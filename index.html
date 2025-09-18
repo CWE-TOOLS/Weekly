@@ -625,7 +625,7 @@
 
             for (let i = 1; i < rows.length; i++) {
                 const row = rows[i];
-                if (row.length >= 7) {
+                if (row.length >= 9) {
                     const task = {
                             week: row[0] || '',
                             project: row[1] || '',
@@ -633,7 +633,9 @@
                             date: row[3] || '',
                             department: normalizeDepartment(row[4] || ''),
                             value: row[5] || '',
-                            hours: row[6] || ''
+                            hours: row[6] || '',
+                            dayNumber: row[7] || '',
+                            totalDays: row[8] || ''
                         };
                     tasks.push(task);
                 }
@@ -643,29 +645,18 @@
         }
 
         function calculateProjectDayCounts(tasks) {
-            const projectDeptMap = new Map();
-
-            // Group tasks by project and department
             tasks.forEach(task => {
-                if (!task.project || !task.department || !task.date) return;
-                const key = `${task.project}::${task.department}`;
-                if (!projectDeptMap.has(key)) {
-                    projectDeptMap.set(key, []);
+                if (task.dayNumber && task.totalDays) {
+                    const dayNum = parseInt(task.dayNumber);
+                    const total = parseInt(task.totalDays);
+                    if (!isNaN(dayNum) && !isNaN(total)) {
+                        task.dayCounter = `Day ${dayNum} of ${total}`;
+                    } else {
+                        task.dayCounter = '';
+                    }
+                } else {
+                    task.dayCounter = '';
                 }
-                projectDeptMap.get(key).push(task);
-            });
-
-            // Sort, count, and assign day counter string
-            projectDeptMap.forEach((projectTasks, key) => {
-                // Sort tasks by date
-                const sortedTasks = projectTasks.sort((a, b) => new Date(a.date) - new Date(b.date));
-                
-                const totalDays = sortedTasks.length;
-
-                sortedTasks.forEach((task, index) => {
-                    const dayNumber = index + 1;
-                    task.dayCounter = `Day ${dayNumber} of ${totalDays}`;
-                });
             });
         }
 
