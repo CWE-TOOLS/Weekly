@@ -625,11 +625,11 @@
 
             for (let i = 1; i < rows.length; i++) {
                 const row = rows[i];
-                if (row.length >= 9) {
+                if (row.length >= 10) {
                     const task = {
                             week: row[0] || '',
                             project: row[1] || '',
-                            description: row[2] || '',
+                            description: row[9] || '',
                             date: row[3] || '',
                             department: normalizeDepartment(row[4] || ''),
                             value: row[5] || '',
