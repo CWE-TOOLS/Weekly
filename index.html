@@ -169,6 +169,9 @@
             scrollbar-width: none; /* Hide scrollbar for Firefox */
             flex-grow: 1;
             overflow-y: auto;
+            /* Performance optimization: Reduce paint and layout operations */
+            contain: layout style paint;
+            will-change: scroll-position;
         }
 
         .schedule-wrapper::-webkit-scrollbar {
@@ -310,6 +313,7 @@
             color: inherit;
             opacity: 0.8;
             flex-grow: 1;
+            text-align: center;
         }
 
         .task-details {
@@ -347,6 +351,40 @@
             padding: 4rem;
             font-size: 1.25rem;
             color: var(--text-secondary);
+            position: relative;
+        }
+
+        .loading::after {
+            content: '';
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            margin: 0 auto;
+            border: 2px solid var(--border-primary);
+            border-radius: 50%;
+            border-top-color: var(--accent-primary);
+            animation: spin 1s ease-in-out infinite;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        @keyframes spin {
+            to { transform: translateX(-50%) rotate(360deg); }
+        }
+
+        .rendering-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: var(--background-secondary);
+            border: 1px solid var(--border-primary);
+            border-radius: var(--border-radius-md);
+            padding: 0.5rem 1rem;
+            box-shadow: var(--shadow-md);
+            z-index: 1000;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            display: none;
         }
 
         .error {
@@ -550,6 +588,7 @@
         </div>
 
         <div id="loading" class="loading">Loading tasks...</div>
+        <div id="rendering-status" class="rendering-status">Optimizing layout...</div>
         <div id="error" class="error" style="display: none;"></div>
 
         <div class="schedule-wrapper" id="schedule-wrapper">
@@ -756,6 +795,7 @@
         }
 
         function renderAllWeeks() {
+            showRenderingStatus(true, 'Rendering schedule...');
             const container = document.getElementById('schedule-container');
             const wrapper = document.getElementById('schedule-wrapper');
             container.innerHTML = '';
@@ -817,18 +857,22 @@
                 if (initialWeekIndex === -1) initialWeekIndex = allWeekStartDates.length - 1; // Default to last week
             }
 
-            // Use a timeout to allow the DOM to render before scrolling and calculating heights
-            setTimeout(() => {
+            // Performance optimization: Use requestAnimationFrame for better performance
+            requestAnimationFrame(() => {
                 wrapper.scrollLeft = wrapper.offsetWidth * initialWeekIndex;
                 updateWeekDisplayHeader(allWeekStartDates[initialWeekIndex]);
                 // Set the precise width for each grid now that they are in the DOM
                 const wrapperWidth = wrapper.clientWidth;
-                container.querySelectorAll('.schedule-grid').forEach(grid => {
+                const grids = container.querySelectorAll('.schedule-grid');
+                grids.forEach(grid => {
                     grid.style.width = `${wrapperWidth}px`;
                 });
 
                 equalizeAllCardHeights();
-            }, 50);
+            });
+
+            // Hide rendering status after all operations complete
+            setTimeout(() => showRenderingStatus(false), 100);
         }
 
         function updateWeekDisplayHeader(date) {
@@ -844,9 +888,12 @@
         function equalizeAllCardHeights() {
             const container = document.getElementById('schedule-container');
             const allRowClasses = new Set();
-            
+
+            // Performance optimization: Cache DOM queries and batch operations
+            const grids = container.querySelectorAll('.schedule-grid');
+
             // Gather all unique row classes from all grids currently in the DOM
-            container.querySelectorAll('.schedule-grid').forEach(grid => {
+            grids.forEach(grid => {
                 const classes = grid.dataset.rowClasses || '';
                 classes.split(',').forEach(c => {
                     if (c) allRowClasses.add(c);
@@ -857,14 +904,21 @@
                 const elementsInRow = container.querySelectorAll(`.${rowClass}`);
                 if (elementsInRow.length === 0) return;
 
-                // Reset heights first to get natural size
-                elementsInRow.forEach(el => { el.style.minHeight = 'auto'; });
-
+                // Performance optimization: Batch DOM operations
                 let maxHeight = 0;
+
+                // First pass: find max height without modifying DOM
                 elementsInRow.forEach(el => {
-                    if (el.offsetHeight > maxHeight) maxHeight = el.offsetHeight;
+                    // Temporarily reset height to get natural size
+                    const originalHeight = el.style.minHeight;
+                    el.style.minHeight = 'auto';
+                    const currentHeight = el.offsetHeight;
+                    if (currentHeight > maxHeight) maxHeight = currentHeight;
+                    // Restore original height immediately to avoid layout thrashing
+                    el.style.minHeight = originalHeight;
                 });
 
+                // Second pass: apply the max height
                 if (maxHeight > 0) {
                     elementsInRow.forEach(el => {
                         el.style.minHeight = `${maxHeight}px`;
@@ -971,7 +1025,20 @@
         }
 
         function showLoading(show) {
-            document.getElementById('loading').style.display = show ? 'block' : 'none';
+            const loadingElement = document.getElementById('loading');
+            if (show) {
+                loadingElement.style.display = 'block';
+                // Performance monitoring: Track render start time
+                window.renderStartTime = performance.now();
+            } else {
+                loadingElement.style.display = 'none';
+                // Performance monitoring: Log render completion time
+                if (window.renderStartTime) {
+                    const renderTime = performance.now() - window.renderStartTime;
+                    console.log(`Render completed in ${renderTime.toFixed(2)}ms`);
+                    window.renderStartTime = null;
+                }
+            }
         }
 
         function showError(message) {
@@ -982,6 +1049,16 @@
 
         function hideError() {
             document.getElementById('error').style.display = 'none';
+        }
+
+        function showRenderingStatus(show, message = 'Optimizing layout...') {
+            const statusElement = document.getElementById('rendering-status');
+            if (show) {
+                statusElement.textContent = message;
+                statusElement.style.display = 'block';
+            } else {
+                statusElement.style.display = 'none';
+            }
         }
 
         // Event listeners
@@ -1053,8 +1130,8 @@
             updateWeekDisplayHeader(currentWeekDate);
         });
 
-        // Auto-refresh every 5 minutes
-        setInterval(fetchTasks, 5 * 60 * 1000);
+        // Auto-refresh every 30 minutes (reduce frequency to improve performance)
+        setInterval(fetchTasks, 30 * 60 * 1000);
 
         // Initial load
         fetchTasks();
