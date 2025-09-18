@@ -515,6 +515,25 @@
         }
         /* --- End Custom Multi-Select Dropdown --- */
 
+        .today-header {
+            background-color: #fde68a;
+            color: #92400e;
+            padding: 8px;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 4.5rem;
+            height: 4.5rem;
+            box-sizing: border-box;
+        }
+
+        .today-header .date-weekday,
+        .today-header .date-day {
+            color: inherit;
+        }
+
         @media (max-width: 1200px) {
             .schedule-grid {
                 grid-template-columns: minmax(120px, 1fr) repeat(7, minmax(150px, 1fr));
@@ -633,6 +652,29 @@
         function normalizeDepartmentClass(dept) {
             if (!dept) return '';
             return dept.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+        }
+
+        function parseDate(dateStr) {
+            if (!dateStr) return null;
+            const parts = dateStr.split('/');
+            if (parts.length === 3) {
+                const [month, day, year] = parts.map(Number);
+                return new Date(year, month - 1, day);
+            }
+            // If already YYYY-MM-DD
+            const parts2 = dateStr.split('-');
+            if (parts2.length === 3) {
+                const [year, month, day] = parts2.map(Number);
+                return new Date(year, month - 1, day);
+            }
+            return new Date(dateStr); // fallback
+        }
+
+        function getLocalDateString(date) {
+            const year = date.getFullYear();
+            const month = (date.getMonth() + 1).toString().padStart(2, '0');
+            const day = date.getDate().toString().padStart(2, '0');
+            return `${year}-${month}-${day}`;
         }
 
         async function fetchTasks() {
@@ -801,6 +843,8 @@
             container.innerHTML = '';
             allWeekStartDates = [];
 
+            let currentMonday;
+
             if (filteredTasks.length === 0) {
                 container.innerHTML = '<div class="loading">No tasks found for the selected department.</div>';
                 return;
@@ -809,19 +853,26 @@
             // Group tasks by the Monday of their week
             const tasksByWeek = {};
             filteredTasks.forEach(task => {
-                const taskDate = new Date(task.date);
+                const taskDate = parseDate(task.date);
                 if (!task.date || isNaN(taskDate)) return; // Skip if date is empty or invalid
                 const monday = getMonday(taskDate);
-                const mondayString = monday.toISOString();
+                const mondayString = getLocalDateString(monday);
                 if (!tasksByWeek[mondayString]) {
                     tasksByWeek[mondayString] = [];
                 }
                 tasksByWeek[mondayString].push(task);
             });
 
+            // Always include the current week even if no tasks
+            currentMonday = getMonday(new Date());
+            const currentMondayString = currentMonday.toISOString();
+            if (!tasksByWeek[currentMondayString]) {
+                tasksByWeek[currentMondayString] = [];
+            }
+
             // Sort the weeks chronologically
             const sortedWeeks = Object.keys(tasksByWeek).sort();
-            allWeekStartDates = sortedWeeks.map(dateString => new Date(dateString));
+            allWeekStartDates = sortedWeeks.map(dateString => new Date(dateString + 'T00:00:00'));
 
             // --- Global Calculation for Row Normalization ---
             const maxTasksPerDept = {};
@@ -831,7 +882,7 @@
 
                 const tasksByDate = {};
                 deptTasks.forEach(task => {
-                    const taskDate = new Date(task.date);
+                    const taskDate = parseDate(task.date);
                     if (!task.date || isNaN(taskDate)) return;
                     const dateString = taskDate.toDateString();
                     if (!tasksByDate[dateString]) tasksByDate[dateString] = [];
@@ -850,7 +901,7 @@
             });
 
             // Find the index of the current week to scroll to it
-            const currentMonday = getMonday(new Date());
+            currentMonday = getMonday(new Date());
             let initialWeekIndex = allWeekStartDates.findIndex(d => d.getTime() === currentMonday.getTime());
             if (initialWeekIndex === -1) { // If no tasks for current week, find the next future week
                 initialWeekIndex = allWeekStartDates.findIndex(d => d > currentMonday);
@@ -859,14 +910,18 @@
 
             // Performance optimization: Use requestAnimationFrame for better performance
             requestAnimationFrame(() => {
-                wrapper.scrollLeft = wrapper.offsetWidth * initialWeekIndex;
-                updateWeekDisplayHeader(allWeekStartDates[initialWeekIndex]);
                 // Set the precise width for each grid now that they are in the DOM
                 const wrapperWidth = wrapper.clientWidth;
                 const grids = container.querySelectorAll('.schedule-grid');
                 grids.forEach(grid => {
                     grid.style.width = `${wrapperWidth}px`;
                 });
+
+                // Scroll to the target grid
+                if (grids[initialWeekIndex]) {
+                    wrapper.scrollLeft = grids[initialWeekIndex].offsetLeft;
+                }
+                updateWeekDisplayHeader(allWeekStartDates[initialWeekIndex]);
 
                 equalizeAllCardHeights();
             });
@@ -943,9 +998,10 @@
             // --- Header Row ---
             grid.innerHTML += `<div class="grid-header">Department</div>`;
             weekDates.forEach(date => {
+                const isToday = date.toDateString() === new Date().toDateString();
                 grid.innerHTML += `
                     <div class="grid-header">
-                        <div>
+                        <div class="${isToday ? 'today-header' : ''}">
                             <div class="date-weekday">${date.toLocaleDateString('en-US', { weekday: 'short' })}</div>
                             <div class="date-day">${date.toLocaleDateString('en-US', { day: 'numeric' })}</div>
                         </div>
