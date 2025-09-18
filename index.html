@@ -659,15 +659,18 @@
             const parts = dateStr.split('/');
             if (parts.length === 3) {
                 const [month, day, year] = parts.map(Number);
-                return new Date(year, month - 1, day);
+                const date = new Date(year, month - 1, day);
+                return isNaN(date) ? null : date;
             }
             // If already YYYY-MM-DD
             const parts2 = dateStr.split('-');
             if (parts2.length === 3) {
                 const [year, month, day] = parts2.map(Number);
-                return new Date(year, month - 1, day);
+                const date = new Date(year, month - 1, day);
+                return isNaN(date) ? null : date;
             }
-            return new Date(dateStr); // fallback
+            const date = new Date(dateStr); // fallback
+            return isNaN(date) ? null : date;
         }
 
         function getLocalDateString(date) {
@@ -727,6 +730,8 @@
 
         function calculateProjectDayCounts(tasks) {
             tasks.forEach(task => {
+                const taskDate = parseDate(task.date);
+                if (!taskDate) return;
                 if (task.dayNumber && task.totalDays) {
                     const dayNum = parseInt(task.dayNumber);
                     const total = parseInt(task.totalDays);
@@ -854,7 +859,7 @@
             const tasksByWeek = {};
             filteredTasks.forEach(task => {
                 const taskDate = parseDate(task.date);
-                if (!task.date || isNaN(taskDate)) return; // Skip if date is empty or invalid
+                if (!taskDate) return; // Skip if date is empty or invalid
                 const monday = getMonday(taskDate);
                 const mondayString = getLocalDateString(monday);
                 if (!tasksByWeek[mondayString]) {
@@ -865,7 +870,7 @@
 
             // Always include the current week even if no tasks
             currentMonday = getMonday(new Date());
-            const currentMondayString = currentMonday.toISOString();
+            const currentMondayString = getLocalDateString(currentMonday);
             if (!tasksByWeek[currentMondayString]) {
                 tasksByWeek[currentMondayString] = [];
             }
@@ -883,7 +888,7 @@
                 const tasksByDate = {};
                 deptTasks.forEach(task => {
                     const taskDate = parseDate(task.date);
-                    if (!task.date || isNaN(taskDate)) return;
+                    if (!taskDate) return;
                     const dateString = taskDate.toDateString();
                     if (!tasksByDate[dateString]) tasksByDate[dateString] = [];
                     tasksByDate[dateString].push(task);
@@ -1028,8 +1033,8 @@
                         const dateString = date.toDateString();
                         tasksByDate[dateString] = deptTasks.filter(t => {
                             if (!t.date) return false;
-                            const taskDate = new Date(t.date);
-                            return !isNaN(taskDate) && taskDate.toDateString() === dateString;
+                            const taskDate = parseDate(t.date);
+                            return taskDate && taskDate.toDateString() === dateString;
                         });
                     });
 
