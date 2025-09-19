@@ -316,6 +316,15 @@
             text-align: center;
         }
 
+        .missing-description {
+            color: #ef4444;
+            font-weight: 600;
+            opacity: 1;
+            background-color: #fee2e2;
+            border-radius: 4px;
+            padding: 2px 4px;
+        }
+
         .task-details {
             font-size: 0.8rem;
             color: inherit;
@@ -801,7 +810,7 @@
             border: 1px solid var(--border-primary);
             border-radius: var(--border-radius-md);
             padding: 1rem;
-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
             opacity: 0;
             transform: translateY(30px) scale(0.95);
             animation: elegantFadeIn 0.6s ease-out forwards;
@@ -812,25 +821,9 @@
             overflow: hidden;
         }
 
-        .project-task-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 3px;
-            background: linear-gradient(90deg, var(--accent-primary), var(--accent-primary-hover));
-            transform: scaleX(0);
-            transition: transform 0.3s ease;
-        }
-
         .project-task-card:hover {
             transform: translateY(-3px);
             box-shadow: var(--shadow-md);
-        }
-
-        .project-task-card:hover::before {
-            transform: scaleX(1);
         }
 
         .project-task-card:nth-child(1) { animation-delay: 0.1s; }
@@ -1091,8 +1084,9 @@
 
             for (let i = 1; i < rows.length; i++) {
                 const row = rows[i];
-                if (row.length >= 10) {
+                if (row.length >= 1) {  // Import incomplete entries
                     const task = {
+                            id: `task-${i}`,
                             week: row[0] || '',
                             project: row[1] || '',
                             description: row[9] || '',
@@ -1113,7 +1107,9 @@
         function calculateProjectDayCounts(tasks) {
             tasks.forEach(task => {
                 const taskDate = parseDate(task.date);
-                if (!taskDate) return;
+                if (!taskDate) {
+                    task.missingDate = true;
+                }
                 if (task.dayNumber && task.totalDays) {
                     const dayNum = parseInt(task.dayNumber);
                     const total = parseInt(task.totalDays);
@@ -1230,8 +1226,6 @@
             container.innerHTML = '';
             allWeekStartDates = [];
 
-            let currentMonday;
-
             if (filteredTasks.length === 0) {
                 container.innerHTML = '<div class="loading">No tasks found for the selected department.</div>';
                 return;
@@ -1239,9 +1233,13 @@
 
             // Group tasks by the Monday of their week
             const tasksByWeek = {};
+            let currentMonday = getMonday(new Date()); // Assign early for missing dates
             filteredTasks.forEach(task => {
-                const taskDate = parseDate(task.date);
-                if (!taskDate) return; // Skip if date is empty or invalid
+                let taskDate = parseDate(task.date);
+                if (!taskDate) {
+                    task.missingDate = true;
+                    taskDate = currentMonday; // Assign to current week for display
+                }
                 const monday = getMonday(taskDate);
                 const mondayString = getLocalDateString(monday);
                 if (!tasksByWeek[mondayString]) {
@@ -1293,8 +1291,11 @@
 
                 const tasksByDate = {};
                 deptTasks.forEach(task => {
-                    const taskDate = parseDate(task.date);
-                    if (!taskDate) return;
+                    let taskDate = parseDate(task.date);
+                    if (!taskDate) {
+                        task.missingDate = true;
+                        taskDate = getMonday(new Date());
+                    }
                     const dateString = taskDate.toDateString();
                     if (!tasksByDate[dateString]) tasksByDate[dateString] = [];
                     tasksByDate[dateString].push(task);
@@ -1493,15 +1494,16 @@
 
                             if (task) {
                                 dayCell.innerHTML = `
-                                    <div class="task-card ${rowClass} department-${normalizeDepartmentClass(task.department)}">
+                                    <div class="task-card ${rowClass} department-${normalizeDepartmentClass(task.department)}" data-task-id="${task.id}">
                                         <div class="task-title">${task.project}</div>
                                         <div class="task-day-counter">
                                            ${task.dayCounter || ''}
                                         </div>
-                                        <div class="task-description">${task.description}</div>
-                                        <div class="task-details">
-                                            <strong>Hours:</strong> ${task.hours}
-                                        </div>
+                                        <div class="task-description">${task.description && task.description.trim() ? task.description : '<span class="missing-description">Staging Missing</span>'}</div>
+                                          <div class="task-details">
+                                              ${task.missingDate ? '<strong>Date:</strong> Missing<br>' : ''}
+                                              <strong>Hours:</strong> ${task.hours}
+                                          </div>
                                     </div>
                                 `;
                             } else {
@@ -1512,7 +1514,7 @@
                     }
                 }
             });
-            
+
             grid.dataset.rowClasses = [...allRowClasses].join(',');
             return grid;
         }
@@ -1714,18 +1716,18 @@
                     <div class="project-cards-container">
                         ${deptTasks.map((task, index) => {
                             const taskDate = parseDate(task.date);
-                            const formattedDate = taskDate ? taskDate.toLocaleDateString('en-US', {
+                            const formattedDate = task.missingDate ? 'No date' : (taskDate ? taskDate.toLocaleDateString('en-US', {
                                 weekday: 'short',
                                 month: 'short',
                                 day: 'numeric',
                                 year: 'numeric'
-                            }) : 'No date';
+                            }) : 'No date');
 
                             return `
-                                <div class="project-task-card task-card department-${normalizeDepartmentClass(task.department)}" style="animation-delay: ${index * 0.1}s">
+                                <div class="project-task-card task-card department-${normalizeDepartmentClass(task.department)}" style="animation-delay: ${index * 0.1}s" data-task-id="${task.id}">
                                     <div class="task-title">${task.project}</div>
                                     <div class="task-day-counter">${task.dayCounter || ''}</div>
-                                    <div class="task-description">${task.description}</div>
+                                    <div class="task-description">${task.description && task.description.trim() ? task.description : '<span class="missing-description">Staging Missing</span>'}</div>
                                     <div class="task-details">
                                         <strong>Date:</strong> ${formattedDate}<br>
                                         <strong>Hours:</strong> ${task.hours}
@@ -1760,28 +1762,6 @@
             }
         });
 
-        // Add task IDs to cards for context menu reference
-        function addTaskIdsToCards() {
-            const cards = document.querySelectorAll('.task-card');
-            cards.forEach((card, index) => {
-                const project = card.querySelector('.task-title')?.textContent;
-                const description = card.querySelector('.task-description')?.textContent;
-                const matchingTask = allTasks.find(task =>
-                    task.project === project && task.description === description
-                );
-                if (matchingTask) {
-                    card.dataset.taskId = matchingTask.id = `${project}-${description}-${index}`;
-                }
-            });
-        }
-
-        // Override renderWeekGrid to add task IDs after rendering
-        const originalRenderWeekGrid = renderWeekGrid;
-        renderWeekGrid = function(...args) {
-            const result = originalRenderWeekGrid.apply(this, args);
-            setTimeout(addTaskIdsToCards, 100); // Small delay to ensure DOM is updated
-            return result;
-        };
 
         // Auto-refresh every 30 minutes (reduce frequency to improve performance)
         setInterval(fetchTasks, 30 * 60 * 1000);
