@@ -209,7 +209,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            min-height: 4.5rem; /* Ensure consistent header height */
+            height: 4.5rem; /* Ensure consistent header height */
             position: sticky;
             top: 0;
             background-color: var(--background-secondary);
@@ -515,22 +515,25 @@
         }
         /* --- End Custom Multi-Select Dropdown --- */
 
-        .today-header {
-            background-color: #fde68a;
-            color: #92400e;
-            padding: 8px;
-            border-radius: 8px;
+        .date-container {
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            width: 4.5rem;
-            height: 4.5rem;
+            padding: 8px;
             box-sizing: border-box;
+            width: 100%;
+            height: 100%;
         }
 
-        .today-header .date-weekday,
-        .today-header .date-day {
+        .today-highlight {
+            background-color: #fde68a;
+            color: #92400e;
+            border-radius: 8px;
+        }
+
+        .today-highlight .date-weekday,
+        .today-highlight .date-day {
             color: inherit;
         }
 
@@ -868,16 +871,40 @@
                 tasksByWeek[mondayString].push(task);
             });
 
-            // Always include the current week even if no tasks
-            currentMonday = getMonday(new Date());
-            const currentMondayString = getLocalDateString(currentMonday);
-            if (!tasksByWeek[currentMondayString]) {
+            // Generate all weeks between the earliest and latest non-empty weeks, including empty ones
+            const mondayStrings = Object.keys(tasksByWeek);
+            let allMondays = [];
+            if (mondayStrings.length === 0) {
+                // No tasks, include only current week
+                currentMonday = getMonday(new Date());
+                const currentMondayString = getLocalDateString(currentMonday);
+                allMondays = [currentMonday];
                 tasksByWeek[currentMondayString] = [];
+            } else {
+                mondayStrings.sort();
+                const minMonday = new Date(mondayStrings[0] + 'T00:00:00');
+                const maxMonday = new Date(mondayStrings[mondayStrings.length - 1] + 'T00:00:00');
+                let current = new Date(minMonday);
+                while (current <= maxMonday) {
+                    const mondayString = getLocalDateString(current);
+                    allMondays.push(new Date(current));
+                    if (!tasksByWeek[mondayString]) {
+                        tasksByWeek[mondayString] = [];
+                    }
+                    current.setDate(current.getDate() + 7);
+                }
+                // Include current week if not already included
+                currentMonday = getMonday(new Date());
+                const currentMondayString = getLocalDateString(currentMonday);
+                if (!allMondays.some(d => d.getTime() === currentMonday.getTime())) {
+                    allMondays.push(currentMonday);
+                    allMondays.sort((a, b) => a - b);
+                    if (!tasksByWeek[currentMondayString]) {
+                        tasksByWeek[currentMondayString] = [];
+                    }
+                }
             }
-
-            // Sort the weeks chronologically
-            const sortedWeeks = Object.keys(tasksByWeek).sort();
-            allWeekStartDates = sortedWeeks.map(dateString => new Date(dateString + 'T00:00:00'));
+            allWeekStartDates = allMondays;
 
             // --- Global Calculation for Row Normalization ---
             const maxTasksPerDept = {};
@@ -1006,7 +1033,7 @@
                 const isToday = date.toDateString() === new Date().toDateString();
                 grid.innerHTML += `
                     <div class="grid-header">
-                        <div class="${isToday ? 'today-header' : ''}">
+                        <div class="date-container ${isToday ? 'today-highlight' : ''}">
                             <div class="date-weekday">${date.toLocaleDateString('en-US', { weekday: 'short' })}</div>
                             <div class="date-day">${date.toLocaleDateString('en-US', { day: 'numeric' })}</div>
                         </div>
