@@ -1626,7 +1626,7 @@
         // Context Menu Functionality
         let currentTask = null;
 
-        document.addEventListener('contextmenu', (e) => {
+        document.addEventListener('click', (e) => {
             const taskCard = e.target.closest('.task-card');
             if (taskCard) {
                 e.preventDefault();
@@ -1634,17 +1634,10 @@
                 if (currentTask) {
                     showContextMenu(e.clientX, e.clientY);
                 }
+                return; // Prevent the hide handler from running
             }
-        });
 
-        document.addEventListener('click', (e) => {
-            const contextMenu = document.getElementById('context-menu');
-            if (!contextMenu.contains(e.target)) {
-                contextMenu.style.display = 'none';
-            }
-        });
-
-        document.addEventListener('click', (e) => {
+            // Hide menu if click is outside task card and outside menu
             const contextMenu = document.getElementById('context-menu');
             if (!contextMenu.contains(e.target)) {
                 contextMenu.style.display = 'none';
