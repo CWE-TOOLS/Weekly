@@ -543,6 +543,350 @@
             }
         }
 
+        /* --- Context Menu Styles --- */
+        .context-menu {
+            position: fixed;
+            background: var(--background-secondary);
+            border: 1px solid var(--border-primary);
+            border-radius: var(--border-radius-lg);
+            box-shadow: var(--shadow-md);
+            z-index: 10000;
+            min-width: 180px;
+            display: none;
+            overflow: hidden;
+            backdrop-filter: blur(10px);
+            animation: fadeInScale 0.15s ease-out;
+        }
+
+        .context-menu-item {
+            padding: 0.75rem 1rem;
+            cursor: pointer;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .context-menu-item:hover {
+            background-color: var(--accent-primary);
+            color: white;
+        }
+
+        .context-menu-item::before {
+            content: '';
+            width: 16px;
+            height: 16px;
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            opacity: 0.7;
+        }
+
+        .context-menu-item.build-plan::before {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='3' width='18' height='18' rx='2' ry='2'/%3E%3Cline x1='9' y1='9' x2='15' y2='15'/%3E%3Cline x1='15' y1='9' x2='9' y2='15'/%3E%3C/svg%3E");
+        }
+
+        @keyframes fadeInScale {
+            from {
+                opacity: 0;
+                transform: scale(0.85) translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+
+        @keyframes slideInBounce {
+            0% {
+                opacity: 0;
+                transform: translateY(-30px) scale(0.95);
+            }
+            60% {
+                opacity: 0.8;
+                transform: translateY(5px) scale(1.02);
+            }
+            100% {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        @keyframes elegantFadeIn {
+            0% {
+                opacity: 0;
+                transform: translateY(30px) scale(0.95);
+            }
+            50% {
+                opacity: 0.7;
+                transform: translateY(-5px) scale(1.01);
+            }
+            100% {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        @keyframes pulseGlow {
+            0%, 100% {
+                box-shadow: var(--shadow-sm);
+            }
+            50% {
+                box-shadow: 0 0 20px rgba(79, 70, 229, 0.3), var(--shadow-md);
+            }
+        }
+
+        /* --- Project View Modal --- */
+        .project-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(0px);
+            z-index: 9999;
+            display: none;
+            animation: modalBackdropFade 0.4s ease-out;
+            padding: 2rem;
+            box-sizing: border-box;
+        }
+
+        .project-modal.show {
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+        }
+
+        .project-content {
+            background: var(--background-secondary);
+            border-radius: var(--border-radius-lg);
+            box-shadow: var(--shadow-md);
+            width: 95vw;
+            max-width: 1400px;
+            max-height: 85vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            animation: slideInBounce 0.5s ease-out;
+            border: 1px solid var(--border-primary);
+            transition: all 0.3s ease;
+        }
+
+        .project-content:hover {
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.15), var(--shadow-md);
+            transform: translateY(-2px);
+        }
+
+        .project-header {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border-primary);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--background-primary);
+        }
+
+        .project-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 0;
+        }
+
+        .project-close {
+            background: none;
+            border: none;
+            font-size: 1.25rem;
+            cursor: pointer;
+            color: var(--text-secondary);
+            padding: 0.25rem;
+            border-radius: var(--border-radius-md);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .project-close::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle, var(--accent-primary) 0%, transparent 70%);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .project-close:hover {
+            color: var(--accent-primary);
+            transform: scale(1.1) rotate(90deg);
+        }
+
+        .project-close:hover::before {
+            opacity: 0.2;
+        }
+
+        .project-close:active {
+            transform: scale(0.95) rotate(90deg);
+        }
+
+        .project-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.5rem;
+        }
+
+        .project-schedule-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            background-color: var(--background-secondary);
+            border-radius: var(--border-radius-lg);
+            box-shadow: var(--shadow-md);
+            border: 1px solid var(--border-primary);
+            padding: 1rem;
+        }
+
+        .project-dept-section {
+            display: flex;
+            align-items: stretch;
+            gap: 0;
+            margin-bottom: 1.5rem;
+            border: 1px solid var(--border-primary);
+            border-radius: var(--border-radius-md);
+            overflow: hidden;
+        }
+
+        .project-dept-header {
+            font-weight: 600;
+            font-size: 1rem;
+            padding: 1rem;
+            color: var(--text-primary);
+            text-align: center;
+            border-right: 2px solid var(--border-primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: transparent;
+            color: #fff;
+            position: sticky;
+            left: 0;
+            z-index: 5;
+            writing-mode: vertical-rl;
+            text-orientation: mixed;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .project-cards-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            padding: 0.75rem;
+            flex: 1;
+            min-height: 200px;
+            align-items: flex-start;
+        }
+
+        .project-task-card {
+            background: var(--background-secondary);
+            border: 1px solid var(--border-primary);
+            border-radius: var(--border-radius-md);
+            padding: 1rem;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            opacity: 0;
+            transform: translateY(30px) scale(0.95);
+            animation: elegantFadeIn 0.6s ease-out forwards;
+            min-width: 250px;
+            max-width: 300px;
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .project-task-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--accent-primary), var(--accent-primary-hover));
+            transform: scaleX(0);
+            transition: transform 0.3s ease;
+        }
+
+        .project-task-card:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .project-task-card:hover::before {
+            transform: scaleX(1);
+        }
+
+        .project-task-card:nth-child(1) { animation-delay: 0.1s; }
+        .project-task-card:nth-child(2) { animation-delay: 0.2s; }
+        .project-task-card:nth-child(3) { animation-delay: 0.3s; }
+        .project-task-card:nth-child(4) { animation-delay: 0.4s; }
+        .project-task-card:nth-child(5) { animation-delay: 0.5s; }
+        .project-task-card:nth-child(6) { animation-delay: 0.6s; }
+        .project-task-card:nth-child(7) { animation-delay: 0.7s; }
+        .project-task-card:nth-child(8) { animation-delay: 0.8s; }
+
+        .project-task-card .task-title {
+            font-size: 0.85rem;
+        }
+
+        .project-task-card .task-description {
+            font-size: 0.75rem;
+        }
+
+        .project-task-card .task-details {
+            font-size: 0.75rem;
+        }
+
+        @keyframes modalBackdropFade {
+            from {
+                opacity: 0;
+                backdrop-filter: blur(0px);
+            }
+            to {
+                opacity: 1;
+                backdrop-filter: blur(5px);
+            }
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-30px) scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        @keyframes cardFadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(30px) scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
         @media (max-width: 768px) {
             .container {
                 padding: 1rem;
@@ -564,7 +908,20 @@
                 border: none;
                 padding: 0 0 1rem 0;
             }
-            /* Mobile will need a different rendering logic in JS, this is a fallback */
+            .project-content {
+                width: 95%;
+                margin: 1rem auto;
+            }
+            .project-cards-grid {
+                grid-template-columns: 1fr;
+                gap: 1rem;
+            }
+            .project-header {
+                padding: 1rem;
+            }
+            .project-body {
+                padding: 1rem;
+            }
         }
     </style>
 </head>
@@ -616,6 +973,28 @@
         <div class="schedule-wrapper" id="schedule-wrapper">
             <div class="schedule-container" id="schedule-container">
                 <!-- Schedule weeks will be populated by JavaScript -->
+            </div>
+        </div>
+
+        <!-- Context Menu -->
+        <div class="context-menu" id="context-menu">
+            <div class="context-menu-item build-plan" data-action="build-plan">
+                📋 Build Plan
+            </div>
+        </div>
+
+        <!-- Project View Modal -->
+        <div class="project-modal" id="project-modal">
+            <div class="project-content">
+                <div class="project-header">
+                    <h2 class="project-title" id="project-title">Project Plan</h2>
+                    <button class="project-close" id="project-close">&times;</button>
+                </div>
+                <div class="project-body">
+                    <div class="project-schedule-grid" id="project-schedule-grid">
+                        <!-- Project schedule will be populated by JavaScript -->
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -1014,6 +1393,32 @@
             });
         }
 
+        function equalizeProjectCardHeights() {
+            const projectSections = document.querySelectorAll('.project-dept-section');
+
+            projectSections.forEach(section => {
+                const cards = section.querySelectorAll('.project-task-card');
+                if (cards.length === 0) return;
+
+                // Find max height
+                let maxHeight = 0;
+                cards.forEach(card => {
+                    const originalHeight = card.style.minHeight;
+                    card.style.minHeight = 'auto';
+                    const currentHeight = card.offsetHeight;
+                    if (currentHeight > maxHeight) maxHeight = currentHeight;
+                    card.style.minHeight = originalHeight;
+                });
+
+                // Apply max height to all cards in this section
+                if (maxHeight > 0) {
+                    cards.forEach(card => {
+                        card.style.minHeight = `${maxHeight}px`;
+                    });
+                }
+            });
+        }
+
         function renderWeekGrid(dateForWeek, maxTasksPerDept) {
             const grid = document.createElement('div');
             grid.className = 'schedule-grid';
@@ -1217,6 +1622,173 @@
             const currentWeekDate = allWeekStartDates[currentIndex];
             updateWeekDisplayHeader(currentWeekDate);
         });
+
+        // Context Menu Functionality
+        let currentTask = null;
+
+        document.addEventListener('contextmenu', (e) => {
+            const taskCard = e.target.closest('.task-card');
+            if (taskCard) {
+                e.preventDefault();
+                currentTask = taskCard.dataset.taskId ? allTasks.find(t => t.id === taskCard.dataset.taskId) : null;
+                if (currentTask) {
+                    showContextMenu(e.clientX, e.clientY);
+                }
+            }
+        });
+
+        document.addEventListener('click', (e) => {
+            const contextMenu = document.getElementById('context-menu');
+            if (!contextMenu.contains(e.target)) {
+                contextMenu.style.display = 'none';
+            }
+        });
+
+        document.addEventListener('click', (e) => {
+            const contextMenu = document.getElementById('context-menu');
+            if (!contextMenu.contains(e.target)) {
+                contextMenu.style.display = 'none';
+            }
+        });
+
+        document.getElementById('context-menu').addEventListener('click', (e) => {
+            const action = e.target.closest('.context-menu-item')?.dataset.action;
+            if (action === 'build-plan' && currentTask) {
+                showProjectView(currentTask.project);
+            }
+            document.getElementById('context-menu').style.display = 'none';
+        });
+
+        function showContextMenu(x, y) {
+            const contextMenu = document.getElementById('context-menu');
+            contextMenu.style.left = `${x}px`;
+            contextMenu.style.top = `${y}px`;
+            contextMenu.style.display = 'block';
+
+            // Adjust position if menu goes outside viewport
+            const rect = contextMenu.getBoundingClientRect();
+            if (rect.right > window.innerWidth) {
+                contextMenu.style.left = `${x - rect.width}px`;
+            }
+            if (rect.bottom > window.innerHeight) {
+                contextMenu.style.top = `${y - rect.height}px`;
+            }
+        }
+
+        // Project View Functionality
+        function showProjectView(projectName) {
+            const projectTasks = allTasks.filter(task => task.project === projectName);
+
+            const modal = document.getElementById('project-modal');
+            const title = document.getElementById('project-title');
+            const grid = document.getElementById('project-schedule-grid');
+
+            title.textContent = `Build Plan: ${projectName}`;
+            grid.innerHTML = '';
+
+            // Group tasks by department
+            const tasksByDept = {};
+            projectTasks.forEach(task => {
+                const dept = task.department || 'Other';
+                if (!tasksByDept[dept]) tasksByDept[dept] = [];
+                tasksByDept[dept].push(task);
+            });
+
+            // Sort departments in the same order as main view
+            const sortedDepts = DEPARTMENT_ORDER.filter(dept => tasksByDept[dept]);
+            if (tasksByDept['Other']) sortedDepts.push('Other');
+
+            // Create a simple list layout instead of complex grid
+            sortedDepts.forEach(dept => {
+                const deptTasks = tasksByDept[dept].sort((a, b) => {
+                    // Sort by date, then by day number
+                    const dateA = parseDate(a.date);
+                    const dateB = parseDate(b.date);
+                    if (dateA && dateB) {
+                        const dateDiff = dateA - dateB;
+                        if (dateDiff !== 0) return dateDiff;
+                    }
+                    return parseInt(a.dayNumber || 0) - parseInt(b.dayNumber || 0);
+                });
+
+                // Add department section
+                const deptSection = document.createElement('div');
+                deptSection.className = 'project-dept-section';
+                deptSection.innerHTML = `
+                    <div class="project-dept-header department-label department-${normalizeDepartmentClass(dept)}">
+                        ${dept}
+                    </div>
+                    <div class="project-cards-container">
+                        ${deptTasks.map((task, index) => {
+                            const taskDate = parseDate(task.date);
+                            const formattedDate = taskDate ? taskDate.toLocaleDateString('en-US', {
+                                weekday: 'short',
+                                month: 'short',
+                                day: 'numeric',
+                                year: 'numeric'
+                            }) : 'No date';
+
+                            return `
+                                <div class="project-task-card task-card department-${normalizeDepartmentClass(task.department)}" style="animation-delay: ${index * 0.1}s">
+                                    <div class="task-title">${task.project}</div>
+                                    <div class="task-day-counter">${task.dayCounter || ''}</div>
+                                    <div class="task-description">${task.description}</div>
+                                    <div class="task-details">
+                                        <strong>Date:</strong> ${formattedDate}<br>
+                                        <strong>Hours:</strong> ${task.hours}
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                `;
+                grid.appendChild(deptSection);
+            });
+
+            modal.classList.add('show');
+            document.body.style.overflow = 'hidden';
+
+            // Equalize card heights in project view after a short delay
+            setTimeout(() => {
+                equalizeProjectCardHeights();
+            }, 100);
+        }
+
+        function hideProjectView() {
+            const modal = document.getElementById('project-modal');
+            modal.classList.remove('show');
+            document.body.style.overflow = '';
+        }
+
+        document.getElementById('project-close').addEventListener('click', hideProjectView);
+        document.getElementById('project-modal').addEventListener('click', (e) => {
+            if (e.target === document.getElementById('project-modal')) {
+                hideProjectView();
+            }
+        });
+
+        // Add task IDs to cards for context menu reference
+        function addTaskIdsToCards() {
+            const cards = document.querySelectorAll('.task-card');
+            cards.forEach((card, index) => {
+                const project = card.querySelector('.task-title')?.textContent;
+                const description = card.querySelector('.task-description')?.textContent;
+                const matchingTask = allTasks.find(task =>
+                    task.project === project && task.description === description
+                );
+                if (matchingTask) {
+                    card.dataset.taskId = matchingTask.id = `${project}-${description}-${index}`;
+                }
+            });
+        }
+
+        // Override renderWeekGrid to add task IDs after rendering
+        const originalRenderWeekGrid = renderWeekGrid;
+        renderWeekGrid = function(...args) {
+            const result = originalRenderWeekGrid.apply(this, args);
+            setTimeout(addTaskIdsToCards, 100); // Small delay to ensure DOM is updated
+            return result;
+        };
 
         // Auto-refresh every 30 minutes (reduce frequency to improve performance)
         setInterval(fetchTasks, 30 * 60 * 1000);
