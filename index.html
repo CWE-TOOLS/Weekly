@@ -688,6 +688,26 @@
             transition: all 0.3s ease;
         }
 
+        .edit-description {
+            width: 100%;
+            min-height: 60px;
+            padding: 0.5rem;
+            border: 1px solid var(--border-primary);
+            border-radius: var(--border-radius-md);
+            font-size: 0.8rem;
+            font-family: 'Inter', sans-serif;
+            resize: vertical;
+            background-color: var(--background-secondary);
+            color: var(--text-primary);
+            transition: border-color 0.2s ease;
+        }
+
+        .edit-description:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
+        }
+
         .project-content:hover {
             box-shadow: 0 25px 50px rgba(0, 0, 0, 0.15), var(--shadow-md);
             transform: translateY(-2px);
@@ -700,6 +720,54 @@
             justify-content: space-between;
             align-items: center;
             background: var(--background-primary);
+            position: relative;
+        }
+
+        .project-header .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        #edit-plan-btn, #save-changes-btn, #cancel-changes-btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: var(--border-radius-md);
+            font-size: 0.875rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+            box-shadow: var(--shadow-sm);
+        }
+
+        #edit-plan-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        #edit-plan-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+
+        #save-changes-btn {
+            background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+            color: white;
+        }
+
+        #save-changes-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+
+        #cancel-changes-btn {
+            background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+            color: white;
+        }
+
+        #cancel-changes-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
         }
 
         .project-title {
@@ -983,8 +1051,13 @@
         <div class="project-modal" id="project-modal">
             <div class="project-content">
                 <div class="project-header">
-                    <h2 class="project-title" id="project-title">Project Plan</h2>
-                    <button class="project-close" id="project-close">&times;</button>
+                    <h2 class="project-title" id="project-title">Build Plan</h2>
+                    <div class="header-actions">
+                        <button id="edit-plan-btn">✏️ Edit Plan</button>
+                        <button id="save-changes-btn" style="display: none;">💾 Save Changes</button>
+                        <button id="cancel-changes-btn" style="display: none;">❌ Cancel Changes</button>
+                        <button class="project-close" id="project-close">&times;</button>
+                    </div>
                 </div>
                 <div class="project-body">
                     <div class="project-schedule-grid" id="project-schedule-grid">
@@ -1751,6 +1824,9 @@
             setTimeout(() => {
                 equalizeProjectCardHeights();
             }, 100);
+
+            // Initialize edit mode
+            initializeEditMode();
         }
 
         function hideProjectView() {
@@ -1765,6 +1841,87 @@
                 hideProjectView();
             }
         });
+
+        function initializeEditMode() {
+            const editBtn = document.getElementById('edit-plan-btn');
+            const saveBtn = document.getElementById('save-changes-btn');
+            const cancelBtn = document.getElementById('cancel-changes-btn');
+            let originalDescriptions = new Map();
+
+            editBtn.addEventListener('click', () => {
+                enterEditMode();
+            });
+
+            saveBtn.addEventListener('click', () => {
+                saveChanges();
+            });
+
+            cancelBtn.addEventListener('click', () => {
+                cancelEditMode();
+            });
+
+            function enterEditMode() {
+                editBtn.style.display = 'none';
+                saveBtn.style.display = 'inline-block';
+                cancelBtn.style.display = 'inline-block';
+
+                const descriptions = document.querySelectorAll('#project-schedule-grid .task-description');
+                descriptions.forEach(desc => {
+                    const taskId = desc.closest('.project-task-card').dataset.taskId;
+                    const originalText = desc.innerHTML;
+                    originalDescriptions.set(taskId, originalText);
+
+                    const textarea = document.createElement('textarea');
+                    textarea.className = 'edit-description';
+                    textarea.value = desc.textContent.trim() === 'Staging Missing' ? '' : desc.textContent.trim();
+                    desc.replaceWith(textarea);
+                });
+            }
+
+            function saveChanges() {
+                const textareas = document.querySelectorAll('#project-schedule-grid .edit-description');
+                textareas.forEach(textarea => {
+                    const taskId = textarea.closest('.project-task-card').dataset.taskId;
+                    const newText = textarea.value.trim();
+
+                    // Update the task in allTasks
+                    const task = allTasks.find(t => t.id === taskId);
+                    if (task) {
+                        task.description = newText;
+                    }
+
+                    // Replace textarea with div
+                    const descDiv = document.createElement('div');
+                    descDiv.className = 'task-description';
+                    descDiv.innerHTML = newText || '<span class="missing-description">Staging Missing</span>';
+                    textarea.replaceWith(descDiv);
+                });
+
+                exitEditMode();
+            }
+
+            function cancelEditMode() {
+                const textareas = document.querySelectorAll('#project-schedule-grid .edit-description');
+                textareas.forEach(textarea => {
+                    const taskId = textarea.closest('.project-task-card').dataset.taskId;
+                    const originalText = originalDescriptions.get(taskId);
+
+                    const descDiv = document.createElement('div');
+                    descDiv.className = 'task-description';
+                    descDiv.innerHTML = originalText;
+                    textarea.replaceWith(descDiv);
+                });
+
+                exitEditMode();
+            }
+
+            function exitEditMode() {
+                editBtn.style.display = 'inline-block';
+                saveBtn.style.display = 'none';
+                cancelBtn.style.display = 'none';
+                originalDescriptions.clear();
+            }
+        }
 
 
         // Auto-refresh every 30 minutes (reduce frequency to improve performance)
