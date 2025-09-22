@@ -2069,6 +2069,10 @@
         document.addEventListener('click', (e) => {
             const taskCard = e.target.closest('.task-card');
             if (taskCard) {
+                // Don't show context menu if inside the build plan modal
+                if (document.getElementById('project-modal').classList.contains('show')) {
+                    return;
+                }
                 e.preventDefault();
                 currentTask = taskCard.dataset.taskId ? allTasks.find(t => t.id === taskCard.dataset.taskId) : null;
                 if (currentTask) {
