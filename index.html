@@ -686,6 +686,7 @@
             animation: slideInBounce 0.5s ease-out;
             border: 1px solid var(--border-primary);
             transition: all 0.3s ease;
+            position: relative; /* For loading overlay positioning */
         }
 
         .edit-description {
@@ -986,6 +987,74 @@
             }
         }
 
+        /* --- Project Modal Loading Overlay --- */
+        .project-loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(2px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            border-radius: var(--border-radius-lg);
+        }
+
+        .project-loading-overlay .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(0, 0, 0, 0.1);
+            border-radius: 50%;
+            border-top-color: var(--accent-primary);
+            animation: rotateSpinner 1s ease-in-out infinite;
+            margin-bottom: 0.75rem;
+        }
+
+        .project-loading-overlay p {
+            font-size: 1rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin: 0;
+            text-align: center;
+        }
+
+        @keyframes rotateSpinner {
+            to { transform: rotate(360deg); }
+        }
+
+        /* --- Success Notification --- */
+        .project-success-notification {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(34, 197, 94, 0.9);
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: var(--border-radius-md);
+            box-shadow: var(--shadow-md);
+            font-size: 0.875rem;
+            font-weight: 600;
+            z-index: 1010;
+            display: none;
+            animation: fadeInSlideDown 0.3s ease-out;
+        }
+
+        @keyframes fadeInSlideDown {
+            from {
+                opacity: 0;
+                transform: translateX(-50%) translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0);
+            }
+        }
+
         @media (max-width: 768px) {
             .container {
                 padding: 1rem;
@@ -1095,10 +1164,21 @@
                         <button class="project-close" id="project-close">&times;</button>
                     </div>
                 </div>
+
+                <!-- Success Notification -->
+                <div id="project-success-notification" class="project-success-notification">
+                    ✅ Changes saved successfully!
+                </div>
                 <div class="project-body">
                     <div class="project-schedule-grid" id="project-schedule-grid">
                         <!-- Project schedule will be populated by JavaScript -->
                     </div>
+                </div>
+
+                <!-- Loading Overlay -->
+                <div id="project-loading-overlay" class="project-loading-overlay" style="display: none;">
+                    <div class="loading-spinner"></div>
+                    <p>Confirming edits...</p>
                 </div>
             </div>
         </div>
@@ -1429,7 +1509,6 @@
                         throw new Error('Failed to update sheet: ' + error);
                     }
                     console.log('Successfully saved to staging sheet');
-                    alert('Changes saved successfully!');
                 }
             } catch (error) {
                 console.error('Error saving to staging:', error);
@@ -2113,6 +2192,24 @@
         }
 
         function hideProjectView() {
+            // Cancel edit mode if active when exiting
+            const textareas = document.querySelectorAll('#project-schedule-grid .edit-description');
+            if (textareas.length > 0) {
+                textareas.forEach(textarea => {
+                    const taskCard = textarea.closest('.project-task-card');
+                    const taskId = taskCard.dataset.taskId;
+                    const task = allTasks.find(t => t.id === taskId);
+                    const descDiv = document.createElement('div');
+                    descDiv.className = 'task-description';
+                    descDiv.innerHTML = task && task.description ? task.description : '<span class="missing-description">Staging Missing</span>';
+                    textarea.replaceWith(descDiv);
+                });
+                // Reset buttons to non-edit state
+                document.getElementById('edit-plan-btn').style.display = 'inline-block';
+                document.getElementById('save-changes-btn').style.display = 'none';
+                document.getElementById('cancel-changes-btn').style.display = 'none';
+            }
+
             const modal = document.getElementById('project-modal');
             modal.classList.remove('show');
             document.body.style.overflow = '';
@@ -2190,6 +2287,10 @@
                 saveBtn.style.background = 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)';
                 saveBtn.style.cursor = 'not-allowed';
 
+                // Show loading overlay
+                const overlay = document.getElementById('project-loading-overlay');
+                overlay.style.display = 'flex';
+
                 try {
                     const textareas = document.querySelectorAll('#project-schedule-grid .edit-description');
                     const changedTasks = [];
@@ -2220,6 +2321,13 @@
                     // Save to staging if there are changes
                     if (changedTasks.length > 0) {
                         await saveToStaging(currentProjectName, changedTasks);
+
+                        // Show success notification
+                        const successNotif = document.getElementById('project-success-notification');
+                        successNotif.style.display = 'block';
+                        setTimeout(() => {
+                            successNotif.style.display = 'none';
+                        }, 2500);
                     }
 
                     exitEditMode();
@@ -2232,6 +2340,8 @@
                         restoreSaveButton();
                     }, 2000);
                 } finally {
+                    // Hide loading overlay
+                    overlay.style.display = 'none';
                     if (!saveBtn.innerHTML.includes('Failed')) {
                         restoreSaveButton();
                     }
