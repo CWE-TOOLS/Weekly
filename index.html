@@ -788,6 +788,23 @@
             box-shadow: var(--shadow-md);
         }
 
+        /* Save button loading spinner */
+        .save-loading-spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: button-spin 1s ease-in-out infinite;
+            margin-right: 0.5rem;
+            vertical-align: middle;
+        }
+
+        @keyframes button-spin {
+            to { transform: rotate(360deg); }
+        }
+
         .project-title {
             font-size: 1.25rem;
             font-weight: 600;
@@ -2130,8 +2147,8 @@
                 enterEditMode();
             });
 
-            saveBtn.addEventListener('click', () => {
-                saveChanges();
+            saveBtn.addEventListener('click', async () => {
+                await saveChanges();
             });
 
             cancelBtn.addEventListener('click', () => {
@@ -2156,39 +2173,68 @@
                 });
             }
 
-            function saveChanges() {
-                const textareas = document.querySelectorAll('#project-schedule-grid .edit-description');
-                const changedTasks = [];
-                textareas.forEach(textarea => {
-                    const taskId = textarea.closest('.project-task-card').dataset.taskId;
-                    const originalText = originalDescriptions.get(taskId);
-                    const originalStripped = stripHtml(originalText).trim();
-                    const newText = textarea.value.trim();
+            async function saveChanges() {
+                // Set loading state
+                saveBtn.disabled = true;
+                cancelBtn.disabled = true;
+                saveBtn.innerHTML = '<div class="save-loading-spinner"></div>Saving...';
+                saveBtn.style.background = 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)';
+                saveBtn.style.cursor = 'not-allowed';
 
-                    // Update the task
-                    const task = allTasks.find(t => t.id === taskId);
-                    if (task) {
-                        task.description = newText;
+                try {
+                    const textareas = document.querySelectorAll('#project-schedule-grid .edit-description');
+                    const changedTasks = [];
+                    textareas.forEach(textarea => {
+                        const taskId = textarea.closest('.project-task-card').dataset.taskId;
+                        const originalText = originalDescriptions.get(taskId);
+                        const originalStripped = stripHtml(originalText).trim();
+                        const newText = textarea.value.trim();
+
+                        // Update the task
+                        const task = allTasks.find(t => t.id === taskId);
+                        if (task) {
+                            task.description = newText;
+                        }
+
+                        // Replace textarea
+                        const descDiv = document.createElement('div');
+                        descDiv.className = 'task-description';
+                        descDiv.innerHTML = newText || '<span class="missing-description">Staging Missing</span>';
+                        textarea.replaceWith(descDiv);
+
+                        // Check if changed
+                        if (newText !== originalStripped) {
+                            changedTasks.push({task, newText});
+                        }
+                    });
+
+                    // Save to staging if there are changes
+                    if (changedTasks.length > 0) {
+                        await saveToStaging(currentProjectName, changedTasks);
                     }
 
-                    // Replace textarea
-                    const descDiv = document.createElement('div');
-                    descDiv.className = 'task-description';
-                    descDiv.innerHTML = newText || '<span class="missing-description">Staging Missing</span>';
-                    textarea.replaceWith(descDiv);
-
-                    // Check if changed
-                    if (newText !== originalStripped) {
-                        changedTasks.push({task, newText});
+                    exitEditMode();
+                } catch (error) {
+                    console.error('Save failed:', error);
+                    // Show error feedback
+                    saveBtn.innerHTML = '❌ Save Failed';
+                    saveBtn.style.background = 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
+                    setTimeout(() => {
+                        restoreSaveButton();
+                    }, 2000);
+                } finally {
+                    if (!saveBtn.innerHTML.includes('Failed')) {
+                        restoreSaveButton();
                     }
-                });
-
-                // Save to staging if there are changes
-                if (changedTasks.length > 0) {
-                    saveToStaging(currentProjectName, changedTasks);
                 }
+            }
 
-                exitEditMode();
+            function restoreSaveButton() {
+                saveBtn.disabled = false;
+                cancelBtn.disabled = false;
+                saveBtn.innerHTML = '💾 Save Changes';
+                saveBtn.style.background = 'linear-gradient(135deg, #4ade80 0%, #22c55e 100%)';
+                saveBtn.style.cursor = 'pointer';
             }
 
             function cancelEditMode() {
