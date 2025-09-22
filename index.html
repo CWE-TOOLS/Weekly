@@ -729,6 +729,24 @@
             gap: 0.75rem;
         }
 
+        #unlock-editing-btn {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: var(--border-radius-md);
+            font-size: 0.875rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+            box-shadow: var(--shadow-sm);
+        }
+
+        #unlock-editing-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+
         #edit-plan-btn, #save-changes-btn, #cancel-changes-btn {
             padding: 0.5rem 1rem;
             border: none;
@@ -1053,7 +1071,8 @@
                 <div class="project-header">
                     <h2 class="project-title" id="project-title">Build Plan</h2>
                     <div class="header-actions">
-                        <button id="edit-plan-btn">✏️ Edit Plan</button>
+                        <button id="unlock-editing-btn">🔒 Unlock Editing</button>
+                        <button id="edit-plan-btn" style="display: none;">✏️ Edit Plan</button>
                         <button id="save-changes-btn" style="display: none;">💾 Save Changes</button>
                         <button id="cancel-changes-btn" style="display: none;">❌ Cancel Changes</button>
                         <button class="project-close" id="project-close">&times;</button>
@@ -1078,6 +1097,7 @@
         let filteredTasks = [];
         let currentDate = new Date();
         let allWeekStartDates = []; // Store the start dates of all rendered weeks
+        const EDIT_PASSWORD = 'cwe'; // Rudimentary password for unlocking editing
 
         // Department order for sorting
         const DEPARTMENT_ORDER = [
@@ -1843,12 +1863,33 @@
         });
 
         function initializeEditMode() {
+            const unlockBtn = document.getElementById('unlock-editing-btn');
             const editBtn = document.getElementById('edit-plan-btn');
             const saveBtn = document.getElementById('save-changes-btn');
             const cancelBtn = document.getElementById('cancel-changes-btn');
             let originalDescriptions = new Map();
+            let isEditingUnlocked = localStorage.getItem('editingUnlocked') === 'true';
+
+            // Check unlock status and update UI
+            if (isEditingUnlocked) {
+                unlockBtn.style.display = 'none';
+                editBtn.style.display = 'inline-block';
+            }
+
+            unlockBtn.addEventListener('click', () => {
+                const password = prompt('Enter password to unlock editing:');
+                if (password === EDIT_PASSWORD) {
+                    isEditingUnlocked = true;
+                    localStorage.setItem('editingUnlocked', 'true');
+                    unlockBtn.style.display = 'none';
+                    editBtn.style.display = 'inline-block';
+                } else {
+                    alert('Incorrect password. Editing remains locked.');
+                }
+            });
 
             editBtn.addEventListener('click', () => {
+                if (!isEditingUnlocked) return;
                 enterEditMode();
             });
 
