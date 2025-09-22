@@ -1386,10 +1386,15 @@
         }
 
         async function fetchTasks() {
-            try {
+            const modalOpen = document.getElementById('project-modal').classList.contains('show');
+            const silent = modalOpen;
+
+            if (!silent) {
                 showLoading(true);
                 hideError();
+            }
 
+            try {
                 const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${SHEET_NAME}!A1:Z?key=${API_KEY}`);
                 const data = await response.json();
 
@@ -1401,10 +1406,17 @@
                 calculateProjectDayCounts(allTasks); // Calculate the day counts
                 populateDepartmentCheckboxes();
                 filterTasks(); // This will call renderWeeklySchedule
-                showLoading(false);
+
+                if (!silent) {
+                    showLoading(false);
+                }
             } catch (error) {
-                showError('Failed to load tasks: ' + error.message);
-                showLoading(false);
+                if (!silent) {
+                    showError('Failed to load tasks: ' + error.message);
+                    showLoading(false);
+                } else {
+                    console.error('Silent refresh failed:', error);
+                }
             }
         }
 
@@ -1893,10 +1905,22 @@
                 tasksByDept[dept].push(task);
             });
 
+            // Collect all departments present in tasks, sorted by DEPARTMENT_ORDER priority
+            const allDepts = new Set(DEPARTMENT_ORDER);
+            Object.keys(tasksByDept).forEach(dept => allDepts.add(dept));
+            const sortedDepts = Array.from(allDepts).sort((a, b) => {
+                const aIndex = DEPARTMENT_ORDER.indexOf(a);
+                const bIndex = DEPARTMENT_ORDER.indexOf(b);
+                if (aIndex === -1 && bIndex === -1) return a.localeCompare(b);
+                if (aIndex === -1) return 1;
+                if (bIndex === -1) return -1;
+                return aIndex - bIndex;
+            });
+
             const allRowClasses = new Set();
 
             // --- Render Department Rows ---
-            DEPARTMENT_ORDER.forEach(dept => {
+            sortedDepts.forEach(dept => {
                 if (tasksByDept[dept]) {
                     const deptTasks = tasksByDept[dept];
                     const tasksByDate = {};
@@ -2173,7 +2197,8 @@
                                     <div class="task-description">${task.description && task.description.trim() ? task.description : '<span class="missing-description">Staging Missing</span>'}</div>
                                     <div class="task-details">
                                         <strong>Date:</strong> ${formattedDate}<br>
-                                        <strong>Hours:</strong> ${task.hours}
+                                        <strong>Hours:</strong> ${task.hours}<br>
+                                        <strong>Code:</strong> ${task.value}
                                     </div>
                                 </div>
                             `;
@@ -2333,6 +2358,9 @@
                             successNotif.style.display = 'none';
                         }, 2500);
                     }
+
+                    // Trigger data refresh after successful edit
+                    await fetchTasks();
 
                     exitEditMode();
                 } catch (error) {
