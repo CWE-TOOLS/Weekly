@@ -1092,12 +1092,140 @@
         const API_KEY = 'AIzaSyA0i2Mr7kVirmM72ggu_L7_3XAB3_EAsNw';
         const SPREADSHEET_ID = '1ReBnudzH_QAY6e45wwpf_sHd2OF1Akkppm0S7NmZ_ws';
         const SHEET_NAME = 'Primary Live List 2';
+        const STAGING_SHEET_NAME = 'Staging - Project Details';
+
+        // Service Account JSON - Add your actual service account JSON here
+        // You can copy the entire JSON object from your downloaded service account key file
+        const SERVICE_ACCOUNT = {
+            "type": "service_account",
+            "project_id": "your-project-id",
+            "private_key_id": "your-private-key-id",
+            "private_key": "-----BEGIN PRIVATE KEY-----\nYOUR_PRIVATE_KEY_HERE\n-----END PRIVATE KEY-----\n",
+            "client_email": "your-service-account@your-project.iam.gserviceaccount.com",
+            "client_id": "your-client-id",
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+            "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/your-service-account%40your-project.iam.gserviceaccount.com",
+            "universe_domain": "googleapis.com"
+        };
+
+        let cachedAccessToken = null;
+        let tokenExpiry = null;
 
         let allTasks = [];
         let filteredTasks = [];
         let currentDate = new Date();
         let allWeekStartDates = []; // Store the start dates of all rendered weeks
         const EDIT_PASSWORD = 'cwe'; // Rudimentary password for unlocking editing
+        let currentProjectName = '';
+
+        const departmentDayMapping = {
+            "Mill 1": 5,
+            "Mill 2": 8,
+            "Mill 3": 11,
+            "Mill 4": 14,
+            "Form Out 1": 17,
+            "Form Out 2": 20,
+            "Form Out 3": 23,
+            "Form Out 4": 26,
+            "Cast 1": 29,
+            "Cast 2": 32,
+            "Demold 1": 37,
+            "Demold 2": 40,
+            "Crating 1": 46,
+            "Crating 2": 49,
+            "Finish 1": 58,
+            "Finish 2": 61,
+            "Finish 3": 64,
+            "Finish 4": 67,
+            "Seal 1": 70,
+            "Seal 2": 73,
+            "Seal 3": 76,
+            "Seal 4": 79,
+            "Special 1": 82,
+            "Special 2": 85,
+            "Special 3": 88,
+            "Ship 1": 94,
+            "Ship 2": 97,
+            "Load 1": 52
+        };
+
+        // JWT and OAuth functions for service account authentication
+        function base64UrlEncode(str) {
+            return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+        }
+
+        function base64UrlDecode(str) {
+            str = str.replace(/-/g, '+').replace(/_/g, '/');
+            while (str.length % 4) str += '=';
+            return atob(str);
+        }
+
+        async function generateJWT() {
+            const header = {
+                alg: 'RS256',
+                typ: 'JWT'
+            };
+            const now = Math.floor(Date.now() / 1000);
+            const payload = {
+                iss: SERVICE_ACCOUNT.client_email,
+                scope: 'https://www.googleapis.com/auth/spreadsheets',
+                aud: 'https://oauth2.googleapis.com/token',
+                exp: now + 3600,
+                iat: now
+            };
+
+            const encodedHeader = base64UrlEncode(JSON.stringify(header));
+            const encodedPayload = base64UrlEncode(JSON.stringify(payload));
+            const message = encodedHeader + '.' + encodedPayload;
+
+            const privateKeyPem = SERVICE_ACCOUNT.private_key.replace(/-----BEGIN PRIVATE KEY-----\n/, '').replace(/\n-----END PRIVATE KEY-----\n/, '').replace(/\n/g, '');
+            const privateKeyDer = Uint8Array.from(atob(privateKeyPem), c => c.charCodeAt(0));
+
+            const privateKey = await crypto.subtle.importKey(
+                'pkcs8',
+                privateKeyDer,
+                {
+                    name: 'RSASSA-PKCS1-v1_5',
+                    hash: 'SHA-256'
+                },
+                false,
+                ['sign']
+            );
+
+            const signature = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', privateKey, new TextEncoder().encode(message));
+            const encodedSignature = base64UrlEncode(String.fromCharCode(...new Uint8Array(signature)));
+
+            return message + '.' + encodedSignature;
+        }
+
+        async function getAccessToken() {
+            if (cachedAccessToken && tokenExpiry && Date.now() < tokenExpiry) {
+                return cachedAccessToken;
+            }
+
+            const jwt = await generateJWT();
+            const response = await fetch('https://oauth2.googleapis.com/token', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams({
+                    grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+                    assertion: jwt
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to get access token');
+            }
+
+            const data = await response.json();
+            cachedAccessToken = data.access_token;
+            tokenExpiry = Date.now() + (data.expires_in * 1000) - 60000; // Refresh 1 minute before expiry
+            return cachedAccessToken;
+        }
 
         // Department order for sorting
         const DEPARTMENT_ORDER = [
@@ -1172,6 +1300,115 @@
             } catch (error) {
                 showError('Failed to load tasks: ' + error.message);
                 showLoading(false);
+            }
+        }
+
+        async function getSheetId(sheetName) {
+            const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}?key=${API_KEY}`);
+            if (!response.ok) throw new Error('Failed to fetch sheet metadata');
+            const data = await response.json();
+            const sheet = data.sheets.find(s => s.properties.title === sheetName);
+            return sheet ? sheet.properties.sheetId : null;
+        }
+
+        async function getStagingData() {
+            const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${STAGING_SHEET_NAME}!A1:Z?key=${API_KEY}`);
+            if (!response.ok) throw new Error('Failed to fetch staging data');
+            const data = await response.json();
+            return data.values || [];
+        }
+
+        function stripHtml(html) {
+            const div = document.createElement('div');
+            div.innerHTML = html;
+            return div.textContent || div.innerText || '';
+        }
+
+        async function saveToStaging(projectName, changedTasks) {
+            try {
+                const sheetId = await getSheetId(STAGING_SHEET_NAME);
+                if (!sheetId) throw new Error('Staging sheet not found');
+                const stagingData = await getStagingData();
+                const headers = stagingData[0] || [];
+                let projectCol = headers.indexOf(projectName);
+                const requests = [];
+                if (projectCol === -1) {
+                    // Insert column after D (index 3, so startIndex 4)
+                    requests.push({
+                        "insertDimension": {
+                            "range": {
+                                "sheetId": sheetId,
+                                "dimension": "COLUMNS",
+                                "startIndex": 4,
+                                "endIndex": 5
+                            },
+                            "inheritFromBefore": false
+                        }
+                    });
+                    // Set header in new column E (index 4)
+                    requests.push({
+                        "updateCells": {
+                            "range": {
+                                "sheetId": sheetId,
+                                "startRowIndex": 0,
+                                "endRowIndex": 1,
+                                "startColumnIndex": 4,
+                                "endColumnIndex": 5
+                            },
+                            "rows": [{
+                                "values": [{
+                                    "userEnteredValue": { "stringValue": projectName }
+                                }]
+                            }],
+                            "fields": "userEnteredValue"
+                        }
+                    });
+                    projectCol = 4;
+                }
+                // Now update the changed descriptions
+                changedTasks.forEach(({task, newText}) => {
+                    const deptDay = task.department + ' ' + task.dayNumber;
+                    const rowIndex = departmentDayMapping[deptDay];
+                    if (rowIndex !== undefined) {
+                        requests.push({
+                            "updateCells": {
+                                "range": {
+                                    "sheetId": sheetId,
+                                    "startRowIndex": rowIndex - 1,
+                                    "endRowIndex": rowIndex,
+                                    "startColumnIndex": projectCol,
+                                    "endColumnIndex": projectCol + 1
+                                },
+                                "rows": [{
+                                    "values": [{
+                                        "userEnteredValue": { "stringValue": newText }
+                                    }]
+                                }],
+                                "fields": "userEnteredValue"
+                            }
+                        });
+                    }
+                });
+                if (requests.length > 0) {
+                    const accessToken = await getAccessToken();
+                    const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}:batchUpdate`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${accessToken}`
+                        },
+                        body: JSON.stringify({ requests })
+                    });
+                    if (!response.ok) {
+                        const error = await response.text();
+                        throw new Error('Failed to update sheet: ' + error);
+                    }
+                    console.log('Successfully saved to staging sheet');
+                    alert('Changes saved successfully!');
+                }
+            } catch (error) {
+                console.error('Error saving to staging:', error);
+                alert('Failed to save changes: ' + error.message);
             }
         }
 
@@ -1769,6 +2006,7 @@
 
         // Project View Functionality
         function showProjectView(projectName) {
+            currentProjectName = projectName;
             const projectTasks = allTasks.filter(task => task.project === projectName);
 
             const modal = document.getElementById('project-modal');
@@ -1921,22 +2159,35 @@
 
             function saveChanges() {
                 const textareas = document.querySelectorAll('#project-schedule-grid .edit-description');
+                const changedTasks = [];
                 textareas.forEach(textarea => {
                     const taskId = textarea.closest('.project-task-card').dataset.taskId;
+                    const originalText = originalDescriptions.get(taskId);
+                    const originalStripped = stripHtml(originalText).trim();
                     const newText = textarea.value.trim();
 
-                    // Update the task in allTasks
+                    // Update the task
                     const task = allTasks.find(t => t.id === taskId);
                     if (task) {
                         task.description = newText;
                     }
 
-                    // Replace textarea with div
+                    // Replace textarea
                     const descDiv = document.createElement('div');
                     descDiv.className = 'task-description';
                     descDiv.innerHTML = newText || '<span class="missing-description">Staging Missing</span>';
                     textarea.replaceWith(descDiv);
+
+                    // Check if changed
+                    if (newText !== originalStripped) {
+                        changedTasks.push({task, newText});
+                    }
                 });
+
+                // Save to staging if there are changes
+                if (changedTasks.length > 0) {
+                    saveToStaging(currentProjectName, changedTasks);
+                }
 
                 exitEditMode();
             }
