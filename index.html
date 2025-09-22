@@ -1112,11 +1112,11 @@
         const STAGING_SHEET_NAME = 'Staging - Project Details';
 
         // Service Account JSON
-        const SERVICE_ACCOUNT = {
+        let SERVICE_ACCOUNT = {
             "type": "service_account",
             "project_id": "test-1-468219",
-            "private_key_id": "2b0edc1ec03f3a76a35b53dd94bc64ed5cb95494",
-            "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDU2shGz9MBx7H+\nv/4ZhARxO8MCfxZTALjfgVrMuCsv3GQbT/wR9ySZfA6zQsGvf9sjrZ4IvkGgM2j5\ns/HNuL1zHNuV/ZpZFj18/J93jknrl/QOi8y0F2x7QLiWBx8B99xmHTrQIwr3Iv9n\nIm/9ZawnEj2MxvC58g42UDNaXuJUCNfSZl1CusBt6vu4j1rkR8Nrm2W2Tu8i2Nf5\nd82xj5Iba7MVQkcfOnxt4X5OmXgDn7XFnHcegrCgNB8+8jSIE/3GiE8cadlEtfp0\nmZZRWr7H5LGYpvBbTnaeUmXUiMyeoKPYuyezNF2i/PCx6MSdaB8DEeqU43p7MMul\nMfVcNtJxAgMBAAECggEAVAWg9ULoWlWHz7XeChhw4HnkusGMAGvSjnezbghtE9F9\nusJSEI1sZyHvc5eweSSRTn4kWfMwWJqyn48Grlx0fFIx4/1dxjjfQM0/7aO/Tj6H\nWo6Y2aY9blHYC3D4LoC3AaAcLTkIBRJNm1qetnpCAJJUtZN6Rwxjy9DQ1KWL1fuG\np7SUrSTcoCwrhkr34MPbiYkR/iAFhfbGJJe7tNHdV3OjVEB/Fqo4kiNqLtZcr30G\nheoFxRKBlRFet5buuJSeU52TolLJRFzNbux7EG5I66dzCL0Mkm5FLN1S+vjprYKb\nzFoCUK9k15uvubqDepyEHeyYQlhCKSS5ekgRNHpMeQKBgQD+tnodCtFpvoiOAN/a\nAtpUW76EzA7OlOZEHb2RAJephHmUQvWfBvzHaHQIHoB8dgji+G4u1bHBxU8rXJ6R\n6ev7jDldXwtPY391FHxTkZ8fTRQr6x3Be2j0D8NLjsyoSd4ipEdsWnaus8hq6KKU\n1YqoJezTG9hdsJcgWcv+XzlcrwKBgQDV7ic5nGBipgj+rxddxgTpxhhBzR4cBb27\n3NtYS2x1LHqX3a5fY8+YmO6Ys4u3oYWVy6bGUvxykfRA4eUO8LFAjFMHWk9SuttY\nO/nu9qj8a41DwFY1J1CauwZn6RzlHRWJMOlOHJ4zOqTsfSeT0H5/pZVx48rYYQFP\nUIdblPPK3wKBgCUU4cA6o/QWFgE+ZVhy0+A2Hw1sO7ede8xs2/0xLeMy8xQ/j0yg\nksphDYtlDWWRNYf9jOTqnV9NX1I7wKYTfRR4/Jz4Skg7fwHHgrYT3CuNaCNgrktN\nsSDe7pqgZnEVl+5JJlDC9sZGTCYsSgcK8425P7oYMq6pF8dQ617T9CDnAoGAYRRN\noIsiAiIuesSh6d/uYteOMm4Od9DzJMk4kHzJnvKsPzZN5uO4VRsxSwJPKOmXYT6l\nU+JcxPEO0lKwS3NWPGBxXSjSTkyVNRkidhpg3QtBc7lYZY6NuWmdopHalu330+Xq\nOZQrBjxakybISv+WJ/7QLnqclkyO95snkZuqdikCgYEAxwv42MsbgH0g2kK8nJ8O\nyJcZpDNzaBEaDtmOBhGyCIGXJgY2XFQSQx2CHskFWD8L5bq4zdaD42/yOEV8FrxX\nsjpG6TWhS8KzxF48p8xfT6qtI+olmabEwGyUZcAy4/eCw2hgXNqNR38u7Ra3t5ff\naQMxWGh2gKUEmtH0VhxTox8=\n-----END PRIVATE KEY-----\n",
+            "private_key_id": "fbc2ff13cf04d5fb4b147818628d600e91ed5345",
+            "private_key": "LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1JSUV2UUlCQURBTkJna3Foa2lHOXcwQkFRRUZBQVNDQktjd2dnU2pBZ0VBQW9JQkFRRGgrL2V2S3R0SVFDMmkKYld4\n4bFhHcFc3NlFqUno5aVpmdkdzSlZBbGJ0L3daalZRRWhvemh2cE0yZ3VVMGN6VnNndkI0cjZNWm8vQUFpZgpremloVFl6MWlOV0QrZ2l5cS83ekNvSVpmV1ZlK2tNUHdl\nldE1QU1lTVR1bmVLME0zS0xGNEp0c0gYVRLaTFlckYKOEwwcU5ueGhOUWtwa0cwM0U5c3J3bzZhOUY5eSt0K3dEVGNsTldRVnR6bGZJTGh4VituQ3RNeng5aTJIaFgvaTMK\nKL0E4Tmhtem5DW5kVUFscEFWSUwyNXlXeC8xakQvVFNTazV6OTUyZUo2Mmt6a256amNvR2ptakdmZ1Y3VDJ1awpFb2NHa29GUFF3SEowUy85NFhVa2pKeXFxRWQ2NUNu\nudlFINTdHZDM1akUwdGlHeVFSUkIxVzkvTXpHMU00QnJsCmRWeFY0ZStGQWdNQkFBRUNnZ0VBQjFaM0pHanYxZGkvb3BhSy9uK1J0R0R6bzNHY3pVVWlkOEVrRjRURklk\nkRFgKZFpVd3hMWnNrWlhwdkJkWUtJS1lM3dSSVM1M0k3U01reUhrcE5ndnk0azE1YU1veFNSd2t0TzBoYjljbTBqbApCSTMzWmZKV1dpSFYxakQxaVV6NDlnT2NkY20w\nwcTBXRzhsYm54YTZFYkwyOHlxTllVeHp3V2YvMldnMThUWFQ3CncvaEYzTVVWWUlpeWNHSWk0VFRjVDgya2RtcVYrTzAyL2diTktTS1VBWEYxTTFCRXNEVEVYWFFUZDJI\nISm5nNnMKY2xaWUROTVFMV1UyZ25ZcW5MVy8rU29MdmR2OHcxaEpKbFdjbUJoVjlvUGVSQ3h4QjhzVXd0M3h2djROak9Qcwp2ZnlncFNYa1JkQUhCd1dXdDBxS2J6bDFz\nzUFd6bUN4cS9GN0RWeGpyd1FLQmdRRDRuRzd4cno1NUdIZUVCM2F4CncvbXdldTdBMzRQUldPMUUzM1lDSFhFOXMvM3VLZlZMa2M0QmV6WE91WGxlV3htdGtlT1E0Y2lw\nwbHRwN0F5MkkKOEY5NDRwSTFqTWRXU3ErbTRzS1FibHRnZVQ1eEJ4bVM5SW84bXM5YUhDT29sb2UzVHlOUXRURllhZDQrNndpdwpBY0JWR0tmY0JDY1YweTUwZVR1aitm\nmL3FHd0tCZ1FEb3MyQ0w4WHFIenRXQjBYdGF4QjNyNSsxYWFEL1JqZGJOCmNObGxmS0FkWkc3NGFXeWNHRGNKNExFNnBSL1h5Q0hJVXg1djBhUHFLank3T0g1VDJCVmJw\nwczJzMUN5K3F6Um0KbXZjUjBWM2JybGJCMXBvZGZVd1dJMllXcDVDVjRGV0R1QUpsWVFnY05wOEpqK1lHRXkzb1lnSlhPTmJXeE1LWAo1RkRhVE84bTN3S0JnRTBIbTFD\nDRExlWXpjSVNXRTI3TS9BWjBjSm1PSjcgZXJ5QWg0L0lWM1Bla1NaZkZ2U3JPWgpmNnp4MGlBMVU2ZXFybkFiTGRsc085SmdEVjNrQkMzVDNLRUdBcXRZN1VLTmJaTlYy\nyMWNJK29NUHpnc1RXaGN3CmNjeUpZd25XZ2kzd1JiakQrbnM5U1FiTjlyQ2ovbE1hbDg5R0RteWJWTWpzWUE1eXFjb0s0Z0pWQW9HQkFObWsKYS9oM3NwS3k4UjZxUHlW\nWMXFFYXNkV0xKZm1jUXNvY1R0VUVtZnRyK3hJdXlqdEt3RTBvNXpZbDhSM3dhd3Y0SwpQNzExNWtsdGw3L0Q1dU9raHRWaC9aeFlGa0YrLzFPNFBMMTloTHVqSTZISWhm\nmeHU1R3NRVUx0L25jdVFObXNyCi81R3lYMU9FQXR0K3F6V2pXcHl1am1IbDE0cW9IUmpUZ291cXlVTWhBb0dBVmhUU1J6Y081RnE1OHNINVJDTEoKckR2UFhCdEtBL0l3\n3a1N3eHUwdHdzQkZhb0hER0YydWQvL3BFVDdvNkI3V1NEQkdJSzcySEtYSXo2eU1TdzBVZwo1QkF5UTYzdjE3UHVjRVpmWUw5eVVET25hLy9jb3FDdlZUd2dXcDJBWDd3\n3MHNublV0d1NWMUtHTVY5bG9kc3JzCk1wVThZRWNpT2s2SU1qYVVUbVNJVE5rPQotLS0tLUVORCBQUklWQVRFIEtFWS0tLS0tCg==",
             "client_email": "sheet-writer@test-1-468219.iam.gserviceaccount.com",
             "client_id": "117725617866432687465",
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
@@ -1167,6 +1167,8 @@
             "Load 1": 52
         };
 
+        SERVICE_ACCOUNT.private_key = `-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDh+/evKttIQC2i\nbWxlXGpW76QjRz9iZfvGsJVAlbt/wZjVQEhozhvpM2guU0czVsgvB4r6MZo/AAif\nkzihTYz1iNWD+giyq/7zCoIZfWVe+kMPwetMPSYSTuneK8G3KLFxJss8aTKk1evF\n/0qoNxxNQKpkG03E9srwo6a9F9y+t+wDTclNWQVtzlfILhxW+nCtMzx9i2HhX/i3\n/A8NhmznCZwVALPAVIL25yWx/1jD/TSSk5z952eJ62kzknzjcoGjmjgFfgV7T2uk\nEocGkoFPQwHJ0S/94XUkjJyqqEd65CnvQH57Gd35jE0tiGyQRRB1W9/MzG1M4Brl\ndVxV4e+FAgMBAAECggEAB1Z3JGjv1di/opaK/n+RtGDzo3GczUUid8EkF4TFIdDX\ndZUwxLZskZXpvBdYKIKY3W4RRS53I7SMkyHkpNgvy4k15aMoxSRwktO0hb9cm0jl\nBI33ZfJWWiHV1jD1iUz49gOcdcm0q0WG8lbnxa6EbL28yqNYUxzwWf/2Wg18TXT7\nw/hF3MUVYIiycGIy4TTcT82kdmqV+O02/gbNKSKUAXF1M1BEsDTEXXQTd2HJng6s\nclZYDNMQLWU2gnYqnLW/+SoLvdv8w1hJJlWcmBhV9oPeRCxxB8sUwt3xvv4NjOPs\nvfygpSXkRdAHBwWWt0qKbzl1sPWzmCxq/F7DVxjrwQKBgQD4nG7xrz55GHeEB3ax\nw/mweu7A34PRWO1E33YCHXE9s/3uKfVLkc4BezXOuXleWxmtkeOQ4cipltp7Ay2I\n8F944pI1jMdWSq+m4sKQbltgeT5xBxmS9Io8ms9aHCOoloe3TyNQtTFYad4+6wiw\nAcBVGKfcBCcV0y50eTuj+f/qGwKBgQDos2CL8XqHztWB0XtaxB3r5+1aaD/RjdbN\ncNllfKAdZG74aWycGDcJ4LE6pR/XyCHIUx5v0aPqKjy7OH5T2BVbps2s1Cy+qzRm\nmvcR0V3brlbB1podfUwWI2YWp5CV4FWDuAJlYQgcNp8Jj+YGEy3oYgJXONbWxMKX\n5FDaTO8m3wKBgE0Hm1CDLeYzcISWE27M/AZ0cJmOJ7 eryAh4/IV3PekSZfFvSrOZ\nf6zx0iA1U6eqrnAbLdlsO9JgDV3kBC3T3KEGAqtY7UKNbZNV21cI+oMPzgsTWhcw\nccyJYwnWgi3wRijD+ns9SQbN9rCj/lMal89GDmybVMjsYA5yqcoK4gJVAoGBANmk\na/h3spKy8R6qPyV1qEasdWLJfmcQsocTtUEmftr+xIuyjtKwE0o5zYl8R3wawv4K\nP7115kltl7/D5uOkhtVh/ZxYFkF+/1O4PL19hLujI6HIhfxu5GsQULt/ncuQNmsr\n/5GyX1OEAtt+qzWjWpyujmHl14qoHRjTgouqyUMhAoGAVhTSRzcO5Fq58sH5RCLJ\nrDvPXBtKA/IwkSwxu0twsBFaoHDGF2ud//pET7o6B7WSDBGIK72HKXIz6yMSw0Ug\n5BAyQ63v17PucEZfYL9yUDOna//coqCvVTwgWp2AX7w0snnUtwSV1KGMV9lodsrs\nMpU8YEciOk6IMjaUTmSITNk=\n-----END PRIVATE KEY-----\n`;
+
         // JWT and OAuth functions for service account authentication
         function base64UrlEncode(str) {
             return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
@@ -1197,7 +1199,14 @@
             const message = encodedHeader + '.' + encodedPayload;
 
             const privateKeyPem = SERVICE_ACCOUNT.private_key.replace(/-----BEGIN PRIVATE KEY-----\n/, '').replace(/\n-----END PRIVATE KEY-----\n/, '').replace(/\n/g, '');
-            const privateKeyDer = Uint8Array.from(atob(privateKeyPem), c => c.charCodeAt(0));
+            let privateKeyDer;
+            try {
+                privateKeyDer = Uint8Array.from(atob(privateKeyPem), c => c.charCodeAt(0));
+            } catch (e) {
+                console.log('Error with atob:', e.message);
+                console.log('privateKeyPem:', privateKeyPem);
+                throw e;
+            }
 
             const privateKey = await crypto.subtle.importKey(
                 'pkcs8',
