@@ -1215,6 +1215,7 @@
         let allWeekStartDates = []; // Store the start dates of all rendered weeks
         const EDIT_PASSWORD = 'cwe'; // Rudimentary password for unlocking editing
         let currentProjectName = '';
+        let currentViewedWeekIndex = -1; // Track the currently viewed week to preserve on refresh
 
         const departmentDayMapping = {
             "Mill 1": 5,
@@ -1229,22 +1230,27 @@
             "Cast 2": 32,
             "Demold 1": 37,
             "Demold 2": 40,
-            "Crating 1": 46,
-            "Crating 2": 49,
-            "Finish 1": 58,
-            "Finish 2": 61,
-            "Finish 3": 64,
-            "Finish 4": 67,
-            "Seal 1": 70,
-            "Seal 2": 73,
-            "Seal 3": 76,
-            "Seal 4": 79,
-            "Special 1": 82,
-            "Special 2": 85,
-            "Special 3": 88,
-            "Ship 1": 94,
-            "Ship 2": 97,
-            "Load 1": 52
+            "Demold 3": 43,
+            "Crating 1": 49,
+            "Crating 2": 52,
+            "Finish 1": 61,
+            "Finish 2": 64,
+            "Finish 3": 67,
+            "Finish 4": 70,
+            "Finish 5": 73,
+            "Seal 1": 76,
+            "Seal 2": 79,
+            "Seal 3": 82,
+            "Seal 4": 85,
+            "Special 1": 88,
+            "Special 2": 91,
+            "Special 3": 94,
+            "Special 4": 96,
+            "Special 5": 100,
+            "Ship 1": 102,
+            "Ship 2": 105,
+            "Load 1": 55,
+            "Load 2": 58
         };
 
         SERVICE_ACCOUNT.private_key = `-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDh+/evKttIQC2i\nbWxlXGpW76QjRz9iZfvGsJVAlbt/wZjVQEhozhvpM2guU0czVsgvB4r6MZo/AAif\nkzihTYz1iNWD+giyq/7zCoIZfWVe+kMPwetMPSYSTuneK8G3KLFxJss8aTKk1evF\n/0qoNxxNQKpkG03E9srwo6a9F9y+t+wDTclNWQVtzlfILhxW+nCtMzx9i2HhX/i3\n/A8NhmznCZwVALPAVIL25yWx/1jD/TSSk5z952eJ62kzknzjcoGjmjgFfgV7T2uk\nEocGkoFPQwHJ0S/94XUkjJyqqEd65CnvQH57Gd35jE0tiGyQRRB1W9/MzG1M4Brl\ndVxV4e+FAgMBAAECggEAB1Z3JGjv1di/opaK/n+RtGDzo3GczUUid8EkF4TFIdDX\ndZUwxLZskZXpvBdYKIKY3W4RRS53I7SMkyHkpNgvy4k15aMoxSRwktO0hb9cm0jl\nBI33ZfJWWiHV1jD1iUz49gOcdcm0q0WG8lbnxa6EbL28yqNYUxzwWf/2Wg18TXT7\nw/hF3MUVYIiycGIy4TTcT82kdmqV+O02/gbNKSKUAXF1M1BEsDTEXXQTd2HJng6s\nclZYDNMQLWU2gnYqnLW/+SoLvdv8w1hJJlWcmBhV9oPeRCxxB8sUwt3xvv4NjOPs\nvfygpSXkRdAHBwWWt0qKbzl1sPWzmCxq/F7DVxjrwQKBgQD4nG7xrz55GHeEB3ax\nw/mweu7A34PRWO1E33YCHXE9s/3uKfVLkc4BezXOuXleWxmtkeOQ4cipltp7Ay2I\n8F944pI1jMdWSq+m4sKQbltgeT5xBxmS9Io8ms9aHCOoloe3TyNQtTFYad4+6wiw\nAcBVGKfcBCcV0y50eTuj+f/qGwKBgQDos2CL8XqHztWB0XtaxB3r5+1aaD/RjdbN\ncNllfKAdZG74aWycGDcJ4LE6pR/XyCHIUx5v0aPqKjy7OH5T2BVbps2s1Cy+qzRm\nmvcR0V3brlbB1podfUwWI2YWp5CV4FWDuAJlYQgcNp8Jj+YGEy3oYgJXONbWxMKX\n5FDaTO8m3wKBgE0Hm1CDLeYzcISWE27M/AZ0cJmOJ7 eryAh4/IV3PekSZfFvSrOZ\nf6zx0iA1U6eqrnAbLdlsO9JgDV3kBC3T3KEGAqtY7UKNbZNV21cI+oMPzgsTWhcw\nccyJYwnWgi3wRijD+ns9SQbN9rCj/lMal89GDmybVMjsYA5yqcoK4gJVAoGBANmk\na/h3spKy8R6qPyV1qEasdWLJfmcQsocTtUEmftr+xIuyjtKwE0o5zYl8R3wawv4K\nP7115kltl7/D5uOkhtVh/ZxYFkF+/1O4PL19hLujI6HIhfxu5GsQULt/ncuQNmsr\n/5GyX1OEAtt+qzWjWpyujmHl14qoHRjTgouqyUMhAoGAVhTSRzcO5Fq58sH5RCLJ\nrDvPXBtKA/IwkSwxu0twsBFaoHDGF2ud//pET7o6B7WSDBGIK72HKXIz6yMSw0Ug\n5BAyQ63v17PucEZfYL9yUDOna//coqCvVTwgWp2AX7w0snnUtwSV1KGMV9lodsrs\nMpU8YEciOk6IMjaUTmSITNk=\n-----END PRIVATE KEY-----\n`;
@@ -1762,13 +1768,17 @@
                 container.appendChild(renderWeekGrid(mondayDate, maxTasksPerDept));
             });
 
-            // Find the index of the current week to scroll to it
-            currentMonday = getMonday(new Date());
-            let initialWeekIndex = allWeekStartDates.findIndex(d => d.getTime() === currentMonday.getTime());
-            if (initialWeekIndex === -1) { // If no tasks for current week, find the next future week
-                initialWeekIndex = allWeekStartDates.findIndex(d => d > currentMonday);
-                if (initialWeekIndex === -1) initialWeekIndex = allWeekStartDates.length - 1; // Default to last week
+            // Determine the initial week index, preserving the currently viewed week if set
+            if (currentViewedWeekIndex === -1 || currentViewedWeekIndex >= allWeekStartDates.length) {
+                // Set to current week
+                currentMonday = getMonday(new Date());
+                currentViewedWeekIndex = allWeekStartDates.findIndex(d => d.getTime() === currentMonday.getTime());
+                if (currentViewedWeekIndex === -1) {
+                    currentViewedWeekIndex = allWeekStartDates.findIndex(d => d > currentMonday);
+                    if (currentViewedWeekIndex === -1) currentViewedWeekIndex = allWeekStartDates.length - 1;
+                }
             }
+            let initialWeekIndex = currentViewedWeekIndex;
 
             // Performance optimization: Use requestAnimationFrame for better performance
             requestAnimationFrame(() => {
@@ -2083,6 +2093,7 @@
         document.getElementById('schedule-wrapper').addEventListener('scrollend', () => {
             const wrapper = document.getElementById('schedule-wrapper');
             const currentIndex = Math.round(wrapper.scrollLeft / wrapper.offsetWidth);
+            currentViewedWeekIndex = currentIndex;
             const currentWeekDate = allWeekStartDates[currentIndex];
             updateWeekDisplayHeader(currentWeekDate);
         });
