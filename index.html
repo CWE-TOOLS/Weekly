@@ -25,6 +25,7 @@
             --color-mill: #06B6D4; --color-mill-text: #FFFFFF;       /* Cyan */
             --color-form-out: #3B82F6; --color-form-out-text: #FFFFFF; /* Blue */
             --color-cast: #EF4444; --color-cast-text: #FFFFFF;       /* Red */
+            --color-batch: #800000; --color-batch-text: #FFFFFF;     /* Maroon */
             --color-demold: #F97316; --color-demold-text: #FFFFFF;    /* Orange */
             --color-finish: #8B5CF6; --color-finish-text: #FFFFFF;    /* Violet */
             --color-seal: #6B7280; --color-seal-text: #FFFFFF;       /* Medium Grey */
@@ -267,6 +268,7 @@
         .department-label.department-mill { background-color: var(--color-mill); color: var(--color-mill-text); }
         .department-label.department-form-out { background-color: var(--color-form-out); color: var(--color-form-out-text); }
         .department-label.department-cast { background-color: var(--color-cast); color: var(--color-cast-text); }
+        .department-label.department-batch { background-color: var(--color-batch); color: var(--color-batch-text); }
         .department-label.department-demold { background-color: var(--color-demold); color: var(--color-demold-text); }
         .department-label.department-finish { background-color: var(--color-finish); color: var(--color-finish-text); }
         .department-label.department-seal { background-color: var(--color-seal); color: var(--color-seal-text); }
@@ -291,6 +293,7 @@
         .task-card.department-mill { background-color: var(--color-mill); color: var(--color-mill-text); }
         .task-card.department-form-out { background-color: var(--color-form-out); color: var(--color-form-out-text); }
         .task-card.department-cast { background-color: var(--color-cast); color: var(--color-cast-text); }
+        .task-card.department-batch { background-color: var(--color-batch); color: var(--color-batch-text); }
         .task-card.department-demold { background-color: var(--color-demold); color: var(--color-demold-text); }
         .task-card.department-finish { background-color: var(--color-finish); color: var(--color-finish-text); }
         .task-card.department-seal { background-color: var(--color-seal); color: var(--color-seal-text); }
@@ -732,6 +735,29 @@
             gap: 0.75rem;
         }
 
+        .small-lock-btn {
+            padding: 0.25rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            font-size: 0.75rem;
+            border: 1px solid var(--border-primary);
+            border-radius: var(--border-radius-md);
+            background-color: var(--background-secondary);
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+            opacity: 0.7;
+        }
+
+        .small-lock-btn:hover {
+            opacity: 1;
+            transform: scale(1.05);
+            box-shadow: var(--shadow-sm);
+        }
+
         #unlock-editing-btn {
             background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
             color: white;
@@ -1161,6 +1187,7 @@
                     <div class="header-actions">
                         <button id="unlock-editing-btn">🔒 Unlock Editing</button>
                         <button id="edit-plan-btn" style="display: none;">✏️ Edit Plan</button>
+                        <button id="lock-editing-btn" class="small-lock-btn" style="display: none;" title="Lock Editing">🔒</button>
                         <button id="save-changes-btn" style="display: none;">💾 Save Changes</button>
                         <button id="cancel-changes-btn" style="display: none;">❌ Cancel Changes</button>
                         <button class="project-close" id="project-close">&times;</button>
@@ -1345,6 +1372,7 @@
             'Mill',
             'Form Out',
             'Cast',
+            'Batch',
             'Demold',
             'Finish',
             'Seal',
@@ -1764,6 +1792,7 @@
                     maxTasksPerDept[dept] = maxTasks;
                 }
             });
+            maxTasksPerDept['Batch'] = 1;
 
             // Render a grid for each week using the global max tasks count
             allWeekStartDates.forEach(mondayDate => {
@@ -1895,6 +1924,36 @@
                 return date;
             });
 
+            // Generate batch tasks (Mon-Fri only)
+            const batchTasks = [];
+            weekDates.forEach((date, i) => {
+                if (i < 5) { // Mon to Fri
+                    const nextDate = new Date(date);
+                    if (i === 4) { // Friday, show Monday
+                        nextDate.setDate(nextDate.getDate() + 3);
+                    } else {
+                        nextDate.setDate(nextDate.getDate() + 1);
+                    }
+                    const nextDateString = nextDate.toDateString();
+                    const castingProjects = allTasks.filter(t => t.department === 'Cast' && parseDate(t.date) && parseDate(t.date).toDateString() === nextDateString).map(t => t.project);
+                    const batchTask = {
+                        id: `batch-${date.toISOString()}`,
+                        week: getLocalDateString(getMonday(dateForWeek)),
+                        project: 'Batch',
+                        description: castingProjects.length > 0 ? castingProjects.join('<br>') : '',
+                        date: getLocalDateString(date),
+                        department: 'Batch',
+                        value: '',
+                        hours: '',
+                        dayNumber: '',
+                        totalDays: '',
+                        dayCounter: '',
+                        missingDate: false
+                    };
+                    batchTasks.push(batchTask);
+                }
+            });
+
             // --- Header Row ---
             grid.innerHTML += `<div class="grid-header">Department</div>`;
             weekDates.forEach(date => {
@@ -1916,6 +1975,7 @@
                 if (!tasksByDept[dept]) tasksByDept[dept] = [];
                 tasksByDept[dept].push(task);
             });
+            tasksByDept['Batch'] = batchTasks;
 
             // Collect all departments present in tasks, sorted by DEPARTMENT_ORDER priority
             const allDepts = new Set(DEPARTMENT_ORDER);
@@ -1967,6 +2027,7 @@
                             const task = tasksByDate[dateString] ? tasksByDate[dateString][i] : undefined;
 
                             if (task) {
+                                const showDetails = task.department !== 'Batch';
                                 dayCell.innerHTML = `
                                     <div class="task-card ${rowClass} department-${normalizeDepartmentClass(task.department)}" data-task-id="${task.id}">
                                         <div class="task-title">${task.project}</div>
@@ -1974,10 +2035,10 @@
                                            ${task.dayCounter || ''}
                                         </div>
                                         <div class="task-description">${task.description && task.description.trim() ? task.description : '<span class="missing-description">Staging Missing</span>'}</div>
-                                          <div class="task-details">
+                                        ${showDetails ? `<div class="task-details">
                                               ${task.missingDate ? '<strong>Date:</strong> Missing<br>' : ''}
                                               <strong>Hours:</strong> ${task.hours}
-                                          </div>
+                                          </div>` : ''}
                                     </div>
                                 `;
                             } else {
@@ -2267,6 +2328,7 @@
         function initializeEditMode() {
             const unlockBtn = document.getElementById('unlock-editing-btn');
             const editBtn = document.getElementById('edit-plan-btn');
+            const lockBtn = document.getElementById('lock-editing-btn');
             const saveBtn = document.getElementById('save-changes-btn');
             const cancelBtn = document.getElementById('cancel-changes-btn');
             let originalDescriptions = new Map();
@@ -2276,6 +2338,7 @@
             if (isEditingUnlocked) {
                 unlockBtn.style.display = 'none';
                 editBtn.style.display = 'inline-block';
+                lockBtn.style.display = 'inline-block';
             }
 
             unlockBtn.addEventListener('click', () => {
@@ -2285,6 +2348,7 @@
                     localStorage.setItem('editingUnlocked', 'true');
                     unlockBtn.style.display = 'none';
                     editBtn.style.display = 'inline-block';
+                    lockBtn.style.display = 'inline-block';
                 } else {
                     alert('Incorrect password. Editing remains locked.');
                 }
@@ -2303,8 +2367,21 @@
                 cancelEditMode();
             });
 
+            lockBtn.addEventListener('click', () => {
+                isEditingUnlocked = false;
+                localStorage.setItem('editingUnlocked', 'false');
+                unlockBtn.style.display = 'inline-block';
+                editBtn.style.display = 'none';
+                lockBtn.style.display = 'none';
+                // If currently in edit mode, cancel it
+                if (saveBtn.style.display !== 'none') {
+                    cancelEditMode();
+                }
+            });
+
             function enterEditMode() {
                 editBtn.style.display = 'none';
+                lockBtn.style.display = 'none';
                 saveBtn.style.display = 'inline-block';
                 cancelBtn.style.display = 'inline-block';
 
@@ -2418,6 +2495,9 @@
 
             function exitEditMode() {
                 editBtn.style.display = 'inline-block';
+                if (isEditingUnlocked) {
+                    lockBtn.style.display = 'inline-block';
+                }
                 saveBtn.style.display = 'none';
                 cancelBtn.style.display = 'none';
                 originalDescriptions.clear();
