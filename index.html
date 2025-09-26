@@ -1070,6 +1070,442 @@
             to { transform: rotate(360deg); }
         }
 
+        /* --- Print Modal --- */
+        .print-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(5px);
+            z-index: 9999;
+            display: none;
+            animation: modalBackdropFade 0.4s ease-out;
+            padding: 2rem;
+            box-sizing: border-box;
+        }
+
+        .print-modal.show {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .print-content {
+            background: var(--background-secondary);
+            border-radius: var(--border-radius-lg);
+            box-shadow: var(--shadow-md);
+            width: 90vw;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            animation: slideInBounce 0.5s ease-out;
+            border: 1px solid var(--border-primary);
+        }
+
+        .print-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid var(--border-primary);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--background-primary);
+        }
+
+        .print-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin: 0;
+        }
+
+        .print-close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: var(--text-secondary);
+            padding: 0.25rem;
+            border-radius: var(--border-radius-md);
+            transition: all 0.3s ease;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .print-close:hover {
+            color: var(--accent-primary);
+            background: rgba(79, 70, 229, 0.1);
+            transform: scale(1.1);
+        }
+
+        .print-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.5rem;
+        }
+
+        .print-options {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .print-option-label {
+            font-weight: 600;
+            font-size: 1rem;
+            color: var(--text-primary);
+            margin-bottom: 0.5rem;
+            display: block;
+        }
+
+        .radio-group {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .radio-label {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            cursor: pointer;
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .radio-label input[type="radio"] {
+            width: 1.2rem;
+            height: 1.2rem;
+            accent-color: var(--accent-primary);
+        }
+
+        .week-select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid var(--border-primary);
+            border-radius: var(--border-radius-md);
+            background: var(--background-secondary);
+            color: var(--text-primary);
+            font-size: 1rem;
+            font-family: inherit;
+        }
+
+        .date-select-section {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            width: 100%;
+        }
+
+        .date-select-section label {
+            flex-shrink: 0;
+            margin-bottom: 0;
+        }
+
+        .date-select {
+            flex: 1;
+            padding: 0.75rem;
+            border: 1px solid var(--border-primary);
+            border-radius: var(--border-radius-md);
+            background: var(--background-secondary);
+            color: var(--text-primary);
+            font-size: 1rem;
+            font-family: inherit;
+        }
+
+        .departments-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .dept-action-btn {
+            padding: 0.5rem 1rem;
+            border: 1px solid var(--border-primary);
+            border-radius: var(--border-radius-md);
+            background: var(--background-secondary);
+            color: var(--text-primary);
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: background-color 0.2s;
+        }
+
+        .dept-action-btn:hover {
+            background: var(--border-primary);
+        }
+
+        .departments-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 0.75rem;
+        }
+
+        .department-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .department-checkbox input[type="checkbox"] {
+            width: 1.2rem;
+            height: 1.2rem;
+            accent-color: var(--accent-primary);
+        }
+
+        .department-checkbox label {
+            font-weight: 500;
+            color: var(--text-primary);
+            cursor: pointer;
+        }
+
+        .print-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 1rem;
+            margin-top: 2rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border-primary);
+        }
+
+        .print-execute-btn, .print-cancel-btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: var(--border-radius-md);
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .print-execute-btn {
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            color: white;
+        }
+
+        .print-execute-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .print-cancel-btn {
+            background: var(--border-primary);
+            color: var(--text-primary);
+        }
+
+        .print-cancel-btn:hover {
+            background: var(--border-secondary);
+        }
+
+        /* --- Print Content Generation --- */
+        .print-preview-content {
+            display: none;
+        }
+
+        @media print {
+            @page {
+                size: letter landscape;
+                margin: 0.5in;
+            }
+            body > * {
+                display: none !important;
+            }
+            .print-preview-content {
+                display: block !important;
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                height: 100%;
+            }
+            .print-page {
+                page-break-after: always;
+                margin: 0;
+                padding: 0;
+                width: 11in;
+                box-sizing: border-box;
+                background: white;
+                padding-top: 0.25in;
+            }
+            .print-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 0.75rem;
+                background: white;
+                margin: 0 auto;
+            }
+            .print-page {
+                display: flex;
+                align-items: stretch;
+                margin-bottom: 1rem;
+            }
+            .print-department-header {
+                font-weight: 600;
+                background: #e5e7eb;
+                color: black;
+                writing-mode: vertical-rl;
+                text-orientation: mixed;
+                font-size: 1.5rem;
+                print-color-adjust: exact;
+                -webkit-print-color-adjust: exact;
+                width: 150px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                border: 1px solid #000;
+                padding: 0.5rem;
+            }
+            .print-table {
+                flex: 1;
+                border-collapse: collapse;
+            }
+            .print-table th, .print-table td {
+                border: 1px solid #000;
+                padding: 0.25rem;
+                text-align: center;
+                vertical-align: top;
+                width: 180px;
+            }
+            .print-table-day {
+                flex: none;
+                width: auto;
+            }
+            .print-table-day th, .print-table-day td {
+                width: 250px;
+            }
+            .print-page-day {
+                margin: 0 auto;
+            }
+            .print-page-day .print-table {
+                flex: none;
+                width: auto;
+            }
+            .print-department-header-day {
+                width: 100px;
+                writing-mode: horizontal-tb;
+                text-orientation: mixed;
+            }
+            .print-table th {
+                background: #d1d5db;
+                color: black;
+                font-weight: 600;
+            }
+            /* Department colors for print department headers */
+            .print-department-header.department-mill { background-color: #06B6D4 !important; color: #FFFFFF !important; }
+            .print-department-header.department-form-out { background-color: #3B82F6 !important; color: #FFFFFF !important; }
+            .print-department-header.department-cast { background-color: #EF4444 !important; color: #FFFFFF !important; }
+            .print-department-header.department-batch { background-color: #800000 !important; color: #FFFFFF !important; }
+            .print-department-header.department-demold { background-color: #F97316 !important; color: #FFFFFF !important; }
+            .print-department-header.department-finish { background-color: #8B5CF6 !important; color: #FFFFFF !important; }
+            .print-department-header.department-seal { background-color: #6B7280 !important; color: #FFFFFF !important; }
+            .print-department-header.department-special { background-color: #EC4899 !important; color: #FFFFFF !important; }
+            .print-department-header.department-crating { background-color: #A16207 !important; color: #FFFFFF !important; }
+            .print-department-header.department-load { background-color: #F59E0B !important; color: #FFFFFF !important; }
+            .print-department-header.department-ship { background-color: #22C55E !important; color: #FFFFFF !important; }
+            .print-grid-cell {
+                background: white;
+                min-height: 80px;
+                padding: 0.125rem;
+            }
+            .print-task-card {
+                border: 1px solid #d1d5db;
+                border-radius: 4px;
+                padding: 0.25rem;
+                margin-bottom: 0.125rem;
+                font-size: 0.65rem;
+                color: black;
+                display: flex;
+                flex-direction: column;
+                min-height: 80px;
+                max-width: 200px;
+                print-color-adjust: exact;
+                -webkit-print-color-adjust: exact;
+            }
+            .print-task-title {
+                font-weight: 600;
+                margin-bottom: 0.125rem;
+                color: black;
+                font-size: 0.7rem;
+                padding: 0.125rem;
+                border-radius: 2px;
+            }
+            /* Department colors for print task titles */
+            .print-task-title.department-mill { background-color: #06B6D4 !important; color: #FFFFFF !important; }
+            .print-task-title.department-form-out { background-color: #3B82F6 !important; color: #FFFFFF !important; }
+            .print-task-title.department-cast { background-color: #EF4444 !important; color: #FFFFFF !important; }
+            .print-task-title.department-batch { background-color: #800000 !important; color: #FFFFFF !important; }
+            .print-task-title.department-demold { background-color: #F97316 !important; color: #FFFFFF !important; }
+            .print-task-title.department-finish { background-color: #8B5CF6 !important; color: #FFFFFF !important; }
+            .print-task-title.department-seal { background-color: #6B7280 !important; color: #FFFFFF !important; }
+            .print-task-title.department-special { background-color: #EC4899 !important; color: #FFFFFF !important; }
+            .print-task-title.department-crating { background-color: #A16207 !important; color: #FFFFFF !important; }
+            .print-task-title.department-load { background-color: #F59E0B !important; color: #FFFFFF !important; }
+            .print-task-title.department-ship { background-color: #22C55E !important; color: #FFFFFF !important; }
+            .print-task-day-counter {
+                font-size: 0.55rem;
+                font-weight: 600;
+                text-align: center;
+                padding: 0.0625rem 0;
+                margin: 0.125rem -0.25rem 0.125rem -0.25rem;
+                background-color: rgba(0,0,0,0.08);
+                color: black;
+            }
+            .print-task-description {
+                font-size: 0.55rem;
+                font-weight: 600;
+                margin-bottom: 0.25rem;
+                color: black;
+                flex-grow: 1;
+                text-align: center;
+            }
+            .print-missing-description {
+                color: #ef4444;
+                font-weight: 600;
+            }
+            .print-task-details {
+                font-size: 0.55rem;
+                color: black;
+                border-top: 1px solid rgba(0,0,0,0.08);
+                padding-top: 0.125rem;
+                margin-top: auto;
+            }
+            .print-task-details strong {
+                color: black;
+                font-weight: 600;
+            }
+
+           .print-dept-summary {
+               font-weight: 600;
+               font-size: 1rem;
+               color: black;
+               margin-top: 0;
+               text-align: center;
+               border: 1px solid #000;
+               background: white;
+               padding: 0.5rem;
+               display: inline-block;
+           }
+
+            /* Department colors for print */
+            .print-department-label.department-mill { background-color: #06B6D4 !important; color: #FFFFFF !important; }
+            .print-department-label.department-form-out { background-color: #3B82F6 !important; color: #FFFFFF !important; }
+            .print-department-label.department-cast { background-color: #EF4444 !important; color: #FFFFFF !important; }
+            .print-department-label.department-batch { background-color: #800000 !important; color: #FFFFFF !important; }
+            .print-department-label.department-demold { background-color: #F97316 !important; color: #FFFFFF !important; }
+            .print-department-label.department-finish { background-color: #8B5CF6 !important; color: #FFFFFF !important; }
+            .print-department-label.department-seal { background-color: #6B7280 !important; color: #FFFFFF !important; }
+            .print-department-label.department-special { background-color: #EC4899 !important; color: #FFFFFF !important; }
+            .print-department-label.department-crating { background-color: #A16207 !important; color: #FFFFFF !important; }
+            .print-department-label.department-load { background-color: #F59E0B !important; color: #FFFFFF !important; }
+            .print-department-label.department-ship { background-color: #22C55E !important; color: #FFFFFF !important; }
+        }
+
         /* --- Success Notification --- */
         .project-success-notification {
             position: absolute;
@@ -1167,15 +1603,22 @@
             </div>
             <div class="action-group">
                <button id="refresh-btn">Refresh Data</button>
-               <button id="fullscreen-btn" class="icon-btn" aria-label="Toggle Fullscreen">
-                   <svg id="fullscreen-icon-expand" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                       <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
-                   </svg>
-                   <svg id="fullscreen-icon-compress" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
-                       <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 0 2-2h3M3 16h3a2 2 0 0 0 2-2v-3"/>
-                   </svg>
-               </button>
-           </div>
+                <button id="print-btn" class="icon-btn" aria-label="Print Schedule">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="6,9 6,2 18,2 18,9"/>
+                        <path d="m6,18H4a2,2 0 0,1 -2,-2v-5a2,2 0 0,1 2,-2h16a2,2 0 0,1 2,2v5a2,2 0 0,1 -2,2h-2"/>
+                        <rect x="6" y="14" width="12" height="8"/>
+                    </svg>
+                </button>
+                <button id="fullscreen-btn" class="icon-btn" aria-label="Toggle Fullscreen">
+                    <svg id="fullscreen-icon-expand" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+                    </svg>
+                    <svg id="fullscreen-icon-compress" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+                        <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 0 2-2h3M3 16h3a2 2 0 0 0 2-2v-3"/>
+                    </svg>
+                </button>
+            </div>
         </div>
 
         <div id="loading" class="loading">Loading tasks...</div>
@@ -1226,6 +1669,62 @@
                 <div id="project-loading-overlay" class="project-loading-overlay" style="display: none;">
                     <div class="loading-spinner"></div>
                     <p>Confirming edits...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Print Modal -->
+        <div class="print-modal" id="print-modal">
+            <div class="print-content">
+                <div class="print-header">
+                    <h2 class="print-title">Print Schedule</h2>
+                    <button class="print-close" id="print-close">&times;</button>
+                </div>
+
+                <div class="print-body">
+                    <div class="print-options">
+                        <div class="print-type-section">
+                            <label class="print-option-label">Print Type:</label>
+                            <div class="radio-group">
+                                <label class="radio-label">
+                                    <input type="radio" name="print-type" value="week" checked>
+                                    <span class="radio-text">Print Week</span>
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="print-type" value="day">
+                                    <span class="radio-text">Print Day</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="week-select-section" id="week-select-section">
+                            <label for="print-week-select" class="print-option-label">Select Week:</label>
+                            <select id="print-week-select" class="week-select">
+                                <!-- Options populated by JS -->
+                            </select>
+                        </div>
+
+                        <div class="date-select-section" id="day-select-section" style="display: none;">
+                            <label for="print-date-select" class="print-option-label">Select Date:</label>
+                            <input type="date" id="print-date-select" class="date-select">
+                        </div>
+
+                        <div class="departments-section">
+                            <label class="print-option-label">Select Departments:</label>
+                            <div class="departments-actions">
+                                <button id="check-all-depts" class="dept-action-btn">Check All</button>
+                                <button id="uncheck-all-depts" class="dept-action-btn">Uncheck All</button>
+                            </div>
+                            <div class="departments-grid">
+                                <!-- Checkboxes populated by JS -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="print-actions">
+                        <button id="print-execute-btn" class="print-execute-btn">Print Selected</button>
+                        <button id="print-cancel-btn" class="print-cancel-btn">Cancel</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -2546,6 +3045,434 @@
             }
         }
 
+
+        // Print Modal Functionality
+        let currentPrintWeekDates = [];
+        let allDepartmentsForPrint = [];
+        let currentPrintType = 'week';
+
+        function showPrintModal() {
+            if (allTasks.length === 0) {
+                alert('Data is still loading. Please wait for the schedule to load before printing.');
+                return;
+            }
+            const modal = document.getElementById('print-modal');
+            modal.classList.add('show');
+            document.body.style.overflow = 'hidden';
+            populatePrintOptions();
+        }
+
+        function hidePrintModal() {
+            const modal = document.getElementById('print-modal');
+            modal.classList.remove('show');
+            document.body.style.overflow = '';
+        }
+
+        function populatePrintOptions() {
+            // Populate week select
+            const weekSelect = document.getElementById('print-week-select');
+            weekSelect.innerHTML = '';
+            allWeekStartDates.forEach((date, index) => {
+                const option = document.createElement('option');
+                option.value = index.toString();
+                const weekStart = new Date(date);
+                const weekEnd = new Date(date);
+                weekEnd.setDate(date.getDate() + 5);
+                option.textContent = `${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+                if (index === currentViewedWeekIndex) option.selected = true;
+                weekSelect.appendChild(option);
+            });
+
+            // Set date input to today
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('print-date-select').value = today;
+
+            // Get all departments, filter out invalid ones
+            allDepartmentsForPrint = [...new Set(allTasks.map(task => task.department).filter(dept => dept && dept.toLowerCase() !== 'department' && !dept.toLowerCase().includes('link') && !dept.toLowerCase().includes('live')))];
+            allDepartmentsForPrint.sort((a, b) => {
+                const aIndex = DEPARTMENT_ORDER.indexOf(a);
+                const bIndex = DEPARTMENT_ORDER.indexOf(b);
+                if (aIndex === -1 && bIndex === -1) return a.localeCompare(b);
+                if (aIndex === -1) return 1;
+                if (bIndex === -1) return -1;
+                return aIndex - bIndex;
+            });
+
+            const departmentsGrid = document.querySelector('.departments-grid');
+            departmentsGrid.innerHTML = '';
+            allDepartmentsForPrint.forEach(dept => {
+                const checkboxDiv = document.createElement('div');
+                checkboxDiv.className = 'department-checkbox';
+                checkboxDiv.innerHTML = `
+                    <input type="checkbox" id="print-dept-${normalizeDepartmentClass(dept)}" value="${dept}" checked>
+                    <label for="print-dept-${normalizeDepartmentClass(dept)}">${dept}</label>
+                `;
+                departmentsGrid.appendChild(checkboxDiv);
+            });
+
+            updatePrintTypeDisplay();
+        }
+
+        function updatePrintTypeDisplay() {
+            currentPrintType = document.querySelector('input[name="print-type"]:checked').value;
+            const weekSection = document.getElementById('week-select-section');
+            const daySection = document.getElementById('day-select-section');
+            if (currentPrintType === 'week') {
+                weekSection.style.display = 'block';
+                daySection.style.display = 'none';
+            } else {
+                weekSection.style.display = 'none';
+                daySection.style.display = 'block';
+            }
+        }
+
+        function updateWeekDates() {
+            const selectedIndex = parseInt(document.getElementById('print-week-select').value);
+            const selectedWeekStart = allWeekStartDates[selectedIndex];
+            currentPrintWeekDates = Array.from({ length: 6 }).map((_, i) => {
+                const date = new Date(selectedWeekStart);
+                date.setDate(selectedWeekStart.getDate() + i);
+                return date;
+            });
+        }
+
+        function generatePrintContent() {
+            const printType = document.querySelector('input[name="print-type"]:checked').value;
+            let selectedDepts = Array.from(document.querySelectorAll('.departments-grid input[type="checkbox"]:checked')).map(cb => cb.value);
+
+            if (selectedDepts.length === 0) {
+                alert('Please select at least one department.');
+                return;
+            }
+
+            // Update currentPrintWeekDates based on selected week
+            if (printType === 'week') {
+                updateWeekDates();
+            }
+
+            // Filter departments to only those with tasks in the selected period
+            selectedDepts = selectedDepts.filter(dept => {
+                const deptTasks = allTasks.filter(task => task.department === dept);
+                if (printType === 'week') {
+                    return currentPrintWeekDates.some(date => {
+                        const dateString = date.toDateString();
+                        return deptTasks.some(t => {
+                            const taskDate = parseDate(t.date);
+                            return taskDate && taskDate.toDateString() === dateString;
+                        });
+                    });
+                } else {
+                    const selectedDate = new Date(document.getElementById('print-date-select').value);
+                    const dateString = selectedDate.toDateString();
+                    return deptTasks.some(t => {
+                        const taskDate = parseDate(t.date);
+                        return taskDate && taskDate.toDateString() === dateString;
+                    });
+                }
+            });
+
+            if (selectedDepts.length === 0) {
+                alert('No tasks found for the selected departments and date/week.');
+                return;
+            }
+
+            const printContainer = document.createElement('div');
+            printContainer.className = 'print-preview-content';
+
+            selectedDepts.forEach(dept => {
+                // Calculate total hours and revenue for the department in the selected period
+                let deptTasks = allTasks.filter(task => task.department === dept);
+                if (printType === 'week') {
+                    deptTasks = deptTasks.filter(task => {
+                        const taskDate = parseDate(task.date);
+                        return taskDate && currentPrintWeekDates.some(date => date.toDateString() === taskDate.toDateString());
+                    });
+                } else {
+                    const selectedDate = new Date(document.getElementById('print-date-select').value);
+                    const dateString = selectedDate.toDateString();
+                    deptTasks = deptTasks.filter(task => {
+                        const taskDate = parseDate(task.date);
+                        return taskDate && taskDate.toDateString() === dateString;
+                    });
+                }
+                let totalHours = 0;
+                deptTasks.forEach(task => {
+                    const hours = parseFloat(task.hours);
+                    if (!isNaN(hours)) {
+                        totalHours += hours;
+                    }
+                });
+                const revenue = Math.round(totalHours * 135);
+
+                // Create summary div for department totals
+                const summaryDiv = document.createElement('div');
+                summaryDiv.className = 'print-dept-summary';
+                summaryDiv.textContent = `${dept} - Total Hours: ${Math.round(totalHours)}, Revenue: $${revenue.toLocaleString()}`;
+
+                const pageDiv = document.createElement('div');
+                pageDiv.className = 'print-page';
+                if (printType === 'day') {
+                    pageDiv.classList.add('print-page-day');
+                }
+                pageDiv.style.display = 'flex';
+                pageDiv.style.flexDirection = 'column';
+
+                // Main content container for header and table
+                const mainContentDiv = document.createElement('div');
+                mainContentDiv.style.display = 'flex';
+                mainContentDiv.style.alignItems = 'stretch';
+                if (printType === 'day') {
+                    mainContentDiv.style.justifyContent = 'flex-end';
+                }
+
+                // Department header sidebar
+                const deptHeader = document.createElement('div');
+                deptHeader.className = `print-department-header department-${normalizeDepartmentClass(dept)}`;
+                if (printType === 'day') {
+                    deptHeader.classList.add('print-department-header-day');
+                }
+                deptHeader.textContent = dept;
+
+                // Table for tasks
+                const table = document.createElement('table');
+                table.className = 'print-table';
+                if (printType === 'day') {
+                    table.classList.add('print-table-day');
+                }
+
+                if (printType === 'day') {
+                    // Day layout: dept header on top, table below, summary below
+                    deptHeader.style.width = '100%';
+                    deptHeader.style.textAlign = 'center';
+                    deptHeader.style.writingMode = 'horizontal-tb';
+                    deptHeader.style.textOrientation = 'mixed';
+                    deptHeader.style.maxWidth = '300px';
+                    deptHeader.style.margin = '0 auto';
+                    table.style.width = '100%';
+                    table.style.maxWidth = '300px';
+                    summaryDiv.style.maxWidth = '300px';
+                    summaryDiv.style.margin = '0 auto';
+                    pageDiv.appendChild(deptHeader);
+                    pageDiv.appendChild(table);
+                    pageDiv.appendChild(summaryDiv);
+                } else {
+                    // Week layout: dept header left, table right, summary below
+                    mainContentDiv.appendChild(deptHeader);
+                    mainContentDiv.appendChild(table);
+                    pageDiv.appendChild(mainContentDiv);
+                    pageDiv.appendChild(summaryDiv);
+                }
+
+                // Create thead
+                const thead = document.createElement('thead');
+                const headerRow = document.createElement('tr');
+
+                // Date headers
+                if (printType === 'week') {
+                    currentPrintWeekDates.forEach(date => {
+                        const th = document.createElement('th');
+                        th.innerHTML = `${date.toLocaleDateString('en-US', { weekday: 'short' })}<br>${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+                        headerRow.appendChild(th);
+                    });
+                } else {
+                    const selectedDate = new Date(document.getElementById('print-date-select').value);
+                    const th = document.createElement('th');
+                    th.innerHTML = `${selectedDate.toLocaleDateString('en-US', { weekday: 'short' })}<br>${selectedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+                    headerRow.appendChild(th);
+                }
+
+                thead.appendChild(headerRow);
+                table.appendChild(thead);
+
+                // Create tbody
+                const tbody = document.createElement('tbody');
+
+                const deptTasksForMax = allTasks.filter(task => task.department === dept);
+                const maxTasks = getMaxTasksForDept(dept, printType);
+
+                if (printType === 'week') {
+                    for (let row = 0; row < maxTasks; row++) {
+                        const tr = document.createElement('tr');
+
+                        // Task cells for each date
+                        currentPrintWeekDates.forEach(date => {
+                            const dateString = date.toDateString();
+                            const tasksForDate = deptTasks.filter(t => {
+                                const taskDate = parseDate(t.date);
+                                return taskDate && taskDate.toDateString() === dateString;
+                            });
+                            const task = tasksForDate[row];
+                            const td = document.createElement('td');
+                            td.className = 'print-grid-cell';
+                            if (task) {
+                                td.innerHTML = `
+                                    <div class="print-task-card department-${normalizeDepartmentClass(task.department)}">
+                                        <div class="print-task-title">${task.project}</div>
+                                        <div class="print-task-day-counter">${task.dayCounter || ''}</div>
+                                        <div class="print-task-description">${task.description && task.description.trim() ? task.description : '<span class="print-missing-description">Staging Missing</span>'}</div>
+                                        <div class="print-task-details">
+                                            ${task.missingDate ? '<strong>Date:</strong> Missing<br>' : ''}
+                                            <strong>Hours:</strong> ${(() => {
+                                                let hours = parseFloat(task.hours);
+                                                return isNaN(hours) ? 0 : Math.round(hours);
+                                            })()}<br>
+                                            <strong>Revenue:</strong> $${(() => {
+                                                let hours = parseFloat(task.hours);
+                                                let revenue = isNaN(hours) ? 0 : Math.round(Math.round(hours) * 135);
+                                                return revenue.toLocaleString();
+                                            })()}<br>
+                                            <strong>Code:</strong> ${task.value}
+                                        </div>
+                                    </div>
+                                `;
+                            }
+                            tr.appendChild(td);
+                        });
+
+                        tbody.appendChild(tr);
+                    }
+                } else {
+                    for (let row = 0; row < maxTasks; row++) {
+                        const tr = document.createElement('tr');
+
+                        // Task cell for the selected date
+                        const selectedDate = new Date(document.getElementById('print-date-select').value);
+                        const dateString = selectedDate.toDateString();
+                        const tasksForDate = deptTasks.filter(t => {
+                            const taskDate = parseDate(t.date);
+                            return taskDate && taskDate.toDateString() === dateString;
+                        });
+                        const task = tasksForDate[row];
+                        const td = document.createElement('td');
+                        td.className = 'print-grid-cell';
+                        td.style.textAlign = 'center';
+                        if (task) {
+                            td.innerHTML = `
+                                <div class="print-task-card department-${normalizeDepartmentClass(task.department)}" style="margin: 0 auto; max-width: 180px;">
+                                    <div class="print-task-title">${task.project}</div>
+                                    <div class="print-task-day-counter">${task.dayCounter || ''}</div>
+                                    <div class="print-task-description">${task.description && task.description.trim() ? task.description : '<span class="print-missing-description">Staging Missing</span>'}</div>
+                                    <div class="print-task-details">
+                                        ${task.missingDate ? '<strong>Date:</strong> Missing<br>' : ''}
+                                        <strong>Hours:</strong> ${task.hours}<br>
+                                        <strong>Code:</strong> ${task.value}
+                                    </div>
+                                </div>
+                            `;
+                        }
+                        tr.appendChild(td);
+
+                        tbody.appendChild(tr);
+                    }
+                }
+
+                table.appendChild(tbody);
+
+                // Add revenue row for each day in week print
+                if (printType === 'week') {
+                    const tfoot = document.createElement('tfoot');
+                    const revenueRow = document.createElement('tr');
+                    revenueRow.style.borderTop = '2px solid #000';
+                    revenueRow.style.fontSize = '0.8rem';
+
+                    currentPrintWeekDates.forEach(date => {
+                        const dateString = date.toDateString();
+                        const dayTasks = deptTasks.filter(t => {
+                            const taskDate = parseDate(t.date);
+                            return taskDate && taskDate.toDateString() === dateString;
+                        });
+                        let dayHours = 0;
+                        dayTasks.forEach(task => {
+                            const hours = parseFloat(task.hours);
+                            if (!isNaN(hours)) dayHours += hours;
+                        });
+                        const dayRevenue = Math.round(dayHours * 135);
+                        const revenueCell = document.createElement('td');
+                        revenueCell.textContent = `Daily: $${dayRevenue.toLocaleString()}`;
+                        revenueCell.style.fontWeight = 'bold';
+                        revenueCell.style.textAlign = 'center';
+                        revenueRow.appendChild(revenueCell);
+                    });
+
+                    tfoot.appendChild(revenueRow);
+                    table.appendChild(tfoot);
+                }
+
+                printContainer.appendChild(pageDiv);
+            });
+
+            return printContainer;
+        }
+
+        function getMaxTasksForDept(dept, printType) {
+            const deptTasksForMax = allTasks.filter(task => task.department === dept);
+            if (printType === 'week') {
+                let max = 0;
+                currentPrintWeekDates.forEach(date => {
+                    const dateString = date.toDateString();
+                    const count = deptTasksForMax.filter(t => {
+                        const taskDate = parseDate(t.date);
+                        return taskDate && taskDate.toDateString() === dateString;
+                    }).length;
+                    if (count > max) max = count;
+                });
+                return Math.max(1, max);
+            } else {
+                const selectedDate = new Date(document.getElementById('print-date-select').value);
+                const dateString = selectedDate.toDateString();
+                const count = deptTasksForMax.filter(t => {
+                    const taskDate = parseDate(t.date);
+                    return taskDate && taskDate.toDateString() === dateString;
+                }).length;
+                return Math.max(1, count);
+            }
+        }
+
+        // Event listeners for print modal
+        document.getElementById('print-btn').addEventListener('click', showPrintModal);
+        document.getElementById('print-close').addEventListener('click', hidePrintModal);
+        document.getElementById('print-cancel-btn').addEventListener('click', hidePrintModal);
+        document.getElementById('print-modal').addEventListener('click', (e) => {
+            if (e.target === document.getElementById('print-modal')) {
+                hidePrintModal();
+            }
+        });
+
+        document.getElementById('print-week-select').addEventListener('change', updateWeekDates);
+
+        document.querySelectorAll('input[name="print-type"]').forEach(radio => {
+            radio.addEventListener('change', updatePrintTypeDisplay);
+        });
+
+        document.getElementById('check-all-depts').addEventListener('click', () => {
+            document.querySelectorAll('.departments-grid input[type="checkbox"]').forEach(cb => cb.checked = true);
+        });
+
+        document.getElementById('uncheck-all-depts').addEventListener('click', () => {
+            document.querySelectorAll('.departments-grid input[type="checkbox"]').forEach(cb => cb.checked = false);
+        });
+
+        document.getElementById('print-execute-btn').addEventListener('click', () => {
+            let styleElement = null;
+            if (currentPrintType === 'day') {
+                styleElement = document.createElement('style');
+                styleElement.textContent = '@page { size: letter portrait; margin: 0.5in; }';
+                document.head.appendChild(styleElement);
+            }
+            const printContent = generatePrintContent();
+            if (printContent) {
+                document.body.appendChild(printContent);
+                // Give more time for styles to apply
+                setTimeout(() => {
+                    window.print();
+                    if (styleElement) {
+                        document.head.removeChild(styleElement);
+                    }
+                    document.body.removeChild(printContent);
+                    hidePrintModal();
+                }, 500);
+            }
+        });
 
         // Auto-refresh every 30 minutes (reduce frequency to improve performance)
         setInterval(fetchTasks, 30 * 60 * 1000);
