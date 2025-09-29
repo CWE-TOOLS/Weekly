@@ -1945,6 +1945,35 @@
             return `${month}/${day}/${year}`;
         }
 
+        function getWeekMonth(monday) {
+            const daysInEachMonth = {};
+            for (let i = 0; i < 5; i++) { // Mon to Fri
+                const date = new Date(monday);
+                date.setDate(monday.getDate() + i);
+                const month = date.getMonth();
+                daysInEachMonth[month] = (daysInEachMonth[month] || 0) + 1;
+            }
+            let maxDays = 0;
+            let majorMonth = monday.getMonth();
+            for (const m in daysInEachMonth) {
+                if (daysInEachMonth[m] > maxDays) {
+                    maxDays = daysInEachMonth[m];
+                    majorMonth = parseInt(m);
+                }
+            }
+            return majorMonth;
+        }
+
+        function getWeekOfMonth(monday, month) {
+            const year = monday.getFullYear();
+            const firstDayOfMonth = new Date(year, month, 1);
+            const startOfWeek1 = getMonday(firstDayOfMonth);
+            const diffMs = monday - startOfWeek1;
+            const diffDays = diffMs / (1000 * 60 * 60 * 24);
+            const weekNum = 1 + Math.floor(diffDays / 7);
+            return Math.max(1, weekNum);
+        }
+
         async function fetchTasks() {
             const modalOpen = document.getElementById('project-modal').classList.contains('show');
             const silent = modalOpen;
@@ -2360,11 +2389,13 @@
         function updateWeekDisplayHeader(date) {
             if (!date) return;
             const monday = getMonday(date);
+            const month = getWeekMonth(monday);
+            const weekNum = getWeekOfMonth(monday, month);
             const weekStart = new Date(monday);
             const weekEnd = new Date(monday);
             weekEnd.setDate(monday.getDate() + 5);
             const weekDisplay = document.getElementById('week-display');
-            weekDisplay.textContent = `${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+            weekDisplay.textContent = `Week ${weekNum}: ${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
         }
 
         function equalizeAllCardHeights() {
@@ -3085,7 +3116,11 @@
                 const weekStart = new Date(date);
                 const weekEnd = new Date(date);
                 weekEnd.setDate(date.getDate() + 5);
-                option.textContent = `${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+                const monday = getMonday(date);
+                const month = getWeekMonth(monday);
+                const weekNum = getWeekOfMonth(monday, month);
+                const monthName = new Date(monday.getFullYear(), month, 1).toLocaleDateString('en-US', { month: 'short' });
+                option.textContent = `${monthName} Week ${weekNum}: ${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
                 if (index === currentViewedWeekIndex) option.selected = true;
                 weekSelect.appendChild(option);
             });
