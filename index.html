@@ -26,6 +26,7 @@
             --color-form-out: #3B82F6; --color-form-out-text: #FFFFFF; /* Blue */
             --color-cast: #EF4444; --color-cast-text: #FFFFFF;       /* Red */
             --color-batch: #800000; --color-batch-text: #FFFFFF;     /* Maroon */
+            --color-layout: #A16207; --color-layout-text: #FFFFFF;   /* Brown (matching Crating) */
             --color-demold: #F97316; --color-demold-text: #FFFFFF;    /* Orange */
             --color-finish: #8B5CF6; --color-finish-text: #FFFFFF;    /* Violet */
             --color-seal: #6B7280; --color-seal-text: #FFFFFF;       /* Medium Grey */
@@ -269,6 +270,7 @@
         .department-label.department-form-out { background-color: var(--color-form-out); color: var(--color-form-out-text); }
         .department-label.department-cast { background-color: var(--color-cast); color: var(--color-cast-text); }
         .department-label.department-batch { background-color: var(--color-batch); color: var(--color-batch-text); }
+        .department-label.department-layout { background-color: var(--color-layout); color: var(--color-layout-text); }
         .department-label.department-demold { background-color: var(--color-demold); color: var(--color-demold-text); }
         .department-label.department-finish { background-color: var(--color-finish); color: var(--color-finish-text); }
         .department-label.department-seal { background-color: var(--color-seal); color: var(--color-seal-text); }
@@ -296,6 +298,7 @@
         .task-card.department-form-out { background-color: var(--color-form-out); color: var(--color-form-out-text); }
         .task-card.department-cast { background-color: var(--color-cast); color: var(--color-cast-text); }
         .task-card.department-batch { background-color: var(--color-batch); color: var(--color-batch-text); }
+        .task-card.department-layout { background-color: var(--color-layout); color: var(--color-layout-text); }
         .task-card.department-demold { background-color: var(--color-demold); color: var(--color-demold-text); }
         .task-card.department-finish { background-color: var(--color-finish); color: var(--color-finish-text); }
         .task-card.department-seal { background-color: var(--color-seal); color: var(--color-seal-text); }
@@ -1311,7 +1314,7 @@
         @media print {
             @page {
                 size: letter landscape;
-                margin: 0.5in;
+                margin: 0.25in;
             }
             body > * {
                 display: none !important;
@@ -1326,12 +1329,15 @@
             }
             .print-page {
                 page-break-after: always;
+                page-break-inside: avoid;
+                page-break-before: avoid;
                 margin: 0;
                 padding: 0;
                 width: 11in;
                 box-sizing: border-box;
                 background: white;
                 padding-top: 0.25in;
+                transform-origin: top left;
             }
             .print-table {
                 width: 100%;
@@ -1339,6 +1345,12 @@
                 font-size: 0.75rem;
                 background: white;
                 margin: 0 auto;
+                page-break-inside: avoid;
+            }
+            .print-dept-summary {
+                page-break-inside: avoid;
+                page-break-before: avoid;
+                page-break-after: avoid;
             }
             .print-page {
                 display: flex;
@@ -1396,11 +1408,42 @@
                 color: black;
                 font-weight: 600;
             }
+            .print-table thead {
+                page-break-after: avoid;
+            }
+            .print-table tfoot {
+                page-break-inside: avoid;
+                page-break-after: avoid;
+            }
+            .print-table.compact {
+                font-size: 0.6rem;
+            }
+            .print-table.compact .print-grid-cell {
+                min-height: 60px;
+            }
+            .print-table.compact .print-task-card {
+                min-height: 60px;
+                font-size: 0.6rem;
+                padding: 0.2rem;
+            }
+            .print-table.compact .print-task-title {
+                font-size: 0.65rem;
+                padding: 0.1rem;
+            }
+            .print-table.compact .print-task-description {
+                font-size: 0.5rem;
+                margin-bottom: 0.15rem;
+            }
+            .print-table.compact .print-task-details {
+                font-size: 0.5rem;
+                padding-top: 0.1rem;
+            }
             /* Department colors for print department headers */
             .print-department-header.department-mill { background-color: #06B6D4 !important; color: #FFFFFF !important; }
             .print-department-header.department-form-out { background-color: #3B82F6 !important; color: #FFFFFF !important; }
             .print-department-header.department-cast { background-color: #EF4444 !important; color: #FFFFFF !important; }
             .print-department-header.department-batch { background-color: #800000 !important; color: #FFFFFF !important; }
+            .print-department-header.department-layout { background-color: #A16207 !important; color: #FFFFFF !important; }
             .print-department-header.department-demold { background-color: #F97316 !important; color: #FFFFFF !important; }
             .print-department-header.department-finish { background-color: #8B5CF6 !important; color: #FFFFFF !important; }
             .print-department-header.department-seal { background-color: #6B7280 !important; color: #FFFFFF !important; }
@@ -1440,6 +1483,7 @@
             .print-task-title.department-form-out { background-color: #3B82F6 !important; color: #FFFFFF !important; }
             .print-task-title.department-cast { background-color: #EF4444 !important; color: #FFFFFF !important; }
             .print-task-title.department-batch { background-color: #800000 !important; color: #FFFFFF !important; }
+            .print-task-title.department-layout { background-color: #A16207 !important; color: #FFFFFF !important; }
             .print-task-title.department-demold { background-color: #F97316 !important; color: #FFFFFF !important; }
             .print-task-title.department-finish { background-color: #8B5CF6 !important; color: #FFFFFF !important; }
             .print-task-title.department-seal { background-color: #6B7280 !important; color: #FFFFFF !important; }
@@ -1497,6 +1541,7 @@
             .print-department-label.department-form-out { background-color: #3B82F6 !important; color: #FFFFFF !important; }
             .print-department-label.department-cast { background-color: #EF4444 !important; color: #FFFFFF !important; }
             .print-department-label.department-batch { background-color: #800000 !important; color: #FFFFFF !important; }
+            .print-department-label.department-layout { background-color: #A16207 !important; color: #FFFFFF !important; }
             .print-department-label.department-demold { background-color: #F97316 !important; color: #FFFFFF !important; }
             .print-department-label.department-finish { background-color: #8B5CF6 !important; color: #FFFFFF !important; }
             .print-department-label.department-seal { background-color: #6B7280 !important; color: #FFFFFF !important; }
@@ -1891,6 +1936,7 @@
             'Cast',
             'Batch',
             'Demold',
+            'Layout',
             'Finish',
             'Seal',
             'Special',
@@ -2346,6 +2392,7 @@
                 }
             });
             maxTasksPerDept['Batch'] = 1;
+            maxTasksPerDept['Layout'] = 1;
 
             // Render a grid for each week using the global max tasks count
             allWeekStartDates.forEach(mondayDate => {
@@ -2484,13 +2531,38 @@
             weekDates.forEach((date, i) => {
                 if (i < 5) { // Mon to Fri
                     const nextDate = new Date(date);
-                    if (i === 4) { // Friday, show Monday
-                        nextDate.setDate(nextDate.getDate() + 3);
+                    let castingProjects = [];
+                    if (i === 4) { // Friday
+                        // Get tasks for Saturday
+                        const saturday = new Date(date);
+                        saturday.setDate(date.getDate() + 1);
+                        const saturdayString = saturday.toDateString();
+                        const saturdayProjects = allTasks
+                            .filter(t => t.department === 'Cast' && parseDate(t.date) && parseDate(t.date).toDateString() === saturdayString)
+                            .map(t => t.project);
+                        if (saturdayProjects.length > 0) {
+                            castingProjects.push(`<b>Sat:</b> ${saturdayProjects.join(', ')}`);
+                        }
+
+                        // Get tasks for Monday
+                        const monday = new Date(date);
+                        monday.setDate(date.getDate() + 3);
+                        const mondayString = monday.toDateString();
+                        const mondayProjects = allTasks
+                            .filter(t => t.department === 'Cast' && parseDate(t.date) && parseDate(t.date).toDateString() === mondayString)
+                            .map(t => t.project);
+                        if (mondayProjects.length > 0) {
+                            castingProjects.push(`<b>Mon:</b> ${mondayProjects.join(', ')}`);
+                        }
                     } else {
-                        nextDate.setDate(nextDate.getDate() + 1);
+                        // For Mon-Thu, get next day's tasks
+                        const nextDate = new Date(date);
+                        nextDate.setDate(date.getDate() + 1);
+                        const nextDateString = nextDate.toDateString();
+                        castingProjects = allTasks
+                            .filter(t => t.department === 'Cast' && parseDate(t.date) && parseDate(t.date).toDateString() === nextDateString)
+                            .map(t => t.project);
                     }
-                    const nextDateString = nextDate.toDateString();
-                    const castingProjects = allTasks.filter(t => t.department === 'Cast' && parseDate(t.date) && parseDate(t.date).toDateString() === nextDateString).map(t => t.project);
                     const batchTask = {
                         id: `batch-${date.toISOString()}`,
                         week: getLocalDateString(getMonday(dateForWeek)),
@@ -2506,6 +2578,61 @@
                         missingDate: false
                     };
                     batchTasks.push(batchTask);
+                }
+            });
+
+            // Generate layout tasks (Mon-Fri only)
+            const layoutTasks = [];
+            weekDates.forEach((date, i) => {
+                if (i < 5) { // Mon to Fri
+                    const nextDate = new Date(date);
+                    let castingProjects = [];
+                    if (i === 4) { // Friday
+                        // Get tasks for Saturday
+                        const saturday = new Date(date);
+                        saturday.setDate(date.getDate() + 1);
+                        const saturdayString = saturday.toDateString();
+                        const saturdayProjects = allTasks
+                            .filter(t => t.department === 'Cast' && parseDate(t.date) && parseDate(t.date).toDateString() === saturdayString)
+                            .map(t => t.project);
+                        if (saturdayProjects.length > 0) {
+                            castingProjects.push(`<b>Sat:</b> ${saturdayProjects.join(', ')}`);
+                        }
+
+                        // Get tasks for Monday
+                        const monday = new Date(date);
+                        monday.setDate(date.getDate() + 3);
+                        const mondayString = monday.toDateString();
+                        const mondayProjects = allTasks
+                            .filter(t => t.department === 'Cast' && parseDate(t.date) && parseDate(t.date).toDateString() === mondayString)
+                            .map(t => t.project);
+                        if (mondayProjects.length > 0) {
+                            castingProjects.push(`<b>Mon:</b> ${mondayProjects.join(', ')}`);
+                        }
+                    } else {
+                        // For Mon-Thu, get next day's tasks
+                        const nextDate = new Date(date);
+                        nextDate.setDate(date.getDate() + 1);
+                        const nextDateString = nextDate.toDateString();
+                        castingProjects = allTasks
+                            .filter(t => t.department === 'Cast' && parseDate(t.date) && parseDate(t.date).toDateString() === nextDateString)
+                            .map(t => t.project);
+                    }
+                    const layoutTask = {
+                        id: `layout-${date.toISOString()}`,
+                        week: getLocalDateString(getMonday(dateForWeek)),
+                        project: 'Layout',
+                        description: castingProjects.length > 0 ? castingProjects.join('<br>') : '',
+                        date: getLocalDateString(date),
+                        department: 'Layout',
+                        value: '',
+                        hours: '',
+                        dayNumber: '',
+                        totalDays: '',
+                        dayCounter: '',
+                        missingDate: false
+                    };
+                    layoutTasks.push(layoutTask);
                 }
             });
 
@@ -2531,6 +2658,7 @@
                 tasksByDept[dept].push(task);
             });
             tasksByDept['Batch'] = batchTasks;
+            tasksByDept['Layout'] = layoutTasks;
 
             // Collect all departments present in tasks, sorted by DEPARTMENT_ORDER priority
             const allDepts = new Set(DEPARTMENT_ORDER);
@@ -2582,7 +2710,7 @@
                             const task = tasksByDate[dateString] ? tasksByDate[dateString][i] : undefined;
 
                             if (task) {
-                                const showDetails = task.department !== 'Batch';
+                                const showDetails = task.department !== 'Batch' && task.department !== 'Layout';
                                 dayCell.innerHTML = `
                                     <div class="task-card ${rowClass} department-${normalizeDepartmentClass(task.department)}" data-task-id="${task.id}" title="Click for options">
                                         <div class="task-title">${task.project}</div>
@@ -3220,10 +3348,15 @@
                 return;
             }
 
+            // Determine compactness based on department count
+            const isCompact = selectedDepts.length > 4 || printType === 'day';
+
+            // Max tasks per dept will be calculated per selected period below
+
             const printContainer = document.createElement('div');
             printContainer.className = 'print-preview-content';
 
-            selectedDepts.forEach(dept => {
+            selectedDepts.forEach((dept, index) => {
                 // Calculate total hours and revenue for the department in the selected period
                 let deptTasks = allTasks.filter(task => task.department === dept);
                 if (printType === 'week') {
@@ -3281,11 +3414,17 @@
                 }
                 deptHeader.textContent = dept;
 
+                const maxTasks = getMaxTasksForDept(dept, printType);
+                const maxTasksInRow = maxTasks;
+
                 // Table for tasks
                 const table = document.createElement('table');
                 table.className = 'print-table';
                 if (printType === 'day') {
                     table.classList.add('print-table-day');
+                }
+                if (isCompact) {
+                    table.classList.add('compact');
                 }
 
                 if (printType === 'day') {
@@ -3336,9 +3475,6 @@
 
                 // Create tbody
                 const tbody = document.createElement('tbody');
-
-                const deptTasksForMax = allTasks.filter(task => task.department === dept);
-                const maxTasks = getMaxTasksForDept(dept, printType);
 
                 if (printType === 'week') {
                     for (let row = 0; row < maxTasks; row++) {
@@ -3451,6 +3587,10 @@
                 }
 
                 printContainer.appendChild(pageDiv);
+                // Remove page break after the last department to avoid extra blank page
+                if (index === selectedDepts.length - 1) {
+                    pageDiv.style.pageBreakAfter = 'auto';
+                }
             });
 
             return printContainer;
@@ -3518,6 +3658,38 @@
             const printContent = generatePrintContent();
             if (printContent) {
                 document.body.appendChild(printContent);
+                // Automatic scaling to prevent overflow
+                // Temporarily adjust styles for accurate measurement of natural height
+                const originalPosition = printContent.style.position;
+                const originalWidth = printContent.style.width;
+                const originalHeight = printContent.style.height;
+                printContent.style.position = 'relative';
+                printContent.style.width = 'auto';
+                printContent.style.height = 'auto';
+
+                const printType = document.querySelector('input[name="print-type"]:checked').value;
+                const maxHeightPx = printType === 'week' ? 7 * 96 : 9 * 96; // approximate pixels for printable height
+                const pages = printContent.querySelectorAll('.print-page');
+                // Use requestAnimationFrame and setTimeout to ensure DOM is fully rendered
+                requestAnimationFrame(() => {
+                    setTimeout(() => {
+                        pages.forEach(page => {
+                            // Force layout recalculation
+                            page.offsetHeight;
+                            const height = page.offsetHeight;
+                            if (height > maxHeightPx) {
+                                const scale = maxHeightPx / height;
+                                page.style.transform = `scale(${scale})`;
+                                page.style.transformOrigin = 'top left';
+                            }
+                        });
+                    }, 100);
+                });
+
+                // Restore original styles
+                printContent.style.position = originalPosition;
+                printContent.style.width = originalWidth;
+                printContent.style.height = originalHeight;
                 // Give more time for styles to apply
                 setTimeout(() => {
                     window.print();
@@ -3526,7 +3698,7 @@
                     }
                     document.body.removeChild(printContent);
                     hidePrintModal();
-                }, 500);
+                }, 1500);
             }
         });
 
@@ -3538,3 +3710,4 @@
     </script>
 </body>
 </html>
+
