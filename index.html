@@ -3196,10 +3196,12 @@
                     });
                 } else {
                     const selectedDate = new Date(document.getElementById('print-date-select').value);
-                    const selectedDateString = formatDateToMMDDYYYY(selectedDate);
+                    const selectedTimestamp = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate()).getTime();
                     deptTasks = deptTasks.filter(task => {
                         const taskDate = parseDate(task.date);
-                        return taskDate && formatDateToMMDDYYYY(taskDate) === selectedDateString;
+                        if (!taskDate) return false;
+                        const taskTimestamp = new Date(taskDate.getFullYear(), taskDate.getMonth(), taskDate.getDate()).getTime();
+                        return taskTimestamp === selectedTimestamp;
                     });
                 }
                 let totalHours = 0;
@@ -3426,10 +3428,12 @@
                 return Math.max(1, max);
             } else {
                 const selectedDate = new Date(document.getElementById('print-date-select').value);
-                const selectedDateString = formatDateToMMDDYYYY(selectedDate);
+                const selectedTimestamp = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate()).getTime();
                 const count = deptTasksForMax.filter(t => {
                     const taskDate = parseDate(t.date);
-                    return taskDate && formatDateToMMDDYYYY(taskDate) === selectedDateString;
+                    if (!taskDate) return false;
+                    const taskTimestamp = new Date(taskDate.getFullYear(), taskDate.getMonth(), taskDate.getDate()).getTime();
+                    return taskTimestamp === selectedTimestamp;
                 }).length;
                 return Math.max(1, count);
             }
