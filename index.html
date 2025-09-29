@@ -1938,6 +1938,13 @@
             return `${year}-${month}-${day}`;
         }
 
+        function formatDateToMMDDYYYY(date) {
+            const month = (date.getMonth() + 1).toString().padStart(2, '0');
+            const day = date.getDate().toString().padStart(2, '0');
+            const year = date.getFullYear();
+            return `${month}/${day}/${year}`;
+        }
+
         async function fetchTasks() {
             const modalOpen = document.getElementById('project-modal').classList.contains('show');
             const silent = modalOpen;
@@ -3189,10 +3196,10 @@
                     });
                 } else {
                     const selectedDate = new Date(document.getElementById('print-date-select').value);
-                    const dateString = selectedDate.toDateString();
+                    const selectedDateString = formatDateToMMDDYYYY(selectedDate);
                     deptTasks = deptTasks.filter(task => {
                         const taskDate = parseDate(task.date);
-                        return taskDate && taskDate.toDateString() === dateString;
+                        return taskDate && formatDateToMMDDYYYY(taskDate) === selectedDateString;
                     });
                 }
                 let totalHours = 0;
@@ -3419,10 +3426,10 @@
                 return Math.max(1, max);
             } else {
                 const selectedDate = new Date(document.getElementById('print-date-select').value);
-                const dateString = selectedDate.toDateString();
+                const selectedDateString = formatDateToMMDDYYYY(selectedDate);
                 const count = deptTasksForMax.filter(t => {
                     const taskDate = parseDate(t.date);
-                    return taskDate && taskDate.toDateString() === dateString;
+                    return taskDate && formatDateToMMDDYYYY(taskDate) === selectedDateString;
                 }).length;
                 return Math.max(1, count);
             }
