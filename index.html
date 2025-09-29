@@ -1321,11 +1321,9 @@
             }
             .print-preview-content {
                 display: block !important;
-                position: absolute;
-                left: 0;
-                top: 0;
+                position: relative;
                 width: 100%;
-                height: 100%;
+                height: auto;
             }
             .print-page {
                 page-break-after: always;
@@ -1416,27 +1414,27 @@
                 page-break-after: avoid;
             }
             .print-table.compact {
-                font-size: 0.6rem;
+                font-size: 0.5rem;
             }
             .print-table.compact .print-grid-cell {
-                min-height: 60px;
+                min-height: 50px;
             }
             .print-table.compact .print-task-card {
-                min-height: 60px;
-                font-size: 0.6rem;
-                padding: 0.2rem;
+                min-height: 50px;
+                font-size: 0.5rem;
+                padding: 0.15rem;
             }
             .print-table.compact .print-task-title {
-                font-size: 0.65rem;
-                padding: 0.1rem;
+                font-size: 0.55rem;
+                padding: 0.08rem;
             }
             .print-table.compact .print-task-description {
-                font-size: 0.5rem;
-                margin-bottom: 0.15rem;
+                font-size: 0.45rem;
+                margin-bottom: 0.1rem;
             }
             .print-table.compact .print-task-details {
-                font-size: 0.5rem;
-                padding-top: 0.1rem;
+                font-size: 0.45rem;
+                padding-top: 0.08rem;
             }
             /* Department colors for print department headers */
             .print-department-header.department-mill { background-color: #06B6D4 !important; color: #FFFFFF !important; }
@@ -2663,6 +2661,9 @@
             // Collect all departments present in tasks, sorted by DEPARTMENT_ORDER priority
             const allDepts = new Set(DEPARTMENT_ORDER);
             Object.keys(tasksByDept).forEach(dept => allDepts.add(dept));
+            // Exclude Batch and Layout as they are appended to Cast and Demold respectively
+            allDepts.delete('Batch');
+            allDepts.delete('Layout');
             const sortedDepts = Array.from(allDepts).sort((a, b) => {
                 const aIndex = DEPARTMENT_ORDER.indexOf(a);
                 const bIndex = DEPARTMENT_ORDER.indexOf(b);
@@ -3315,9 +3316,165 @@
                 return;
             }
 
+            // Store original selection for batch handling
+            const originalSelectedDepts = [...selectedDepts];
+
             // Update currentPrintWeekDates based on selected week
             if (printType === 'week') {
                 updateWeekDates();
+            }
+
+            // Generate batch tasks for the selected period
+            const printBatchTasks = [];
+            if (printType === 'week') {
+                currentPrintWeekDates.forEach(date => {
+                    const nextDate = new Date(date);
+                    let castingProjects = [];
+                    if (date.getDay() === 5) { // Friday
+                        // Get tasks for Saturday
+                        const saturday = new Date(date);
+                        saturday.setDate(date.getDate() + 1);
+                        const saturdayString = saturday.toDateString();
+                        const saturdayProjects = allTasks
+                            .filter(t => t.department === 'Cast' && parseDate(t.date) && parseDate(t.date).toDateString() === saturdayString)
+                            .map(t => t.project);
+                        if (saturdayProjects.length > 0) {
+                            castingProjects.push(`<b>Sat:</b> ${saturdayProjects.join(', ')}`);
+                        }
+
+                        // Get tasks for Monday
+                        const monday = new Date(date);
+                        monday.setDate(date.getDate() + 3);
+                        const mondayString = monday.toDateString();
+                        const mondayProjects = allTasks
+                            .filter(t => t.department === 'Cast' && parseDate(t.date) && parseDate(t.date).toDateString() === mondayString)
+                            .map(t => t.project);
+                        if (mondayProjects.length > 0) {
+                            castingProjects.push(`<b>Mon:</b> ${mondayProjects.join(', ')}`);
+                        }
+                    } else {
+                        // For Mon-Thu, get next day's tasks
+                        nextDate.setDate(date.getDate() + 1);
+                        const nextDateString = nextDate.toDateString();
+                        castingProjects = allTasks
+                            .filter(t => t.department === 'Cast' && parseDate(t.date) && parseDate(t.date).toDateString() === nextDateString)
+                            .map(t => t.project);
+                    }
+                    const batchTask = {
+                        id: `batch-${date.toISOString()}`,
+                        week: getLocalDateString(getMonday(date)),
+                        project: 'Batch',
+                        description: castingProjects.length > 0 ? castingProjects.join('<br>') : '',
+                        date: getLocalDateString(date),
+                        department: 'Batch',
+                        value: '',
+                        hours: '',
+                        dayNumber: '',
+                        totalDays: '',
+                        dayCounter: '',
+                        missingDate: false
+                    };
+                    printBatchTasks.push(batchTask);
+                });
+            } else {
+                // For day print, generate batch for the selected date
+                const value = document.getElementById('print-date-select').value;
+                const [year, month, day] = value.split('-').map(Number);
+                const selectedDate = new Date(year, month - 1, day);
+                const nextDate = new Date(selectedDate);
+                let castingProjects = [];
+                // Similar logic, but for day, perhaps next day or something, but since batch is per day, maybe empty or same as week
+                // For simplicity, since day print is for single day, and batch is daily, perhaps no batch for day or copy from week logic
+                // But to match, perhaps add the batch task for that day
+                const batchTask = {
+                    id: `batch-${selectedDate.toISOString()}`,
+                    week: getLocalDateString(getMonday(selectedDate)),
+                    project: 'Batch',
+                    description: '', // For day, perhaps no description
+                    date: getLocalDateString(selectedDate),
+                    department: 'Batch',
+                    value: '',
+                    hours: '',
+                    dayNumber: '',
+                    totalDays: '',
+                    dayCounter: '',
+                    missingDate: false
+                };
+                printBatchTasks.push(batchTask);
+            }
+
+            // Generate layout tasks similar to batch tasks
+            const printLayoutTasks = [];
+            if (printType === 'week') {
+                currentPrintWeekDates.forEach(date => {
+                    const nextDate = new Date(date);
+                    let castingProjects = [];
+                    if (date.getDay() === 5) { // Friday
+                        // Get tasks for Saturday
+                        const saturday = new Date(date);
+                        saturday.setDate(date.getDate() + 1);
+                        const saturdayString = saturday.toDateString();
+                        const saturdayProjects = allTasks
+                            .filter(t => t.department === 'Cast' && parseDate(t.date) && parseDate(t.date).toDateString() === saturdayString)
+                            .map(t => t.project);
+                        if (saturdayProjects.length > 0) {
+                            castingProjects.push(`<b>Sat:</b> ${saturdayProjects.join(', ')}`);
+                        }
+
+                        // Get tasks for Monday
+                        const monday = new Date(date);
+                        monday.setDate(date.getDate() + 3);
+                        const mondayString = monday.toDateString();
+                        const mondayProjects = allTasks
+                            .filter(t => t.department === 'Cast' && parseDate(t.date) && parseDate(t.date).toDateString() === mondayString)
+                            .map(t => t.project);
+                        if (mondayProjects.length > 0) {
+                            castingProjects.push(`<b>Mon:</b> ${mondayProjects.join(', ')}`);
+                        }
+                    } else {
+                        // For Mon-Thu, get next day's tasks
+                        nextDate.setDate(date.getDate() + 1);
+                        const nextDateString = nextDate.toDateString();
+                        castingProjects = allTasks
+                            .filter(t => t.department === 'Cast' && parseDate(t.date) && parseDate(t.date).toDateString() === nextDateString)
+                            .map(t => t.project);
+                    }
+                    const layoutTask = {
+                        id: `layout-${date.toISOString()}`,
+                        week: getLocalDateString(getMonday(date)),
+                        project: 'Layout',
+                        description: castingProjects.length > 0 ? castingProjects.join('<br>') : '',
+                        date: getLocalDateString(date),
+                        department: 'Layout',
+                        value: '',
+                        hours: '',
+                        dayNumber: '',
+                        totalDays: '',
+                        dayCounter: '',
+                        missingDate: false
+                    };
+                    printLayoutTasks.push(layoutTask);
+                });
+            } else {
+                // For day print, generate layout for the selected date
+                const value = document.getElementById('print-date-select').value;
+                const [year, month, day] = value.split('-').map(Number);
+                const selectedDate = new Date(year, month - 1, day);
+                const layoutTask = {
+                    id: `layout-${selectedDate.toISOString()}`,
+                    week: getLocalDateString(getMonday(selectedDate)),
+                    project: 'Layout',
+                    description: '', // For day, perhaps no description
+                    date: getLocalDateString(selectedDate),
+                    department: 'Layout',
+                    value: '',
+                    hours: '',
+                    dayNumber: '',
+                    totalDays: '',
+                    dayCounter: '',
+                    missingDate: false
+                };
+                printLayoutTasks.push(layoutTask);
             }
 
             // Filter departments to only those with tasks in the selected period
@@ -3347,6 +3504,9 @@
                 alert('No tasks found for the selected departments and date/week.');
                 return;
             }
+
+            // Exclude Batch and Layout as they are appended to Cast and Demold respectively
+            selectedDepts = selectedDepts.filter(dept => dept !== 'Batch' && dept !== 'Layout');
 
             // Determine compactness based on department count
             const isCompact = selectedDepts.length > 4 || printType === 'day';
@@ -3414,8 +3574,20 @@
                 }
                 deptHeader.textContent = dept;
 
-                const maxTasks = getMaxTasksForDept(dept, printType);
-                const maxTasksInRow = maxTasks;
+                let maxTasks = getMaxTasksForDept(dept, printType);
+                let maxTasksInRow = maxTasks;
+                let castMax = 0;
+                let demoldMax = 0;
+                if (dept === 'Cast') {
+                    castMax = maxTasks;
+                    // let batchMax = getMaxTasksForDept('Batch', printType);
+                    // maxTasks += batchMax;
+                }
+                if (dept === 'Demold') {
+                    demoldMax = maxTasks;
+                    // let layoutMax = getMaxTasksForDept('Layout', printType);
+                    // maxTasks += layoutMax;
+                }
 
                 // Table for tasks
                 const table = document.createElement('table');
@@ -3423,7 +3595,7 @@
                 if (printType === 'day') {
                     table.classList.add('print-table-day');
                 }
-                if (isCompact) {
+                if (isCompact || maxTasks > 6) {
                     table.classList.add('compact');
                 }
 
@@ -3487,7 +3659,7 @@
                                 const taskDate = parseDate(t.date);
                                 return taskDate && taskDate.toDateString() === dateString;
                             });
-                            const task = tasksForDate[row];
+                            let task = tasksForDate[row];
                             const td = document.createElement('td');
                             td.className = 'print-grid-cell';
                             if (task) {
@@ -3530,7 +3702,7 @@
                             const taskDate = parseDate(t.date);
                             return taskDate && taskDate.toDateString() === dateString;
                         });
-                        const task = tasksForDate[row];
+                        let task = tasksForDate[row];
                         const td = document.createElement('td');
                         td.className = 'print-grid-cell';
                         td.style.textAlign = 'center';
@@ -3586,6 +3758,283 @@
                     table.appendChild(tfoot);
                 }
 
+                if (dept === 'Cast') {
+                    // calculate batchTotalHours = 0; since no hours
+                    const batchRevenue = 0;
+                    const batchSummaryDiv = document.createElement('div');
+                    batchSummaryDiv.className = 'print-dept-summary';
+                    batchSummaryDiv.textContent = `Batch - Total Hours: 0`;
+
+                    const batchMainContentDiv = document.createElement('div');
+                    batchMainContentDiv.style.display = 'flex';
+                    batchMainContentDiv.style.alignItems = 'stretch';
+                    if (printType === 'day') {
+                        batchMainContentDiv.style.justifyContent = 'flex-end';
+                    }
+
+                    const batchDeptHeader = document.createElement('div');
+                    batchDeptHeader.className = `print-department-header department-batch`;
+                    if (printType === 'day') {
+                        batchDeptHeader.classList.add('print-department-header-day');
+                    }
+                    batchDeptHeader.textContent = 'Batch';
+
+                    const batchTable = document.createElement('table');
+                    batchTable.className = 'print-table';
+                    if (printType === 'day') {
+                        batchTable.classList.add('print-table-day');
+                    }
+                    if (isCompact || getMaxTasksForDept('Batch', printType) > 6) {
+                        batchTable.classList.add('compact');
+                    }
+
+                    // Create thead for Batch
+                    const batchThead = document.createElement('thead');
+                    const batchHeaderRow = document.createElement('tr');
+
+                    if (printType === 'week') {
+                        currentPrintWeekDates.forEach(date => {
+                            const th = document.createElement('th');
+                            th.innerHTML = `${date.toLocaleDateString('en-US', { weekday: 'short' })}<br>${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+                            batchHeaderRow.appendChild(th);
+                        });
+                    } else {
+                        const value = document.getElementById('print-date-select').value;
+                        const [year, month, day] = value.split('-').map(Number);
+                        const selectedDate = new Date(year, month - 1, day);
+                        const th = document.createElement('th');
+                        th.innerHTML = `${selectedDate.toLocaleDateString('en-US', { weekday: 'short' })}<br>${selectedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+                        batchHeaderRow.appendChild(th);
+                    }
+
+                    batchThead.appendChild(batchHeaderRow);
+                    batchTable.appendChild(batchThead);
+
+                    // Create tbody for Batch
+                    const batchTbody = document.createElement('tbody');
+                    const batchMaxTasks = getMaxTasksForDept('Batch', printType);
+
+                    if (printType === 'week') {
+                        for (let row = 0; row < batchMaxTasks; row++) {
+                            const tr = document.createElement('tr');
+                            currentPrintWeekDates.forEach(date => {
+                                const dateString = date.toDateString();
+                                const batchTasksForDate = printBatchTasks.filter(t => parseDate(t.date).toDateString() === dateString);
+                                const task = batchTasksForDate[row];
+                                const td = document.createElement('td');
+                                td.className = 'print-grid-cell';
+                                if (task) {
+                                    td.innerHTML = `
+                                        <div class="print-task-card department-batch">
+                                            <div class="print-task-title">${task.project}</div>
+                                            <div class="print-task-day-counter">${task.dayCounter || ''}</div>
+                                            <div class="print-task-description">${task.description && task.description.trim() ? task.description : '<span class="print-missing-description">Staging Missing</span>'}</div>
+                                            <div class="print-task-details">
+                                                ${task.missingDate ? '<strong>Date:</strong> Missing<br>' : ''}
+                                                <strong>Hours:</strong> ${task.hours}<br>
+                                                <strong>Code:</strong> ${task.value}
+                                            </div>
+                                        </div>
+                                    `;
+                                }
+                                tr.appendChild(td);
+                            });
+                            batchTbody.appendChild(tr);
+                        }
+                    } else {
+                        for (let row = 0; row < batchMaxTasks; row++) {
+                            const tr = document.createElement('tr');
+                            const value = document.getElementById('print-date-select').value;
+                            const [year, month, day] = value.split('-').map(Number);
+                            const selectedDate = new Date(year, month - 1, day);
+                            const dateString = selectedDate.toDateString();
+                            const batchTasksForDate = printBatchTasks.filter(t => parseDate(t.date).toDateString() === dateString);
+                            const task = batchTasksForDate[row];
+                            const td = document.createElement('td');
+                            td.className = 'print-grid-cell';
+                            td.style.textAlign = 'center';
+                            if (task) {
+                                td.innerHTML = `
+                                    <div class="print-task-card department-batch" style="margin: 0 auto; max-width: 180px;">
+                                        <div class="print-task-title">${task.project}</div>
+                                        <div class="print-task-day-counter">${task.dayCounter || ''}</div>
+                                        <div class="print-task-description">${task.description && task.description.trim() ? task.description : '<span class="print-missing-description">Staging Missing</span>'}</div>
+                                        <div class="print-task-details">
+                                            ${task.missingDate ? '<strong>Date:</strong> Missing<br>' : ''}
+                                            <strong>Hours:</strong> ${task.hours}<br>
+                                            <strong>Code:</strong> ${task.value}
+                                        </div>
+                                    </div>
+                                `;
+                            }
+                            tr.appendChild(td);
+                            batchTbody.appendChild(tr);
+                        }
+                    }
+
+                    batchTable.appendChild(batchTbody);
+
+
+                    if (printType === 'week') {
+                        batchMainContentDiv.appendChild(batchDeptHeader);
+                        batchMainContentDiv.appendChild(batchTable);
+                        pageDiv.appendChild(batchMainContentDiv);
+                        pageDiv.appendChild(batchSummaryDiv);
+                    } else {
+                        batchDeptHeader.style.width = '100%';
+                        batchDeptHeader.style.textAlign = 'center';
+                        batchDeptHeader.style.writingMode = 'horizontal-tb';
+                        batchDeptHeader.style.textOrientation = 'mixed';
+                        batchDeptHeader.style.maxWidth = '300px';
+                        batchDeptHeader.style.margin = '0 auto';
+                        batchTable.style.width = '100%';
+                        batchTable.style.maxWidth = '300px';
+                        batchSummaryDiv.style.maxWidth = '300px';
+                        batchSummaryDiv.style.margin = '0 auto';
+                        pageDiv.appendChild(batchDeptHeader);
+                        pageDiv.appendChild(batchTable);
+                        pageDiv.appendChild(batchSummaryDiv);
+                    }
+                }
+
+                if (dept === 'Demold') {
+                    // calculate layoutTotalHours = 0; since no hours
+                    const layoutSummaryDiv = document.createElement('div');
+                    layoutSummaryDiv.className = 'print-dept-summary';
+                    layoutSummaryDiv.textContent = `Layout - Total Hours: 0`;
+
+                    const layoutMainContentDiv = document.createElement('div');
+                    layoutMainContentDiv.style.display = 'flex';
+                    layoutMainContentDiv.style.alignItems = 'stretch';
+                    if (printType === 'day') {
+                        layoutMainContentDiv.style.justifyContent = 'flex-end';
+                    }
+
+                    const layoutDeptHeader = document.createElement('div');
+                    layoutDeptHeader.className = `print-department-header department-layout`;
+                    if (printType === 'day') {
+                        layoutDeptHeader.classList.add('print-department-header-day');
+                    }
+                    layoutDeptHeader.textContent = 'Layout';
+
+                    const layoutTable = document.createElement('table');
+                    layoutTable.className = 'print-table';
+                    if (printType === 'day') {
+                        layoutTable.classList.add('print-table-day');
+                    }
+                    if (isCompact || getMaxTasksForDept('Layout', printType) > 6) {
+                        layoutTable.classList.add('compact');
+                    }
+
+                    // Create thead for Layout
+                    const layoutThead = document.createElement('thead');
+                    const layoutHeaderRow = document.createElement('tr');
+
+                    if (printType === 'week') {
+                        currentPrintWeekDates.forEach(date => {
+                            const th = document.createElement('th');
+                            th.innerHTML = `${date.toLocaleDateString('en-US', { weekday: 'short' })}<br>${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+                            layoutHeaderRow.appendChild(th);
+                        });
+                    } else {
+                        const value = document.getElementById('print-date-select').value;
+                        const [year, month, day] = value.split('-').map(Number);
+                        const selectedDate = new Date(year, month - 1, day);
+                        const th = document.createElement('th');
+                        th.innerHTML = `${selectedDate.toLocaleDateString('en-US', { weekday: 'short' })}<br>${selectedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+                        layoutHeaderRow.appendChild(th);
+                    }
+
+                    layoutThead.appendChild(layoutHeaderRow);
+                    layoutTable.appendChild(layoutThead);
+
+                    // Create tbody for Layout
+                    const layoutTbody = document.createElement('tbody');
+                    const layoutMaxTasks = getMaxTasksForDept('Layout', printType);
+
+                    if (printType === 'week') {
+                        for (let row = 0; row < layoutMaxTasks; row++) {
+                            const tr = document.createElement('tr');
+                            currentPrintWeekDates.forEach(date => {
+                                const dateString = date.toDateString();
+                                const layoutTasksForDate = printLayoutTasks.filter(t => parseDate(t.date).toDateString() === dateString);
+                                const task = layoutTasksForDate[row];
+                                const td = document.createElement('td');
+                                td.className = 'print-grid-cell';
+                                if (task) {
+                                    td.innerHTML = `
+                                        <div class="print-task-card department-layout">
+                                            <div class="print-task-title">${task.project}</div>
+                                            <div class="print-task-day-counter">${task.dayCounter || ''}</div>
+                                            <div class="print-task-description">${task.description && task.description.trim() ? task.description : '<span class="print-missing-description">Staging Missing</span>'}</div>
+                                            <div class="print-task-details">
+                                                ${task.missingDate ? '<strong>Date:</strong> Missing<br>' : ''}
+                                                <strong>Hours:</strong> ${task.hours}<br>
+                                                <strong>Code:</strong> ${task.value}
+                                            </div>
+                                        </div>
+                                    `;
+                                }
+                                tr.appendChild(td);
+                            });
+                            layoutTbody.appendChild(tr);
+                        }
+                    } else {
+                        for (let row = 0; row < layoutMaxTasks; row++) {
+                            const tr = document.createElement('tr');
+                            const value = document.getElementById('print-date-select').value;
+                            const [year, month, day] = value.split('-').map(Number);
+                            const selectedDate = new Date(year, month - 1, day);
+                            const dateString = selectedDate.toDateString();
+                            const layoutTasksForDate = printLayoutTasks.filter(t => parseDate(t.date).toDateString() === dateString);
+                            const task = layoutTasksForDate[row];
+                            const td = document.createElement('td');
+                            td.className = 'print-grid-cell';
+                            td.style.textAlign = 'center';
+                            if (task) {
+                                td.innerHTML = `
+                                    <div class="print-task-card department-layout" style="margin: 0 auto; max-width: 180px;">
+                                        <div class="print-task-title">${task.project}</div>
+                                        <div class="print-task-day-counter">${task.dayCounter || ''}</div>
+                                        <div class="print-task-description">${task.description && task.description.trim() ? task.description : '<span class="print-missing-description">Staging Missing</span>'}</div>
+                                        <div class="print-task-details">
+                                            ${task.missingDate ? '<strong>Date:</strong> Missing<br>' : ''}
+                                            <strong>Hours:</strong> ${task.hours}<br>
+                                            <strong>Code:</strong> ${task.value}
+                                        </div>
+                                    </div>
+                                `;
+                            }
+                            tr.appendChild(td);
+                            layoutTbody.appendChild(tr);
+                        }
+                    }
+
+                    layoutTable.appendChild(layoutTbody);
+
+
+                    if (printType === 'week') {
+                        layoutMainContentDiv.appendChild(layoutDeptHeader);
+                        layoutMainContentDiv.appendChild(layoutTable);
+                        pageDiv.appendChild(layoutMainContentDiv);
+                        pageDiv.appendChild(layoutSummaryDiv);
+                    } else {
+                        layoutDeptHeader.style.width = '100%';
+                        layoutDeptHeader.style.textAlign = 'center';
+                        layoutDeptHeader.style.writingMode = 'horizontal-tb';
+                        layoutDeptHeader.style.textOrientation = 'mixed';
+                        layoutDeptHeader.style.maxWidth = '300px';
+                        layoutDeptHeader.style.margin = '0 auto';
+                        layoutTable.style.width = '100%';
+                        layoutTable.style.maxWidth = '300px';
+                        layoutSummaryDiv.style.maxWidth = '300px';
+                        layoutSummaryDiv.style.margin = '0 auto';
+                        pageDiv.appendChild(layoutDeptHeader);
+                        pageDiv.appendChild(layoutTable);
+                        pageDiv.appendChild(layoutSummaryDiv);
+                    }
+                }
+
                 printContainer.appendChild(pageDiv);
                 // Remove page break after the last department to avoid extra blank page
                 if (index === selectedDepts.length - 1) {
@@ -3597,6 +4046,7 @@
         }
 
         function getMaxTasksForDept(dept, printType) {
+            if (dept === 'Batch' || dept === 'Layout') return 1;
             const deptTasksForMax = allTasks.filter(task => task.department === dept);
             if (printType === 'week') {
                 let max = 0;
@@ -3608,7 +4058,7 @@
                     }).length;
                     if (count > max) max = count;
                 });
-                return Math.max(1, max);
+                return max;
             } else {
                 const value = document.getElementById('print-date-select').value;
                 const [year, month, day] = value.split('-').map(Number);
@@ -3620,7 +4070,7 @@
                     const taskTimestamp = new Date(taskDate.getFullYear(), taskDate.getMonth(), taskDate.getDate()).getTime();
                     return taskTimestamp === selectedTimestamp;
                 }).length;
-                return Math.max(1, count);
+                return count;
             }
         }
 
@@ -3668,7 +4118,7 @@
                 printContent.style.height = 'auto';
 
                 const printType = document.querySelector('input[name="print-type"]:checked').value;
-                const maxHeightPx = printType === 'week' ? 7 * 96 : 9 * 96; // approximate pixels for printable height
+                const maxHeightPx = 8 * 96; // 8 inches printable height to ensure it fits on one page
                 const pages = printContent.querySelectorAll('.print-page');
                 // Use requestAnimationFrame and setTimeout to ensure DOM is fully rendered
                 requestAnimationFrame(() => {
