@@ -3169,7 +3169,9 @@
                         });
                     });
                 } else {
-                    const selectedDate = new Date(document.getElementById('print-date-select').value);
+                    const value = document.getElementById('print-date-select').value;
+                    const [year, month, day] = value.split('-').map(Number);
+                    const selectedDate = new Date(year, month - 1, day);
                     const dateString = selectedDate.toDateString();
                     return deptTasks.some(t => {
                         const taskDate = parseDate(t.date);
@@ -3195,8 +3197,10 @@
                         return taskDate && currentPrintWeekDates.some(date => date.toDateString() === taskDate.toDateString());
                     });
                 } else {
-                    const selectedDate = new Date(document.getElementById('print-date-select').value);
-                    const selectedTimestamp = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate()).getTime();
+                    const value = document.getElementById('print-date-select').value;
+                    const [year, month, day] = value.split('-').map(Number);
+                    const selectedDate = new Date(year, month - 1, day);
+                    const selectedTimestamp = selectedDate.getTime();
                     deptTasks = deptTasks.filter(task => {
                         const taskDate = parseDate(task.date);
                         if (!taskDate) return false;
@@ -3284,7 +3288,9 @@
                         headerRow.appendChild(th);
                     });
                 } else {
-                    const selectedDate = new Date(document.getElementById('print-date-select').value);
+                    const value = document.getElementById('print-date-select').value;
+                    const [year, month, day] = value.split('-').map(Number);
+                    const selectedDate = new Date(year, month - 1, day);
                     const th = document.createElement('th');
                     th.innerHTML = `${selectedDate.toLocaleDateString('en-US', { weekday: 'short' })}<br>${selectedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
                     headerRow.appendChild(th);
@@ -3345,7 +3351,9 @@
                         const tr = document.createElement('tr');
 
                         // Task cell for the selected date
-                        const selectedDate = new Date(document.getElementById('print-date-select').value);
+                        const value = document.getElementById('print-date-select').value;
+                        const [year, month, day] = value.split('-').map(Number);
+                        const selectedDate = new Date(year, month - 1, day);
                         const dateString = selectedDate.toDateString();
                         const tasksForDate = deptTasks.filter(t => {
                             const taskDate = parseDate(t.date);
@@ -3427,8 +3435,10 @@
                 });
                 return Math.max(1, max);
             } else {
-                const selectedDate = new Date(document.getElementById('print-date-select').value);
-                const selectedTimestamp = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate()).getTime();
+                const value = document.getElementById('print-date-select').value;
+                const [year, month, day] = value.split('-').map(Number);
+                const selectedDate = new Date(year, month - 1, day);
+                const selectedTimestamp = selectedDate.getTime();
                 const count = deptTasksForMax.filter(t => {
                     const taskDate = parseDate(t.date);
                     if (!taskDate) return false;
