@@ -2661,9 +2661,6 @@
             // Collect all departments present in tasks, sorted by DEPARTMENT_ORDER priority
             const allDepts = new Set(DEPARTMENT_ORDER);
             Object.keys(tasksByDept).forEach(dept => allDepts.add(dept));
-            // Exclude Batch and Layout as they are appended to Cast and Demold respectively
-            allDepts.delete('Batch');
-            allDepts.delete('Layout');
             const sortedDepts = Array.from(allDepts).sort((a, b) => {
                 const aIndex = DEPARTMENT_ORDER.indexOf(a);
                 const bIndex = DEPARTMENT_ORDER.indexOf(b);
