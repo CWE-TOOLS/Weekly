@@ -1314,7 +1314,7 @@
         @media print {
             @page {
                 size: letter landscape;
-                margin: 0.25in;
+                margin: 0.2in;
             }
             body > * {
                 display: none !important;
@@ -1331,16 +1331,16 @@
                 page-break-before: avoid;
                 margin: 0;
                 padding: 0;
-                width: 11in;
+                width: 10.6in;
                 box-sizing: border-box;
                 background: white;
-                padding-top: 0.25in;
+                padding-top: 0.2in;
                 transform-origin: top left;
             }
             .print-table {
                 width: 100%;
                 border-collapse: collapse;
-                font-size: 0.75rem;
+                font-size: 0.6rem;
                 background: white;
                 margin: 0 auto;
                 page-break-inside: avoid;
@@ -1353,7 +1353,7 @@
             .print-page {
                 display: flex;
                 align-items: stretch;
-                margin-bottom: 1rem;
+                margin-bottom: 0.5rem;
             }
             .print-department-header {
                 font-weight: 600;
@@ -1361,15 +1361,15 @@
                 color: black;
                 writing-mode: vertical-rl;
                 text-orientation: mixed;
-                font-size: 1.5rem;
+                font-size: 1.2rem;
                 print-color-adjust: exact;
                 -webkit-print-color-adjust: exact;
-                width: 150px;
+                width: 100px;
                 display: flex;
                 align-items: center;
                 justify-content: center;
                 border: 1px solid #000;
-                padding: 0.5rem;
+                padding: 0.3rem;
             }
             .print-table {
                 flex: 1;
@@ -1377,10 +1377,10 @@
             }
             .print-table th, .print-table td {
                 border: 1px solid #000;
-                padding: 0.25rem;
+                padding: 0.1rem;
                 text-align: center;
                 vertical-align: top;
-                width: 180px;
+                width: 140px;
             }
             .print-table-day {
                 flex: none;
@@ -1414,28 +1414,59 @@
                 page-break-after: avoid;
             }
             .print-table.compact {
-                font-size: 0.5rem;
+                font-size: 0.45rem;
+            }
+            .print-table.compact th, .print-table.compact td {
+                width: 120px;
+                padding: 0.05rem;
             }
             .print-table.compact .print-grid-cell {
-                min-height: 50px;
+                min-height: 40px;
             }
             .print-table.compact .print-task-card {
-                min-height: 50px;
-                font-size: 0.5rem;
-                padding: 0.15rem;
+                min-height: 40px;
+                font-size: 0.45rem;
+                padding: 0.1rem;
             }
             .print-table.compact .print-task-title {
-                font-size: 0.55rem;
-                padding: 0.08rem;
+                font-size: 0.5rem;
+                padding: 0.05rem;
             }
             .print-table.compact .print-task-description {
-                font-size: 0.45rem;
-                margin-bottom: 0.1rem;
+                font-size: 0.4rem;
+                margin-bottom: 0.05rem;
             }
             .print-table.compact .print-task-details {
-                font-size: 0.45rem;
-                padding-top: 0.08rem;
-            }
+               font-size: 0.4rem;
+               padding-top: 0.05rem;
+           }
+           /* Daily print larger fonts and spacing */
+           .print-table.daily-print {
+               font-size: 0.9rem;
+           }
+           .print-table.daily-print th, .print-table.daily-print td {
+               padding: 0.3rem;
+           }
+           .print-table.daily-print .print-grid-cell {
+               min-height: 60px;
+           }
+           .print-table.daily-print .print-task-card {
+               min-height: 60px;
+               font-size: 0.9rem;
+               padding: 0.3rem;
+           }
+           .print-table.daily-print .print-task-title {
+               font-size: 0.8rem;
+               padding: 0.2rem;
+           }
+           .print-table.daily-print .print-task-description {
+               font-size: 0.8rem;
+               margin-bottom: 0.3rem;
+           }
+           .print-table.daily-print .print-task-details {
+               font-size: 0.7rem;
+               padding-top: 0.2rem;
+           }
             /* Department colors for print department headers */
             .print-department-header.department-mill { background-color: #06B6D4 !important; color: #FFFFFF !important; }
             .print-department-header.department-form-out { background-color: #3B82F6 !important; color: #FFFFFF !important; }
@@ -1451,19 +1482,19 @@
             .print-department-header.department-ship { background-color: #22C55E !important; color: #FFFFFF !important; }
             .print-grid-cell {
                 background: white;
-                min-height: 80px;
-                padding: 0.125rem;
+                min-height: 50px;
+                padding: 0.1rem;
             }
             .print-task-card {
                 border: 1px solid #d1d5db;
                 border-radius: 4px;
-                padding: 0.25rem;
-                margin-bottom: 0.125rem;
-                font-size: 0.65rem;
+                padding: 0.2rem;
+                margin-bottom: 0.1rem;
+                font-size: 0.6rem;
                 color: black;
                 display: flex;
                 flex-direction: column;
-                min-height: 80px;
+                min-height: 50px;
                 max-width: 200px;
                 print-color-adjust: exact;
                 -webkit-print-color-adjust: exact;
@@ -1472,7 +1503,7 @@
                 font-weight: 600;
                 margin-bottom: 0.125rem;
                 color: black;
-                font-size: 0.7rem;
+                font-size: 0.65rem;
                 padding: 0.125rem;
                 border-radius: 2px;
             }
@@ -1490,7 +1521,7 @@
             .print-task-title.department-load { background-color: #F59E0B !important; color: #FFFFFF !important; }
             .print-task-title.department-ship { background-color: #22C55E !important; color: #FFFFFF !important; }
             .print-task-day-counter {
-                font-size: 0.55rem;
+                font-size: 0.5rem;
                 font-weight: 600;
                 text-align: center;
                 padding: 0.0625rem 0;
@@ -1499,9 +1530,9 @@
                 color: black;
             }
             .print-task-description {
-                font-size: 0.55rem;
+                font-size: 0.5rem;
                 font-weight: 600;
-                margin-bottom: 0.25rem;
+                margin-bottom: 0.2rem;
                 color: black;
                 flex-grow: 1;
                 text-align: center;
@@ -1511,7 +1542,7 @@
                 font-weight: 600;
             }
             .print-task-details {
-                font-size: 0.55rem;
+                font-size: 0.5rem;
                 color: black;
                 border-top: 1px solid rgba(0,0,0,0.08);
                 padding-top: 0.125rem;
@@ -3565,8 +3596,15 @@
             // Exclude Batch and Layout as they are appended to Cast and Demold respectively
             selectedDepts = selectedDepts.filter(dept => dept !== 'Batch' && dept !== 'Layout');
 
-            // Determine compactness based on department count
-            const isCompact = selectedDepts.length > 4 || printType === 'day';
+            // Calculate max tasks overall to determine compactness
+            let maxTasksOverall = 0;
+            selectedDepts.forEach(dept => {
+                const maxTasks = getMaxTasksForDept(dept, printType);
+                if (maxTasks > maxTasksOverall) maxTasksOverall = maxTasks;
+            });
+
+            // Determine compactness based on department count and max tasks
+            const isCompact = selectedDepts.length > 4 || printType === 'day' || maxTasksOverall > 6;
 
             // Max tasks per dept will be calculated per selected period below
 
@@ -3650,7 +3688,7 @@
                 const table = document.createElement('table');
                 table.className = 'print-table';
                 if (printType === 'day') {
-                    table.classList.add('print-table-day');
+                    table.classList.add('print-table-day', 'daily-print');
                 }
                 if (isCompact || maxTasks > 6) {
                     table.classList.add('compact');
@@ -3662,11 +3700,11 @@
                     deptHeader.style.textAlign = 'center';
                     deptHeader.style.writingMode = 'horizontal-tb';
                     deptHeader.style.textOrientation = 'mixed';
-                    deptHeader.style.maxWidth = '300px';
+                    deptHeader.style.maxWidth = '500px';
                     deptHeader.style.margin = '0 auto';
-                    table.style.width = '100%';
-                    table.style.maxWidth = '300px';
-                    summaryDiv.style.maxWidth = '300px';
+                    table.style.width = '500px';
+                    table.style.maxWidth = '500px';
+                    summaryDiv.style.width = '500px';
                     summaryDiv.style.margin = '0 auto';
                     pageDiv.appendChild(deptHeader);
                     pageDiv.appendChild(table);
@@ -4167,38 +4205,26 @@
             const printContent = generatePrintContent();
             if (printContent) {
                 document.body.appendChild(printContent);
-                // Automatic scaling to prevent overflow
-                // Temporarily adjust styles for accurate measurement of natural height
-                const originalPosition = printContent.style.position;
-                const originalWidth = printContent.style.width;
-                const originalHeight = printContent.style.height;
-                printContent.style.position = 'relative';
-                printContent.style.width = 'auto';
-                printContent.style.height = 'auto';
 
                 const printType = document.querySelector('input[name="print-type"]:checked').value;
-                const maxHeightPx = 8 * 96; // 8 inches printable height to ensure it fits on one page
+                const pageMaxHeightPx = printType === 'day' ? 7 * 96 : 6 * 96; // Aggressive max heights to force scaling: day 7in portrait, week 6in landscape
                 const pages = printContent.querySelectorAll('.print-page');
-                // Use requestAnimationFrame and setTimeout to ensure DOM is fully rendered
+
+                // Intelligent scaling: scale the entire page to fit within printable area
                 requestAnimationFrame(() => {
                     setTimeout(() => {
                         pages.forEach(page => {
                             // Force layout recalculation
                             page.offsetHeight;
                             const height = page.offsetHeight;
-                            if (height > maxHeightPx) {
-                                const scale = maxHeightPx / height;
-                                page.style.transform = `scale(${scale})`;
-                                page.style.transformOrigin = 'top left';
+                            if (height > pageMaxHeightPx) {
+                                const scale = pageMaxHeightPx / height;
+                                page.style.zoom = scale;
                             }
                         });
                     }, 100);
                 });
 
-                // Restore original styles
-                printContent.style.position = originalPosition;
-                printContent.style.width = originalWidth;
-                printContent.style.height = originalHeight;
                 // Give more time for styles to apply
                 setTimeout(() => {
                     window.print();
