@@ -2028,7 +2028,7 @@
             }
 
             try {
-                const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${SHEET_NAME}!A1:Z?key=${API_KEY}`);
+                const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(SHEET_NAME)}!A1:Z?key=${API_KEY}`);
                 const data = await response.json();
 
                 if (!data.values) {
@@ -2062,7 +2062,7 @@
         }
 
         async function getStagingData() {
-            const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${STAGING_SHEET_NAME}!A1:ZZ?key=${API_KEY}`);
+            const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(STAGING_SHEET_NAME)}!A1:ZZ?key=${API_KEY}`);
             if (!response.ok) throw new Error('Failed to fetch staging data');
             const data = await response.json();
             return data.values || [];
@@ -3378,16 +3378,43 @@
                 const value = document.getElementById('print-date-select').value;
                 const [year, month, day] = value.split('-').map(Number);
                 const selectedDate = new Date(year, month - 1, day);
-                const nextDate = new Date(selectedDate);
                 let castingProjects = [];
-                // Similar logic, but for day, perhaps next day or something, but since batch is per day, maybe empty or same as week
-                // For simplicity, since day print is for single day, and batch is daily, perhaps no batch for day or copy from week logic
-                // But to match, perhaps add the batch task for that day
+                if (selectedDate.getDay() === 5) { // Friday
+                    // Get tasks for Saturday
+                    const saturday = new Date(selectedDate);
+                    saturday.setDate(selectedDate.getDate() + 1);
+                    const saturdayString = saturday.toDateString();
+                    const saturdayProjects = allTasks
+                        .filter(t => t.department === 'Cast' && parseDate(t.date) && parseDate(t.date).toDateString() === saturdayString)
+                        .map(t => t.project);
+                    if (saturdayProjects.length > 0) {
+                        castingProjects.push(`<b>Sat:</b> ${saturdayProjects.join(', ')}`);
+                    }
+
+                    // Get tasks for Monday
+                    const monday = new Date(selectedDate);
+                    monday.setDate(selectedDate.getDate() + 3);
+                    const mondayString = monday.toDateString();
+                    const mondayProjects = allTasks
+                        .filter(t => t.department === 'Cast' && parseDate(t.date) && parseDate(t.date).toDateString() === mondayString)
+                        .map(t => t.project);
+                    if (mondayProjects.length > 0) {
+                        castingProjects.push(`<b>Mon:</b> ${mondayProjects.join(', ')}`);
+                    }
+                } else {
+                    // For Mon-Thu, get next day's tasks
+                    const nextDate = new Date(selectedDate);
+                    nextDate.setDate(selectedDate.getDate() + 1);
+                    const nextDateString = nextDate.toDateString();
+                    castingProjects = allTasks
+                        .filter(t => t.department === 'Cast' && parseDate(t.date) && parseDate(t.date).toDateString() === nextDateString)
+                        .map(t => t.project);
+                }
                 const batchTask = {
                     id: `batch-${selectedDate.toISOString()}`,
                     week: getLocalDateString(getMonday(selectedDate)),
                     project: 'Batch',
-                    description: '', // For day, perhaps no description
+                    description: castingProjects.length > 0 ? castingProjects.join('<br>') : '',
                     date: getLocalDateString(selectedDate),
                     department: 'Batch',
                     value: '',
@@ -3457,11 +3484,43 @@
                 const value = document.getElementById('print-date-select').value;
                 const [year, month, day] = value.split('-').map(Number);
                 const selectedDate = new Date(year, month - 1, day);
+                let castingProjects = [];
+                if (selectedDate.getDay() === 5) { // Friday
+                    // Get tasks for Saturday
+                    const saturday = new Date(selectedDate);
+                    saturday.setDate(selectedDate.getDate() + 1);
+                    const saturdayString = saturday.toDateString();
+                    const saturdayProjects = allTasks
+                        .filter(t => t.department === 'Cast' && parseDate(t.date) && parseDate(t.date).toDateString() === saturdayString)
+                        .map(t => t.project);
+                    if (saturdayProjects.length > 0) {
+                        castingProjects.push(`<b>Sat:</b> ${saturdayProjects.join(', ')}`);
+                    }
+
+                    // Get tasks for Monday
+                    const monday = new Date(selectedDate);
+                    monday.setDate(selectedDate.getDate() + 3);
+                    const mondayString = monday.toDateString();
+                    const mondayProjects = allTasks
+                        .filter(t => t.department === 'Cast' && parseDate(t.date) && parseDate(t.date).toDateString() === mondayString)
+                        .map(t => t.project);
+                    if (mondayProjects.length > 0) {
+                        castingProjects.push(`<b>Mon:</b> ${mondayProjects.join(', ')}`);
+                    }
+                } else {
+                    // For Mon-Thu, get next day's tasks
+                    const nextDate = new Date(selectedDate);
+                    nextDate.setDate(selectedDate.getDate() + 1);
+                    const nextDateString = nextDate.toDateString();
+                    castingProjects = allTasks
+                        .filter(t => t.department === 'Cast' && parseDate(t.date) && parseDate(t.date).toDateString() === nextDateString)
+                        .map(t => t.project);
+                }
                 const layoutTask = {
                     id: `layout-${selectedDate.toISOString()}`,
                     week: getLocalDateString(getMonday(selectedDate)),
                     project: 'Layout',
-                    description: '', // For day, perhaps no description
+                    description: castingProjects.length > 0 ? castingProjects.join('<br>') : '',
                     date: getLocalDateString(selectedDate),
                     department: 'Layout',
                     value: '',
