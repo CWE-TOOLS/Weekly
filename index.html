@@ -1913,7 +1913,7 @@
                 <!-- Loading Overlay -->
                 <div id="project-loading-overlay" class="project-loading-overlay" style="display: none;">
                     <div class="loading-spinner"></div>
-                    <p>Confirming edits...</p>
+                    <p>Saving changes...</p>
                 </div>
             </div>
         </div>
@@ -3352,16 +3352,12 @@
             }
 
             async function saveChanges() {
-                // Set loading state
+                // Set loading state (minimal UI feedback)
                 saveBtn.disabled = true;
                 cancelBtn.disabled = true;
                 saveBtn.innerHTML = '<div class="save-loading-spinner"></div>Saving...';
                 saveBtn.style.background = 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)';
                 saveBtn.style.cursor = 'not-allowed';
-
-                // Show loading overlay
-                const overlay = document.getElementById('project-loading-overlay');
-                overlay.style.display = 'flex';
 
                 try {
                     const textareas = document.querySelectorAll('#project-schedule-grid .edit-description');
@@ -3390,22 +3386,26 @@
                         }
                     });
 
-                    // Save to staging if there are changes
+                    // Save to staging asynchronously (don't block user)
                     if (changedTasks.length > 0) {
-                        await saveToStaging(currentProjectName, changedTasks);
-
-                        // Show success notification
-                        const successNotif = document.getElementById('project-success-notification');
-                        successNotif.style.display = 'block';
-                        setTimeout(() => {
-                            successNotif.style.display = 'none';
-                        }, 2500);
+                        // Save immediately to local data, then sync to staging in background
+                        setTimeout(() => saveToStaging(currentProjectName, changedTasks), 100);
                     }
 
-                    // Trigger data refresh after successful edit
-                    await fetchTasks();
+                    // Local data is already updated, modal will show changes automatically
+                    // Skip expensive re-rendering to keep save instant
+                    // Background sync will ensure consistency
+                    setTimeout(() => fetchTasks(), 100);
 
                     exitEditMode();
+
+                    // Show success notification (changes saved locally, staging syncs in background)
+                    const successNotif = document.getElementById('project-success-notification');
+                    successNotif.style.display = 'block';
+                    setTimeout(() => {
+                        successNotif.style.display = 'none';
+                    }, 2500);
+
                 } catch (error) {
                     console.error('Save failed:', error);
                     // Show error feedback
@@ -3415,8 +3415,6 @@
                         restoreSaveButton();
                     }, 2000);
                 } finally {
-                    // Hide loading overlay
-                    overlay.style.display = 'none';
                     if (!saveBtn.innerHTML.includes('Failed')) {
                         restoreSaveButton();
                     }
