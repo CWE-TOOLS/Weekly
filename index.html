@@ -64,6 +64,7 @@
             display: flex;
             flex-direction: column;
             height: 100%;
+            position: relative;
         }
 
         header {
@@ -90,6 +91,13 @@
             margin-bottom: 2rem;
             flex-wrap: wrap;
             gap: 1rem;
+        }
+
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
         }
 
        .action-group {
@@ -171,7 +179,7 @@
             overflow-x: scroll;
             scroll-snap-type: x proximity;
             -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
-            scrollbar-width: none; /* Hide scrollbar for Firefox */
+            scrollbar-width: thin; /* Show thin scrollbars for Firefox */
             flex-grow: 1;
             overflow-y: auto;
             /* Performance optimization: Reduce paint and layout operations */
@@ -180,7 +188,8 @@
         }
 
         .schedule-wrapper::-webkit-scrollbar {
-            height: 8px; /* Thin scrollbar for discrete appearance */
+            height: 12px; /* Horizontal scrollbar height */
+            width: 0px; /* Hide vertical scrollbar */
         }
 
         .schedule-wrapper::-webkit-scrollbar-track {
@@ -188,12 +197,12 @@
         }
 
         .schedule-wrapper::-webkit-scrollbar-thumb {
-            background: #888;
+            background: #555;
             border-radius: 4px;
         }
 
         .schedule-wrapper::-webkit-scrollbar-thumb:hover {
-            background: #555;
+            background: #333;
         }
 
         .schedule-container {
@@ -410,25 +419,26 @@
         }
 
         .loading {
-            text-align: center;
-            padding: 4rem;
-            font-size: 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1.5rem;
+            font-size: 0.875rem;
             color: var(--text-secondary);
-            position: relative;
+            background: var(--background-secondary);
+            border-radius: var(--border-radius-md);
+            border: 1px solid var(--border-primary);
         }
 
-        .loading::after {
+        .loading::before {
             content: '';
-            position: absolute;
-            width: 20px;
-            height: 20px;
-            margin: 0 auto;
-            border: 2px solid var(--border-primary);
+            width: 18px;
+            height: 18px;
+            border: 3px solid var(--border-primary);
             border-radius: 50%;
             border-top-color: var(--accent-primary);
             animation: spin 1s ease-in-out infinite;
-            left: 50%;
-            transform: translateX(-50%);
+            flex-shrink: 0;
         }
 
         @keyframes spin {
@@ -1746,25 +1756,26 @@
     <div class="container">
         <div class="controls">
             <div class="filter-group">
-                <label>Filter by Department:</label>
-                <div id="multi-select-dropdown" class="multi-select-dropdown">
-                    <button id="multi-select-btn" class="multi-select-btn" aria-haspopup="listbox" aria-expanded="false">
-                        <span id="multi-select-label">All Departments</span>
-                        <svg class="dropdown-arrow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                            <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.25 4.25a.75.75 0 01-1.06 0L5.23 8.27a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
-                        </svg>
-                    </button>
-                    <div id="multi-select-panel" class="multi-select-panel" role="listbox">
-                        <div class="multi-select-actions">
-                            <button id="select-all-btn">Show All</button>
-                            <button id="select-none-btn">Show None</button>
-                        </div>
-                        <ul id="department-list">
-                            <!-- Department checkboxes will be populated by JavaScript -->
-                        </ul>
-                    </div>
-                </div>
-            </div>
+               <label>Filter by Department:</label>
+               <div id="multi-select-dropdown" class="multi-select-dropdown">
+                   <button id="multi-select-btn" class="multi-select-btn" aria-haspopup="listbox" aria-expanded="false">
+                       <span id="multi-select-label">All Departments</span>
+                       <svg class="dropdown-arrow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                           <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.25 4.25a.75.75 0 01-1.06 0L5.23 8.27a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+                       </svg>
+                   </button>
+                   <div id="multi-select-panel" class="multi-select-panel" role="listbox">
+                       <div class="multi-select-actions">
+                           <button id="select-all-btn">Show All</button>
+                           <button id="select-none-btn">Show None</button>
+                       </div>
+                       <ul id="department-list">
+                           <!-- Department checkboxes will be populated by JavaScript -->
+                       </ul>
+                   </div>
+               </div>
+               <div id="loading" class="loading">Loading tasks...</div>
+           </div>
             <div class="navigation-group">
                 <button id="prev-week-btn">&larr; Previous</button>
                 <h2 id="week-display"></h2>
@@ -1790,7 +1801,6 @@
             </div>
         </div>
 
-        <div id="loading" class="loading">Loading tasks...</div>
         <div id="rendering-status" class="rendering-status">Optimizing layout...</div>
         <div id="error" class="error" style="display: none;"></div>
 
@@ -2298,10 +2308,12 @@
                         throw new Error('Failed to update sheet: ' + error);
                     }
                     console.log('Successfully saved to staging sheet');
+                    return true;
                 }
+                return true;
             } catch (error) {
                 console.error('Error saving to staging:', error);
-                alert('Failed to save changes: ' + error.message);
+                throw error; // Re-throw to handle in caller
             }
         }
 
@@ -2537,10 +2549,12 @@
             maxTasksPerDept['Batch'] = 1;
             maxTasksPerDept['Layout'] = 1;
 
-            // Render a grid for each week using the global max tasks count
+            // Render a grid for each week using the global max tasks count - use document fragment for better performance
+            const fragment = document.createDocumentFragment();
             allWeekStartDates.forEach(mondayDate => {
-                container.appendChild(renderWeekGrid(mondayDate, maxTasksPerDept));
+                fragment.appendChild(renderWeekGrid(mondayDate, maxTasksPerDept));
             });
+            container.appendChild(fragment);
 
             // Determine the initial week index, preserving the currently viewed week if set
             if (currentViewedWeekIndex === -1 || currentViewedWeekIndex >= allWeekStartDates.length) {
@@ -2570,6 +2584,8 @@
                 updateWeekDisplayHeader(allWeekStartDates[initialWeekIndex]);
 
                 equalizeAllCardHeights();
+                // Reset will-change after optimizations
+                wrapper.style.willChange = 'auto';
             });
 
             // Hide rendering status after all operations complete
@@ -2888,8 +2904,18 @@
                 loadingElement.style.display = 'block';
                 // Performance monitoring: Track render start time
                 window.renderStartTime = performance.now();
+                // Auto-hide after 30 seconds to prevent getting stuck
+                if (window.loadingTimeout) clearTimeout(window.loadingTimeout);
+                window.loadingTimeout = setTimeout(() => {
+                    loadingElement.style.display = 'none';
+                    console.warn('Loading indicator auto-hidden after timeout');
+                }, 30000);
             } else {
                 loadingElement.style.display = 'none';
+                if (window.loadingTimeout) {
+                    clearTimeout(window.loadingTimeout);
+                    window.loadingTimeout = null;
+                }
                 // Performance monitoring: Log render completion time
                 if (window.renderStartTime) {
                     const renderTime = performance.now() - window.renderStartTime;
@@ -3297,6 +3323,14 @@
                         const task = allTasks.find(t => t.id === taskId);
                         if (task) {
                             task.description = newText;
+                            // Temp update weekly view cards
+                            const weeklyCard = document.querySelector(`.task-card[data-task-id="${taskId}"]`);
+                            if (weeklyCard) {
+                                const descElement = weeklyCard.querySelector('.task-description');
+                                if (descElement) {
+                                    descElement.innerHTML = newText || '<span class="missing-description">Staging Missing</span>';
+                                }
+                            }
                         }
 
                         // Replace textarea
@@ -3311,25 +3345,29 @@
                         }
                     });
 
-                    // Save to staging asynchronously (don't block user)
+                    // Save to staging
+                    let syncSuccess = true;
                     if (changedTasks.length > 0) {
-                        // Save immediately to local data, then sync to staging in background
-                        setTimeout(() => saveToStaging(currentProjectName, changedTasks), 100);
+                        try {
+                            await saveToStaging(currentProjectName, changedTasks);
+                        } catch (error) {
+                            syncSuccess = false;
+                            console.error('Staging sync failed:', error);
+                            // Continue with local save - user can retry
+                        }
                     }
 
                     // Local data is already updated, modal will show changes automatically
-                    // Skip expensive re-rendering to keep save instant
-                    // Background sync will ensure consistency
-                    setTimeout(() => fetchTasks(), 100);
-
                     exitEditMode();
 
-                    // Show success notification (changes saved locally, staging syncs in background)
+                    // Show success notification
                     const successNotif = document.getElementById('project-success-notification');
+                    const syncStatus = syncSuccess ? '✅ Changes saved and synced!' : '✅ Changes saved locally. Sync to backend failed - please try again.';
+                    successNotif.textContent = syncStatus;
                     successNotif.style.display = 'block';
                     setTimeout(() => {
                         successNotif.style.display = 'none';
-                    }, 2500);
+                    }, syncSuccess ? 2500 : 5000);
 
                 } catch (error) {
                     console.error('Save failed:', error);
