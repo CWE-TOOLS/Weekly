@@ -171,7 +171,7 @@
             overflow-x: scroll;
             scroll-snap-type: x proximity;
             -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
-            scrollbar-width: none; /* Hide scrollbar for Firefox */
+            scrollbar-width: auto; /* Show scrollbar for Firefox */
             flex-grow: 1;
             overflow-y: auto;
             /* Performance optimization: Reduce paint and layout operations */
@@ -180,7 +180,21 @@
         }
 
         .schedule-wrapper::-webkit-scrollbar {
-            display: none; /* Hide scrollbar for Chrome, Safari, and Opera */
+            display: block; /* Show scrollbar for Chrome, Safari, and Opera */
+            height: 8px; /* Make it discrete */
+        }
+
+        .schedule-wrapper::-webkit-scrollbar-track {
+            background: var(--background-primary);
+        }
+
+        .schedule-wrapper::-webkit-scrollbar-thumb {
+            background: var(--border-primary);
+            border-radius: 4px;
+        }
+
+        .schedule-wrapper::-webkit-scrollbar-thumb:hover {
+            background: var(--accent-primary);
         }
 
         .schedule-container {
