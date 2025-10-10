@@ -285,7 +285,6 @@
             color: var(--text-primary);
             border-radius: var(--border-radius-md);
             padding: 0.75rem;
-            transition: transform 0.2s ease, box-shadow 0.2s ease, cursor 0.2s ease;
             border: none;
             cursor: pointer;
             display: flex;
@@ -293,6 +292,7 @@
             min-height: 140px;
             background-color: var(--background-secondary); /* Default background */
             position: relative;
+            /* Removed transitions for performance */
         }
         
         /* Department colors for task cards */
@@ -310,8 +310,8 @@
         .task-card.department-ship { background-color: var(--color-ship); color: var(--color-ship-text); }
 
         .task-card:hover {
-            transform: translateY(-3px);
             box-shadow: var(--shadow-md);
+            /* Removed transform for performance */
         }
 
         .task-card::after {
@@ -322,8 +322,8 @@
             font-size: 1.2rem;
             color: rgba(0, 0, 0, 0.4);
             opacity: 0;
-            transition: opacity 0.2s ease;
             pointer-events: none;
+            /* Removed transition for performance */
         }
 
         .task-card:hover::after {
@@ -604,8 +604,7 @@
             min-width: 180px;
             display: none;
             overflow: hidden;
-            backdrop-filter: blur(10px);
-            animation: fadeInScale 0.15s ease-out;
+            /* Removed backdrop-filter and animation for performance */
         }
 
         .context-menu-item {
@@ -637,31 +636,7 @@
         }
 
 
-        @keyframes fadeInScale {
-            from {
-                opacity: 0;
-                transform: scale(0.85) translateY(-10px);
-            }
-            to {
-                opacity: 1;
-                transform: scale(1) translateY(0);
-            }
-        }
 
-        @keyframes slideInBounce {
-            0% {
-                opacity: 0;
-                transform: translateY(-30px) scale(0.95);
-            }
-            60% {
-                opacity: 0.8;
-                transform: translateY(5px) scale(1.02);
-            }
-            100% {
-                opacity: 1;
-                transform: translateY(0) scale(1);
-            }
-        }
 
         @keyframes elegantFadeIn {
             0% {
@@ -678,14 +653,6 @@
             }
         }
 
-        @keyframes pulseGlow {
-            0%, 100% {
-                box-shadow: var(--shadow-sm);
-            }
-            50% {
-                box-shadow: 0 0 20px rgba(79, 70, 229, 0.3), var(--shadow-md);
-            }
-        }
 
         /* --- Project View Modal --- */
         .project-modal {
@@ -695,12 +662,11 @@
             width: 100%;
             height: 100%;
             background: rgba(0, 0, 0, 0.4);
-            backdrop-filter: blur(0px);
             z-index: 9999;
             display: none;
-            animation: modalBackdropFade 0.4s ease-out;
             padding: 2rem;
             box-sizing: border-box;
+            /* Removed backdrop-filter and animation for performance */
         }
 
         .project-modal.show {
@@ -719,10 +685,9 @@
             overflow: hidden;
             display: flex;
             flex-direction: column;
-            animation: slideInBounce 0.5s ease-out;
             border: 1px solid var(--border-primary);
-            transition: all 0.3s ease;
             position: relative; /* For loading overlay positioning */
+            /* Removed animation and transition for performance */
         }
 
         .edit-description {
@@ -861,9 +826,6 @@
             vertical-align: middle;
         }
 
-        @keyframes button-spin {
-            to { transform: rotate(360deg); }
-        }
 
         .project-title {
             font-size: 1.25rem;
@@ -976,15 +938,12 @@
             border: 1px solid var(--border-primary);
             border-radius: var(--border-radius-md);
             padding: 1rem;
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-            opacity: 0;
-            transform: translateY(30px) scale(0.95);
-            animation: elegantFadeIn 0.6s ease-out forwards;
             min-width: 250px;
             max-width: 300px;
             flex: 1;
             position: relative;
             overflow: hidden;
+            /* Removed transitions and animation for performance */
         }
 
         .project-task-card:hover {
@@ -992,14 +951,6 @@
             box-shadow: var(--shadow-md);
         }
 
-        .project-task-card:nth-child(1) { animation-delay: 0.1s; }
-        .project-task-card:nth-child(2) { animation-delay: 0.2s; }
-        .project-task-card:nth-child(3) { animation-delay: 0.3s; }
-        .project-task-card:nth-child(4) { animation-delay: 0.4s; }
-        .project-task-card:nth-child(5) { animation-delay: 0.5s; }
-        .project-task-card:nth-child(6) { animation-delay: 0.6s; }
-        .project-task-card:nth-child(7) { animation-delay: 0.7s; }
-        .project-task-card:nth-child(8) { animation-delay: 0.8s; }
 
         .project-task-card .task-title {
             font-size: 0.85rem;
@@ -1021,38 +972,8 @@
             font-size: 0.75rem;
         }
 
-        @keyframes modalBackdropFade {
-            from {
-                opacity: 0;
-                backdrop-filter: blur(0px);
-            }
-            to {
-                opacity: 1;
-                backdrop-filter: blur(5px);
-            }
-        }
 
-        @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateY(-30px) scale(0.95);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0) scale(1);
-            }
-        }
 
-        @keyframes cardFadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(30px) scale(0.95);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0) scale(1);
-            }
-        }
 
         /* --- Project Modal Loading Overlay --- */
         .project-loading-overlay {
@@ -1125,8 +1046,8 @@
             overflow: hidden;
             display: flex;
             flex-direction: column;
-            animation: slideInBounce 0.5s ease-out;
             border: 1px solid var(--border-primary);
+            /* Removed animation for performance */
         }
 
         .password-header {
@@ -1766,19 +1687,9 @@
             font-weight: 600;
             z-index: 1010;
             display: none;
-            animation: fadeInSlideDown 0.3s ease-out;
+            /* Removed animation for performance */
         }
 
-        @keyframes fadeInSlideDown {
-            from {
-                opacity: 0;
-                transform: translateX(-50%) translateY(-10px);
-            }
-            to {
-                opacity: 1;
-                transform: translateX(-50%) translateY(0);
-            }
-        }
 
         @media (max-width: 768px) {
             .container {
@@ -2143,7 +2054,7 @@
 
             const data = await response.json();
             cachedAccessToken = data.access_token;
-            tokenExpiry = Date.now() + (data.expires_in * 1000) - 60000; // Refresh 1 minute before expiry
+            tokenExpiry = Date.now() + (data.expires_in * 1000) - 300000; // Refresh 5 minutes before expiry for better performance
             return cachedAccessToken;
         }
 
@@ -2856,10 +2767,10 @@
             });
 
             // --- Header Row ---
-            grid.innerHTML += `<div class="grid-header">Department</div>`;
+            let html = `<div class="grid-header">Department</div>`;
             weekDates.forEach(date => {
                 const isToday = date.toDateString() === new Date().toDateString();
-                grid.innerHTML += `
+                html += `
                     <div class="grid-header">
                         <div class="date-container ${isToday ? 'today-highlight' : ''}">
                             <div class="date-weekday">${date.toLocaleDateString('en-US', { weekday: 'short' })}</div>
