@@ -352,6 +352,81 @@
             opacity: 1;
         }
 
+        .task-edit-btn {
+            position: absolute;
+            bottom: 0.5rem;
+            right: 0.5rem;
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid var(--border-primary);
+            border-radius: var(--border-radius-md);
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            cursor: pointer;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease-in-out;
+            z-index: 10;
+        }
+
+        .task-card:hover .task-edit-btn {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .task-card .task-edit-btn:hover {
+            background: var(--background-secondary);
+            transform: scale(1.05);
+        }
+
+        .edit-controls {
+            position: absolute;
+            bottom: 0.5rem;
+            right: 0.5rem;
+            display: flex;
+            gap: 0.25rem;
+            z-index: 10;
+        }
+
+        .edit-confirm-btn, .edit-cancel-btn {
+            padding: 0.25rem 0.5rem;
+            border: 1px solid var(--border-primary);
+            border-radius: var(--border-radius-md);
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+        }
+
+        .edit-confirm-btn {
+            background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+            color: white;
+        }
+
+        .edit-confirm-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .edit-cancel-btn {
+            background: var(--border-primary);
+            color: var(--text-primary);
+        }
+
+        .edit-cancel-btn:hover {
+            background: var(--border-secondary);
+        }
+
+        .task-card.editing {
+            position: relative;
+            box-shadow: 0 0 0 2px var(--accent-primary);
+        }
+
+        .task-card.editing .task-edit-btn {
+            display: none;
+        }
+
         .task-title {
             font-weight: 600;
             font-size: 0.9rem;
@@ -2870,24 +2945,26 @@
                             const task = tasksByDate[dateString] ? tasksByDate[dateString][i] : undefined;
 
                         if (task) {
-                            const showDetails = task.department !== 'Batch' && task.department !== 'Layout';
-                            dayCell.innerHTML = `
-                                <div class="task-card ${rowClass} department-${normalizeDepartmentClass(task.department)}" data-task-id="${task.id}" title="Click for options">
-                                    <div class="task-title">${task.project}</div>
-                                    <div class="project-description">${task.projectDescription || ''}</div>
-                                    <div class="task-day-counter">
-                                       ${task.dayCounter || ''}
-                                    </div>
-                                    <div class="task-description">${task.description && task.description.trim() ? task.description : '<span class="missing-description">Staging Missing</span>'}</div>
-                                    ${showDetails ? `<div class="task-details">
-                                          ${task.missingDate ? '<strong>Date:</strong> Missing<br>' : ''}
-                                          <strong>Hours:</strong> ${task.hours}
-                                      </div>` : ''}
-                                </div>
-                            `;
-                            } else {
-                                dayCell.innerHTML = `<div class="task-card-placeholder ${rowClass}"></div>`;
-                            }
+                             const showDetails = task.department !== 'Batch' && task.department !== 'Layout';
+                             const editingEnabled = localStorage.getItem('editingUnlocked') === 'true';
+                             dayCell.innerHTML = `
+                                 <div class="task-card ${rowClass} department-${normalizeDepartmentClass(task.department)}" data-task-id="${task.id}" title="Click for options">
+                                     <div class="task-title">${task.project}</div>
+                                     <div class="project-description">${task.projectDescription || ''}</div>
+                                     <div class="task-day-counter">
+                                        ${task.dayCounter || ''}
+                                     </div>
+                                     <div class="task-description">${task.description && task.description.trim() ? task.description : '<span class="missing-description">Staging Missing</span>'}</div>
+                                     ${showDetails ? `<div class="task-details">
+                                           ${task.missingDate ? '<strong>Date:</strong> Missing<br>' : ''}
+                                           <strong>Hours:</strong> ${task.hours}
+                                       </div>` : ''}
+                                     ${editingEnabled ? `<button class="task-edit-btn" data-task-id="${task.id}">Edit</button>` : ''}
+                                 </div>
+                             `;
+                             } else {
+                                 dayCell.innerHTML = `<div class="task-card-placeholder ${rowClass}"></div>`;
+                             }
                             grid.appendChild(dayCell);
                         });
                     }
@@ -3020,7 +3097,17 @@
 
         document.addEventListener('click', (e) => {
             const taskCard = e.target.closest('.task-card');
-            if (taskCard) {
+            const editBtn = e.target.closest('.task-edit-btn');
+            if (editBtn) {
+                // Handle edit button click
+                e.preventDefault();
+                const taskId = editBtn.dataset.taskId;
+                const task = allTasks.find(t => t.id === taskId);
+                if (task) {
+                    editTaskInline(task, editBtn.closest('.task-card'));
+                }
+                return;
+            } else if (taskCard) {
                 // Don't show context menu if inside the build plan modal
                 if (document.getElementById('project-modal').classList.contains('show')) {
                     return;
@@ -4435,6 +4522,153 @@
 
         // Auto-refresh every 30 minutes (reduce frequency to improve performance)
         setInterval(fetchTasks, 30 * 60 * 1000);
+
+        function editTaskInline(task, taskCard) {
+            const descElement = taskCard.querySelector('.task-description');
+            const originalText = descElement.innerHTML;
+
+            // Add editing class to card
+            taskCard.classList.add('editing');
+
+            // Create input field
+            const input = document.createElement('textarea');
+            input.className = 'inline-edit-input';
+            input.value = descElement.textContent.trim() === 'Staging Missing' ? '' : descElement.textContent.trim();
+            input.style.width = '100%';
+            input.style.minHeight = '60px';
+            input.style.border = '1px solid var(--border-primary)';
+            input.style.borderRadius = 'var(--border-radius-md)';
+            input.style.fontSize = '0.8rem';
+            input.style.fontFamily = 'inherit';
+            input.style.backgroundColor = 'var(--background-secondary)';
+            input.style.color = 'var(--text-primary)';
+            input.style.resize = 'vertical';
+
+            // Create control buttons
+            const controlsDiv = document.createElement('div');
+            controlsDiv.className = 'edit-controls';
+
+            const confirmBtn = document.createElement('button');
+            confirmBtn.className = 'edit-confirm-btn';
+            confirmBtn.textContent = '✓';
+            confirmBtn.title = 'Confirm changes (Ctrl+Enter)';
+
+            const cancelBtn = document.createElement('button');
+            cancelBtn.className = 'edit-cancel-btn';
+            cancelBtn.textContent = '✕';
+            cancelBtn.title = 'Cancel changes (Escape)';
+
+            controlsDiv.appendChild(confirmBtn);
+            controlsDiv.appendChild(cancelBtn);
+
+            // Replace description with input and add controls
+            descElement.replaceWith(input);
+            taskCard.appendChild(controlsDiv);
+            input.focus();
+            input.select();
+
+            // Handle save/cancel
+            const saveEdit = async () => {
+                const newText = input.value.trim();
+                task.description = newText;
+
+                // Update display
+                const newDescElement = document.createElement('div');
+                newDescElement.className = 'task-description';
+                newDescElement.innerHTML = newText || '<span class="missing-description">Staging Missing</span>';
+                input.replaceWith(newDescElement);
+
+                // Remove controls
+                if (controlsDiv.parentNode) {
+                    controlsDiv.parentNode.removeChild(controlsDiv);
+                }
+
+                // Remove editing class
+                taskCard.classList.remove('editing');
+
+                // Save to staging if possible
+                try {
+                    await saveToStaging(task.project, [{task, newText}]);
+                    showSuccessNotification('Task updated successfully!');
+                } catch (error) {
+                    console.error('Failed to save:', error);
+                    showSuccessNotification('Task updated locally. Sync failed.', true);
+                }
+
+                // Remove event listeners
+                document.removeEventListener('click', handleClickOutside);
+                document.removeEventListener('keydown', handleKeydown);
+            };
+
+            const cancelEdit = () => {
+                const newDescElement = document.createElement('div');
+                newDescElement.className = 'task-description';
+                newDescElement.innerHTML = originalText;
+                input.replaceWith(newDescElement);
+
+                // Remove controls
+                if (controlsDiv.parentNode) {
+                    controlsDiv.parentNode.removeChild(controlsDiv);
+                }
+
+                // Remove editing class
+                taskCard.classList.remove('editing');
+
+                document.removeEventListener('click', handleClickOutside);
+                document.removeEventListener('keydown', handleKeydown);
+            };
+
+            // Button event handlers
+            confirmBtn.addEventListener('click', saveEdit);
+            cancelBtn.addEventListener('click', cancelEdit);
+
+            const handleClickOutside = (e) => {
+                if (!input.contains(e.target) && !controlsDiv.contains(e.target)) {
+                    saveEdit();
+                }
+            };
+
+            const handleKeydown = (e) => {
+                if (e.key === 'Enter' && e.ctrlKey) {
+                    saveEdit();
+                } else if (e.key === 'Escape') {
+                    cancelEdit();
+                }
+            };
+
+            // Add event listeners
+            setTimeout(() => {
+                document.addEventListener('click', handleClickOutside);
+                document.addEventListener('keydown', handleKeydown);
+            }, 10);
+        }
+
+        function showSuccessNotification(message, isError = false) {
+            // Create notification element
+            const notification = document.createElement('div');
+            notification.className = 'inline-edit-notification';
+            notification.textContent = message;
+            notification.style.position = 'fixed';
+            notification.style.top = '20px';
+            notification.style.right = '20px';
+            notification.style.background = isError ? '#ef4444' : '#22c55e';
+            notification.style.color = 'white';
+            notification.style.padding = '0.75rem 1rem';
+            notification.style.borderRadius = 'var(--border-radius-md)';
+            notification.style.boxShadow = 'var(--shadow-md)';
+            notification.style.zIndex = '10000';
+            notification.style.fontSize = '0.875rem';
+            notification.style.fontWeight = '500';
+
+            document.body.appendChild(notification);
+
+            // Remove after 3 seconds
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                }
+            }, 3000);
+        }
 
         // Initial load
         fetchTasks();
