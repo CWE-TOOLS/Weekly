@@ -2265,8 +2265,11 @@
 
         function getWeekOfMonth(monday, month) {
             const year = monday.getFullYear();
-            const firstDayOfMonth = new Date(year, month, 1);
-            const startOfWeek1 = getMonday(firstDayOfMonth);
+            let startOfWeek1 = getMonday(new Date(year, month, 1));
+            // Find the first Monday whose week has majority days in the month
+            while (getWeekMonth(startOfWeek1) !== month) {
+                startOfWeek1 = new Date(startOfWeek1.getTime() + 7 * 24 * 60 * 60 * 1000);
+            }
             const diffMs = monday - startOfWeek1;
             const diffDays = diffMs / (1000 * 60 * 60 * 24);
             const weekNum = 1 + Math.floor(diffDays / 7);
