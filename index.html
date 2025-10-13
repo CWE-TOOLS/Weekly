@@ -380,6 +380,34 @@
             transform: scale(1.05);
         }
 
+        .task-plan-btn {
+            position: absolute;
+            bottom: 0.5rem;
+            right: 3.5rem; /* Position it to the left of the edit button */
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid var(--border-primary);
+            border-radius: var(--border-radius-md);
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            cursor: pointer;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease-in-out;
+            z-index: 10;
+        }
+
+        .task-card:hover .task-plan-btn {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .task-plan-btn:hover {
+            background: var(--background-secondary);
+            transform: scale(1.05);
+        }
+
         .edit-controls {
             position: absolute;
             bottom: 0.5rem;
@@ -423,7 +451,8 @@
             box-shadow: 0 0 0 2px var(--accent-primary);
         }
 
-        .task-card.editing .task-edit-btn {
+        .task-card.editing .task-edit-btn,
+        .task-card.editing .task-plan-btn {
             display: none;
         }
 
@@ -2988,7 +3017,7 @@
                                            ${task.missingDate ? '<strong>Date:</strong> Missing<br>' : ''}
                                            <strong>Hours:</strong> ${task.hours}
                                        </div>` : ''}
-                                     ${editingEnabled ? `<button class="task-edit-btn" data-task-id="${task.id}">Edit</button>` : ''}
+                                     ${editingEnabled ? `<button class="task-plan-btn" data-task-id="${task.id}">Plan</button><button class="task-edit-btn" data-task-id="${task.id}">Edit</button>` : ''}
                                  </div>
                              `;
                              } else {
@@ -3127,7 +3156,17 @@
         document.addEventListener('click', (e) => {
             const taskCard = e.target.closest('.task-card');
             const editBtn = e.target.closest('.task-edit-btn');
-            if (editBtn) {
+            const planBtn = e.target.closest('.task-plan-btn');
+            if (planBtn) {
+                // Handle plan button click
+                e.preventDefault();
+                const taskId = planBtn.dataset.taskId;
+                const task = allTasks.find(t => t.id === taskId);
+                if (task) {
+                    showProjectView(task.project);
+                }
+                return;
+            } else if (editBtn) {
                 // Handle edit button click
                 e.preventDefault();
                 const taskId = editBtn.dataset.taskId;
