@@ -3160,11 +3160,13 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
                     deptHeader.style.textAlign = 'center';
                     deptHeader.style.writingMode = 'horizontal-tb';
                     deptHeader.style.textOrientation = 'mixed';
-                    deptHeader.style.maxWidth = '500px';
+                    deptHeader.style.maxWidth = '800px';
                     deptHeader.style.margin = '0 auto';
-                    table.style.width = '500px';
-                    table.style.maxWidth = '500px';
-                    summaryDiv.style.width = '500px';
+                    table.style.width = '100%';
+                    table.style.maxWidth = '800px';
+                    table.style.margin = '0 auto';
+                    summaryDiv.style.width = '100%';
+                    summaryDiv.style.maxWidth = '800px';
                     summaryDiv.style.margin = '0 auto';
                     pageDiv.appendChild(deptHeader);
                     pageDiv.appendChild(table);
@@ -3192,9 +3194,21 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
                     const value = document.getElementById('print-date-select').value;
                     const [year, month, day] = value.split('-').map(Number);
                     const selectedDate = new Date(year, month - 1, day);
-                    const th = document.createElement('th');
-                    th.innerHTML = `${selectedDate.toLocaleDateString('en-US', { weekday: 'short' })}<br>${selectedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
-                    headerRow.appendChild(th);
+                    const taskHeader = document.createElement('th');
+                    taskHeader.textContent = 'Task';
+                    headerRow.appendChild(taskHeader);
+
+                    const revenueHeader = document.createElement('th');
+                    revenueHeader.textContent = 'Revenue';
+                    headerRow.appendChild(revenueHeader);
+
+                    const midDayHeader = document.createElement('th');
+                    midDayHeader.textContent = 'Mid-Day';
+                    headerRow.appendChild(midDayHeader);
+
+                    const endOfDayHeader = document.createElement('th');
+                    endOfDayHeader.textContent = 'End of Day';
+                    headerRow.appendChild(endOfDayHeader);
                 }
 
                 thead.appendChild(headerRow);
@@ -3249,7 +3263,7 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
                     for (let row = 0; row < maxTasks; row++) {
                         const tr = document.createElement('tr');
 
-                        // Task cell for the selected date
+                        // Get the task for this row
                         const value = document.getElementById('print-date-select').value;
                         const [year, month, day] = value.split('-').map(Number);
                         const selectedDate = new Date(year, month - 1, day);
@@ -3259,11 +3273,13 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
                             return taskDate && taskDate.toDateString() === dateString;
                         });
                         let task = tasksForDate[row];
-                        const td = document.createElement('td');
-                        td.className = 'print-grid-cell';
-                        td.style.textAlign = 'center';
+
+                        // Task cell
+                        const taskCell = document.createElement('td');
+                        taskCell.className = 'print-grid-cell';
+                        taskCell.style.width = '60%';
                         if (task) {
-                            td.innerHTML = `
+                            taskCell.innerHTML = `
                                 <div class="print-task-card department-${normalizeDepartmentClass(task.department)}" style="margin: 0 auto; max-width: 180px;">
                                     <div class="print-task-title">${task.project}</div>
                                     <div class="print-project-description">${task.projectDescription || ''}</div>
@@ -3277,7 +3293,39 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
                                 </div>
                             `;
                         }
-                        tr.appendChild(td);
+                        tr.appendChild(taskCell);
+
+                        // Revenue cell
+                        const revenueCell = document.createElement('td');
+                        revenueCell.className = 'print-grid-cell';
+                        revenueCell.style.textAlign = 'center';
+                        revenueCell.style.fontSize = '1.2rem';
+                        revenueCell.style.fontWeight = 'bold';
+                        revenueCell.style.width = '13.33%';
+                        if (task && task.hours) {
+                            let hours = parseFloat(task.hours);
+                            let revenue = isNaN(hours) ? 0 : Math.round(Math.round(hours) * 135);
+                            revenueCell.textContent = `$${revenue.toLocaleString()}`;
+                        } else {
+                            revenueCell.textContent = '';
+                        }
+                        tr.appendChild(revenueCell);
+
+                        // Mid-Day cell (blank)
+                        const midDayCell = document.createElement('td');
+                        midDayCell.className = 'print-grid-cell';
+                        midDayCell.style.textAlign = 'center';
+                        midDayCell.style.width = '13.33%';
+                        midDayCell.textContent = '';
+                        tr.appendChild(midDayCell);
+
+                        // End of Day cell (blank)
+                        const endOfDayCell = document.createElement('td');
+                        endOfDayCell.className = 'print-grid-cell';
+                        endOfDayCell.style.textAlign = 'center';
+                        endOfDayCell.style.width = '13.33%';
+                        endOfDayCell.textContent = '';
+                        tr.appendChild(endOfDayCell);
 
                         tbody.appendChild(tr);
                     }
@@ -3356,12 +3404,21 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
                             batchHeaderRow.appendChild(th);
                         });
                     } else {
-                        const value = document.getElementById('print-date-select').value;
-                        const [year, month, day] = value.split('-').map(Number);
-                        const selectedDate = new Date(year, month - 1, day);
-                        const th = document.createElement('th');
-                        th.innerHTML = `${selectedDate.toLocaleDateString('en-US', { weekday: 'short' })}<br>${selectedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
-                        batchHeaderRow.appendChild(th);
+                        const taskHeader = document.createElement('th');
+                        taskHeader.textContent = 'Task';
+                        batchHeaderRow.appendChild(taskHeader);
+
+                        const revenueHeader = document.createElement('th');
+                        revenueHeader.textContent = 'Revenue';
+                        batchHeaderRow.appendChild(revenueHeader);
+
+                        const midDayHeader = document.createElement('th');
+                        midDayHeader.textContent = 'Mid-Day';
+                        batchHeaderRow.appendChild(midDayHeader);
+
+                        const endOfDayHeader = document.createElement('th');
+                        endOfDayHeader.textContent = 'End of Day';
+                        batchHeaderRow.appendChild(endOfDayHeader);
                     }
 
                     batchThead.appendChild(batchHeaderRow);
@@ -3408,11 +3465,13 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
                             const dateString = selectedDate.toDateString();
                             const batchTasksForDate = printBatchTasks.filter(t => parseDate(t.date).toDateString() === dateString);
                             const task = batchTasksForDate[row];
-                            const td = document.createElement('td');
-                            td.className = 'print-grid-cell';
-                            td.style.textAlign = 'center';
+
+                            // Task cell
+                            const taskCell = document.createElement('td');
+                            taskCell.className = 'print-grid-cell';
+                            taskCell.style.width = '60%';
                             if (task) {
-                                td.innerHTML = `
+                                taskCell.innerHTML = `
                                     <div class="print-task-card department-batch" style="margin: 0 auto; max-width: 180px;">
                                         <div class="print-task-title">${task.project}</div>
                                         <div class="print-project-description">${task.projectDescription || ''}</div>
@@ -3426,7 +3485,32 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
                                     </div>
                                 `;
                             }
-                            tr.appendChild(td);
+                            tr.appendChild(taskCell);
+
+                            // Revenue cell (empty for batch/layout tasks)
+                            const revenueCell = document.createElement('td');
+                            revenueCell.className = 'print-grid-cell';
+                            revenueCell.style.textAlign = 'center';
+                            revenueCell.style.width = '13.33%';
+                            revenueCell.textContent = '';
+                            tr.appendChild(revenueCell);
+
+                            // Mid-Day cell (blank)
+                            const midDayCell = document.createElement('td');
+                            midDayCell.className = 'print-grid-cell';
+                            midDayCell.style.textAlign = 'center';
+                            midDayCell.style.width = '13.33%';
+                            midDayCell.textContent = '';
+                            tr.appendChild(midDayCell);
+
+                            // End of Day cell (blank)
+                            const endOfDayCell = document.createElement('td');
+                            endOfDayCell.className = 'print-grid-cell';
+                            endOfDayCell.style.textAlign = 'center';
+                            endOfDayCell.style.width = '13.33%';
+                            endOfDayCell.textContent = '';
+                            tr.appendChild(endOfDayCell);
+
                             batchTbody.appendChild(tr);
                         }
                     }
@@ -3444,12 +3528,13 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
                         batchDeptHeader.style.textAlign = 'center';
                         batchDeptHeader.style.writingMode = 'horizontal-tb';
                         batchDeptHeader.style.textOrientation = 'mixed';
-                        batchDeptHeader.style.maxWidth = '300px';
+                        batchDeptHeader.style.maxWidth = '600px';
                         batchDeptHeader.style.margin = '0 auto';
                         batchTable.style.width = '100%';
-                        batchTable.style.maxWidth = '300px';
+                        batchTable.style.maxWidth = '600px';
+                        batchTable.style.margin = '0 auto';
                         batchSummaryDiv.style.width = '100%';
-                        batchSummaryDiv.style.maxWidth = '300px';
+                        batchSummaryDiv.style.maxWidth = '600px';
                         batchSummaryDiv.style.margin = '0 auto';
                         pageDiv.appendChild(batchDeptHeader);
                         pageDiv.appendChild(batchTable);
@@ -3497,12 +3582,21 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
                             layoutHeaderRow.appendChild(th);
                         });
                     } else {
-                        const value = document.getElementById('print-date-select').value;
-                        const [year, month, day] = value.split('-').map(Number);
-                        const selectedDate = new Date(year, month - 1, day);
-                        const th = document.createElement('th');
-                        th.innerHTML = `${selectedDate.toLocaleDateString('en-US', { weekday: 'short' })}<br>${selectedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
-                        layoutHeaderRow.appendChild(th);
+                        const taskHeader = document.createElement('th');
+                        taskHeader.textContent = 'Task';
+                        layoutHeaderRow.appendChild(taskHeader);
+
+                        const revenueHeader = document.createElement('th');
+                        revenueHeader.textContent = 'Revenue';
+                        layoutHeaderRow.appendChild(revenueHeader);
+
+                        const midDayHeader = document.createElement('th');
+                        midDayHeader.textContent = 'Mid-Day';
+                        layoutHeaderRow.appendChild(midDayHeader);
+
+                        const endOfDayHeader = document.createElement('th');
+                        endOfDayHeader.textContent = 'End of Day';
+                        layoutHeaderRow.appendChild(endOfDayHeader);
                     }
 
                     layoutThead.appendChild(layoutHeaderRow);
@@ -3549,11 +3643,13 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
                             const dateString = selectedDate.toDateString();
                             const layoutTasksForDate = printLayoutTasks.filter(t => parseDate(t.date).toDateString() === dateString);
                             const task = layoutTasksForDate[row];
-                            const td = document.createElement('td');
-                            td.className = 'print-grid-cell';
-                            td.style.textAlign = 'center';
+
+                            // Task cell
+                            const taskCell = document.createElement('td');
+                            taskCell.className = 'print-grid-cell';
+                            taskCell.style.width = '60%';
                             if (task) {
-                                td.innerHTML = `
+                                taskCell.innerHTML = `
                                     <div class="print-task-card department-layout" style="margin: 0 auto; max-width: 180px;">
                                         <div class="print-task-title">${task.project}</div>
                                         <div class="print-project-description">${task.projectDescription || ''}</div>
@@ -3567,7 +3663,32 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
                                     </div>
                                 `;
                             }
-                            tr.appendChild(td);
+                            tr.appendChild(taskCell);
+
+                            // Revenue cell (empty for batch/layout tasks)
+                            const revenueCell = document.createElement('td');
+                            revenueCell.className = 'print-grid-cell';
+                            revenueCell.style.textAlign = 'center';
+                            revenueCell.style.width = '13.33%';
+                            revenueCell.textContent = '';
+                            tr.appendChild(revenueCell);
+
+                            // Mid-Day cell (blank)
+                            const midDayCell = document.createElement('td');
+                            midDayCell.className = 'print-grid-cell';
+                            midDayCell.style.textAlign = 'center';
+                            midDayCell.style.width = '13.33%';
+                            midDayCell.textContent = '';
+                            tr.appendChild(midDayCell);
+
+                            // End of Day cell (blank)
+                            const endOfDayCell = document.createElement('td');
+                            endOfDayCell.className = 'print-grid-cell';
+                            endOfDayCell.style.textAlign = 'center';
+                            endOfDayCell.style.width = '13.33%';
+                            endOfDayCell.textContent = '';
+                            tr.appendChild(endOfDayCell);
+
                             layoutTbody.appendChild(tr);
                         }
                     }
@@ -3585,12 +3706,13 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
                         layoutDeptHeader.style.textAlign = 'center';
                         layoutDeptHeader.style.writingMode = 'horizontal-tb';
                         layoutDeptHeader.style.textOrientation = 'mixed';
-                        layoutDeptHeader.style.maxWidth = '300px';
+                        layoutDeptHeader.style.maxWidth = '600px';
                         layoutDeptHeader.style.margin = '0 auto';
                         layoutTable.style.width = '100%';
-                        layoutTable.style.maxWidth = '300px';
+                        layoutTable.style.maxWidth = '600px';
+                        layoutTable.style.margin = '0 auto';
                         layoutSummaryDiv.style.width = '100%';
-                        layoutSummaryDiv.style.maxWidth = '300px';
+                        layoutSummaryDiv.style.maxWidth = '600px';
                         layoutSummaryDiv.style.margin = '0 auto';
                         pageDiv.appendChild(layoutDeptHeader);
                         pageDiv.appendChild(layoutTable);
