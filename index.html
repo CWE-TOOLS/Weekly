@@ -2292,8 +2292,8 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
                 }
                 return;
             } else if (taskCard) {
-                // Don't show context menu if inside the build plan modal
-                if (document.getElementById('project-modal').classList.contains('show')) {
+                // Don't show context menu if inside the build plan modal or if editing
+                if (document.getElementById('project-modal').classList.contains('show') || taskCard.classList.contains('editing')) {
                     return;
                 }
                 e.preventDefault();
