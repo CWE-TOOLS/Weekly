@@ -3829,6 +3829,18 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
         // Auto-refresh every 30 minutes (reduce frequency to improve performance)
         setInterval(fetchTasks, 30 * 60 * 1000);
 
+        // Handle tab visibility changes to refresh data when returning to the tab
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                const modalOpen = document.getElementById('project-modal').classList.contains('show') ||
+                                 document.getElementById('password-modal').classList.contains('show') ||
+                                 document.getElementById('print-modal').classList.contains('show');
+                if (!modalOpen) {
+                    fetchTasks(); // Refresh data when tab becomes visible (but not if modals are open)
+                }
+            }
+        });
+
         function editTaskInline(task, taskCard) {
             const descElement = taskCard.querySelector('.task-description');
             const originalText = descElement.innerHTML;
