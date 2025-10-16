@@ -1729,6 +1729,9 @@ function parseDate(e){if(!e)return null;const t=e.split("/");if(3===t.length){co
                         checkbox.checked = !checkbox.checked;
                     }
                     filterTasks();
+                    // Save department selection state
+                    const selectedDepts = getSelectedDepartments();
+                    localStorage.setItem('selectedDepartments', JSON.stringify(selectedDepts));
                 });
             });
             updateMultiSelectLabel();
@@ -1879,12 +1882,25 @@ function getMonday(e){e=new Date(e);const t=e.getDay()||7;return 1!==t&&e.setHou
 
             // Determine the initial week index, preserving the currently viewed week if set
             if (currentViewedWeekIndex === -1 || currentViewedWeekIndex >= allWeekStartDates.length) {
-                // Set to current week
-                currentMonday = getMonday(new Date());
-                currentViewedWeekIndex = allWeekStartDates.findIndex(d => d.getTime() === currentMonday.getTime());
-                if (currentViewedWeekIndex === -1) {
-                    currentViewedWeekIndex = allWeekStartDates.findIndex(d => d > currentMonday);
-                    if (currentViewedWeekIndex === -1) currentViewedWeekIndex = allWeekStartDates.length - 1;
+                // Try to restore from localStorage first
+                const savedWeekIndex = localStorage.getItem('currentViewedWeekIndex');
+                const savedScrollPosition = localStorage.getItem('scheduleScrollPosition');
+
+                if (savedWeekIndex && !isNaN(parseInt(savedWeekIndex))) {
+                    const restoredIndex = parseInt(savedWeekIndex);
+                    if (restoredIndex < allWeekStartDates.length) {
+                        currentViewedWeekIndex = restoredIndex;
+                    }
+                }
+
+                // If no valid saved position, set to current week
+                if (currentViewedWeekIndex === -1 || currentViewedWeekIndex >= allWeekStartDates.length) {
+                    currentMonday = getMonday(new Date());
+                    currentViewedWeekIndex = allWeekStartDates.findIndex(d => d.getTime() === currentMonday.getTime());
+                    if (currentViewedWeekIndex === -1) {
+                        currentViewedWeekIndex = allWeekStartDates.findIndex(d => d > currentMonday);
+                        if (currentViewedWeekIndex === -1) currentViewedWeekIndex = allWeekStartDates.length - 1;
+                    }
                 }
             }
             let initialWeekIndex = currentViewedWeekIndex;
@@ -1900,9 +1916,28 @@ function getMonday(e){e=new Date(e);const t=e.getDay()||7;return 1!==t&&e.setHou
 
                 // Scroll to the target grid
                 if (grids[initialWeekIndex]) {
-                    wrapper.scrollLeft = grids[initialWeekIndex].offsetLeft;
+                    const targetScrollLeft = grids[initialWeekIndex].offsetLeft;
+
+                    // Try to restore from localStorage first
+                    const savedScrollPosition = localStorage.getItem('scheduleScrollPosition');
+                    if (savedScrollPosition && !isNaN(parseFloat(savedScrollPosition))) {
+                        const savedPosition = parseFloat(savedScrollPosition);
+                        // Only use saved position if it's within reasonable bounds
+                        if (savedPosition >= 0 && savedPosition <= wrapper.scrollWidth) {
+                            wrapper.scrollLeft = savedPosition;
+                            // Update currentViewedWeekIndex based on restored position
+                            currentViewedWeekIndex = Math.round(savedPosition / wrapper.offsetWidth);
+                        } else {
+                            wrapper.scrollLeft = targetScrollLeft;
+                        }
+                    } else {
+                        wrapper.scrollLeft = targetScrollLeft;
+                    }
                 }
-                updateWeekDisplayHeader(allWeekStartDates[initialWeekIndex]);
+
+                // Update header after scroll position is set
+                const finalWeekIndex = Math.min(currentViewedWeekIndex, allWeekStartDates.length - 1);
+                updateWeekDisplayHeader(allWeekStartDates[finalWeekIndex]);
 
                 equalizeAllCardHeights();
                 // Reset will-change after optimizations
@@ -2262,6 +2297,11 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
             const wrapper = document.getElementById('schedule-wrapper');
             const currentIndex = Math.round(wrapper.scrollLeft / wrapper.offsetWidth);
             currentViewedWeekIndex = currentIndex;
+
+            // Save scroll position to localStorage for persistence
+            localStorage.setItem('scheduleScrollPosition', wrapper.scrollLeft.toString());
+            localStorage.setItem('currentViewedWeekIndex', currentIndex.toString());
+
             const currentWeekDate = allWeekStartDates[currentIndex];
             updateWeekDisplayHeader(currentWeekDate);
         });
@@ -2743,9 +2783,11 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
                 weekSelect.appendChild(option);
             });
 
-            // Set date input to today
-            const today = new Date().toISOString().split('T')[0];
-            document.getElementById('print-date-select').value = today;
+            // Set date input to tomorrow
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            const tomorrowString = tomorrow.toISOString().split('T')[0];
+            document.getElementById('print-date-select').value = tomorrowString;
 
             // Get all departments, filter out invalid ones
             allDepartmentsForPrint = [...new Set(allTasks.map(task => task.department).filter(dept => dept && dept.toLowerCase() !== 'department' && !dept.toLowerCase().includes('link') && !dept.toLowerCase().includes('live')))];
@@ -2760,11 +2802,14 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
 
             const departmentsGrid = document.querySelector('.departments-grid');
             departmentsGrid.innerHTML = '';
+            // Restore saved print department selections
+            const savedPrintDepartments = JSON.parse(localStorage.getItem('printSelectedDepartments')) || allDepartmentsForPrint;
+
             allDepartmentsForPrint.forEach(dept => {
                 const checkboxDiv = document.createElement('div');
                 checkboxDiv.className = 'department-checkbox';
                 checkboxDiv.innerHTML = `
-                    <input type="checkbox" id="print-dept-${normalizeDepartmentClass(dept)}" value="${dept}" checked>
+                    <input type="checkbox" id="print-dept-${normalizeDepartmentClass(dept)}" value="${dept}" ${savedPrintDepartments.includes(dept) ? 'checked' : ''}>
                     <label for="print-dept-${normalizeDepartmentClass(dept)}">${dept}</label>
                 `;
                 departmentsGrid.appendChild(checkboxDiv);
@@ -2811,6 +2856,15 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
             // Update currentPrintWeekDates based on selected week
             if (printType === 'week') {
                 updateWeekDates();
+            }
+
+            // Format selected date for daily print header
+            let selectedDateFormatted = '';
+            if (printType === 'day') {
+                const value = document.getElementById('print-date-select').value;
+                const [year, month, day] = value.split('-').map(Number);
+                const selectedDate = new Date(year, month - 1, day);
+                selectedDateFormatted = selectedDate.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
             }
 
             // Generate batch tasks for the selected period
@@ -3195,7 +3249,7 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
                     const [year, month, day] = value.split('-').map(Number);
                     const selectedDate = new Date(year, month - 1, day);
                     const taskHeader = document.createElement('th');
-                    taskHeader.textContent = 'Task';
+                    taskHeader.textContent = selectedDateFormatted;
                     headerRow.appendChild(taskHeader);
 
                     const revenueHeader = document.createElement('th');
@@ -3405,7 +3459,7 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
                         });
                     } else {
                         const taskHeader = document.createElement('th');
-                        taskHeader.textContent = 'Task';
+                        taskHeader.textContent = selectedDateFormatted;
                         batchHeaderRow.appendChild(taskHeader);
 
                         const revenueHeader = document.createElement('th');
@@ -3583,7 +3637,7 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
                         });
                     } else {
                         const taskHeader = document.createElement('th');
-                        taskHeader.textContent = 'Task';
+                        taskHeader.textContent = selectedDateFormatted;
                         layoutHeaderRow.appendChild(taskHeader);
 
                         const revenueHeader = document.createElement('th');
@@ -3778,10 +3832,15 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
 
         document.getElementById('check-all-depts').addEventListener('click', () => {
             document.querySelectorAll('.departments-grid input[type="checkbox"]').forEach(cb => cb.checked = true);
+            // Save the state
+            const selectedDepts = Array.from(document.querySelectorAll('.departments-grid input[type="checkbox"]:checked')).map(cb => cb.value);
+            localStorage.setItem('printSelectedDepartments', JSON.stringify(selectedDepts));
         });
 
         document.getElementById('uncheck-all-depts').addEventListener('click', () => {
             document.querySelectorAll('.departments-grid input[type="checkbox"]').forEach(cb => cb.checked = false);
+            // Save the state
+            localStorage.setItem('printSelectedDepartments', JSON.stringify([]));
         });
 
         document.getElementById('print-execute-btn').addEventListener('click', () => {
@@ -3836,7 +3895,67 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
                                  document.getElementById('password-modal').classList.contains('show') ||
                                  document.getElementById('print-modal').classList.contains('show');
                 if (!modalOpen) {
-                    fetchTasks(); // Refresh data when tab becomes visible (but not if modals are open)
+                    // Show brief refresh indicator
+                    showRenderingStatus(true, 'Refreshing schedule...');
+
+                    // Force layout recalculation and re-render to fix grey screen issue
+                    const scheduleWrapper = document.getElementById('schedule-wrapper');
+                    const scheduleContainer = document.getElementById('schedule-container');
+
+                    if (scheduleContainer && scheduleWrapper) {
+                        // Temporarily force layout recalculation
+                        scheduleWrapper.style.contain = 'none';
+                        scheduleWrapper.style.willChange = 'auto';
+
+                        // Force DOM reflow
+                        scheduleWrapper.offsetHeight;
+                        scheduleContainer.offsetHeight;
+
+                        // Restore performance optimizations
+                        scheduleWrapper.style.contain = 'layout style paint';
+                        scheduleWrapper.style.willChange = 'scroll-position';
+
+                        // Re-equalize card heights and restore scroll position
+                        setTimeout(() => {
+                            equalizeAllCardHeights();
+
+                            // Restore scroll position if we have a saved position
+                            if (currentViewedWeekIndex >= 0 && allWeekStartDates.length > currentViewedWeekIndex) {
+                                const targetGrid = scheduleContainer.querySelectorAll('.schedule-grid')[currentViewedWeekIndex];
+                                if (targetGrid) {
+                                    scheduleWrapper.scrollLeft = targetGrid.offsetLeft;
+                                    updateWeekDisplayHeader(allWeekStartDates[currentViewedWeekIndex]);
+                                }
+                            }
+
+                            // Force another layout recalculation after a short delay
+                            setTimeout(() => {
+                                scheduleWrapper.style.display = 'none';
+                                scheduleWrapper.offsetHeight; // Trigger reflow
+                                scheduleWrapper.style.display = '';
+
+                                // Final scroll position restoration
+                                if (currentViewedWeekIndex >= 0 && allWeekStartDates.length > currentViewedWeekIndex) {
+                                    const targetGrid = scheduleContainer.querySelectorAll('.schedule-grid')[currentViewedWeekIndex];
+                                    if (targetGrid) {
+                                        scheduleWrapper.scrollLeft = targetGrid.offsetLeft;
+                                        updateWeekDisplayHeader(allWeekStartDates[currentViewedWeekIndex]);
+                                    }
+                                }
+
+                                // Hide refresh indicator after layout is restored
+                                setTimeout(() => {
+                                    showRenderingStatus(false);
+                                }, 200);
+                            }, 50);
+                        }, 100);
+                    } else {
+                        // Hide refresh indicator if containers aren't available
+                        showRenderingStatus(false);
+                    }
+
+                    // Refresh data silently
+                    fetchTasks();
                 }
             }
         });
