@@ -758,7 +758,7 @@
         @media print {
             @page {
                 size: letter landscape;
-                margin: 0.2in;
+                margin: 0.25in;
             }
             body > * {
                 display: none !important;
@@ -771,266 +771,161 @@
             }
             .print-page {
                 page-break-after: always;
-                page-break-inside: avoid;
-                page-break-before: avoid;
-                margin: 0;
+                margin: 0 0 0.5rem 0;
                 padding: 0;
-                width: 10.6in;
+                width: 10.5in;
                 box-sizing: border-box;
                 background: white;
-                padding-top: 0.2in;
-                transform-origin: top left;
             }
             .print-table {
                 width: 100%;
                 border-collapse: collapse;
-                font-size: 0.6rem;
+                font-size: 14pt;
                 background: white;
-                margin: 0 auto;
-                page-break-inside: avoid;
-            }
-            .print-dept-summary {
-                page-break-inside: avoid;
-                page-break-before: avoid;
-                page-break-after: avoid;
-            }
-            .print-page {
-                display: flex;
-                align-items: stretch;
-                margin-bottom: 0.5rem;
-            }
-            .print-department-header {
-                font-weight: 600;
-                background: #e5e7eb;
-                color: black;
-                writing-mode: vertical-rl;
-                text-orientation: mixed;
-                font-size: 1.2rem;
-                print-color-adjust: exact;
-                -webkit-print-color-adjust: exact;
-                width: 100px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                border: 1px solid #000;
-                padding: 0.3rem;
-            }
-            .print-table {
-                flex: 1;
-                border-collapse: collapse;
+                margin: 0;
             }
             .print-table th, .print-table td {
                 border: 1px solid #000;
-                padding: 0.1rem;
+                padding: 8pt;
                 text-align: center;
                 vertical-align: top;
-                width: 140px;
-            }
-            .print-table-day {
-                flex: none;
-                width: auto;
-            }
-            .print-table-day th, .print-table-day td {
-                width: 250px;
-            }
-            .print-page-day {
-                margin: 0 auto;
-            }
-            .print-page-day .print-table {
-                flex: none;
-                width: auto;
-            }
-            .print-department-header-day {
-                width: 100px;
-                writing-mode: horizontal-tb;
-                text-orientation: mixed;
+                font-size: 14pt;
             }
             .print-table th {
-                background: #d1d5db;
-                color: black;
-                font-weight: 600;
+                background: #f0f0f0;
+                font-weight: bold;
+                font-size: 7pt !important;
             }
-            .print-table thead {
-                page-break-after: avoid;
-            }
-            .print-table tfoot {
-                page-break-inside: avoid;
-                page-break-after: avoid;
-            }
-            .print-table.compact {
-                font-size: 0.45rem;
-            }
-            .print-table.compact th, .print-table.compact td {
-                width: 120px;
-                padding: 0.05rem;
-            }
-            .print-table.compact .print-grid-cell {
-                min-height: 40px;
-            }
-            .print-table.compact .print-task-card {
-                min-height: 40px;
-                font-size: 0.45rem;
-                padding: 0.1rem;
-            }
-            .print-table.compact .print-task-title {
-                font-size: 0.5rem;
-                padding: 0.05rem;
-            }
-            .print-table.compact .print-task-description {
-                font-size: 0.4rem;
-                margin-bottom: 0.05rem;
-            }
-            .print-table.compact .print-task-details {
-               font-size: 0.4rem;
-               padding-top: 0.05rem;
-           }
-           /* Daily print larger fonts and spacing */
-           .print-table.daily-print {
-               font-size: 0.9rem;
-           }
-           .print-table.daily-print th, .print-table.daily-print td {
-               padding: 0.3rem;
-           }
-           .print-table.daily-print .print-grid-cell {
-               min-height: 60px;
-           }
-           .print-table.daily-print .print-task-card {
-               min-height: 60px;
-               font-size: 0.9rem;
-               padding: 0.3rem;
-           }
-           .print-table.daily-print .print-task-title {
-               font-size: 0.8rem;
-               padding: 0.2rem;
-           }
-           .print-table.daily-print .print-task-description {
-               font-size: 0.8rem;
-               margin-bottom: 0.3rem;
-           }
-           .print-table.daily-print .print-task-details {
-               font-size: 0.7rem;
-               padding-top: 0.2rem;
-           }
-            /* Department colors for print department headers */
-            .print-department-header.department-mill { background-color: #06B6D4 !important; color: #FFFFFF !important; }
-            .print-department-header.department-form-out { background-color: #3B82F6 !important; color: #FFFFFF !important; }
-            .print-department-header.department-cast { background-color: #EF4444 !important; color: #FFFFFF !important; }
-            .print-department-header.department-batch { background-color: #800000 !important; color: #FFFFFF !important; }
-            .print-department-header.department-layout { background-color: #A16207 !important; color: #FFFFFF !important; }
-            .print-department-header.department-demold { background-color: #F97316 !important; color: #FFFFFF !important; }
-            .print-department-header.department-finish { background-color: #8B5CF6 !important; color: #FFFFFF !important; }
-            .print-department-header.department-seal { background-color: #6B7280 !important; color: #FFFFFF !important; }
-            .print-department-header.department-special { background-color: #EC4899 !important; color: #FFFFFF !important; }
-            .print-department-header.department-crating { background-color: #A16207 !important; color: #FFFFFF !important; }
-            .print-department-header.department-load { background-color: #F59E0B !important; color: #FFFFFF !important; }
-            .print-department-header.department-ship { background-color: #22C55E !important; color: #FFFFFF !important; }
             .print-grid-cell {
                 background: white;
-                min-height: 50px;
-                padding: 0.1rem;
+                min-height: 80pt;
+                padding: 6pt;
             }
-            .print-task-card {
-                border: 1px solid #d1d5db;
-                border-radius: 4px;
-                padding: 0.2rem;
-                margin-bottom: 0.1rem;
-                font-size: 0.6rem;
+            .print-task-grid {
+                border: none;
+                background: white;
+                padding: 4pt;
+                margin: 2pt 0;
+                font-size: 12pt;
                 color: black;
-                display: flex;
-                flex-direction: column;
-                min-height: 50px;
-                max-width: 200px;
-                print-color-adjust: exact;
-                -webkit-print-color-adjust: exact;
+                display: block;
+                min-height: 60pt;
             }
             .print-task-title {
-                font-weight: 600;
-                margin-bottom: 0.125rem;
-                color: black;
-                font-size: 0.65rem;
-                padding: 0.125rem;
-                border-radius: 2px;
-            }
-            /* Department colors for print task titles */
-            .print-task-title.department-mill { background-color: #06B6D4 !important; color: #FFFFFF !important; }
-            .print-task-title.department-form-out { background-color: #3B82F6 !important; color: #FFFFFF !important; }
-            .print-task-title.department-cast { background-color: #EF4444 !important; color: #FFFFFF !important; }
-            .print-task-title.department-batch { background-color: #800000 !important; color: #FFFFFF !important; }
-            .print-task-title.department-layout { background-color: #A16207 !important; color: #FFFFFF !important; }
-            .print-task-title.department-demold { background-color: #F97316 !important; color: #FFFFFF !important; }
-            .print-task-title.department-finish { background-color: #8B5CF6 !important; color: #FFFFFF !important; }
-            .print-task-title.department-seal { background-color: #6B7280 !important; color: #FFFFFF !important; }
-            .print-task-title.department-special { background-color: #EC4899 !important; color: #FFFFFF !important; }
-            .print-task-title.department-crating { background-color: #A16207 !important; color: #FFFFFF !important; }
-            .print-task-title.department-load { background-color: #F59E0B !important; color: #FFFFFF !important; }
-            .print-task-title.department-ship { background-color: #22C55E !important; color: #FFFFFF !important; }
-            .print-task-day-counter {
-                font-size: 0.5rem;
-                font-weight: 600;
+                font-weight: bold !important;
+                font-size: 8pt !important;
+                margin-bottom: 4pt;
+                color: white !important;
                 text-align: center;
-                padding: 0.0625rem 0;
-                margin: 0.125rem -0.25rem 0.125rem -0.25rem;
-                background-color: rgba(0,0,0,0.08);
-                color: black;
+                background-color: var(--bg-color, #333) !important;
+                padding: 2pt 4pt !important;
+                border-radius: 2pt !important;
+                display: inline-block !important;
+                width: 100% !important;
+                box-sizing: border-box !important;
+                print-color-adjust: exact !important;
+                -webkit-print-color-adjust: exact !important;
             }
-            .print-project-description {
-                font-size: 0.45rem;
-                font-weight: 400;
-                font-style: italic;
-                margin-bottom: 0.1rem;
-                color: black;
-                opacity: 0.75;
-                text-align: center;
+            /* Force department colors for all print task titles - higher specificity */
+            .print-task-card.department-mill .print-task-title,
+            .print-task-grid.department-mill .print-task-title {
+                background-color: var(--color-mill) !important;
+                color: var(--color-mill-text) !important;
+            }
+            .print-task-card.department-form-out .print-task-title,
+            .print-task-grid.department-form-out .print-task-title {
+                background-color: var(--color-form-out) !important;
+                color: var(--color-form-out-text) !important;
+            }
+            .print-task-card.department-cast .print-task-title,
+            .print-task-grid.department-cast .print-task-title {
+                background-color: var(--color-cast) !important;
+                color: var(--color-cast-text) !important;
+            }
+            .print-task-card.department-batch .print-task-title,
+            .print-task-grid.department-batch .print-task-title {
+                background-color: var(--color-batch) !important;
+                color: var(--color-batch-text) !important;
+            }
+            .print-task-card.department-layout .print-task-title,
+            .print-task-grid.department-layout .print-task-title {
+                background-color: var(--color-layout) !important;
+                color: var(--color-layout-text) !important;
+            }
+            .print-task-card.department-demold .print-task-title,
+            .print-task-grid.department-demold .print-task-title {
+                background-color: var(--color-demold) !important;
+                color: var(--color-demold-text) !important;
+            }
+            .print-task-card.department-finish .print-task-title,
+            .print-task-grid.department-finish .print-task-title {
+                background-color: var(--color-finish) !important;
+                color: var(--color-finish-text) !important;
+            }
+            .print-task-card.department-seal .print-task-title,
+            .print-task-grid.department-seal .print-task-title {
+                background-color: var(--color-seal) !important;
+                color: var(--color-seal-text) !important;
+            }
+            .print-task-card.department-special .print-task-title,
+            .print-task-grid.department-special .print-task-title {
+                background-color: var(--color-special) !important;
+                color: var(--color-special-text) !important;
+            }
+            .print-task-card.department-crating .print-task-title,
+            .print-task-grid.department-crating .print-task-title {
+                background-color: var(--color-crating) !important;
+                color: var(--color-crating-text) !important;
+            }
+            .print-task-card.department-load .print-task-title,
+            .print-task-grid.department-load .print-task-title {
+                background-color: var(--color-load) !important;
+                color: var(--color-load-text) !important;
+            }
+            .print-task-card.department-ship .print-task-title,
+            .print-task-grid.department-ship .print-task-title {
+                background-color: var(--color-ship) !important;
+                color: var(--color-ship-text) !important;
             }
             .print-task-description {
-                font-size: 0.5rem;
-                font-weight: 600;
-                margin-bottom: 0.2rem;
-                color: black;
-                flex-grow: 1;
+                font-size: 8pt !important;
+                font-weight: bold !important;
+                margin-bottom: 6pt;
+                color: black !important;
                 text-align: center;
-            }
-            .print-missing-description {
-                color: #ef4444;
-                font-weight: 600;
+                line-height: 1.2;
             }
             .print-task-details {
-                font-size: 0.5rem;
-                color: black;
-                border-top: 1px solid rgba(0,0,0,0.08);
-                padding-top: 0.125rem;
-                margin-top: auto;
+                font-size: 7pt !important;
+                font-weight: bold !important;
+                color: black !important;
+                text-align: center;
+                margin-top: 4pt;
             }
-            .print-task-details strong {
+            .print-department-header {
+                font-weight: bold;
+                background: #e0e0e0;
                 color: black;
-                font-weight: 600;
+                font-size: 18pt;
+                padding: 12pt;
+                writing-mode: vertical-rl;
+                text-orientation: mixed;
+                width: 60pt;
+                border: 2px solid #000;
+                display: flex;
+                align-items: center;
+                justify-content: center;
             }
-
-           .print-dept-summary {
-               font-weight: 600;
-               font-size: 1rem;
-               color: black;
-               margin-top: 0;
-               text-align: center;
-               border: 1px solid #000;
-               background: white;
-               padding: 0.5rem;
-               display: inline-block;
-           }
-
-            /* Department colors for print */
-            .print-department-label.department-mill { background-color: #06B6D4 !important; color: #FFFFFF !important; }
-            .print-department-label.department-form-out { background-color: #3B82F6 !important; color: #FFFFFF !important; }
-            .print-department-label.department-cast { background-color: #EF4444 !important; color: #FFFFFF !important; }
-            .print-department-label.department-batch { background-color: #800000 !important; color: #FFFFFF !important; }
-            .print-department-label.department-layout { background-color: #A16207 !important; color: #FFFFFF !important; }
-            .print-department-label.department-demold { background-color: #F97316 !important; color: #FFFFFF !important; }
-            .print-department-label.department-finish { background-color: #8B5CF6 !important; color: #FFFFFF !important; }
-            .print-department-label.department-seal { background-color: #6B7280 !important; color: #FFFFFF !important; }
-            .print-department-label.department-special { background-color: #EC4899 !important; color: #FFFFFF !important; }
-            .print-department-label.department-crating { background-color: #A16207 !important; color: #FFFFFF !important; }
-            .print-department-label.department-load { background-color: #F59E0B !important; color: #FFFFFF !important; }
-            .print-department-label.department-ship { background-color: #22C55E !important; color: #FFFFFF !important; }
+            .print-dept-summary {
+                font-weight: bold;
+                font-size: 12pt;
+                color: black;
+                margin: 8pt 0;
+                text-align: center;
+                border: 1px solid #000;
+                background: white;
+                padding: 6pt;
+            }
         }
 
         /* --- Success Notification --- */
@@ -2818,17 +2713,20 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
             const departmentsGrid = document.querySelector('.departments-grid');
             departmentsGrid.innerHTML = '';
             // Restore saved print department selections
-            const savedPrintDepartments = JSON.parse(localStorage.getItem('printSelectedDepartments')) || allDepartmentsForPrint;
+            const savedPrintDepartments = JSON.parse(localStorage.getItem('printSelectedDepartments'));
+            // If no saved selection or empty array, default to all departments
+            const defaultSelectedDepts = (savedPrintDepartments && savedPrintDepartments.length > 0) ? savedPrintDepartments : allDepartmentsForPrint;
 
             allDepartmentsForPrint.forEach(dept => {
                 const checkboxDiv = document.createElement('div');
                 checkboxDiv.className = 'department-checkbox';
                 checkboxDiv.innerHTML = `
-                    <input type="checkbox" id="print-dept-${normalizeDepartmentClass(dept)}" value="${dept}" ${savedPrintDepartments.includes(dept) ? 'checked' : ''}>
+                    <input type="checkbox" id="print-dept-${normalizeDepartmentClass(dept)}" value="${dept}" ${defaultSelectedDepts.includes(dept) ? 'checked' : ''}>
                     <label for="print-dept-${normalizeDepartmentClass(dept)}">${dept}</label>
                 `;
                 departmentsGrid.appendChild(checkboxDiv);
             });
+
 
             updatePrintTypeDisplay();
         }
@@ -3196,7 +3094,7 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
                 if (printType === 'day') {
                     deptHeader.classList.add('print-department-header-day');
                 }
-                deptHeader.textContent = dept;
+                deptHeader.innerHTML = `<div style="background-color: var(--color-${normalizeDepartmentClass(dept)}); color: var(--color-${normalizeDepartmentClass(dept)}-text); padding: 8pt; border-radius: 4pt; font-weight: bold; text-align: center; font-size: 12pt; writing-mode: horizontal-tb; text-orientation: mixed;">${dept}</div>`;
 
                 let maxTasks = getMaxTasksForDept(dept, printType);
                 let maxTasksInRow = maxTasks;
@@ -3302,24 +3200,14 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
                             td.className = 'print-grid-cell';
                             if (task) {
                                 td.innerHTML = `
-                                    <div class="print-task-card department-${normalizeDepartmentClass(task.department)}">
+                                    <div class="print-task-grid department-${normalizeDepartmentClass(task.department)}">
                                         <div class="print-task-title">${task.project}</div>
-                                        <div class="print-project-description">${task.projectDescription || ''}</div>
-                                        <div class="print-task-day-counter">${task.dayCounter || ''}</div>
                                         <div class="print-task-description">${task.description && task.description.trim() ? task.description : '<span class="print-missing-description">Staging Missing</span>'}</div>
-                                        <div class="print-task-details">
-                                            ${task.missingDate ? '<strong>Date:</strong> Missing<br>' : ''}
-                                            <strong>Hours:</strong> ${(() => {
-                                                let hours = parseFloat(task.hours);
-                                                return isNaN(hours) ? 0 : Math.round(hours);
-                                            })()}<br>
-                                            <strong>Revenue:</strong> $${(() => {
-                                                let hours = parseFloat(task.hours);
-                                                let revenue = isNaN(hours) ? 0 : Math.round(Math.round(hours) * 135);
-                                                return revenue.toLocaleString();
-                                            })()}<br>
-                                            <strong>Code:</strong> ${task.value}
-                                        </div>
+                                        <div class="print-task-details">${(() => {
+                                            let hours = parseFloat(task.hours);
+                                            let revenue = isNaN(hours) ? 0 : Math.round(Math.round(hours) * 135);
+                                            return `${isNaN(hours) ? 0 : Math.round(hours)} hrs | $${revenue.toLocaleString()}`;
+                                        })()}</div>
                                     </div>
                                 `;
                             }
@@ -3349,16 +3237,14 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
                         taskCell.style.width = '60%';
                         if (task) {
                             taskCell.innerHTML = `
-                                <div class="print-task-card department-${normalizeDepartmentClass(task.department)}" style="margin: 0 auto; max-width: 180px;">
+                                <div class="print-task-grid department-${normalizeDepartmentClass(task.department)}" style="margin: 0 auto; max-width: 180px;">
                                     <div class="print-task-title">${task.project}</div>
-                                    <div class="print-project-description">${task.projectDescription || ''}</div>
-                                    <div class="print-task-day-counter">${task.dayCounter || ''}</div>
                                     <div class="print-task-description">${task.description && task.description.trim() ? task.description : '<span class="print-missing-description">Staging Missing</span>'}</div>
-                                    <div class="print-task-details">
-                                        ${task.missingDate ? '<strong>Date:</strong> Missing<br>' : ''}
-                                        <strong>Hours:</strong> ${task.hours}<br>
-                                        <strong>Code:</strong> ${task.value}
-                                    </div>
+                                    <div class="print-task-details">${(() => {
+                                        let hours = parseFloat(task.hours);
+                                        let revenue = isNaN(hours) ? 0 : Math.round(Math.round(hours) * 135);
+                                        return `${isNaN(hours) ? 0 : Math.round(hours)} hrs | $${revenue.toLocaleString()}`;
+                                    })()}</div>
                                 </div>
                             `;
                         }
@@ -3368,7 +3254,7 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
                         const revenueCell = document.createElement('td');
                         revenueCell.className = 'print-grid-cell';
                         revenueCell.style.textAlign = 'center';
-                        revenueCell.style.fontSize = '1.2rem';
+                        revenueCell.style.fontSize = '0.5rem';
                         revenueCell.style.fontWeight = 'bold';
                         revenueCell.style.width = '13.33%';
                         if (task && task.hours) {
@@ -3407,7 +3293,7 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
                     const tfoot = document.createElement('tfoot');
                     const revenueRow = document.createElement('tr');
                     revenueRow.style.borderTop = '2px solid #000';
-                    revenueRow.style.fontSize = '0.8rem';
+                    revenueRow.style.fontSize = '0.4rem';
 
                     currentPrintWeekDates.forEach(date => {
                         const dateString = date.toDateString();
@@ -3515,8 +3401,11 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
                                             <div class="print-task-description">${task.description && task.description.trim() ? task.description : '<span class="print-missing-description">Staging Missing</span>'}</div>
                                             <div class="print-task-details">
                                                 ${task.missingDate ? '<strong>Date:</strong> Missing<br>' : ''}
-                                                <strong>Hours:</strong> ${task.hours}<br>
-                                                <strong>Code:</strong> ${task.value}
+                                                <strong>Hours:</strong> ${task.hours} | <strong>Revenue:</strong> $${(() => {
+                                                    let hours = parseFloat(task.hours);
+                                                    let revenue = isNaN(hours) ? 0 : Math.round(Math.round(hours) * 135);
+                                                    return revenue.toLocaleString();
+                                                })()}
                                             </div>
                                         </div>
                                     `;
@@ -3548,8 +3437,11 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
                                         <div class="print-task-description">${task.description && task.description.trim() ? task.description : '<span class="print-missing-description">Staging Missing</span>'}</div>
                                         <div class="print-task-details">
                                             ${task.missingDate ? '<strong>Date:</strong> Missing<br>' : ''}
-                                            <strong>Hours:</strong> ${task.hours}<br>
-                                            <strong>Code:</strong> ${task.value}
+                                            <strong>Hours:</strong> ${task.hours} | <strong>Revenue:</strong> $${(() => {
+                                                let hours = parseFloat(task.hours);
+                                                let revenue = isNaN(hours) ? 0 : Math.round(Math.round(hours) * 135);
+                                                return revenue.toLocaleString();
+                                            })()}
                                         </div>
                                     </div>
                                 `;
@@ -3693,8 +3585,11 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
                                             <div class="print-task-description">${task.description && task.description.trim() ? task.description : '<span class="print-missing-description">Staging Missing</span>'}</div>
                                             <div class="print-task-details">
                                                 ${task.missingDate ? '<strong>Date:</strong> Missing<br>' : ''}
-                                                <strong>Hours:</strong> ${task.hours}<br>
-                                                <strong>Code:</strong> ${task.value}
+                                                <strong>Hours:</strong> ${task.hours} | <strong>Revenue:</strong> $${(() => {
+                                                    let hours = parseFloat(task.hours);
+                                                    let revenue = isNaN(hours) ? 0 : Math.round(Math.round(hours) * 135);
+                                                    return revenue.toLocaleString();
+                                                })()}
                                             </div>
                                         </div>
                                     `;
@@ -3726,8 +3621,11 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
                                         <div class="print-task-description">${task.description && task.description.trim() ? task.description : '<span class="print-missing-description">Staging Missing</span>'}</div>
                                         <div class="print-task-details">
                                             ${task.missingDate ? '<strong>Date:</strong> Missing<br>' : ''}
-                                            <strong>Hours:</strong> ${task.hours}<br>
-                                            <strong>Code:</strong> ${task.value}
+                                            <strong>Hours:</strong> ${task.hours} | <strong>Revenue:</strong> $${(() => {
+                                                let hours = parseFloat(task.hours);
+                                                let revenue = isNaN(hours) ? 0 : Math.round(Math.round(hours) * 135);
+                                                return revenue.toLocaleString();
+                                            })()}
                                         </div>
                                     </div>
                                 `;
