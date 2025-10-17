@@ -3921,6 +3921,10 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
                     // Show loading immediately to prevent white screen
                     showLoading(true, 'Restoring schedule...');
                     console.log('📊 Loading indicator shown');
+
+                    // Reset to current week on resume for better UX
+                    console.log('📅 Resetting to current week on tab resume');
+                    currentViewedWeekIndex = -1; // Force recalculation to current week
                     // Ultra-fast cache restoration - always prioritize speed over freshness
                     const scheduleContainer = document.getElementById('schedule-container');
                     const scheduleWrapper = document.getElementById('schedule-wrapper');
