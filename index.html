@@ -3910,167 +3910,45 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
         // Handle tab visibility changes to refresh data when returning to the tab
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible') {
-                console.log('👁️ Tab became visible, checking for cache restoration...');
+                console.log('👁️ Tab became visible, refreshing schedule...');
                 const modalOpen = document.getElementById('project-modal').classList.contains('show') ||
                                   document.getElementById('password-modal').classList.contains('show') ||
                                   document.getElementById('print-modal').classList.contains('show');
                 if (!modalOpen) {
-                    console.log('🔄 Starting cache restoration...');
-                    performance.mark('cache-restore-start');
+                    console.log('🔄 Starting simplified resume refresh...');
 
-                    // Show loading immediately to prevent white screen
-                    showLoading(true, 'Restoring schedule...');
-                    console.log('📊 Loading indicator shown');
-
-                    // Reset to current week on resume for better UX
-                    console.log('📅 Resetting to current week on tab resume');
-                    currentViewedWeekIndex = -1; // Force recalculation to current week
-                    // Ultra-fast cache restoration - always prioritize speed over freshness
-                    const scheduleContainer = document.getElementById('schedule-container');
-                    const scheduleWrapper = document.getElementById('schedule-wrapper');
-
-                    console.log('🔄 Tab visible, checking cache availability...');
-                    console.log('Cache exists:', !!renderCache);
-                    console.log('Container exists:', !!scheduleContainer);
-                    console.log('Wrapper exists:', !!scheduleWrapper);
-
-                    if (scheduleContainer && scheduleWrapper && renderCache && renderCache.containerHTML) {
-                        console.log('🚀 CACHE RESTORE: Starting instant restoration...');
-
-                        performance.mark('cache-restore-inner-start');
-
-                        // Instantly restore the cached state with maximum speed
-                        console.log('🔧 Setting container HTML...');
-                        scheduleContainer.innerHTML = renderCache.containerHTML;
-                        console.log('📍 Setting scroll position...');
-                        scheduleWrapper.scrollLeft = renderCache.scrollPosition || 0;
-                        currentViewedWeekIndex = renderCache.weekIndex || 0;
-                        allWeekStartDates = [...(renderCache.weekDates || [])];
-
-                        console.log('📊 Restored state:', {
-                            weekIndex: currentViewedWeekIndex,
-                            scrollPos: scheduleWrapper.scrollLeft,
-                            weekCount: allWeekStartDates.length
-                        });
-
-                        performance.mark('cache-restore-dom-set');
-
-                        // Force immediate visual rendering with synchronous operations
-                        console.log('📐 Recalculating grid widths...');
-                        const wrapperWidth = scheduleWrapper.clientWidth;
-                        const grids = scheduleContainer.querySelectorAll('.schedule-grid');
-
-                        // Synchronous width recalculation
-                        grids.forEach(grid => {
-                            grid.style.width = `${wrapperWidth}px`;
-                        });
-
-                        performance.mark('cache-restore-widths');
-
-                        // Force multiple synchronous reflows
-                        console.log('🔄 Forcing reflows...');
-                        scheduleWrapper.offsetHeight;
-                        scheduleContainer.offsetHeight;
-                        document.body.offsetHeight;
-
-                        performance.mark('cache-restore-reflows');
-
-                        // Update header immediately
-                        console.log('📋 Updating header...');
-                        if (currentViewedWeekIndex >= 0 && allWeekStartDates.length > currentViewedWeekIndex) {
-                            updateWeekDisplayHeader(allWeekStartDates[currentViewedWeekIndex]);
-                        }
-
-                        performance.mark('cache-restore-header');
-
-                        // Perform height equalization after a short delay to avoid blocking cache restore
-                        console.log('⚖️ Scheduling height equalization for cache restore');
-                        setTimeout(() => {
-                            console.log('⚖️ Running height equalization...');
-                            equalizeAllCardHeights();
-                            console.log('⚖️ Height equalization complete');
-                        }, 50);
-
-                        performance.mark('cache-restore-heights');
-
-                        // Hide loading after restoration
-                        console.log('✅ Hiding loading indicator...');
-                        showLoading(false);
-
-                        performance.mark('cache-restore-loading-hidden');
-
-                        // Log performance metrics
-                        performance.mark('cache-restore-end');
-                        performance.measure('cache-restore-total', 'cache-restore-start', 'cache-restore-end');
-                        performance.measure('cache-restore-inner', 'cache-restore-inner-start', 'cache-restore-end');
-
-                        const totalTime = performance.getEntriesByName('cache-restore-total')[0].duration;
-                        const innerTime = performance.getEntriesByName('cache-restore-inner')[0].duration;
-
-                        console.log(`⏱️ Cache restore performance:`, {
-                            total: `${totalTime.toFixed(2)}ms`,
-                            inner: `${innerTime.toFixed(2)}ms`,
-                            domSet: `${performance.getEntriesByName('cache-restore-dom-set')[0].duration.toFixed(2)}ms`,
-                            widths: `${performance.getEntriesByName('cache-restore-widths')[0].duration.toFixed(2)}ms`,
-                            reflows: `${performance.getEntriesByName('cache-restore-reflows')[0].duration.toFixed(2)}ms`,
-                            header: `${performance.getEntriesByName('cache-restore-header')[0].duration.toFixed(2)}ms`,
-                            heights: `[ASYNC - 50ms delay]`,
-                            loading: `${performance.getEntriesByName('cache-restore-loading-hidden')[0].duration.toFixed(2)}ms`
-                        });
-
-                        // Final visual confirmation
-                        requestAnimationFrame(() => {
-                            requestAnimationFrame(() => {
-                                console.log('✅ CACHE RESTORE COMPLETE - Schedule visible immediately');
-
-                                // Schedule background refresh with longer delay to avoid interference
-                                setTimeout(async () => {
-                                    console.log('🔄 Starting background refresh...');
-                                    try {
-                                        await fetchTasks();
-                                        console.log('✅ Background refresh completed');
-                                    } catch (error) {
-                                        console.error('❌ Background refresh failed:', error);
-                                    }
-                                }, 3000); // 3 second delay to ensure visual stability
-                            });
-                        });
-
-                    } else {
-                        console.log('⚠️ No valid cache found, performing full refresh');
-                        // Fallback to full refresh if no cache exists
-                        showRenderingStatus(true, 'Loading schedule...');
-
-                        setTimeout(async () => {
-                            try {
-                                await fetchTasks();
-                                showRenderingStatus(false);
-                            } catch (error) {
-                                console.error('Fallback refresh failed:', error);
-                                showRenderingStatus(false);
-                            }
-                        }, 50);
+                    // Preserve last viewed week on tab resume for better UX
+                    // Restore saved week index from localStorage before refreshing
+                    const savedWeekIndex = localStorage.getItem('currentViewedWeekIndex');
+                    if (savedWeekIndex && !isNaN(parseInt(savedWeekIndex))) {
+                        currentViewedWeekIndex = parseInt(savedWeekIndex);
+                        console.log('📍 Restored week index:', currentViewedWeekIndex);
                     }
 
-                    // Set a timeout to force a fallback refresh if cache restoration takes too long
-                    const cacheRestoreTimeout = setTimeout(() => {
-                        console.log('⏰ Cache restoration timeout - forcing full refresh');
-                        if (document.getElementById('loading').style.display !== 'none') {
-                            showLoading(true, 'Taking longer than expected...');
-                            // Force a full refresh
-                            setTimeout(async () => {
-                                try {
-                                    await fetchTasks();
-                                } catch (error) {
-                                    console.error('Timeout fallback refresh failed:', error);
-                                    showLoading(false);
-                                }
-                            }, 100);
-                        }
-                    }, 2000); // 2 second timeout
+                    // Show loading
+                    showLoading(true, 'Refreshing schedule...');
 
-                    // Clear timeout if restoration completes normally
-                    setTimeout(() => clearTimeout(cacheRestoreTimeout), 2500);
+                    // Perform fresh data fetch (simplified approach)
+                    fetchTasks()
+                        .then(() => {
+                            console.log('✅ Resume refresh completed');
+
+                            // After rendering, restore scroll position if available
+                            const savedScrollPosition = localStorage.getItem('scheduleScrollPosition');
+                            if (savedScrollPosition && !isNaN(parseFloat(savedScrollPosition))) {
+                                const scheduleWrapper = document.getElementById('schedule-wrapper');
+                                if (scheduleWrapper) {
+                                    scheduleWrapper.scrollLeft = parseFloat(savedScrollPosition);
+                                    console.log('📍 Restored scroll position:', savedScrollPosition);
+                                }
+                            }
+
+                            showLoading(false);
+                        })
+                        .catch(error => {
+                            console.error('❌ Resume refresh failed:', error);
+                            showLoading(false);
+                        });
                 }
             }
         });
