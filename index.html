@@ -4027,6 +4027,15 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
                 try {
                     await saveToStaging(task.project, [{task, newText}]);
                     showSuccessNotification('Task updated successfully!');
+
+                    // Send refresh signal to all other clients
+                    await sendRefreshSignal({
+                        action: 'task_updated',
+                        project: task.project,
+                        taskId: task.id,
+                        description: newText.substring(0, 50) + (newText.length > 50 ? '...' : '')
+                    });
+
                 } catch (error) {
                     console.error('Failed to save:', error);
                     showSuccessNotification('Task updated locally. Sync failed.', true);
@@ -4109,6 +4118,265 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
 
         // Initial load
         fetchTasks();
+
+        // ============================================
+        // SIMPLE REFRESH SYSTEM INTEGRATION
+        // ============================================
+
+        // Configuration for refresh system
+        const SUPABASE_URL_REFRESH = 'https://nrrkxlovhxgwwgzoihiu.supabase.co';
+        const SUPABASE_ANON_KEY_REFRESH = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5ycmt4bG92aHhnd3dnem9paGl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NTEzMzAsImV4cCI6MjA3NjIyNzMzMH0.mwLAySKxtQHHl7ihT0MboMpZnzQJbw-QjCCgi3CCrT4';
+        const SUPABASE_EDGE_URL_REFRESH = SUPABASE_URL_REFRESH + '/functions/v1/sync-sheet-data';
+        const SERVICE_KEY_REFRESH = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5ycmt4bG92aHhnd3dnem9paGl1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MDY1MTMzMCwiZXhwIjoyMDc2MjI3MzMwfQ.Ni2pK3PZxU3WxJcSJvOkJf-ti9Wx4WenHUd2rxhBfAk';
+
+        // Google Sheets API configuration (already defined above, reusing)
+        // const GOOGLE_SHEETS_API_KEY = 'AIzaSyA0i2Mr7kVirmM72ggu_L7_3XAB3_EAsNw';
+        // const SPREADSHEET_ID = '1ReBnudzH_QAY6e45wwpf_sHd2OF1Akkppm0S7NmZ_ws';
+
+        let supabaseClientRefresh = null;
+        let refreshChannel = null;
+
+        /**
+         * Initialize Supabase for refresh signaling only
+         */
+        async function initializeRefreshSystem() {
+            if (supabaseClientRefresh) return supabaseClientRefresh;
+
+            // Load Supabase library if not already loaded
+            if (!window.supabase) {
+                await new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+                    script.onload = resolve;
+                    script.onerror = reject;
+                    document.head.appendChild(script);
+                });
+            }
+
+            supabaseClientRefresh = window.supabase.createClient(SUPABASE_URL_REFRESH, SUPABASE_ANON_KEY_REFRESH);
+
+            // Subscribe to refresh signals
+            setupRefreshSubscription();
+
+            console.log('✅ Refresh system initialized');
+            return supabaseClientRefresh;
+        }
+
+        /**
+         * Set up subscription to refresh signals
+         */
+        function setupRefreshSubscription() {
+            // Create a channel for refresh signals
+            refreshChannel = supabaseClientRefresh
+                .channel('refresh_signals')
+                .on('broadcast', { event: 'data_updated' }, (payload) => {
+                    console.log('🔄 Refresh signal received:', payload);
+                    handleRefreshSignal(payload);
+                })
+                .subscribe((status) => {
+                    if (status === 'SUBSCRIBED') {
+                        console.log('✅ Subscribed to refresh signals');
+                    } else if (status === 'CLOSED') {
+                        console.log('⚠️ Refresh subscription closed');
+                    } else if (status === 'CHANNEL_ERROR') {
+                        console.error('❌ Refresh subscription error');
+                    }
+                });
+        }
+
+        /**
+         * Handle refresh signal by reloading data from Google Sheets
+         */
+        function handleRefreshSignal(payload) {
+            console.log('🔄 Processing refresh signal...');
+
+            // Add visual indicator
+            showRefreshIndicator();
+
+            // Reload data using your existing fetchTasks function
+            fetchTasks()
+                .then(() => {
+                    console.log('✅ Data refreshed from Google Sheets');
+                })
+                .catch(error => {
+                    console.error('❌ Failed to refresh data:', error);
+                });
+        }
+
+        /**
+         * Send a refresh signal to all other clients
+         * Call this after successfully updating Google Sheets
+         */
+        async function sendRefreshSignal(updateInfo = {}) {
+            if (!supabaseClientRefresh) {
+                console.warn('⚠️ Supabase not initialized, cannot send refresh signal');
+                return;
+            }
+
+            try {
+                console.log('📡 Sending refresh signal to all clients...');
+
+                // Send broadcast signal
+                const { error } = await supabaseClientRefresh
+                    .channel('refresh_signals')
+                    .send({
+                        type: 'broadcast',
+                        event: 'data_updated',
+                        payload: {
+                            timestamp: new Date().toISOString(),
+                            source: 'web_app',
+                            info: updateInfo
+                        }
+                    });
+
+                if (error) {
+                    console.error('❌ Failed to send refresh signal:', error);
+                } else {
+                    console.log('✅ Refresh signal sent successfully');
+                }
+
+            } catch (error) {
+                console.error('❌ Error sending refresh signal:', error);
+            }
+        }
+
+        /**
+         * Enhanced save function that updates Google Sheets and signals refresh
+         */
+        async function saveTaskAndRefresh(taskData, rowIndex) {
+            try {
+                console.log('💾 Starting save and refresh process...');
+
+                // Step 1: Update Google Sheets (your existing logic)
+                await updateGoogleSheets(taskData, rowIndex);
+
+                // Step 2: Send refresh signal to all other clients
+                await sendRefreshSignal({
+                    action: 'task_updated',
+                    taskId: taskData.id,
+                    rowIndex: rowIndex
+                });
+
+                // Show success
+                showNotification('Changes saved and synced!', 'success');
+
+                console.log('✅ Save and refresh completed successfully');
+
+            } catch (error) {
+                console.error('❌ Save/refresh failed:', error);
+                showNotification('Save failed', 'error');
+                throw error;
+            }
+        }
+
+        /**
+         * Your existing Google Sheets update function (modified for integration)
+         */
+        async function updateGoogleSheets(taskData, rowIndex) {
+            const range = `Primary Live List 2!A${rowIndex}:J${rowIndex}`;
+
+            const values = [[
+                taskData.week || '',
+                taskData.project || '',
+                taskData.project_description || '',
+                formatDateForSheets(taskData.task_date),
+                taskData.department || '',
+                taskData.task_value || '',
+                taskData.hours || '',
+                taskData.day_number || '',
+                taskData.total_days || '',
+                taskData.description || ''
+            ]];
+
+            const updateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=RAW&key=${API_KEY}`;
+
+            const response = await fetch(updateUrl, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ values })
+            });
+
+            if (!response.ok) {
+                const error = await response.text();
+                throw new Error(`Google Sheets update failed: ${response.status} ${error}`);
+            }
+
+            console.log('✅ Google Sheets updated successfully');
+        }
+
+        /**
+         * Utility functions for refresh system
+         */
+        function showRefreshIndicator() {
+            const indicator = document.createElement('div');
+            indicator.textContent = '🔄 Refreshing...';
+            indicator.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: #3b82f6;
+                color: white;
+                padding: 8px 16px;
+                border-radius: 8px;
+                font-size: 14px;
+                font-weight: 500;
+                z-index: 10000;
+                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            `;
+
+            document.body.appendChild(indicator);
+            setTimeout(() => {
+                if (indicator.parentNode) {
+                    indicator.parentNode.removeChild(indicator);
+                }
+            }, 2000);
+        }
+
+        function showNotification(message, type = 'info') {
+            console.log(`[${type.toUpperCase()}] ${message}`);
+
+            const notification = document.createElement('div');
+            notification.textContent = message;
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: ${type === 'success' ? '#22c55e' : type === 'error' ? '#ef4444' : '#3b82f6'};
+                color: white;
+                padding: 12px 20px;
+                border-radius: 8px;
+                font-weight: 500;
+                z-index: 10000;
+                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            `;
+
+            document.body.appendChild(notification);
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                }
+            }, 4000);
+        }
+
+        /**
+         * Initialize the refresh system when the page loads
+         */
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Initialize existing functionality first
+            try {
+                await initializeRefreshSystem();
+                console.log('🚀 Simple refresh system ready');
+            } catch (error) {
+                console.error('❌ Failed to initialize refresh system:', error);
+            }
+        });
+
+        // Export functions for global use
+        window.saveTaskAndRefresh = saveTaskAndRefresh;
+        window.sendRefreshSignal = sendRefreshSignal;
+
     </script>
 </body>
 </html>
