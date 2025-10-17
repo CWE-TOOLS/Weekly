@@ -1300,6 +1300,8 @@
         const EDIT_PASSWORD = 'cwe'; // Rudimentary password for unlocking editing
         let currentProjectName = '';
         let currentViewedWeekIndex = -1; // Track the currently viewed week to preserve on refresh
+        let lastRenderTimestamp = null; // Track when we last successfully rendered
+        let renderCache = null; // Cache the last successful render
 
         const departmentDayMapping = {
             "Mill 1": 5,
@@ -1944,6 +1946,15 @@ function getMonday(e){e=new Date(e);const t=e.getDay()||7;return 1!==t&&e.setHou
                 wrapper.style.willChange = 'auto';
             });
 
+            // Store successful render state
+            lastRenderTimestamp = Date.now();
+            renderCache = {
+                containerHTML: container.innerHTML,
+                scrollPosition: wrapper.scrollLeft,
+                weekIndex: currentViewedWeekIndex,
+                weekDates: [...allWeekStartDates]
+            };
+
             // Hide rendering status after all operations complete
             setTimeout(() => showRenderingStatus(false), 100);
         }
@@ -1960,7 +1971,7 @@ function getMonday(e){e=new Date(e);const t=e.getDay()||7;return 1!==t&&e.setHou
             weekDisplay.textContent = `Week ${weekNum}: ${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
         }
 
-function equalizeAllCardHeights(){const e=document.getElementById("schedule-container"),t=new Set();e.querySelectorAll(".schedule-grid").forEach(e=>{const r=e.dataset.rowClasses||"";r.split(",").forEach(e=>{e&&t.add(e)})}),t.forEach(t=>{const r=e.querySelectorAll(`.${t}`);if(0===r.length)return;let n=0;r.forEach(e=>{const t=e.style.minHeight;e.style.minHeight="auto";const r=e.offsetHeight;r>n&&(n=r),e.style.minHeight=t}),n>0&&r.forEach(e=>{e.style.minHeight=`${n}px`})})}
+function equalizeAllCardHeights(){const e=document.getElementById("schedule-container"),t=new Set();e.querySelectorAll(".schedule-grid").forEach(e=>{const r=e.dataset.rowClasses||"";r.split(",").forEach(e=>{e&&t.add(e)})}),t.forEach(t=>{const r=e.querySelectorAll(`.${t}`);if(0===r.length)return;let n=0;r.forEach(e=>{const t=e.offsetHeight;t>n&&(n=t)}),n>0&&r.forEach(e=>{e.style.minHeight=`${n}px`})})}
 
         function equalizeProjectCardHeights() {
             const projectSections = document.querySelectorAll('.project-dept-section');
@@ -2184,10 +2195,14 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
             return grid;
         }
 
-        function showLoading(show) {
+        function showLoading(show, message = 'Loading tasks...') {
             const loadingElement = document.getElementById('loading');
             if (show) {
                 loadingElement.style.display = 'block';
+                // Update message if provided
+                if (message) {
+                    loadingElement.querySelector('div:first-child').textContent = message;
+                }
                 // Performance monitoring: Track render start time
                 window.renderStartTime = performance.now();
                 // Auto-hide after 30 seconds to prevent getting stuck
@@ -3886,76 +3901,172 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
         });
 
         // Auto-refresh every 30 minutes (reduce frequency to improve performance)
-        setInterval(fetchTasks, 30 * 60 * 1000);
+        setInterval(() => {
+            // Clear render cache when doing scheduled refresh to force fresh data
+            renderCache = null;
+            fetchTasks();
+        }, 30 * 60 * 1000);
 
         // Handle tab visibility changes to refresh data when returning to the tab
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible') {
+                console.log('👁️ Tab became visible, checking for cache restoration...');
                 const modalOpen = document.getElementById('project-modal').classList.contains('show') ||
-                                 document.getElementById('password-modal').classList.contains('show') ||
-                                 document.getElementById('print-modal').classList.contains('show');
+                                  document.getElementById('password-modal').classList.contains('show') ||
+                                  document.getElementById('print-modal').classList.contains('show');
                 if (!modalOpen) {
-                    // Show brief refresh indicator
-                    showRenderingStatus(true, 'Refreshing schedule...');
+                    console.log('🔄 Starting cache restoration...');
+                    performance.mark('cache-restore-start');
 
-                    // Force layout recalculation and re-render to fix grey screen issue
-                    const scheduleWrapper = document.getElementById('schedule-wrapper');
+                    // Show loading immediately to prevent white screen
+                    showLoading(true, 'Restoring schedule...');
+                    console.log('📊 Loading indicator shown');
+                    // Ultra-fast cache restoration - always prioritize speed over freshness
                     const scheduleContainer = document.getElementById('schedule-container');
+                    const scheduleWrapper = document.getElementById('schedule-wrapper');
 
-                    if (scheduleContainer && scheduleWrapper) {
-                        // Temporarily force layout recalculation
-                        scheduleWrapper.style.contain = 'none';
-                        scheduleWrapper.style.willChange = 'auto';
+                    console.log('🔄 Tab visible, checking cache availability...');
+                    console.log('Cache exists:', !!renderCache);
+                    console.log('Container exists:', !!scheduleContainer);
+                    console.log('Wrapper exists:', !!scheduleWrapper);
 
-                        // Force DOM reflow
+                    if (scheduleContainer && scheduleWrapper && renderCache && renderCache.containerHTML) {
+                        console.log('🚀 CACHE RESTORE: Starting instant restoration...');
+
+                        performance.mark('cache-restore-inner-start');
+
+                        // Instantly restore the cached state with maximum speed
+                        console.log('🔧 Setting container HTML...');
+                        scheduleContainer.innerHTML = renderCache.containerHTML;
+                        console.log('📍 Setting scroll position...');
+                        scheduleWrapper.scrollLeft = renderCache.scrollPosition || 0;
+                        currentViewedWeekIndex = renderCache.weekIndex || 0;
+                        allWeekStartDates = [...(renderCache.weekDates || [])];
+
+                        console.log('📊 Restored state:', {
+                            weekIndex: currentViewedWeekIndex,
+                            scrollPos: scheduleWrapper.scrollLeft,
+                            weekCount: allWeekStartDates.length
+                        });
+
+                        performance.mark('cache-restore-dom-set');
+
+                        // Force immediate visual rendering with synchronous operations
+                        console.log('📐 Recalculating grid widths...');
+                        const wrapperWidth = scheduleWrapper.clientWidth;
+                        const grids = scheduleContainer.querySelectorAll('.schedule-grid');
+
+                        // Synchronous width recalculation
+                        grids.forEach(grid => {
+                            grid.style.width = `${wrapperWidth}px`;
+                        });
+
+                        performance.mark('cache-restore-widths');
+
+                        // Force multiple synchronous reflows
+                        console.log('🔄 Forcing reflows...');
                         scheduleWrapper.offsetHeight;
                         scheduleContainer.offsetHeight;
+                        document.body.offsetHeight;
 
-                        // Restore performance optimizations
-                        scheduleWrapper.style.contain = 'layout style paint';
-                        scheduleWrapper.style.willChange = 'scroll-position';
+                        performance.mark('cache-restore-reflows');
 
-                        // Re-equalize card heights and restore scroll position
+                        // Update header immediately
+                        console.log('📋 Updating header...');
+                        if (currentViewedWeekIndex >= 0 && allWeekStartDates.length > currentViewedWeekIndex) {
+                            updateWeekDisplayHeader(allWeekStartDates[currentViewedWeekIndex]);
+                        }
+
+                        performance.mark('cache-restore-header');
+
+                        // Perform height equalization after a short delay to avoid blocking cache restore
+                        console.log('⚖️ Scheduling height equalization for cache restore');
                         setTimeout(() => {
+                            console.log('⚖️ Running height equalization...');
                             equalizeAllCardHeights();
+                            console.log('⚖️ Height equalization complete');
+                        }, 50);
 
-                            // Restore scroll position if we have a saved position
-                            if (currentViewedWeekIndex >= 0 && allWeekStartDates.length > currentViewedWeekIndex) {
-                                const targetGrid = scheduleContainer.querySelectorAll('.schedule-grid')[currentViewedWeekIndex];
-                                if (targetGrid) {
-                                    scheduleWrapper.scrollLeft = targetGrid.offsetLeft;
-                                    updateWeekDisplayHeader(allWeekStartDates[currentViewedWeekIndex]);
-                                }
-                            }
+                        performance.mark('cache-restore-heights');
 
-                            // Force another layout recalculation after a short delay
-                            setTimeout(() => {
-                                scheduleWrapper.style.display = 'none';
-                                scheduleWrapper.offsetHeight; // Trigger reflow
-                                scheduleWrapper.style.display = '';
+                        // Hide loading after restoration
+                        console.log('✅ Hiding loading indicator...');
+                        showLoading(false);
 
-                                // Final scroll position restoration
-                                if (currentViewedWeekIndex >= 0 && allWeekStartDates.length > currentViewedWeekIndex) {
-                                    const targetGrid = scheduleContainer.querySelectorAll('.schedule-grid')[currentViewedWeekIndex];
-                                    if (targetGrid) {
-                                        scheduleWrapper.scrollLeft = targetGrid.offsetLeft;
-                                        updateWeekDisplayHeader(allWeekStartDates[currentViewedWeekIndex]);
+                        performance.mark('cache-restore-loading-hidden');
+
+                        // Log performance metrics
+                        performance.mark('cache-restore-end');
+                        performance.measure('cache-restore-total', 'cache-restore-start', 'cache-restore-end');
+                        performance.measure('cache-restore-inner', 'cache-restore-inner-start', 'cache-restore-end');
+
+                        const totalTime = performance.getEntriesByName('cache-restore-total')[0].duration;
+                        const innerTime = performance.getEntriesByName('cache-restore-inner')[0].duration;
+
+                        console.log(`⏱️ Cache restore performance:`, {
+                            total: `${totalTime.toFixed(2)}ms`,
+                            inner: `${innerTime.toFixed(2)}ms`,
+                            domSet: `${performance.getEntriesByName('cache-restore-dom-set')[0].duration.toFixed(2)}ms`,
+                            widths: `${performance.getEntriesByName('cache-restore-widths')[0].duration.toFixed(2)}ms`,
+                            reflows: `${performance.getEntriesByName('cache-restore-reflows')[0].duration.toFixed(2)}ms`,
+                            header: `${performance.getEntriesByName('cache-restore-header')[0].duration.toFixed(2)}ms`,
+                            heights: `[ASYNC - 50ms delay]`,
+                            loading: `${performance.getEntriesByName('cache-restore-loading-hidden')[0].duration.toFixed(2)}ms`
+                        });
+
+                        // Final visual confirmation
+                        requestAnimationFrame(() => {
+                            requestAnimationFrame(() => {
+                                console.log('✅ CACHE RESTORE COMPLETE - Schedule visible immediately');
+
+                                // Schedule background refresh with longer delay to avoid interference
+                                setTimeout(async () => {
+                                    console.log('🔄 Starting background refresh...');
+                                    try {
+                                        await fetchTasks();
+                                        console.log('✅ Background refresh completed');
+                                    } catch (error) {
+                                        console.error('❌ Background refresh failed:', error);
                                     }
-                                }
+                                }, 3000); // 3 second delay to ensure visual stability
+                            });
+                        });
 
-                                // Hide refresh indicator after layout is restored
-                                setTimeout(() => {
-                                    showRenderingStatus(false);
-                                }, 200);
-                            }, 50);
-                        }, 100);
                     } else {
-                        // Hide refresh indicator if containers aren't available
-                        showRenderingStatus(false);
+                        console.log('⚠️ No valid cache found, performing full refresh');
+                        // Fallback to full refresh if no cache exists
+                        showRenderingStatus(true, 'Loading schedule...');
+
+                        setTimeout(async () => {
+                            try {
+                                await fetchTasks();
+                                showRenderingStatus(false);
+                            } catch (error) {
+                                console.error('Fallback refresh failed:', error);
+                                showRenderingStatus(false);
+                            }
+                        }, 50);
                     }
 
-                    // Refresh data silently
-                    fetchTasks();
+                    // Set a timeout to force a fallback refresh if cache restoration takes too long
+                    const cacheRestoreTimeout = setTimeout(() => {
+                        console.log('⏰ Cache restoration timeout - forcing full refresh');
+                        if (document.getElementById('loading').style.display !== 'none') {
+                            showLoading(true, 'Taking longer than expected...');
+                            // Force a full refresh
+                            setTimeout(async () => {
+                                try {
+                                    await fetchTasks();
+                                } catch (error) {
+                                    console.error('Timeout fallback refresh failed:', error);
+                                    showLoading(false);
+                                }
+                            }, 100);
+                        }
+                    }, 2000); // 2 second timeout
+
+                    // Clear timeout if restoration completes normally
+                    setTimeout(() => clearTimeout(cacheRestoreTimeout), 2500);
                 }
             }
         });
