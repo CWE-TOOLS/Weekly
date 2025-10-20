@@ -2579,6 +2579,8 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
                 if (saveBtn.style.display !== 'none') {
                     cancelEditMode();
                 }
+                // Disable add card indicators when locking editing
+                enableAddCardIndicators();
             });
 
             function enterEditMode() {
@@ -4772,6 +4774,11 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
             const isEditingUnlocked = localStorage.getItem('editingUnlocked') === 'true';
             if (!isEditingUnlocked) {
                 console.log('Editing not unlocked, skipping add card indicators');
+                // Remove add-enabled class if editing is locked
+                const placeholders = document.querySelectorAll('.task-card-placeholder.add-enabled');
+                placeholders.forEach(placeholder => {
+                    placeholder.classList.remove('add-enabled');
+                });
                 return;
             }
 
@@ -4823,6 +4830,12 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
         document.addEventListener('click', (e) => {
             const placeholder = e.target.closest('.task-card-placeholder.add-enabled');
             if (placeholder) {
+                // Check if editing is unlocked
+                const isEditingUnlocked = localStorage.getItem('editingUnlocked') === 'true';
+                if (!isEditingUnlocked) {
+                    return; // Do not show modal if editing is not unlocked
+                }
+
                 e.preventDefault();
 
                 // Get context from data attributes on the placeholder
