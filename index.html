@@ -2368,13 +2368,9 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
             if (password && password.trim().toLowerCase() === EDIT_PASSWORD.toLowerCase()) {
                 isEditingUnlocked = true;
                 localStorage.setItem('editingUnlocked', 'true');
-                const unlockBtn = document.getElementById('unlock-editing-btn');
-                const editBtn = document.getElementById('edit-plan-btn');
-                const lockBtn = document.getElementById('lock-editing-btn');
-                if (unlockBtn) unlockBtn.style.display = 'none';
-                if (editBtn) editBtn.style.display = 'inline-block';
-                if (lockBtn) lockBtn.style.display = 'inline-block';
                 hidePasswordModal();
+                // Reset the page to allow additional functions to load
+                location.reload();
             } else {
                 alert('Incorrect password. Editing remains locked.');
                 document.getElementById('password-input').focus();
