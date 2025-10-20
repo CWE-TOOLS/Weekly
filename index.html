@@ -12,6 +12,7 @@
 .schedule-wrapper{overflow-x:scroll;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch;scrollbar-width:thin;flex-grow:1;overflow-y:auto;contain:layout style paint;will-change:scroll-position;}.schedule-wrapper::-webkit-scrollbar{height:12px;width:0;}.schedule-wrapper::-webkit-scrollbar-track{background:#f1f1f1;}.schedule-wrapper::-webkit-scrollbar-thumb{background:#555;border-radius:4px;}.schedule-wrapper::-webkit-scrollbar-thumb:hover{background:#333;}.schedule-container{display:flex;width:max-content;align-items:flex-start;}.schedule-grid{display:grid;grid-template-columns:minmax(140px,1fr) repeat(6,minmax(180px,2fr));width:100%;scroll-snap-align:start;background-color:var(--background-secondary);border-radius:var(--border-radius-lg);box-shadow:var(--shadow-md);border:1px solid var(--border-primary);}.grid-header{font-weight:600;font-size:.75rem;padding:1rem .75rem;color:var(--text-secondary);text-align:center;border-bottom:2px solid var(--border-secondary);text-transform:uppercase;letter-spacing:.05em;line-height:1.2;display:flex;align-items:center;justify-content:center;height:4.5rem;position:sticky;top:0;background-color:var(--background-secondary);z-index:10;}.grid-header:first-child{left:0;z-index:15;}.date-weekday{font-size:.7rem;font-weight:500;color:var(--text-secondary);}.date-day{font-size:1.1rem;font-weight:600;color:var(--text-primary);}.grid-cell{padding:.75rem;border-bottom:2px solid var(--border-primary);border-right:2px solid var(--border-primary);}.grid-cell:last-child{border-right:none;}.department-label{font-weight:600;font-size:3rem;padding:.25rem .75rem;color:#fff;text-align:center;border-right:2px solid var(--border-primary);display:flex;align-items:center;justify-content:center;background-color:transparent;position:sticky;left:0;z-index:5;writing-mode:vertical-rl;text-orientation:mixed;}
 
 .department-label.department-mill{background-color:var(--color-mill);color:var(--color-mill-text);}.department-label.department-form-out{background-color:var(--color-form-out);color:var(--color-form-out-text);}.department-label.department-cast{background-color:var(--color-cast);color:var(--color-cast-text);}.department-label.department-batch{background-color:var(--color-batch);color:var(--color-batch-text);}.department-label.department-layout{background-color:var(--color-layout);color:var(--color-layout-text);}.department-label.department-demold{background-color:var(--color-demold);color:var(--color-demold-text);}.department-label.department-finish{background-color:var(--color-finish);color:var(--color-finish-text);}.department-label.department-seal{background-color:var(--color-seal);color:var(--color-seal-text);}.department-label.department-special{background-color:var(--color-special);color:var(--color-special-text);}.department-label.department-crating{background-color:var(--color-crating);color:var(--color-crating-text);}.department-label.department-load{background-color:var(--color-load);color:var(--color-load-text);}.department-label.department-ship{background-color:var(--color-ship);color:var(--color-ship-text);}.task-card{color:var(--text-primary);border-radius:var(--border-radius-md);padding:.75rem;border:none;cursor:pointer;display:flex;flex-direction:column;min-height:140px;background-color:var(--background-secondary);position:relative;}.task-card.department-mill{background-color:var(--color-mill);color:var(--color-mill-text);}.task-card.department-form-out{background-color:var(--color-form-out);color:var(--color-form-out-text);}.task-card.department-cast{background-color:var(--color-cast);color:var(--color-cast-text);}.task-card.department-batch{background-color:var(--color-batch);color:var(--color-batch-text);}.task-card.department-layout{background-color:var(--color-layout);color:var(--color-layout-text);}.task-card.department-demold{background-color:var(--color-demold);color:var(--color-demold-text);}.task-card.department-finish{background-color:var(--color-finish);color:var(--color-finish-text);}.task-card.department-seal{background-color:var(--color-seal);color:var(--color-seal-text);}.task-card.department-special{background-color:var(--color-special);color:var(--color-special-text);}.task-card.department-crating{background-color:var(--color-crating);color:var(--color-crating-text);}.task-card.department-load{background-color:var(--color-load);color:var(--color-load-text);}.task-card.department-ship{background-color:var(--color-ship);color:var(--color-ship-text);}.task-card:hover{box-shadow:var(--shadow-md);}.task-card::after{content:'⋮';position:absolute;top:.5rem;right:.5rem;font-size:1.2rem;color:rgba(0,0,0,.4);opacity:0;pointer-events:none;}.task-card:hover::after{opacity:1;}.task-edit-btn{position:absolute;bottom:.5rem;right:.5rem;background:rgba(255,255,255,.9);border:1px solid var(--border-primary);border-radius:var(--border-radius-md);padding:.25rem .5rem;font-size:.75rem;font-weight:600;color:var(--text-primary);cursor:pointer;opacity:0;pointer-events:none;transition:opacity .2s ease-in-out;z-index:10;}.task-card:hover .task-edit-btn{opacity:1;pointer-events:auto;}.task-card .task-edit-btn:hover{background:var(--background-secondary);transform:scale(1.05);}.task-plan-btn{position:absolute;bottom:.5rem;right:3.5rem;background:rgba(255,255,255,.9);border:1px solid var(--border-primary);border-radius:var(--border-radius-md);padding:.25rem .5rem;font-size:.75rem;font-weight:600;color:var(--text-primary);cursor:pointer;opacity:0;pointer-events:none;transition:opacity .2s ease-in-out;z-index:10;}.task-card:hover .task-plan-btn{opacity:1;pointer-events:auto;}.task-plan-btn:hover{background:var(--background-secondary);transform:scale(1.05);}.edit-controls{position:absolute;bottom:.5rem;right:.5rem;display:flex;gap:.25rem;z-index:10;}.edit-confirm-btn,.edit-cancel-btn{padding:.25rem .5rem;border:1px solid var(--border-primary);border-radius:var(--border-radius-md);font-size:.75rem;font-weight:600;cursor:pointer;transition:all .2s ease-in-out;}.edit-confirm-btn{background:linear-gradient(135deg,#4ade80 0%,#22c55e 100%);color:white;}.edit-confirm-btn:hover{transform:translateY(-1px);box-shadow:var(--shadow-sm);}.edit-cancel-btn{background:var(--border-primary);color:var(--text-primary);}.edit-cancel-btn:hover{background:var(--border-secondary);}.task-card.editing{position:relative;box-shadow:0 0 0 2px var(--accent-primary);}.task-card.editing .task-edit-btn,.task-card.editing .task-plan-btn{display:none;}.task-title{font-weight:600;font-size:.9rem;margin-bottom:.5rem;color:inherit;text-align:center;}.task-description{font-size:.8rem;font-weight:600;margin-bottom:1rem;color:inherit;flex-grow:1;text-align:center;}.project-description{font-size:.8rem;font-weight:400;font-style:italic;margin-bottom:.5rem;color:inherit;text-align:center;opacity:.75;}.missing-description{color:#ef4444;font-weight:600;opacity:1;background-color:#fee2e2;border-radius:4px;padding:2px 4px;}.task-details{font-size:.8rem;color:inherit;opacity:.9;border-top:1px solid rgba(0,0,0,.08);padding-top:.5rem;margin-top:auto;}.task-details strong{color:inherit;font-weight:600;}.task-day-counter{font-size:.75rem;font-weight:600;text-align:center;padding:.25rem 0;margin:.5rem -.75rem .5rem -.75rem;background-color:rgba(0,0,0,.08);color:inherit;}.task-card-placeholder{min-height:140px;background:transparent;border:none;}.loading{display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:.5rem 1.5rem;font-size:.875rem;color:var(--text-secondary);background:var(--background-secondary);border-radius:var(--border-radius-md);border:1px solid var(--border-primary);min-width:140px;white-space:nowrap;flex-shrink:0;}.loading > div{display:inline-block;}.loading > div:first-child{flex:1;}.loading > div:last-child{flex-shrink:0;}.loading-spinner{width:18px;height:18px;border:3px solid var(--border-primary);border-radius:50%;border-top-color:var(--accent-primary);animation:spin 1s ease-in-out infinite;flex-shrink:0;}.loading::before{display:none;}@keyframes spin{to{transform:rotate(360deg);}}@keyframes button-spin{to{transform:rotate(360deg);}}.rendering-status{position:fixed;top:20px;right:20px;background:var(--background-secondary);border:1px solid var(--border-primary);border-radius:var(--border-radius-md);padding:.5rem 1rem;box-shadow:var(--shadow-md);z-index:1000;font-size:.875rem;color:var(--text-secondary);display:none;}.error{background:#FEE2E2;color:#B91C1C;padding:1rem;border-radius:var(--border-radius-md);margin-bottom:1.5rem;border:1px solid #FCA5A5;}
+.task-delete-btn{position:absolute;bottom:.5rem;right:7rem;background:rgba(239,68,68,.9);border:1px solid #dc2626;border-radius:var(--border-radius-md);padding:.25rem .5rem;font-size:.75rem;font-weight:600;color:white;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .2s ease-in-out;z-index:10;}.task-card:hover .task-delete-btn{opacity:1;pointer-events:auto;}.task-delete-btn:hover{background:#dc2626;transform:scale(1.05);}
 
 .multi-select-dropdown{position:relative;display:inline-block;min-width:220px;}.multi-select-btn{width:100%;display:flex;justify-content:space-between;align-items:center;padding:.625rem 1rem;border:1px solid var(--border-primary);border-radius:var(--border-radius-md);background-color:var(--background-secondary);cursor:pointer;font-size:.875rem;text-align:left;color:var(--text-primary);font-weight:500;}.multi-select-btn:focus{outline:2px solid transparent;outline-offset:2px;box-shadow:0 0 0 2px var(--accent-primary);}.multi-select-btn .dropdown-arrow{width:1rem;height:1rem;transition:transform .2s ease-in-out;}.multi-select-dropdown.open .dropdown-arrow{transform:rotate(180deg);}.multi-select-panel{display:none;position:absolute;top:calc(100% + .5rem);left:0;width:100%;background-color:var(--background-secondary);border-radius:var(--border-radius-lg);box-shadow:var(--shadow-md);border:1px solid var(--border-primary);z-index:100;overflow:hidden;}.multi-select-dropdown.open .multi-select-panel{display:block;}.multi-select-actions{display:flex;justify-content:space-between;padding:.75rem;border-bottom:1px solid var(--border-primary);}.multi-select-actions button{flex:1;padding:.5rem;font-size:.75rem;font-weight:600;border:none;border-radius:var(--border-radius-md);cursor:pointer;transition:background-color .2s;}.multi-select-actions button:first-child{margin-right:.5rem;background-color:var(--accent-primary);color:white;}.multi-select-actions button:first-child:hover{background-color:var(--accent-primary-hover);}.multi-select-actions button:last-child{background-color:var(--border-primary);color:var(--text-primary);}.multi-select-actions button:last-child:hover{background-color:var(--border-secondary);}#department-list{list-style:none;padding:.5rem 0;}#department-list li{padding:.6rem 1rem;cursor:pointer;display:flex;align-items:center;font-size:.875rem;}#department-list li:hover{background-color:var(--background-primary);}#department-list input[type="checkbox"]{margin-right:.75rem;width:1rem;height:1rem;accent-color:var(--accent-primary);}.date-container{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px;box-sizing:border-box;width:100%;height:100%;}.today-highlight{background-color:#fde68a;color:#92400e;border-radius:8px;}.today-highlight .date-weekday,.today-highlight .date-day{color:inherit;}@media (max-width:1200px){.schedule-grid{grid-template-columns:minmax(120px,1fr) repeat(7,minmax(150px,1fr));}}
 
@@ -1161,6 +1162,69 @@
                 </div>
             </div>
         </div>
+
+        <!-- Add Card Modal -->
+        <div class="add-card-modal" id="add-card-modal">
+            <div class="add-card-content">
+                <div class="add-card-header">
+                    <h3>Add New Task</h3>
+                    <button class="add-card-close" id="add-card-close">&times;</button>
+                </div>
+                <div class="add-card-body">
+                    <form id="add-card-form">
+                        <div class="form-group">
+                            <label for="task-project">Project Name *</label>
+                            <input type="text" id="task-project" name="project" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="task-description">Description</label>
+                            <textarea id="task-description" name="description" rows="3"></textarea>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="task-department">Department *</label>
+                                <select id="task-department" name="department" required>
+                                    <option value="">Select Department</option>
+                                    <option value="Mill">Mill</option>
+                                    <option value="Form Out">Form Out</option>
+                                    <option value="Cast">Cast</option>
+                                    <option value="Batch">Batch</option>
+                                    <option value="Demold">Demold</option>
+                                    <option value="Finish">Finish</option>
+                                    <option value="Seal">Seal</option>
+                                    <option value="Special">Special</option>
+                                    <option value="Crating">Crating</option>
+                                    <option value="Load">Load</option>
+                                    <option value="Ship">Ship</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="task-date">Date *</label>
+                                <input type="date" id="task-date" name="date" required>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="task-hours">Hours</label>
+                                <input type="number" id="task-hours" name="hours" step="0.5" min="0">
+                            </div>
+                            <div class="form-group">
+                                <label for="task-day-number">Day Number</label>
+                                <input type="number" id="task-day-number" name="dayNumber" min="1">
+                            </div>
+                            <div class="form-group">
+                                <label for="task-total-days">Total Days</label>
+                                <input type="number" id="task-total-days" name="totalDays" min="1">
+                            </div>
+                        </div>
+                        <div class="form-actions">
+                            <button type="button" id="add-card-cancel" class="btn-secondary">Cancel</button>
+                            <button type="submit" id="add-card-submit" class="btn-primary">Add Task</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -1406,6 +1470,7 @@ function parseDate(e){if(!e)return null;const t=e.split("/");if(3===t.length){co
             }
 
             try {
+                // Fetch Google Sheets data
                 const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(SHEET_NAME)}!A1:Z?key=${API_KEY}`);
                 const data = await response.json();
 
@@ -1413,7 +1478,15 @@ function parseDate(e){if(!e)return null;const t=e.split("/");if(3===t.length){co
                     throw new Error('No data found in sheet');
                 }
 
-                allTasks = parseSheetData(data.values);
+                const sheetsTasks = parseSheetData(data.values);
+
+                // Fetch manual tasks from Supabase
+                const manualTasks = await loadManualTasks();
+
+                // Merge tasks, with manual tasks taking precedence for same ID
+                const manualTaskIds = new Set(manualTasks.map(t => t.id));
+                allTasks = [...sheetsTasks.filter(t => !manualTaskIds.has(t.id)), ...manualTasks];
+
                 calculateProjectDayCounts(allTasks); // Calculate the day counts
                 populateDepartmentCheckboxes();
                 filterTasks(); // This will call renderWeeklySchedule
@@ -1850,8 +1923,11 @@ function getMonday(e){e=new Date(e);const t=e.getDay()||7;return 1!==t&&e.setHou
                 weekDates: [...allWeekStartDates]
             };
 
-            // Hide rendering status after all operations complete
-            setTimeout(() => showRenderingStatus(false), 100);
+            // Re-enable add card indicators after rendering
+            setTimeout(() => {
+                enableAddCardIndicators();
+                showRenderingStatus(false);
+            }, 100);
         }
 
         function updateWeekDisplayHeader(date) {
@@ -1901,6 +1977,7 @@ function equalizeAllCardHeights(){const e=document.getElementById("schedule-cont
             // --- Date Setup ---
             const monday = new Date(dateForWeek);
             monday.setDate(dateForWeek.getDate() - (dateForWeek.getDay() || 7) + 1);
+            grid.dataset.mondayDate = getLocalDateString(monday);
             const weekDates = Array.from({ length: 6 }).map((_, i) => {
                 const date = new Date(monday);
                 date.setDate(monday.getDate() + i);
@@ -2079,7 +2156,7 @@ let t=`<div class="grid-header">Department</div>`;weekDates.forEach(e=>{const d=
                             
                             const task = tasksByDate[dateString] ? tasksByDate[dateString][i] : undefined;
 
-if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localStorage.getItem('editingUnlocked')==='true';dayCell.innerHTML=`<div class="task-card ${rowClass} department-${normalizeDepartmentClass(task.department)}" data-task-id="${task.id}" title="Click for options"><div class="task-title">${task.project}</div><div class="project-description">${task.projectDescription||''}</div><div class="task-day-counter">${task.dayCounter||''}</div><div class="task-description">${task.description&&task.description.trim()?task.description:'<span class="missing-description">Staging Missing</span>'}</div>${e?`<div class="task-details">${task.missingDate?'<strong>Date:</strong> Missing<br>':''}<strong>Hours:</strong> ${task.hours}</div>`:''}${d?`<button class="task-plan-btn" data-task-id="${task.id}">Plan</button><button class="task-edit-btn" data-task-id="${task.id}">Edit</button>`:''}</div>`}else dayCell.innerHTML=`<div class="task-card-placeholder ${rowClass}"></div>`;
+if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localStorage.getItem('editingUnlocked')==='true',m=task.isManual&&d;dayCell.innerHTML=`<div class="task-card ${rowClass} department-${normalizeDepartmentClass(task.department)}" data-task-id="${task.id}" title="Click for options"><div class="task-title">${task.project}</div><div class="project-description">${task.projectDescription||''}</div><div class="task-day-counter">${task.dayCounter||''}</div><div class="task-description">${task.description&&task.description.trim()?task.description:'<span class="missing-description">Staging Missing</span>'}</div>${e?`<div class="task-details">${task.missingDate?'<strong>Date:</strong> Missing<br>':''}<strong>Hours:</strong> ${task.hours}</div>`:''}${d?`<button class="task-plan-btn" data-task-id="${task.id}">Plan</button><button class="task-edit-btn" data-task-id="${task.id}">Edit</button>`:''}${m?`<button class="task-delete-btn" data-task-id="${task.id}" title="Delete this manual task">🗑️</button>`:''}</div>`}else{const year=date.getFullYear(),month=(date.getMonth()+1).toString().padStart(2,'0'),day=date.getDate().toString().padStart(2,'0'),p=`${year}-${month}-${day}`,g=getLocalDateString(getMonday(date));const placeholder=document.createElement('div');placeholder.className=`task-card-placeholder ${rowClass} add-enabled`;placeholder.dataset.department=dept;placeholder.dataset.date=p;placeholder.dataset.week=g;dayCell.appendChild(placeholder);};
                             grid.appendChild(dayCell);
                         });
                     }
@@ -4014,24 +4091,30 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
         // SIMPLE REFRESH SYSTEM INTEGRATION
         // ============================================
 
+        // Supabase configuration for task management
+        const SUPABASE_URL = 'https://nrrkxlovhxgwwgzoihiu.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5ycmt4bG92aHhnd3dnem9paGl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NTEzMzAsImV4cCI6MjA3NjIyNzMzMH0.mwLAySKxtQHHl7ihT0MboMpZnzQJbw-QjCCgi3CCrT4';
+        const SUPABASE_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5ycmt4bG92aHhnd3dnem9paGl1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MDY1MTMzMCwiZXhwIjoyMDc2MjI3MzMwfQ.Ni2pK3PZxU3WxJcSJvOkJf-ti9Wx4WenHUd2rxhBfAk';
+
         // Configuration for refresh system
-        const SUPABASE_URL_REFRESH = 'https://nrrkxlovhxgwwgzoihiu.supabase.co';
-        const SUPABASE_ANON_KEY_REFRESH = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5ycmt4bG92aHhnd3dnem9paGl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NTEzMzAsImV4cCI6MjA3NjIyNzMzMH0.mwLAySKxtQHHl7ihT0MboMpZnzQJbw-QjCCgi3CCrT4';
+        const SUPABASE_URL_REFRESH = SUPABASE_URL;
+        const SUPABASE_ANON_KEY_REFRESH = SUPABASE_ANON_KEY;
         const SUPABASE_EDGE_URL_REFRESH = SUPABASE_URL_REFRESH + '/functions/v1/sync-sheet-data';
-        const SERVICE_KEY_REFRESH = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5ycmt4bG92aHhnd3dnem9paGl1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MDY1MTMzMCwiZXhwIjoyMDc2MjI3MzMwfQ.Ni2pK3PZxU3WxJcSJvOkJf-ti9Wx4WenHUd2rxhBfAk';
+        const SERVICE_KEY_REFRESH = SUPABASE_SERVICE_KEY;
 
         // Google Sheets API configuration (already defined above, reusing)
         // const GOOGLE_SHEETS_API_KEY = 'AIzaSyA0i2Mr7kVirmM72ggu_L7_3XAB3_EAsNw';
         // const SPREADSHEET_ID = '1ReBnudzH_QAY6e45wwpf_sHd2OF1Akkppm0S7NmZ_ws';
 
-        let supabaseClientRefresh = null;
+        let supabaseClient = null;
         let refreshChannel = null;
+        let tasksTable = 'weekly_tasks'; // Supabase table name for manual tasks
 
         /**
-         * Initialize Supabase for refresh signaling only
+         * Initialize Supabase for task management and refresh signaling
          */
-        async function initializeRefreshSystem() {
-            if (supabaseClientRefresh) return supabaseClientRefresh;
+        async function initializeSupabase() {
+            if (supabaseClient) return supabaseClient;
 
             // Load Supabase library if not already loaded
             if (!window.supabase) {
@@ -4044,13 +4127,13 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
                 });
             }
 
-            supabaseClientRefresh = window.supabase.createClient(SUPABASE_URL_REFRESH, SUPABASE_ANON_KEY_REFRESH);
+            supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
             // Subscribe to refresh signals
             setupRefreshSubscription();
 
-            console.log('✅ Refresh system initialized');
-            return supabaseClientRefresh;
+            console.log('✅ Supabase initialized');
+            return supabaseClient;
         }
 
         /**
@@ -4058,7 +4141,7 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
          */
         function setupRefreshSubscription() {
             // Create a channel for refresh signals
-            refreshChannel = supabaseClientRefresh
+            refreshChannel = supabaseClient
                 .channel('refresh_signals')
                 .on('broadcast', { event: 'data_updated' }, (payload) => {
                     console.log('🔄 Refresh signal received:', payload);
@@ -4096,10 +4179,10 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
 
         /**
          * Send a refresh signal to all other clients
-         * Call this after successfully updating Google Sheets
+         * Call this after successfully updating Google Sheets or Supabase
          */
         async function sendRefreshSignal(updateInfo = {}) {
-            if (!supabaseClientRefresh) {
+            if (!supabaseClient) {
                 console.warn('⚠️ Supabase not initialized, cannot send refresh signal');
                 return;
             }
@@ -4108,7 +4191,7 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
                 console.log('📡 Sending refresh signal to all clients...');
 
                 // Send broadcast signal
-                const { error } = await supabaseClientRefresh
+                const { error } = await supabaseClient
                     .channel('refresh_signals')
                     .send({
                         type: 'broadcast',
@@ -4128,6 +4211,117 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
 
             } catch (error) {
                 console.error('❌ Error sending refresh signal:', error);
+            }
+        }
+
+        /**
+         * Save a new task to Supabase
+         */
+        async function saveTaskToSupabase(taskData) {
+            if (!supabaseClient) {
+                await initializeSupabase();
+            }
+
+            try {
+                const { data, error } = await supabaseClient
+                    .from(tasksTable)
+                    .insert([{
+                        id: taskData.id || `task-${Date.now()}`,
+                        week: taskData.week,
+                        project: taskData.project,
+                        project_description: taskData.projectDescription || '',
+                        description: taskData.description || '',
+                        date: taskData.date,
+                        department: taskData.department,
+                        value: taskData.value || '',
+                        hours: taskData.hours || '',
+                        day_number: taskData.dayNumber || '',
+                        total_days: taskData.totalDays || '',
+                        created_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString()
+                    }]);
+
+                if (error) {
+                    throw error;
+                }
+
+                console.log('✅ Task saved to Supabase');
+                return data;
+            } catch (error) {
+                console.error('❌ Failed to save task to Supabase:', error);
+                throw error;
+            }
+        }
+
+        /**
+         * Delete a task from Supabase
+         */
+        async function deleteTaskFromSupabase(taskId) {
+            if (!supabaseClient) {
+                await initializeSupabase();
+            }
+
+            try {
+                const { error } = await supabaseClient
+                    .from(tasksTable)
+                    .delete()
+                    .eq('id', taskId);
+
+                if (error) {
+                    throw error;
+                }
+
+                console.log('✅ Task deleted from Supabase');
+                return true;
+            } catch (error) {
+                console.error('❌ Failed to delete task from Supabase:', error);
+                throw error;
+            }
+        }
+
+        /**
+         * Load manual tasks from Supabase and merge with Google Sheets data
+         */
+        async function loadManualTasks() {
+            if (!supabaseClient) {
+                await initializeSupabase();
+            }
+
+            try {
+                const { data, error } = await supabaseClient
+                    .from(tasksTable)
+                    .select('*')
+                    .order('created_at', { ascending: false });
+
+                if (error) {
+                    throw error;
+                }
+
+                // Convert Supabase data to match Google Sheets task structure
+                const manualTasks = data.map(row => ({
+                    id: row.id,
+                    week: row.week,
+                    project: row.project,
+                    projectDescription: row.project_description || '',
+                    description: row.description || '',
+                    date: row.date,
+                    department: normalizeDepartment(row.department),
+                    value: row.value || '',
+                    hours: row.hours || '',
+                    dayNumber: row.day_number || '',
+                    totalDays: row.total_days || '',
+                    dayCounter: '',
+                    missingDate: !row.date,
+                    isManual: true // Flag to identify manual tasks
+                }));
+
+                // Calculate day counters for manual tasks
+                calculateProjectDayCounts(manualTasks);
+
+                return manualTasks;
+            } catch (error) {
+                console.error('❌ Failed to load manual tasks:', error);
+                return [];
             }
         }
 
@@ -4257,11 +4451,404 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
         document.addEventListener('DOMContentLoaded', async () => {
             // Initialize existing functionality first
             try {
-                await initializeRefreshSystem();
-                console.log('🚀 Simple refresh system ready');
+                await initializeSupabase();
+                console.log('🚀 Supabase and refresh system ready');
+                // Re-enable add card indicators after any DOM changes
+                setTimeout(enableAddCardIndicators, 500);
             } catch (error) {
-                console.error('❌ Failed to initialize refresh system:', error);
+                console.error('❌ Failed to initialize system:', error);
             }
+        });
+
+        // Add modal styles
+        const addCardModalStyles = `
+        <style>
+        .add-card-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 10000;
+            display: none;
+            padding: 2rem;
+            box-sizing: border-box;
+        }
+
+        .add-card-modal.show {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .add-card-content {
+            background: var(--background-secondary);
+            border-radius: var(--border-radius-lg);
+            box-shadow: var(--shadow-md);
+            width: 90vw;
+            max-width: 500px;
+            max-height: 90vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid var(--border-primary);
+        }
+
+        .add-card-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid var(--border-primary);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--background-primary);
+        }
+
+        .add-card-header h3 {
+            margin: 0;
+            color: var(--text-primary);
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .add-card-close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: var(--text-secondary);
+            padding: 0.25rem;
+            border-radius: var(--border-radius-md);
+            transition: all 0.3s ease;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .add-card-close:hover {
+            color: var(--accent-primary);
+            background: rgba(79, 70, 229, 0.1);
+        }
+
+        .add-card-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.5rem;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-row {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .form-row .form-group {
+            flex: 1;
+            margin-bottom: 0;
+        }
+
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid var(--border-primary);
+            border-radius: var(--border-radius-md);
+            background: var(--background-secondary);
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 0.875rem;
+            box-sizing: border-box;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 1rem;
+            justify-content: flex-end;
+            margin-top: 1.5rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border-primary);
+        }
+
+        .btn-primary, .btn-secondary {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: var(--border-radius-md);
+            font-size: 0.875rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .btn-secondary {
+            background: var(--border-primary);
+            color: var(--text-primary);
+        }
+
+        .btn-secondary:hover {
+            background: var(--border-secondary);
+        }
+
+        .task-card-placeholder.add-enabled {
+            position: relative;
+            cursor: pointer;
+        }
+
+        .task-card-placeholder.add-enabled:hover {
+            background: rgba(79, 70, 229, 0.1);
+            border: 2px dashed var(--accent-primary);
+        }
+
+        .task-card-placeholder.add-enabled::before {
+            content: '+';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 2rem;
+            color: var(--accent-primary);
+            font-weight: bold;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .task-card-placeholder.add-enabled:hover::before {
+            opacity: 1;
+        }
+        </style>`;
+
+        // Insert modal styles
+        document.head.insertAdjacentHTML('beforeend', addCardModalStyles);
+
+        // Global variables for add card functionality
+        let currentAddCardContext = null; // { department, date, week }
+
+        // Show add card modal
+        function showAddCardModal(department, date, week) {
+            currentAddCardContext = { department, date, week };
+
+            console.log('showAddCardModal called with:', { department, date, week });
+
+            // First ensure modal exists in DOM
+            let modal = document.getElementById('add-card-modal');
+            if (!modal) {
+                console.error('Modal not found! Inserting modal HTML...');
+                // Re-insert the modal if it's missing
+                document.head.insertAdjacentHTML('beforeend', addCardModalStyles);
+                document.body.insertAdjacentHTML('beforeend', addCardModalHTML);
+                modal = document.getElementById('add-card-modal');
+            }
+
+            console.log('Modal element:', modal);
+
+            // Set default values - autofill department and date if provided
+            const elements = {
+                'task-project': '',
+                'task-description': '',
+                'task-department': department || '',
+                'task-date': date || '',
+                'task-hours': '0',
+                'task-day-number': '1',
+                'task-total-days': '1'
+            };
+
+            modal.classList.add('show');
+            document.body.style.overflow = 'hidden';
+
+            // Use setTimeout to ensure the modal is rendered before populating fields
+            setTimeout(() => {
+                Object.entries(elements).forEach(([id, value]) => {
+                    const element = document.getElementById(id);
+                    if (element) {
+                        element.value = value;
+                        console.log(`"${id}" set to:`, value);
+                    } else {
+                        console.error(`Element with id "${id}" not found!`);
+                    }
+                });
+                document.getElementById('task-project')?.focus();
+            }, 50); // A short delay is enough
+        }
+
+        // Hide add card modal
+        function hideAddCardModal() {
+            document.getElementById('add-card-modal').classList.remove('show');
+            document.body.style.overflow = '';
+            currentAddCardContext = null;
+        }
+
+        // Handle add card form submission
+        async function handleAddCardSubmit(e) {
+            e.preventDefault();
+
+            const formData = new FormData(e.target);
+            const taskData = {
+                id: `manual-${Date.now()}`,
+                week: currentAddCardContext.week,
+                project: formData.get('project'),
+                description: formData.get('description'),
+                department: formData.get('department'),
+                date: formData.get('date'),
+                hours: formData.get('hours'),
+                dayNumber: formData.get('dayNumber'),
+                totalDays: formData.get('totalDays'),
+                value: '',
+                projectDescription: ''
+            };
+
+            // Basic validation
+            if (!taskData.project || !taskData.department || !taskData.date) {
+                alert('Please fill in all required fields.');
+                return;
+            }
+
+            try {
+                // Show loading
+                const submitBtn = document.getElementById('add-card-submit');
+                const originalText = submitBtn.textContent;
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Adding...';
+
+                // Save to Supabase
+                await saveTaskToSupabase(taskData);
+
+                // Send refresh signal to all clients
+                await sendRefreshSignal({
+                    action: 'task_added',
+                    taskId: taskData.id,
+                    department: taskData.department,
+                    date: taskData.date
+                });
+
+                // Refresh local data
+                await fetchTasks();
+
+                hideAddCardModal();
+
+            } catch (error) {
+                console.error('Failed to add task:', error);
+                alert('Failed to add task. Please try again.');
+            } finally {
+                const submitBtn = document.getElementById('add-card-submit');
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Add Task';
+            }
+        }
+
+        // Enable visual add indicators on empty cells
+        function enableAddCardIndicators() {
+            const isEditingUnlocked = localStorage.getItem('editingUnlocked') === 'true';
+            if (!isEditingUnlocked) {
+                console.log('Editing not unlocked, skipping add card indicators');
+                return;
+            }
+
+            const placeholders = document.querySelectorAll('.task-card-placeholder');
+            placeholders.forEach(placeholder => {
+                placeholder.classList.add('add-enabled');
+            });
+        }
+
+        // Event listeners for add card modal
+        document.getElementById('add-card-close').addEventListener('click', hideAddCardModal);
+        document.getElementById('add-card-cancel').addEventListener('click', hideAddCardModal);
+        document.getElementById('add-card-modal').addEventListener('click', (e) => {
+            if (e.target === document.getElementById('add-card-modal')) {
+                hideAddCardModal();
+            }
+        });
+        document.getElementById('add-card-form').addEventListener('submit', handleAddCardSubmit);
+
+        // Handle clicking on delete buttons
+        document.addEventListener('click', (e) => {
+            const deleteBtn = e.target.closest('.task-delete-btn');
+            if (deleteBtn) {
+                e.preventDefault();
+                const taskId = deleteBtn.dataset.taskId;
+                const taskCard = deleteBtn.closest('.task-card');
+                const taskName = taskCard ? taskCard.querySelector('.task-title').textContent : 'this task';
+
+                if (confirm(`Are you sure you want to delete "${taskName}"? This action cannot be undone.`)) {
+                    deleteTaskFromSupabase(taskId).then(async () => {
+                        // Send refresh signal to all clients
+                        await sendRefreshSignal({
+                            action: 'task_deleted',
+                            taskId: taskId
+                        });
+
+                        // Refresh the tasks
+                        await fetchTasks();
+                        showSuccessNotification('Task deleted successfully!');
+                    }).catch(error => {
+                        console.error('Failed to delete task:', error);
+                        showSuccessNotification('Failed to delete task.', true);
+                    });
+                }
+            }
+        });
+
+        // Handle clicking on empty cells to add tasks
+        document.addEventListener('click', (e) => {
+            const placeholder = e.target.closest('.task-card-placeholder.add-enabled');
+            if (placeholder) {
+                e.preventDefault();
+
+                // Get context from data attributes on the placeholder
+                const department = placeholder.dataset.department;
+                const dateStr = placeholder.dataset.date;
+                const weekText = placeholder.dataset.week;
+
+                console.log('Clicked placeholder with data:', { department, dateStr, weekText });
+
+                if (department && dateStr && weekText) {
+                    showAddCardModal(department, dateStr, weekText);
+                } else {
+                    console.log('Missing data attributes, showing modal with empty context');
+                    // Fallback: show modal with empty context
+                    showAddCardModal('', '', '');
+                }
+            }
+        });
+
+        // Initialize add card functionality after page load
+        document.addEventListener('DOMContentLoaded', () => {
+            // Initialize Supabase
+            initializeSupabase();
+
+            // Enable add card indicators after initial render
+            setTimeout(enableAddCardIndicators, 1000);
         });
 
         // Export functions for global use
