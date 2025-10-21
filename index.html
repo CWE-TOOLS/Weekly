@@ -7,7 +7,7 @@
     <title>Weekly Schedule Task Viewer</title>
     <style>:root{--background-primary:#F3F4F6;--background-secondary:#FFFFFF;--text-primary:#1F2937;--text-secondary:#6B7280;--border-primary:#E5E7EB;--border-secondary:#D1D5DB;--accent-primary:#4F46E5;--accent-primary-hover:#4338CA;--shadow-sm:0 1px 2px 0 rgb(0 0 0 / 0.05);--shadow-md:0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);--border-radius-md:.5rem;--border-radius-lg:.75rem;--color-mill:#06B6D4;--color-mill-text:#FFFFFF;--color-form-out:#3B82F6;--color-form-out-text:#FFFFFF;--color-cast:#EF4444;--color-cast-text:#FFFFFF;--color-batch:#800000;--color-batch-text:#FFFFFF;--color-layout:#A16207;--color-layout-text:#FFFFFF;--color-demold:#F97316;--color-demold-text:#FFFFFF;--color-finish:#8B5CF6;--color-finish-text:#FFFFFF;--color-seal:#6B7280;--color-seal-text:#FFFFFF;--color-special:#EC4899;--color-special-text:#FFFFFF;--color-crating:#A16207;--color-crating-text:#FFFFFF;--color-load:#F59E0B;--color-load-text:#FFFFFF;--color-ship:#22C55E;--color-ship-text:#FFFFFF;}
 
-        *{margin:0;padding:0;box-sizing:border-box;}html{height:100vh;}body{font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif,'Apple Color Emoji','Segoe UI Emoji','Segoe UI Symbol';background-color:var(--background-primary);color:var(--text-primary);line-height:1.6;height:100%;overflow:hidden;}.container{width:100%;padding:2rem;box-sizing:border-box;display:flex;flex-direction:column;height:100%;position:relative;}header{text-align:center;margin-bottom:2.5rem;}h1{font-size:2.5rem;font-weight:700;color:var(--text-primary);margin-bottom:.5rem;}header p{font-size:1.125rem;color:var(--text-secondary);}.controls{display:flex;justify-content:space-between;align-items:center;margin-bottom:2rem;flex-wrap:wrap;gap:1rem;}.filter-group{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;}.action-group{display:flex;align-items:center;gap:.75rem;}.icon-btn{padding:.625rem;display:flex;align-items:center;justify-content:center;width:40px;height:40px;}.icon-btn svg{width:2rem;height:2rem;}.navigation-group{display:flex;align-items:center;gap:1rem;justify-content:center;flex-grow:1;}#week-display{font-size:1.25rem;font-weight:600;color:var(--text-primary);white-space:nowrap;}label{font-weight:500;font-size:.875rem;color:var(--text-secondary);}select,button{padding:.625rem 1rem;border:1px solid var(--border-primary);border-radius:var(--border-radius-md);font-size:.875rem;background-color:var(--background-secondary);transition:all .2s ease-in-out;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;}select:focus,button:focus{outline:2px solid transparent;outline-offset:2px;box-shadow:0 0 0 2px var(--accent-primary);}button{background-color:var(--accent-primary);color:white;font-weight:600;cursor:pointer;border:none;}button:hover{background-color:var(--accent-primary-hover);}
+        *{margin:0;padding:0;box-sizing:border-box;}html{height:100vh;}body{font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif,'Apple Color Emoji','Segoe UI Emoji','Segoe UI Symbol';background-color:var(--background-primary);color:var(--text-primary);line-height:1.6;height:100%;overflow:hidden;}.container{width:100%;padding:2rem;box-sizing:border-box;display:flex;flex-direction:column;height:100%;position:relative;}header{text-align:center;margin-bottom:2.5rem;}h1{font-size:2.5rem;font-weight:700;color:var(--text-primary);margin-bottom:.5rem;}header p{font-size:1.125rem;color:var(--text-secondary);}.controls{display:flex;justify-content:space-between;align-items:center;margin-bottom:2rem;flex-wrap:wrap;gap:1rem;}.filter-group{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;}.search-group{position:relative;display:flex;flex-direction:column;}.search-input{padding:.625rem 1rem;border:1px solid var(--border-primary);border-radius:var(--border-radius-md);font-size:.875rem;background-color:var(--background-secondary);transition:all .2s ease-in-out;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;width:250px;}.search-input:focus{outline:2px solid transparent;outline-offset:2px;box-shadow:0 0 0 2px var(--accent-primary);}.search-results{position:absolute;top:calc(100% + .5rem);left:0;width:100%;background-color:var(--background-secondary);border-radius:var(--border-radius-lg);box-shadow:var(--shadow-md);border:1px solid var(--border-primary);z-index:100;overflow:hidden;max-height:400px;overflow-y:auto;}.search-result-item{padding:.75rem 1rem;cursor:pointer;display:flex;flex-direction:column;border-bottom:1px solid var(--border-primary);transition:background-color .2s;}.search-result-item:last-child{border-bottom:none;}.search-result-item:hover{background-color:var(--background-primary);}.search-result-title{font-weight:600;color:var(--text-primary);font-size:.875rem;}.search-result-hours{font-size:.75rem;color:var(--text-secondary);margin-top:.25rem;}.action-group{display:flex;align-items:center;gap:.75rem;}.icon-btn{padding:.625rem;display:flex;align-items:center;justify-content:center;width:40px;height:40px;}.icon-btn svg{width:2rem;height:2rem;}.navigation-group{display:flex;align-items:center;gap:1rem;justify-content:center;flex-grow:1;}#week-display{font-size:1.25rem;font-weight:600;color:var(--text-primary);white-space:nowrap;}label{font-weight:500;font-size:.875rem;color:var(--text-secondary);}select,button{padding:.625rem 1rem;border:1px solid var(--border-primary);border-radius:var(--border-radius-md);font-size:.875rem;background-color:var(--background-secondary);transition:all .2s ease-in-out;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;}select:focus,button:focus{outline:2px solid transparent;outline-offset:2px;box-shadow:0 0 0 2px var(--accent-primary);}button{background-color:var(--accent-primary);color:white;font-weight:600;cursor:pointer;border:none;}button:hover{background-color:var(--accent-primary-hover);}
 
 .schedule-wrapper{overflow-x:scroll;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch;scrollbar-width:thin;flex-grow:1;overflow-y:auto;contain:layout style paint;will-change:scroll-position;}.schedule-wrapper::-webkit-scrollbar{height:12px;width:0;}.schedule-wrapper::-webkit-scrollbar-track{background:#f1f1f1;}.schedule-wrapper::-webkit-scrollbar-thumb{background:#555;border-radius:4px;}.schedule-wrapper::-webkit-scrollbar-thumb:hover{background:#333;}.schedule-container{display:flex;width:max-content;align-items:flex-start;}.schedule-grid{display:grid;grid-template-columns:minmax(140px,1fr) repeat(6,minmax(180px,2fr));width:100%;scroll-snap-align:start;background-color:var(--background-secondary);border-radius:var(--border-radius-lg);box-shadow:var(--shadow-md);border:1px solid var(--border-primary);}.grid-header{font-weight:600;font-size:.75rem;padding:1rem .75rem;color:var(--text-secondary);text-align:center;border-bottom:2px solid var(--border-secondary);text-transform:uppercase;letter-spacing:.05em;line-height:1.2;display:flex;align-items:center;justify-content:center;height:4.5rem;position:sticky;top:0;background-color:var(--background-secondary);z-index:10;}.grid-header:first-child{left:0;z-index:15;}.date-weekday{font-size:.7rem;font-weight:500;color:var(--text-secondary);}.date-day{font-size:1.1rem;font-weight:600;color:var(--text-primary);}.grid-cell{padding:.75rem;border-bottom:2px solid var(--border-primary);border-right:2px solid var(--border-primary);}.grid-cell:last-child{border-right:none;}.department-label{font-weight:600;font-size:3rem;padding:.25rem .75rem;color:#fff;text-align:center;border-right:2px solid var(--border-primary);display:flex;align-items:center;justify-content:center;background-color:transparent;position:sticky;left:0;z-index:5;writing-mode:vertical-rl;text-orientation:mixed;}
 
@@ -990,29 +990,34 @@
     <div class="container">
         <div class="controls">
             <div class="filter-group">
-               <label>Filter by Department:</label>
-               <div id="multi-select-dropdown" class="multi-select-dropdown">
-                   <button id="multi-select-btn" class="multi-select-btn" aria-haspopup="listbox" aria-expanded="false">
-                       <span id="multi-select-label">All Departments</span>
-                       <svg class="dropdown-arrow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                           <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.25 4.25a.75.75 0 01-1.06 0L5.23 8.27a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
-                       </svg>
-                   </button>
+                <div id="multi-select-dropdown" class="multi-select-dropdown" style="margin-left: auto;">
+                    <button id="multi-select-btn" class="multi-select-btn" aria-haspopup="listbox" aria-expanded="false">
+                        <span id="multi-select-label">All Departments</span>
+                        <svg class="dropdown-arrow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.25 4.25a.75.75 0 01-1.06 0L5.23 8.27a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
                    <div id="multi-select-panel" class="multi-select-panel" role="listbox">
-                       <div class="multi-select-actions">
-                           <button id="select-all-btn">Show All</button>
-                           <button id="select-none-btn">Show None</button>
-                       </div>
-                       <ul id="department-list">
-                           <!-- Department checkboxes will be populated by JavaScript -->
-                       </ul>
-                   </div>
-               </div>
-               <div id="loading" class="loading">
-                   <div>Loading tasks...</div>
-                   <div class="loading-spinner"></div>
-               </div>
-           </div>
+                        <div class="multi-select-actions">
+                            <button id="select-all-btn">Show All</button>
+                            <button id="select-none-btn">Show None</button>
+                        </div>
+                        <ul id="department-list">
+                            <!-- Department checkboxes will be populated by JavaScript -->
+                        </ul>
+                    </div>
+                </div>
+                <div class="search-group">
+                    <input type="text" id="project-search" placeholder="Search projects..." class="search-input">
+                    <div id="search-results" class="search-results" style="display: none;">
+                        <!-- Search results will be populated by JavaScript -->
+                    </div>
+                </div>
+                <div id="loading" class="loading">
+                    <div>Loading tasks...</div>
+                    <div class="loading-spinner"></div>
+                </div>
+            </div>
             <div class="navigation-group">
                 <button id="prev-week-btn">&larr; Previous</button>
                 <h2 id="week-display"></h2>
@@ -2253,6 +2258,27 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
         document.getElementById('prev-week-btn').addEventListener('click', showPreviousWeek);
         document.getElementById('next-week-btn').addEventListener('click', showNextWeek);
 
+        // Search functionality
+        const searchInput = document.getElementById('project-search');
+        const searchResults = document.getElementById('search-results');
+
+        searchInput.addEventListener('input', (e) => {
+            performSearch(e.target.value);
+        });
+
+        searchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                searchInput.value = '';
+                searchResults.style.display = 'none';
+            }
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!searchInput.contains(e.target) && !searchResults.contains(e.target)) {
+                searchResults.style.display = 'none';
+            }
+        });
+
         const fullscreenBtn = document.getElementById('fullscreen-btn');
         const expandIcon = document.getElementById('fullscreen-icon-expand');
         const compressIcon = document.getElementById('fullscreen-icon-compress');
@@ -2408,6 +2434,62 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
         }
 
         // Project View Functionality
+        function getProjectSummaries() {
+            const projectSummaries = {};
+            allTasks.forEach(task => {
+                if (!task.project) return;
+                if (!projectSummaries[task.project]) {
+                    projectSummaries[task.project] = { totalHours: 0, tasks: [] };
+                }
+                const hours = parseFloat(task.hours);
+                if (!isNaN(hours)) {
+                    projectSummaries[task.project].totalHours += hours;
+                }
+                projectSummaries[task.project].tasks.push(task);
+            });
+            return projectSummaries;
+        }
+
+        function performSearch(query) {
+            const trimmedQuery = query.trim().toLowerCase();
+            const results = document.getElementById('search-results');
+            results.innerHTML = '';
+            results.style.display = 'none';
+
+            if (!trimmedQuery) return;
+
+            const summaries = getProjectSummaries();
+            const matches = [];
+
+            Object.entries(summaries).forEach(([projectName, summary]) => {
+                if (projectName.toLowerCase().includes(trimmedQuery)) {
+                    matches.push({
+                        project: projectName,
+                        totalHours: summary.totalHours,
+                        tasks: summary.tasks
+                    });
+                }
+            });
+
+            if (matches.length > 0) {
+                matches.forEach(match => {
+                    const item = document.createElement('div');
+                    item.className = 'search-result-item';
+                    item.innerHTML = `
+                        <div class="search-result-title">${match.project}</div>
+                        <div class="search-result-hours">Total Hours: ${Math.round(match.totalHours)}</div>
+                    `;
+                    item.addEventListener('click', () => {
+                        showProjectView(match.project);
+                        document.getElementById('project-search').value = '';
+                        results.style.display = 'none';
+                    });
+                    results.appendChild(item);
+                });
+                results.style.display = 'block';
+            }
+        }
+
         function showProjectView(projectName) {
             currentProjectName = projectName;
             const projectTasks = allTasks.filter(task => task.project === projectName);
