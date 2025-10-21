@@ -2826,6 +2826,10 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
         }
 
         function hidePrintModal() {
+            // Save current department selection before hiding modal
+            const selectedDepts = Array.from(document.querySelectorAll('.departments-grid input[type="checkbox"]:checked')).map(cb => cb.value);
+            localStorage.setItem('printSelectedDepartments', JSON.stringify(selectedDepts));
+
             const modal = document.getElementById('print-modal');
             modal.classList.remove('show');
             document.body.style.overflow = '';
@@ -2870,9 +2874,9 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
             const departmentsGrid = document.querySelector('.departments-grid');
             departmentsGrid.innerHTML = '';
             // Restore saved print department selections
-            const savedPrintDepartments = JSON.parse(localStorage.getItem('printSelectedDepartments'));
-            // If no saved selection or empty array, default to all departments
-            const defaultSelectedDepts = (savedPrintDepartments && savedPrintDepartments.length > 0) ? savedPrintDepartments : allDepartmentsForPrint;
+            const savedPrintDepartments = localStorage.getItem('printSelectedDepartments') ? JSON.parse(localStorage.getItem('printSelectedDepartments')) : null;
+            // If no saved selection, default to all departments; if empty array, keep empty
+            const defaultSelectedDepts = savedPrintDepartments !== null ? savedPrintDepartments : allDepartmentsForPrint;
 
             allDepartmentsForPrint.forEach(dept => {
                 const checkboxDiv = document.createElement('div');
@@ -2882,6 +2886,13 @@ if(task){const e=task.department!=='Batch'&&task.department!=='Layout',d=localSt
                     <label for="print-dept-${normalizeDepartmentClass(dept)}">${dept}</label>
                 `;
                 departmentsGrid.appendChild(checkboxDiv);
+
+                // Add event listener to save selection when changed
+                const checkbox = checkboxDiv.querySelector('input[type="checkbox"]');
+                checkbox.addEventListener('change', () => {
+                    const selectedDepts = Array.from(document.querySelectorAll('.departments-grid input[type="checkbox"]:checked')).map(cb => cb.value);
+                    localStorage.setItem('printSelectedDepartments', JSON.stringify(selectedDepts));
+                });
             });
 
 
