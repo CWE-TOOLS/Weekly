@@ -5334,6 +5334,32 @@ const d=localStorage.getItem('editingUnlocked')==='true';if(task){const e=task.d
             }
         });
 
+        // Window resize handler with debouncing
+        let resizeTimeout;
+        function handleWindowResize() {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(() => {
+                console.log('Window resized, refreshing layout...');
+
+                // Update grid widths to match new window size
+                const wrapper = document.getElementById('schedule-wrapper');
+                const container = document.getElementById('schedule-container');
+                const wrapperWidth = wrapper.clientWidth;
+                const grids = container.querySelectorAll('.schedule-grid');
+                grids.forEach(grid => {
+                    grid.style.width = `${wrapperWidth}px`;
+                });
+
+                // Re-equalize card heights
+                equalizeAllCardHeights();
+
+                console.log('Layout refreshed after window resize');
+            }, 250); // Debounce for 250ms
+        }
+
+        // Add window resize listener
+        window.addEventListener('resize', handleWindowResize);
+
         // Initialize add card functionality after page load
         document.addEventListener('DOMContentLoaded', () => {
             // Initialize Supabase
