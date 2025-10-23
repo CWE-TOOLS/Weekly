@@ -5264,6 +5264,7 @@ const d=localStorage.getItem('editingUnlocked')==='true';if(task){const e=task.d
 
         // Add tooltip for draggable cards
         document.addEventListener('mouseenter', function(e) {
+            if (!(e.target instanceof Element)) return;
             const taskCard = e.target.closest('.task-card[draggable="true"]');
             if (taskCard && !document.body.classList.contains('dragging-active')) {
                 taskCard.title = 'Drag to move to different date';
@@ -5271,6 +5272,7 @@ const d=localStorage.getItem('editingUnlocked')==='true';if(task){const e=task.d
         }, true);
 
         document.addEventListener('mouseleave', function(e) {
+            if (!(e.target instanceof Element)) return;
             const taskCard = e.target.closest('.task-card[draggable="true"]');
             if (taskCard) {
                 taskCard.title = '';
@@ -5350,14 +5352,21 @@ const d=localStorage.getItem('editingUnlocked')==='true';if(task){const e=task.d
                     grid.style.width = `${wrapperWidth}px`;
                 });
 
-                // Clear existing minHeight values before recalculating
+                // Clear existing minHeight values and force a reflow before recalculating
                 const allCards = container.querySelectorAll('.task-card');
                 allCards.forEach(card => {
                     card.style.minHeight = 'auto';
+                    // Force reflow by accessing offsetHeight
+                    card.offsetHeight;
                 });
 
-                // Re-equalize card heights
+                // Re-equalize card heights with improved logic
                 equalizeAllCardHeights();
+
+                // Force another reflow and re-equalize to ensure consistency
+                setTimeout(() => {
+                    equalizeAllCardHeights();
+                }, 50);
 
                 console.log('Layout refreshed after window resize');
             }, 250); // Debounce for 250ms
