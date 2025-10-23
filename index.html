@@ -2293,6 +2293,7 @@ const d=localStorage.getItem('editingUnlocked')==='true';if(task){const e=task.d
 
         // Add drag and drop event listeners to the schedule wrapper
         document.addEventListener('dragstart', function(e) {
+            if (!(e.target instanceof Element)) return;
             const taskCard = e.target.closest('.task-card[draggable="true"]');
             if (taskCard) {
                 draggedTask = taskCard.dataset.taskId ? allTasks.find(t => t.id === taskCard.dataset.taskId) : null;
@@ -2324,6 +2325,7 @@ const d=localStorage.getItem('editingUnlocked')==='true';if(task){const e=task.d
         });
 
         document.addEventListener('dragend', function(e) {
+            if (!(e.target instanceof Element)) return;
             const taskCard = e.target.closest('.task-card[draggable="true"]');
             if (taskCard) {
                 taskCard.style.opacity = '1';
@@ -2350,6 +2352,7 @@ const d=localStorage.getItem('editingUnlocked')==='true';if(task){const e=task.d
             e.dataTransfer.dropEffect = 'move';
 
             // Provide visual feedback on drop zones
+            if (!(e.target instanceof Element)) return;
             const dropTarget = e.target.closest('.task-card-placeholder');
             if (dropTarget && draggedTask) {
                 const placeholder = dropTarget;
@@ -2371,12 +2374,13 @@ const d=localStorage.getItem('editingUnlocked')==='true';if(task){const e=task.d
 
         document.addEventListener('dragleave', function(e) {
             // Only remove highlight if actually leaving the drop zone
+            if (!(e.target instanceof Element)) return;
             const relatedTarget = e.relatedTarget;
             const placeholder = e.target.closest('.task-card-placeholder');
 
             if (placeholder && relatedTarget) {
                 const isLeavingDropZone = !placeholder.contains(relatedTarget) &&
-                                         !relatedTarget.closest('.task-card-placeholder');
+                                          !relatedTarget.closest('.task-card-placeholder');
 
                 if (isLeavingDropZone) {
                     placeholder.classList.remove('drag-over', 'drag-invalid');
@@ -2389,6 +2393,7 @@ const d=localStorage.getItem('editingUnlocked')==='true';if(task){const e=task.d
 
             if (!draggedTask) return;
 
+            if (!(e.target instanceof Element)) return;
             const dropTarget = e.target.closest('.task-card-placeholder');
             if (dropTarget) {
                 const newDate = dropTarget.dataset.date;
@@ -2636,6 +2641,7 @@ const d=localStorage.getItem('editingUnlocked')==='true';if(task){const e=task.d
         let currentTask = null;
 
         document.addEventListener('click', (e) => {
+            if (!(e.target instanceof Element)) return;
             const taskCard = e.target.closest('.task-card');
             const editBtn = e.target.closest('.task-edit-btn');
             const planBtn = e.target.closest('.task-plan-btn');
@@ -2678,6 +2684,7 @@ const d=localStorage.getItem('editingUnlocked')==='true';if(task){const e=task.d
         });
 
         document.getElementById('context-menu').addEventListener('click', (e) => {
+            if (!(e.target instanceof Element)) return;
             const menuItem = e.target.closest('.context-menu-item');
             const action = menuItem && menuItem.dataset.action;
             if (action === 'build-plan' && currentTask) {
@@ -2689,6 +2696,7 @@ const d=localStorage.getItem('editingUnlocked')==='true';if(task){const e=task.d
         // Keyboard support for context menu
         document.addEventListener('keydown', (e) => {
             if (e.keyCode === 93 || (e.shiftKey && e.key === 'F10')) { // Context menu key or Shift+F10
+                if (!(e.target instanceof Element)) return;
                 const taskCard = e.target.closest('.task-card');
                 if (taskCard && !document.getElementById('project-modal').classList.contains('show')) {
                     e.preventDefault();
@@ -5281,6 +5289,7 @@ const d=localStorage.getItem('editingUnlocked')==='true';if(task){const e=task.d
 
         // Handle clicking on delete buttons
         document.addEventListener('click', (e) => {
+            if (!(e.target instanceof Element)) return;
             const deleteBtn = e.target.closest('.task-delete-btn');
             if (deleteBtn) {
                 e.preventDefault();
@@ -5309,6 +5318,7 @@ const d=localStorage.getItem('editingUnlocked')==='true';if(task){const e=task.d
 
         // Handle clicking on empty cells to add tasks
         document.addEventListener('click', (e) => {
+            if (!(e.target instanceof Element)) return;
             const placeholder = e.target.closest('.task-card-placeholder.add-enabled');
             if (placeholder) {
                 // Check if editing is unlocked
