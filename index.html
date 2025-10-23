@@ -2211,6 +2211,7 @@ let t=`<div class="grid-header">Department</div>`;weekDates.forEach(e=>{const d=
                         deptLabel.textContent = dept;
                     }
                     deptLabel.style.gridRow = `span ${maxTasksInRow}`;
+                    deptLabel.style.zIndex = '10'; // Ensure department labels stay above dragging cards
                     grid.appendChild(deptLabel);
 
                     for (let i = 0; i < maxTasksInRow; i++) {
@@ -2224,7 +2225,7 @@ let t=`<div class="grid-header">Department</div>`;weekDates.forEach(e=>{const d=
 
                             const task = tasksByDate[dateString] ? tasksByDate[dateString][i] : undefined;
 
-const d=localStorage.getItem('editingUnlocked')==='true';if(task){const e=task.department!=='Batch'&&task.department!=='Layout',m=task.isManual&&d;dayCell.innerHTML=`<div class="task-card ${rowClass} department-${normalizeDepartmentClass(task.department)}" data-task-id="${task.id}" title="Click for options"><div class="task-title">${task.project}</div><div class="project-description">${task.projectDescription||''}</div><div class="task-day-counter">${task.dayCounter||''}</div><div class="task-description">${task.description&&task.description.trim()?task.description:'<span class="missing-description">Staging Missing</span>'}</div>${e?`<div class="task-details">${task.missingDate?'<strong>Date:</strong> Missing<br>':''}<strong>Hours:</strong> ${task.hours}</div>`:''}${d?`<button class="task-plan-btn" data-task-id="${task.id}">Plan</button><button class="task-edit-btn" data-task-id="${task.id}">Edit</button>`:''}${m?`<button class="task-delete-btn" data-task-id="${task.id}" title="Delete this manual task">🗑️</button>`:''}</div>`}else{const year=date.getFullYear(),month=(date.getMonth()+1).toString().padStart(2,'0'),day=date.getDate().toString().padStart(2,'0'),p=`${year}-${month}-${day}`,g=getLocalDateString(getMonday(date));const placeholder=document.createElement('div');placeholder.className=`task-card-placeholder ${rowClass}${d?' add-enabled':''}`;placeholder.dataset.department=dept;placeholder.dataset.date=p;placeholder.dataset.week=g;dayCell.appendChild(placeholder);};
+const d=localStorage.getItem('editingUnlocked')==='true';if(task){const e=task.department!=='Batch'&&task.department!=='Layout',m=task.isManual&&d;dayCell.innerHTML=`<div class="task-card ${rowClass} department-${normalizeDepartmentClass(task.department)} ${m?'':'not-draggable'}" data-task-id="${task.id}" ${m?'draggable="true"':''} title="${m?'Drag to move to different date':'Click for options'}"><div class="task-title">${task.project}</div><div class="project-description">${task.projectDescription||''}</div><div class="task-day-counter">${task.dayCounter||''}</div><div class="task-description">${task.description&&task.description.trim()?task.description:'<span class="missing-description">Staging Missing</span>'}</div>${e?`<div class="task-details">${task.missingDate?'<strong>Date:</strong> Missing<br>':''}<strong>Hours:</strong> ${task.hours}</div>`:''}${d?`<button class="task-plan-btn" data-task-id="${task.id}">Plan</button><button class="task-edit-btn" data-task-id="${task.id}">Edit</button>`:''}${m?`<button class="task-delete-btn" data-task-id="${task.id}" title="Delete this manual task">🗑️</button>`:''}</div>`}else{const year=date.getFullYear(),month=(date.getMonth()+1).toString().padStart(2,'0'),day=date.getDate().toString().padStart(2,'0'),p=`${year}-${month}-${day}`,g=getLocalDateString(getMonday(date));const placeholder=document.createElement('div');placeholder.className=`task-card-placeholder ${rowClass}${d?' add-enabled':''}`;placeholder.dataset.department=dept;placeholder.dataset.date=p;placeholder.dataset.week=g;dayCell.appendChild(placeholder);};
                             grid.appendChild(dayCell);
                         });
                     }
@@ -2283,6 +2284,219 @@ const d=localStorage.getItem('editingUnlocked')==='true';if(task){const e=task.d
                 statusElement.style.display = 'block';
             } else {
                 statusElement.style.display = 'none';
+            }
+        }
+
+        // Drag and Drop functionality for manual tasks
+        let draggedTask = null;
+        let dragGhost = null;
+
+        // Add drag and drop event listeners to the schedule wrapper
+        document.addEventListener('dragstart', function(e) {
+            const taskCard = e.target.closest('.task-card[draggable="true"]');
+            if (taskCard) {
+                draggedTask = taskCard.dataset.taskId ? allTasks.find(t => t.id === taskCard.dataset.taskId) : null;
+                if (draggedTask) {
+                    e.dataTransfer.setData('text/plain', draggedTask.id);
+                    e.dataTransfer.effectAllowed = 'move';
+
+                    // Create a custom drag image
+                    dragGhost = taskCard.cloneNode(true);
+                    dragGhost.classList.add('dragging');
+                    dragGhost.style.position = 'absolute';
+                    dragGhost.style.top = '-1000px';
+                    dragGhost.style.left = '-1000px';
+                    dragGhost.style.width = taskCard.offsetWidth + 'px';
+                    dragGhost.style.height = taskCard.offsetHeight + 'px';
+                    dragGhost.style.opacity = '0.9';
+                    dragGhost.style.pointerEvents = 'none';
+                    dragGhost.style.transform = 'rotate(2deg)'; // Subtle rotation for visual feedback
+                    document.body.appendChild(dragGhost);
+                    e.dataTransfer.setDragImage(dragGhost, e.offsetX, e.offsetY);
+
+                    taskCard.style.opacity = '0.3';
+                    taskCard.classList.add('dragging');
+
+                    // Add dragging-active class to body for visual feedback
+                    document.body.classList.add('dragging-active');
+                }
+            }
+        });
+
+        document.addEventListener('dragend', function(e) {
+            const taskCard = e.target.closest('.task-card[draggable="true"]');
+            if (taskCard) {
+                taskCard.style.opacity = '1';
+                taskCard.classList.remove('dragging');
+            }
+
+            // Remove drag ghost
+            if (dragGhost && dragGhost.parentNode) {
+                dragGhost.parentNode.removeChild(dragGhost);
+                dragGhost = null;
+            }
+
+            // Remove dragging visual indicators
+            document.body.classList.remove('dragging-active');
+            document.querySelectorAll('.task-card-placeholder.drag-over, .task-card-placeholder.drag-invalid').forEach(el => {
+                el.classList.remove('drag-over', 'drag-invalid');
+            });
+
+            draggedTask = null;
+        });
+
+        document.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+
+            // Provide visual feedback on drop zones
+            const dropTarget = e.target.closest('.task-card-placeholder');
+            if (dropTarget && draggedTask) {
+                const placeholder = dropTarget;
+                const isValidDrop = placeholder.dataset.department === draggedTask.department;
+
+                // Remove previous highlights
+                document.querySelectorAll('.task-card-placeholder.drag-over, .task-card-placeholder.drag-invalid').forEach(el => {
+                    el.classList.remove('drag-over', 'drag-invalid');
+                });
+
+                // Add current highlight
+                if (isValidDrop) {
+                    placeholder.classList.add('drag-over');
+                } else {
+                    placeholder.classList.add('drag-invalid');
+                }
+            }
+        });
+
+        document.addEventListener('dragleave', function(e) {
+            // Only remove highlight if actually leaving the drop zone
+            const relatedTarget = e.relatedTarget;
+            const placeholder = e.target.closest('.task-card-placeholder');
+
+            if (placeholder && relatedTarget) {
+                const isLeavingDropZone = !placeholder.contains(relatedTarget) &&
+                                         !relatedTarget.closest('.task-card-placeholder');
+
+                if (isLeavingDropZone) {
+                    placeholder.classList.remove('drag-over', 'drag-invalid');
+                }
+            }
+        });
+
+        document.addEventListener('drop', async function(e) {
+            e.preventDefault();
+
+            if (!draggedTask) return;
+
+            const dropTarget = e.target.closest('.task-card-placeholder');
+            if (dropTarget) {
+                const newDate = dropTarget.dataset.date;
+                const newWeek = dropTarget.dataset.week;
+                const department = dropTarget.dataset.department;
+
+                // Only allow dropping if department matches
+                if (department !== draggedTask.department) {
+                    showSuccessNotification('Cannot move task to different department', true);
+                    return;
+                }
+
+                // Only allow dropping if date is different
+                if (newDate === draggedTask.date) {
+                    showSuccessNotification('Task is already on this date', true);
+                    return;
+                }
+
+                try {
+                    // Show loading state on original card
+                    const originalCard = document.querySelector(`.task-card[data-task-id="${draggedTask.id}"]`);
+                    if (originalCard) {
+                        originalCard.style.opacity = '0.5';
+                        originalCard.style.pointerEvents = 'none';
+                    }
+
+                    // Update task locally
+                    draggedTask.date = newDate;
+                    draggedTask.week = newWeek;
+
+                    // Save to Supabase
+                    let supabaseSuccess = false;
+                    try {
+                        await updateTaskInSupabase(draggedTask);
+                        supabaseSuccess = true;
+                    } catch (supabaseError) {
+                        console.error('Supabase update failed:', supabaseError);
+                        // Don't throw here - we want to continue with refresh signal
+                    }
+
+                    // Send refresh signal to all clients (don't fail the whole operation if this fails)
+                    try {
+                        await sendRefreshSignal({
+                            action: 'task_moved',
+                            taskId: draggedTask.id,
+                            newDate: newDate,
+                            department: department
+                        });
+                    } catch (signalError) {
+                        console.error('Refresh signal failed:', signalError);
+                        // Continue - this is not critical
+                    }
+
+                    // Refresh local data
+                    await fetchTasks();
+
+                    // Show appropriate success message
+                    if (supabaseSuccess) {
+                        showSuccessNotification('Task moved successfully!');
+                    } else {
+                        showSuccessNotification('Task moved locally. Sync to server may have failed.', true);
+                    }
+
+                } catch (error) {
+                    console.error('Failed to move task:', error);
+                    showSuccessNotification('Failed to move task', true);
+
+                    // Restore original card if save failed
+                    if (originalCard) {
+                        originalCard.style.opacity = '1';
+                        originalCard.style.pointerEvents = 'auto';
+                    }
+                }
+            }
+        });
+
+        // Function to update task in Supabase
+        async function updateTaskInSupabase(task) {
+            if (!supabaseClient) {
+                await initializeSupabase();
+            }
+
+            // Add timeout to prevent hanging
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
+            try {
+                const { error } = await supabaseClient
+                    .from(tasksTable)
+                    .update({
+                        date: task.date,
+                        week: task.week,
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', task.id);
+
+                clearTimeout(timeoutId);
+
+                if (error) {
+                    throw error;
+                }
+
+                console.log('✅ Task updated in Supabase');
+                return true;
+            } catch (error) {
+                clearTimeout(timeoutId);
+                console.error('❌ Failed to update task in Supabase:', error);
+                throw error;
             }
         }
 
@@ -4848,6 +5062,57 @@ const d=localStorage.getItem('editingUnlocked')==='true';if(task){const e=task.d
         .task-card-placeholder.add-enabled:hover::before {
             opacity: 1;
         }
+
+        /* Drag and Drop Enhancements */
+        .task-card[draggable="true"] {
+            cursor: grab;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .task-card[draggable="true"]:active {
+            cursor: grabbing;
+        }
+
+        .task-card.not-draggable {
+            cursor: default;
+        }
+
+        .dragging-active .task-card-placeholder {
+            background: rgba(79, 70, 229, 0.1);
+            border: 1px dashed var(--accent-primary);
+            transition: all 0.2s ease;
+        }
+
+        .dragging-active .task-card-placeholder.drag-over {
+            background: rgba(79, 70, 229, 0.2);
+            border: 2px solid var(--accent-primary);
+            transform: scale(1.02);
+            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+        }
+
+        .dragging-active .task-card-placeholder.drag-invalid {
+            background: rgba(239, 68, 68, 0.1);
+            border: 2px solid #ef4444;
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+        }
+
+        .task-card.dragging {
+            transform: rotate(5deg) scale(1.05);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+            filter: brightness(1.1);
+        }
+
+        /* Hover effects for draggable cards */
+        .task-card[draggable="true"]:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+
+        /* Disable hover effects during drag */
+        .dragging-active .task-card[draggable="true"]:hover {
+            transform: none;
+        }
         </style>`;
 
         // Insert modal styles
@@ -4996,6 +5261,21 @@ const d=localStorage.getItem('editingUnlocked')==='true';if(task){const e=task.d
             }
         });
         document.getElementById('add-card-form').addEventListener('submit', handleAddCardSubmit);
+
+        // Add tooltip for draggable cards
+        document.addEventListener('mouseenter', function(e) {
+            const taskCard = e.target.closest('.task-card[draggable="true"]');
+            if (taskCard && !document.body.classList.contains('dragging-active')) {
+                taskCard.title = 'Drag to move to different date';
+            }
+        }, true);
+
+        document.addEventListener('mouseleave', function(e) {
+            const taskCard = e.target.closest('.task-card[draggable="true"]');
+            if (taskCard) {
+                taskCard.title = '';
+            }
+        });
 
         // Handle clicking on delete buttons
         document.addEventListener('click', (e) => {
