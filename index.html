@@ -5350,6 +5350,12 @@ const d=localStorage.getItem('editingUnlocked')==='true';if(task){const e=task.d
                     grid.style.width = `${wrapperWidth}px`;
                 });
 
+                // Clear existing minHeight values before recalculating
+                const allCards = container.querySelectorAll('.task-card');
+                allCards.forEach(card => {
+                    card.style.minHeight = 'auto';
+                });
+
                 // Re-equalize card heights
                 equalizeAllCardHeights();
 
