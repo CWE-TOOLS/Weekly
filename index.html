@@ -5172,7 +5172,8 @@ const d=localStorage.getItem('editingUnlocked')==='true';if(task){const e=task.d
                         console.error(`Element with id "${id}" not found!`);
                     }
                 });
-                document.getElementById('task-project')?.focus();
+                const taskProjectEl = document.getElementById('task-project');
+                if (taskProjectEl) taskProjectEl.focus();
             }, 50); // A short delay is enough
         }
 
