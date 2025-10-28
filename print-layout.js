@@ -1,0 +1,267 @@
+/**
+ * Print Layout Components - Modular layout system for print reports
+ * Handles component creation and layout management
+ */
+
+// ============================================
+// LAYOUT COMPONENT CREATORS
+// ============================================
+
+/**
+ * Create a department header component
+ */
+function createDepartmentHeader(dept, printType, colors) {
+    const header = document.createElement('div');
+    header.className = `print-department-header department-${normalizeDepartmentClass(dept)}`;
+    
+    if (printType === 'day') {
+        header.classList.add('print-department-header-day');
+    }
+    
+    const deptText = dept === 'Special Events' ? dept.replace(' ', '<br>') : dept;
+    header.innerHTML = `<div style="background-color: ${colors.bg}; color: ${colors.text}; padding: 8pt; border-radius: 4pt; font-weight: bold; text-align: center; font-size: 12pt; writing-mode: horizontal-tb; text-orientation: mixed;">${deptText}</div>`;
+    
+    return header;
+}
+
+/**
+ * Create a department summary component
+ */
+function createDepartmentSummary(dept, totalHours, revenue) {
+    const summary = document.createElement('div');
+    summary.className = 'print-dept-summary';
+    summary.textContent = `${dept} - Total Hours: ${Math.round(totalHours)}, Revenue: $${revenue.toLocaleString()}`;
+    return summary;
+}
+
+/**
+ * Create table header row
+ */
+function createTableHeader(dates, printType) {
+    const thead = document.createElement('thead');
+    const headerRow = document.createElement('tr');
+    
+    if (printType === 'week') {
+        dates.forEach(date => {
+            const th = document.createElement('th');
+            th.innerHTML = `${date.toLocaleDateString('en-US', { weekday: 'short' })}<br>${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+            headerRow.appendChild(th);
+        });
+    } else {
+        // Daily print headers
+        const headers = [
+            dates[0].toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' }),
+            'Revenue', 'Mid-Day', 'End of Day'
+        ];
+        headers.forEach(text => {
+            const th = document.createElement('th');
+            th.textContent = text;
+            headerRow.appendChild(th);
+        });
+    }
+    
+    thead.appendChild(headerRow);
+    return thead;
+}
+
+/**
+ * Create table footer with daily totals
+ */
+function createTableFooter(dates, tasks, printType) {
+    if (printType !== 'week') return null;
+    
+    const tfoot = document.createElement('tfoot');
+    const revenueRow = document.createElement('tr');
+    revenueRow.style.borderTop = '2px solid #000';
+    revenueRow.style.fontSize = '0.4rem';
+    
+    dates.forEach(date => {
+        const dateString = date.toDateString();
+        const dayTasks = tasks.filter(t => {
+            const taskDate = parseDate(t.date);
+            return taskDate && taskDate.toDateString() === dateString;
+        });
+        
+        let dayHours = 0;
+        dayTasks.forEach(task => {
+            const hours = parseFloat(task.hours);
+            if (!isNaN(hours)) dayHours += hours;
+        });
+        const dayRevenue = Math.round(dayHours * 135);
+        
+        const revenueCell = document.createElement('td');
+        revenueCell.textContent = `Daily: $${dayRevenue.toLocaleString()}`;
+        revenueCell.style.fontWeight = 'bold';
+        revenueCell.style.textAlign = 'center';
+        revenueRow.appendChild(revenueCell);
+    });
+    
+    tfoot.appendChild(revenueRow);
+    return tfoot;
+}
+
+/**
+ * Create a task card for printing
+ */
+function createPrintTaskCard(task, departmentClass) {
+    const card = document.createElement('div');
+    card.className = `print-task-card department-${departmentClass}`;
+    
+    const colors = getDepartmentColorMapping()[departmentClass] || { bg: '#333', text: '#FFFFFF' };
+    
+    // Calculate revenue based on hours
+    const hours = parseFloat(task.hours || 0);
+    const revenue = hours * 135;
+    
+    card.innerHTML = `
+        <div class="print-task-title" style="background-color: ${colors.bg} !important; color: ${colors.text} !important;">
+            ${task.project || 'Unknown Project'}
+        </div>
+        <div class="print-project-description">
+            ${task.projectDescription || ''}
+        </div>
+        <div class="print-task-day-counter">
+            ${task.dayCounter || ''}
+        </div>
+        <div class="print-task-description">
+            ${task.description && task.description.trim() ? task.description : '<span class="print-missing-description">Staging Missing</span>'}
+        </div>
+        <div class="print-task-details">
+            ${task.missingDate ? '<strong>Date:</strong> Missing<br>' : ''}
+            <strong>Hours:</strong> ${hours.toFixed(1)} | <strong>Revenue:</strong> $${revenue.toLocaleString()}
+        </div>
+    `;
+    
+    return card;
+}
+
+/**
+ * Create table body with task rows
+ */
+function createTableBody(dates, tasks, maxTasks, printType) {
+    const tbody = document.createElement('tbody');
+    
+    if (printType === 'week') {
+        for (let row = 0; row < maxTasks; row++) {
+            const tr = document.createElement('tr');
+            
+            dates.forEach(date => {
+                const dateString = date.toDateString();
+                const dayTasks = tasks.filter(t => {
+                    const taskDate = parseDate(t.date);
+                    return taskDate && taskDate.toDateString() === dateString;
+                });
+                
+                const td = document.createElement('td');
+                td.className = 'print-grid-cell';
+                
+                if (dayTasks[row]) {
+                    const task = dayTasks[row];
+                    const departmentClass = normalizeDepartmentClass(task.department);
+                    const card = createPrintTaskCard(task, departmentClass);
+                    td.appendChild(card);
+                }
+                
+                tr.appendChild(td);
+            });
+            
+            tbody.appendChild(tr);
+        }
+    } else {
+        // Daily print layout
+        for (let row = 0; row < maxTasks; row++) {
+            const tr = document.createElement('tr');
+            const dateString = dates[0].toDateString();
+            const dayTasks = tasks.filter(t => {
+                const taskDate = parseDate(t.date);
+                return taskDate && taskDate.toDateString() === dateString;
+            });
+            const task = dayTasks[row];
+            
+            // Task cell
+            const taskCell = document.createElement('td');
+            taskCell.className = 'print-grid-cell';
+            taskCell.style.width = '60%';
+            if (task) {
+                const departmentClass = normalizeDepartmentClass(task.department);
+                const card = createPrintTaskCard(task, departmentClass);
+                card.style.margin = '0 auto';
+                card.style.maxWidth = '180px';
+                taskCell.appendChild(card);
+            }
+            tr.appendChild(taskCell);
+            
+            // Revenue cell
+            const revenueCell = document.createElement('td');
+            revenueCell.className = 'print-grid-cell';
+            revenueCell.style.textAlign = 'center';
+            revenueCell.style.fontSize = '0.5rem';
+            revenueCell.style.fontWeight = 'bold';
+            revenueCell.style.width = '13.33%';
+            if (task && task.hours) {
+                const hours = parseFloat(task.hours);
+                const revenue = isNaN(hours) ? 0 : Math.round(Math.round(hours) * 135);
+                revenueCell.textContent = `$${revenue.toLocaleString()}`;
+            } else {
+                revenueCell.textContent = '';
+            }
+            tr.appendChild(revenueCell);
+            
+            // Mid-Day cell (blank)
+            const midDayCell = document.createElement('td');
+            midDayCell.className = 'print-grid-cell';
+            midDayCell.style.textAlign = 'center';
+            midDayCell.style.width = '13.33%';
+            midDayCell.textContent = '';
+            tr.appendChild(midDayCell);
+            
+            // End of Day cell (blank)
+            const endOfDayCell = document.createElement('td');
+            endOfDayCell.className = 'print-grid-cell';
+            endOfDayCell.style.textAlign = 'center';
+            endOfDayCell.style.width = '13.33%';
+            endOfDayCell.textContent = '';
+            tr.appendChild(endOfDayCell);
+            
+            tbody.appendChild(tr);
+        }
+    }
+    
+    return tbody;
+}
+
+/**
+ * Create a complete table for a department
+ */
+function createDepartmentTable(dept, tasks, dates, printType, isCompact) {
+    const table = document.createElement('table');
+    table.className = `print-table ${printType === 'day' ? 'print-table-day daily-print' : ''} ${isCompact ? 'compact' : ''}`;
+    
+    // Add header
+    const thead = createTableHeader(dates, printType);
+    table.appendChild(thead);
+    
+    // Add body
+    const maxTasks = getMaxTasksForDept(dept, tasks, dates, printType);
+    const tbody = createTableBody(dates, tasks, maxTasks, printType);
+    table.appendChild(tbody);
+    
+    // Add footer (week view only)
+    const tfoot = createTableFooter(dates, tasks, printType);
+    if (tfoot) {
+        table.appendChild(tfoot);
+    }
+    
+    return table;
+}
+
+// Export layout components
+window.PrintLayout = {
+    createDepartmentHeader,
+    createDepartmentSummary,
+    createTableHeader,
+    createTableFooter,
+    createPrintTaskCard,
+    createTableBody,
+    createDepartmentTable
+};

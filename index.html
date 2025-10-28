@@ -5,9 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📋</text></svg>">
     <title>Weekly Schedule Task Viewer</title>
-    <style>:root{--background-primary:#F3F4F6;--background-secondary:#FFFFFF;--text-primary:#1F2937;--text-secondary:#6B7280;--border-primary:#E5E7EB;--border-secondary:#D1D5DB;--accent-primary:#4F46E5;--accent-primary-hover:#4338CA;--shadow-sm:0 1px 2px 0 rgb(0 0 0 / 0.05);--shadow-md:0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);--border-radius-md:.5rem;--border-radius-lg:.75rem;--color-mill:#06B6D4;--color-mill-text:#FFFFFF;--color-form-out:#3B82F6;--color-form-out-text:#FFFFFF;--color-cast:#EF4444;--color-cast-text:#FFFFFF;--color-batch:#800000;--color-batch-text:#FFFFFF;--color-layout:#A16207;--color-layout-text:#FFFFFF;--color-demold:#F97316;--color-demold-text:#FFFFFF;--color-finish:#8B5CF6;--color-finish-text:#FFFFFF;--color-seal:#6B7280;--color-seal-text:#FFFFFF;--color-special:#EC4899;--color-special-text:#FFFFFF;--color-crating:#A16207;--color-crating-text:#FFFFFF;--color-load:#F59E0B;--color-load-text:#FFFFFF;--color-ship:#22C55E;--color-ship-text:#FFFFFF;}
+   <link rel="stylesheet" href="styles.css">
+   <!-- Modular Print System -->
+   <script src="print-layout.js"></script>
+   <script src="print-renderer.js"></script>
+   <script src="print-utils.js"></script>
+   <script src="print-debug.js"></script>
+   <style>:root{--background-primary:#F3F4F6;--background-secondary:#FFFFFF;--text-primary:#1F2937;--text-secondary:#6B7280;--border-primary:#E5E7EB;--border-secondary:#D1D5DB;--accent-primary:#4F46E5;--accent-primary-hover:#4338CA;--shadow-sm:0 1px 2px 0 rgb(0 0 0 / 0.05);--shadow-md:0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);--border-radius-md:.5rem;--border-radius-lg:.75rem;--color-mill:#06B6D4;--color-mill-text:#FFFFFF;--color-form-out:#3B82F6;--color-form-out-text:#FFFFFF;--color-cast:#EF4444;--color-cast-text:#FFFFFF;--color-batch:#800000;--color-batch-text:#FFFFFF;--color-layout:#A16207;--color-layout-text:#FFFFFF;--color-demold:#F97316;--color-demold-text:#FFFFFF;--color-finish:#8B5CF6;--color-finish-text:#FFFFFF;--color-seal:#6B7280;--color-seal-text:#FFFFFF;--color-special:#EC4899;--color-special-text:#FFFFFF;--color-crating:#A16207;--color-crating-text:#FFFFFF;--color-load:#F59E0B;--color-load-text:#FFFFFF;--color-ship:#22C55E;--color-ship-text:#FFFFFF;}
 
-        *{margin:0;padding:0;box-sizing:border-box;}html{height:100vh;}body{font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif,'Apple Color Emoji','Segoe UI Emoji','Segoe UI Symbol';background-color:var(--background-primary);color:var(--text-primary);line-height:1.6;height:125vh;width:125vw;overflow:hidden;transform:scale(0.8);transform-origin:top left;}.container{width:100%;padding:2rem;box-sizing:border-box;display:flex;flex-direction:column;height:100%;position:relative;}header{text-align:center;margin-bottom:2.5rem;}h1{font-size:2.5rem;font-weight:700;color:var(--text-primary);margin-bottom:.5rem;}header p{font-size:1.125rem;color:var(--text-secondary);}.controls{display:flex;justify-content:space-between;align-items:center;margin-bottom:2rem;flex-wrap:wrap;gap:1rem;}.filter-group{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;}.search-group{position:relative;display:flex;flex-direction:column;}.search-input{padding:.625rem 1rem;border:1px solid var(--border-primary);border-radius:var(--border-radius-md);font-size:.875rem;background-color:var(--background-secondary);transition:all .2s ease-in-out;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;width:250px;}.search-input:focus{outline:2px solid transparent;outline-offset:2px;box-shadow:0 0 0 2px var(--accent-primary);}.search-results{position:absolute;top:calc(100% + .5rem);left:0;width:100%;background-color:var(--background-secondary);border-radius:var(--border-radius-lg);box-shadow:var(--shadow-md);border:1px solid var(--border-primary);z-index:100;overflow:hidden;max-height:400px;overflow-y:auto;}.search-result-item{padding:.75rem 1rem;cursor:pointer;display:flex;flex-direction:column;border-bottom:1px solid var(--border-primary);transition:background-color .2s;}.search-result-item:last-child{border-bottom:none;}.search-result-item:hover{background-color:var(--background-primary);}.search-result-title{font-weight:600;color:var(--text-primary);font-size:.875rem;}.search-result-hours{font-size:.75rem;color:var(--text-secondary);margin-top:.25rem;}.action-group{display:flex;align-items:center;gap:.75rem;}.icon-btn{padding:.625rem;display:flex;align-items:center;justify-content:center;width:40px;height:40px;}.icon-btn svg{width:2rem;height:2rem;}.navigation-group{display:flex;align-items:center;gap:1rem;justify-content:center;flex-grow:1;}#week-display{font-size:1.25rem;font-weight:600;color:var(--text-primary);white-space:nowrap;}label{font-weight:500;font-size:.875rem;color:var(--text-secondary);}select,button{padding:.625rem 1rem;border:1px solid var(--border-primary);border-radius:var(--border-radius-md);font-size:.875rem;background-color:var(--background-secondary);transition:all .2s ease-in-out;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;}select:focus,button:focus{outline:2px solid transparent;outline-offset:2px;box-shadow:0 0 0 2px var(--accent-primary);}button{background-color:var(--accent-primary);color:white;font-weight:600;cursor:pointer;border:none;}button:hover{background-color:var(--accent-primary-hover);}
+       *{margin:0;padding:0;box-sizing:border-box;}html{height:100vh;}body{font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif,'Apple Color Emoji','Segoe UI Emoji','Segoe UI Symbol';background-color:var(--background-primary);color:var(--text-primary);line-height:1.6;height:125vh;width:125vw;overflow:hidden;transform:scale(0.8);transform-origin:top left;}.container{width:100%;padding:2rem;box-sizing:border-box;display:flex;flex-direction:column;height:100%;position:relative;}header{text-align:center;margin-bottom:2.5rem;}h1{font-size:2.5rem;font-weight:700;color:var(--text-primary);margin-bottom:.5rem;}header p{font-size:1.125rem;color:var(--text-secondary);}.controls{display:flex;justify-content:space-between;align-items:center;margin-bottom:2rem;flex-wrap:wrap;gap:1rem;}.filter-group{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;}.search-group{position:relative;display:flex;flex-direction:column;}.search-input{padding:.625rem 1rem;border:1px solid var(--border-primary);border-radius:var(--border-radius-md);font-size:.875rem;background-color:var(--background-secondary);transition:all .2s ease-in-out;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;width:250px;}.search-input:focus{outline:2px solid transparent;outline-offset:2px;box-shadow:0 0 0 2px var(--accent-primary);}.search-results{position:absolute;top:calc(100% + .5rem);left:0;width:100%;background-color:var(--background-secondary);border-radius:var(--border-radius-lg);box-shadow:var(--shadow-md);border:1px solid var(--border-primary);z-index:100;overflow:hidden;max-height:400px;overflow-y:auto;}.search-result-item{padding:.75rem 1rem;cursor:pointer;display:flex;flex-direction:column;border-bottom:1px solid var(--border-primary);transition:background-color .2s;}.search-result-item:last-child{border-bottom:none;}.search-result-item:hover{background-color:var(--background-primary);}.search-result-title{font-weight:600;color:var(--text-primary);font-size:.875rem;}.search-result-hours{font-size:.75rem;color:var(--text-secondary);margin-top:.25rem;}.action-group{display:flex;align-items:center;gap:.75rem;}.icon-btn{padding:.625rem;display:flex;align-items:center;justify-content:center;width:40px;height:40px;}.icon-btn svg{width:2rem;height:2rem;}.navigation-group{display:flex;align-items:center;gap:1rem;justify-content:center;flex-grow:1;}#week-display{font-size:1.25rem;font-weight:600;color:var(--text-primary);white-space:nowrap;}label{font-weight:500;font-size:.875rem;color:var(--text-secondary);}select,button{padding:.625rem 1rem;border:1px solid var(--border-primary);border-radius:var(--border-radius-md);font-size:.875rem;background-color:var(--background-secondary);transition:all .2s ease-in-out;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;}select:focus,button:focus{outline:2px solid transparent;outline-offset:2px;box-shadow:0 0 0 2px var(--accent-primary);}button{background-color:var(--accent-primary);color:white;font-weight:600;cursor:pointer;border:none;}button:hover{background-color:var(--accent-primary-hover);}
 
 .schedule-wrapper{overflow-x:scroll;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch;scrollbar-width:thin;flex-grow:1;overflow-y:auto;contain:layout style paint;will-change:scroll-position;}.schedule-wrapper::-webkit-scrollbar{height:12px;width:0;}.schedule-wrapper::-webkit-scrollbar-track{background:#f1f1f1;}.schedule-wrapper::-webkit-scrollbar-thumb{background:#555;border-radius:4px;}.schedule-wrapper::-webkit-scrollbar-thumb:hover{background:#333;}.schedule-container{display:flex;width:max-content;align-items:flex-start;}.schedule-grid{display:grid;grid-template-columns:minmax(140px,1fr) repeat(6,minmax(180px,2fr));width:100%;scroll-snap-align:start;background-color:var(--background-secondary);border-radius:var(--border-radius-lg);box-shadow:var(--shadow-md);border:1px solid var(--border-primary);}.grid-header{font-weight:600;font-size:.75rem;padding:1rem .75rem;color:var(--text-secondary);text-align:center;border-bottom:2px solid var(--border-secondary);text-transform:uppercase;letter-spacing:.05em;line-height:1.2;display:flex;align-items:center;justify-content:center;height:4.5rem;position:sticky;top:0;background-color:var(--background-secondary);z-index:10;}.grid-header:first-child{left:0;z-index:15;}.date-weekday{font-size:.7rem;font-weight:500;color:var(--text-secondary);}.date-day{font-size:1.1rem;font-weight:600;color:var(--text-primary);}.grid-cell{padding:.75rem;border-bottom:2px solid var(--border-primary);border-right:2px solid var(--border-primary);}.grid-cell:last-child{border-right:none;}.department-label{font-weight:600;font-size:3rem;padding:.25rem .75rem;color:#fff;text-align:center;border-right:2px solid var(--border-primary);display:flex;align-items:center;justify-content:center;background-color:transparent;position:sticky;left:0;z-index:5;writing-mode:vertical-rl;text-orientation:mixed;}
 
@@ -772,178 +778,6 @@
             display: none;
         }
 
-        @media print {
-            @page {
-                size: letter landscape;
-                margin: 0.25in;
-            }
-            body > * {
-                display: none !important;
-            }
-            .print-preview-content {
-                display: block !important;
-                position: relative;
-                width: 100%;
-                height: auto;
-            }
-            .print-page {
-                page-break-after: always;
-                margin: 0 0 0.5rem 0;
-                padding: 0;
-                width: 10.5in;
-                box-sizing: border-box;
-                background: white;
-            }
-            .print-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 14pt;
-                background: white;
-                margin: 0;
-            }
-            .print-table th, .print-table td {
-                border: 1px solid #000;
-                padding: 8pt;
-                text-align: center;
-                vertical-align: top;
-                font-size: 14pt;
-            }
-            .print-table th {
-                background: #f0f0f0;
-                font-weight: bold;
-                font-size: 7pt !important;
-            }
-            .print-grid-cell {
-                background: white;
-                min-height: 80pt;
-                padding: 6pt;
-            }
-            .print-task-grid {
-                border: none;
-                background: white;
-                padding: 4pt;
-                margin: 2pt 0;
-                font-size: 12pt;
-                color: black;
-                display: block;
-                min-height: 60pt;
-            }
-            .print-task-title {
-                font-weight: bold !important;
-                font-size: 8pt !important;
-                margin-bottom: 4pt;
-                color: white !important;
-                text-align: center;
-                background-color: var(--bg-color, #333) !important;
-                padding: 2pt 4pt !important;
-                border-radius: 2pt !important;
-                display: inline-block !important;
-                width: 100% !important;
-                box-sizing: border-box !important;
-                print-color-adjust: exact !important;
-                -webkit-print-color-adjust: exact !important;
-            }
-            /* Force department colors for all print task titles - higher specificity */
-            .print-task-card.department-mill .print-task-title,
-            .print-task-grid.department-mill .print-task-title {
-                background-color: var(--color-mill) !important;
-                color: var(--color-mill-text) !important;
-            }
-            .print-task-card.department-form-out .print-task-title,
-            .print-task-grid.department-form-out .print-task-title {
-                background-color: var(--color-form-out) !important;
-                color: var(--color-form-out-text) !important;
-            }
-            .print-task-card.department-cast .print-task-title,
-            .print-task-grid.department-cast .print-task-title {
-                background-color: var(--color-cast) !important;
-                color: var(--color-cast-text) !important;
-            }
-            .print-task-card.department-batch .print-task-title,
-            .print-task-grid.department-batch .print-task-title {
-                background-color: var(--color-batch) !important;
-                color: var(--color-batch-text) !important;
-            }
-            .print-task-card.department-layout .print-task-title,
-            .print-task-grid.department-layout .print-task-title {
-                background-color: var(--color-layout) !important;
-                color: var(--color-layout-text) !important;
-            }
-            .print-task-card.department-demold .print-task-title,
-            .print-task-grid.department-demold .print-task-title {
-                background-color: var(--color-demold) !important;
-                color: var(--color-demold-text) !important;
-            }
-            .print-task-card.department-finish .print-task-title,
-            .print-task-grid.department-finish .print-task-title {
-                background-color: var(--color-finish) !important;
-                color: var(--color-finish-text) !important;
-            }
-            .print-task-card.department-seal .print-task-title,
-            .print-task-grid.department-seal .print-task-title {
-                background-color: var(--color-seal) !important;
-                color: var(--color-seal-text) !important;
-            }
-            .print-task-card.department-special .print-task-title,
-            .print-task-grid.department-special .print-task-title {
-                background-color: var(--color-special) !important;
-                color: var(--color-special-text) !important;
-            }
-            .print-task-card.department-crating .print-task-title,
-            .print-task-grid.department-crating .print-task-title {
-                background-color: var(--color-crating) !important;
-                color: var(--color-crating-text) !important;
-            }
-            .print-task-card.department-load .print-task-title,
-            .print-task-grid.department-load .print-task-title {
-                background-color: var(--color-load) !important;
-                color: var(--color-load-text) !important;
-            }
-            .print-task-card.department-ship .print-task-title,
-            .print-task-grid.department-ship .print-task-title {
-                background-color: var(--color-ship) !important;
-                color: var(--color-ship-text) !important;
-            }
-            .print-task-description {
-                font-size: 8pt !important;
-                font-weight: bold !important;
-                margin-bottom: 6pt;
-                color: black !important;
-                text-align: center;
-                line-height: 1.2;
-            }
-            .print-task-details {
-                font-size: 7pt !important;
-                font-weight: bold !important;
-                color: black !important;
-                text-align: center;
-                margin-top: 4pt;
-            }
-            .print-department-header {
-                font-weight: bold;
-                background: #e0e0e0;
-                color: black;
-                font-size: 18pt;
-                padding: 12pt;
-                writing-mode: vertical-rl;
-                text-orientation: mixed;
-                width: 60pt;
-                border: 2px solid #000;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-            }
-            .print-dept-summary {
-                font-weight: bold;
-                font-size: 12pt;
-                color: black;
-                margin: 8pt 0;
-                text-align: center;
-                border: 1px solid #000;
-                background: white;
-                padding: 6pt;
-            }
-        }
 
         /* --- Success Notification --- */
         .project-success-notification {
@@ -3255,6 +3089,30 @@ const d=localStorage.getItem('editingUnlocked')==='true';if(task){const e=task.d
         }
 
         function generatePrintContent() {
+            // Use the externalized print utilities
+            const printType = document.querySelector('input[name="print-type"]:checked').value;
+            const selectedDepts = Array.from(document.querySelectorAll('.departments-grid input[type="checkbox"]:checked')).map(cb => cb.value);
+
+            if (selectedDepts.length === 0) {
+                alert('Please select at least one department.');
+                return;
+            }
+
+            // Update week dates based on selected week
+            if (printType === 'week') {
+                updateWeekDates();
+            }
+
+            // Generate print content using external utilities
+            const printContent = window.PrintUtils.generatePrintContent(printType, selectedDepts, currentPrintWeekDates, allTasks);
+
+            if (printContent) {
+                window.PrintUtils.executePrint(printContent, printType);
+            }
+        }
+
+        // Keep the old function as backup for now - will be removed after testing
+        function generatePrintContent_old() {
             const printType = document.querySelector('input[name="print-type"]:checked').value;
             let selectedDepts = Array.from(document.querySelectorAll('.departments-grid input[type="checkbox"]:checked')).map(cb => cb.value);
 
@@ -4189,7 +4047,10 @@ const d=localStorage.getItem('editingUnlocked')==='true';if(task){const e=task.d
 
                 printContainer.appendChild(pageDiv);
                 // Remove page break after the last department to avoid extra blank page
-                if (index === selectedDepts.length - 1) {
+                // Only add page breaks between departments, not after the last one
+                if (index < selectedDepts.length - 1) {
+                    pageDiv.style.pageBreakAfter = 'always';
+                } else {
                     pageDiv.style.pageBreakAfter = 'auto';
                 }
             });

@@ -1,0 +1,289 @@
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    margin: 0;
+    padding: 2rem;
+    background-color: #f8f9fa;
+    color: #212529;
+}
+h1 {
+    text-align: center;
+    color: #343a40;
+    font-size: 2.5rem;
+    margin-bottom: 2rem;
+}
+.week-container {
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    background-color: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+h2 {
+    color: #007bff;
+    border-bottom: 2px solid #dee2e6;
+    padding-bottom: 0.5rem;
+    margin-top: 0;
+}
+ul {
+    list-style-type: none;
+    padding-left: 0;
+}
+li {
+    padding: 0.75rem 0;
+    border-bottom: 1px solid #e9ecef;
+}
+li:last-child {
+    border-bottom: none;
+}
+
+/* Print-specific styles for project_starts.html */
+@media print {
+    body {
+        background-color: white !important;
+        color: black !important;
+        margin: 0;
+        padding: 0.5in;
+        font-size: 12pt;
+    }
+    h1 {
+        color: black !important;
+        page-break-after: avoid;
+        font-size: 18pt;
+    }
+    .week-container {
+        background-color: white !important;
+        border: 1px solid #ccc;
+        box-shadow: none !important;
+        page-break-inside: avoid;
+        margin-bottom: 1rem;
+    }
+    h2 {
+        color: black !important;
+        border-bottom: 1px solid #000;
+        page-break-after: avoid;
+    }
+    ul {
+        margin: 0;
+        padding: 0;
+    }
+    li {
+        border-bottom: 1px solid #000;
+        padding: 0.25rem 0;
+        page-break-inside: avoid;
+    }
+    li:last-child {
+        border-bottom: none;
+    }
+}
+
+/* Print-specific styles for index.html (weekly and daily reports) */
+@media print {
+    @page {
+        size: letter landscape;
+        margin: 0.25in;
+    }
+    body > * {
+        display: none !important;
+    }
+    .print-preview-content {
+        display: block !important;
+        position: relative;
+        width: 100%;
+        height: auto;
+    }
+    .print-page {
+        page-break-after: auto;
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 10.5in;
+        box-sizing: border-box;
+        background: white;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: center !important;
+        align-items: center !important;
+        min-height: 7.5in;
+    }
+    .print-page-day {
+        min-height: 10in !important;
+    }
+    .print-page:last-child {
+        page-break-after: avoid !important;
+        break-after: avoid !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    .print-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14pt;
+        background: white;
+        margin: 0;
+    }
+    .print-table th, .print-table td {
+        border: 1px solid #000;
+        padding: 8pt;
+        text-align: center;
+        vertical-align: top;
+        font-size: 14pt;
+    }
+    .print-table th {
+        background: #f0f0f0;
+        font-weight: bold;
+        font-size: 7pt !important;
+    }
+    .print-grid-cell {
+        background: white;
+        min-height: 80pt;
+        padding: 6pt;
+    }
+    .print-task-grid {
+        border: none;
+        background: white;
+        padding: 4pt;
+        margin: 2pt 0;
+        font-size: 12pt;
+        color: black;
+        display: block;
+        min-height: 60pt;
+    }
+    .print-task-title {
+        font-weight: bold !important;
+        font-size: 8pt !important;
+        margin-bottom: 4pt;
+        color: white !important;
+        text-align: center;
+        background-color: var(--bg-color, #333) !important;
+        padding: 2pt 4pt !important;
+        border-radius: 2pt !important;
+        display: inline-block !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+        print-color-adjust: exact !important;
+        -webkit-print-color-adjust: exact !important;
+    }
+    /* Force department colors for all print task titles - higher specificity */
+    .print-task-card.department-mill .print-task-title,
+    .print-task-grid.department-mill .print-task-title {
+        background-color: var(--color-mill) !important;
+        color: var(--color-mill-text) !important;
+    }
+    .print-task-card.department-form-out .print-task-title,
+    .print-task-grid.department-form-out .print-task-title {
+        background-color: var(--color-form-out) !important;
+        color: var(--color-form-out-text) !important;
+    }
+    .print-task-card.department-cast .print-task-title,
+    .print-task-grid.department-cast .print-task-title {
+        background-color: var(--color-cast) !important;
+        color: var(--color-cast-text) !important;
+    }
+    .print-task-card.department-batch .print-task-title,
+    .print-task-grid.department-batch .print-task-title {
+        background-color: var(--color-batch) !important;
+        color: var(--color-batch-text) !important;
+    }
+    .print-task-card.department-layout .print-task-title,
+    .print-task-grid.department-layout .print-task-title {
+        background-color: var(--color-layout) !important;
+        color: var(--color-layout-text) !important;
+    }
+    .print-task-card.department-demold .print-task-title,
+    .print-task-grid.department-demold .print-task-title {
+        background-color: var(--color-demold) !important;
+        color: var(--color-demold-text) !important;
+    }
+    .print-task-card.department-finish .print-task-title,
+    .print-task-grid.department-finish .print-task-title {
+        background-color: var(--color-finish) !important;
+        color: var(--color-finish-text) !important;
+    }
+    .print-task-card.department-seal .print-task-title,
+    .print-task-grid.department-seal .print-task-title {
+        background-color: var(--color-seal) !important;
+        color: var(--color-seal-text) !important;
+    }
+    .print-task-card.department-special .print-task-title,
+    .print-task-grid.department-special .print-task-title {
+        background-color: var(--color-special) !important;
+        color: var(--color-special-text) !important;
+    }
+    .print-task-card.department-crating .print-task-title,
+    .print-task-grid.department-crating .print-task-title {
+        background-color: var(--color-crating) !important;
+        color: var(--color-crating-text) !important;
+    }
+    .print-task-card.department-load .print-task-title,
+    .print-task-grid.department-load .print-task-title {
+        background-color: var(--color-load) !important;
+        color: var(--color-load-text) !important;
+    }
+    .print-task-card.department-ship .print-task-title,
+    .print-task-grid.department-ship .print-task-title {
+        background-color: var(--color-ship) !important;
+        color: var(--color-ship-text) !important;
+    }
+    .print-task-description {
+        font-size: 8pt !important;
+        font-weight: bold !important;
+        margin-bottom: 6pt;
+        color: black !important;
+        text-align: center;
+        line-height: 1.2;
+    }
+    .print-task-details {
+        font-size: 7pt !important;
+        font-weight: bold !important;
+        color: black !important;
+        text-align: center;
+        margin-top: 4pt;
+    }
+    .print-department-header {
+        font-weight: bold;
+        background: #e0e0e0;
+        color: black;
+        font-size: 18pt;
+        padding: 12pt;
+        writing-mode: vertical-rl;
+        text-orientation: mixed;
+        width: 60pt;
+        border: 2px solid #000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .print-dept-summary {
+        font-weight: bold;
+        font-size: 12pt;
+        color: black;
+        margin: 8pt 0;
+        text-align: center;
+        border: 1px solid #000;
+        background: white;
+        padding: 6pt;
+    }
+    .print-page.daily-print th,
+    .print-page.daily-print td {
+        padding: .3rem;
+    }
+    .print-page.daily-print .print-grid-cell {
+        min-height: 60px;
+    }
+    .print-page.daily-print .print-task-card {
+        min-height: 60px;
+        font-size: .9rem;
+        padding: .3rem;
+    }
+    .print-page.daily-print .print-task-title {
+        font-size: 1rem;
+        padding: .2rem;
+    }
+    .print-page.daily-print .print-task-description {
+        font-size: 1rem;
+        margin-bottom: .3rem;
+    }
+    .print-page.daily-print .print-task-details {
+        font-size: .7rem;
+        padding-top: .2rem;
+    }
+}
