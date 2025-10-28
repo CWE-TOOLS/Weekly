@@ -47,30 +47,115 @@ function getDepartmentColorMapping() {
 }
 
 /**
- * Parse date from various formats (MM/DD/YYYY, YYYY-MM-DD, Date object)
+ * Parse date from various formats (MM/DD/YYYY, YYYY-MM-DD, Date object, etc.)
  */
 function parseDate(dateStr) {
     if (!dateStr) return null;
     if (dateStr instanceof Date) return dateStr;
 
-    // Handle MM/DD/YYYY format
-    const slashParts = dateStr.split('/');
+    // Trim whitespace
+    const trimmed = dateStr.toString().trim();
+
+    // Handle slash-separated formats: MM/DD/YYYY, DD/MM/YYYY, MM/DD/YY, DD/MM/YY
+    const slashParts = trimmed.split('/');
     if (slashParts.length === 3) {
-        const [month, day, year] = slashParts.map(Number);
+        let [part1, part2, part3] = slashParts.map(s => s.trim());
+        let month, day, year;
+
+        // Determine if it's MM/DD/YYYY or DD/MM/YYYY based on first part
+        const num1 = Number(part1);
+        const num2 = Number(part2);
+        let num3 = Number(part3);
+
+        // Handle 2-digit years
+        if (num3 < 100) {
+            num3 += num3 < 50 ? 2000 : 1900; // Assume 1950-2049 range
+        }
+
+        if (num1 > 12) {
+            // Must be DD/MM/YYYY format
+            day = num1;
+            month = num2;
+            year = num3;
+        } else if (num2 > 12) {
+            // Must be MM/DD/YYYY format
+            month = num1;
+            day = num2;
+            year = num3;
+        } else {
+            // Ambiguous, assume MM/DD/YYYY (US format)
+            month = num1;
+            day = num2;
+            year = num3;
+        }
+
         const date = new Date(year, month - 1, day);
-        return isNaN(date.getTime()) ? null : date;
+        if (!isNaN(date.getTime())) return date;
     }
 
-    // Handle YYYY-MM-DD format
-    const dashParts = dateStr.split('-');
+    // Handle dash-separated formats: YYYY-MM-DD, DD-MM-YYYY, MM-DD-YYYY
+    const dashParts = trimmed.split('-');
     if (dashParts.length === 3) {
-        const [year, month, day] = dashParts.map(Number);
+        let [part1, part2, part3] = dashParts.map(s => s.trim());
+        let year, month, day;
+
+        const num1 = Number(part1);
+        const num2 = Number(part2);
+        const num3 = Number(part3);
+
+        if (num1 > 31) {
+            // YYYY-MM-DD format
+            year = num1;
+            month = num2;
+            day = num3;
+        } else if (num2 > 12) {
+            // DD-MM-YYYY format
+            day = num1;
+            month = num2;
+            year = num3;
+        } else {
+            // Assume MM-DD-YYYY or DD-MM-YYYY, try both
+            // First try MM-DD-YYYY
+            let date = new Date(num3, num1 - 1, num2);
+            if (!isNaN(date.getTime())) return date;
+
+            // Then try DD-MM-YYYY
+            date = new Date(num3, num2 - 1, num1);
+            if (!isNaN(date.getTime())) return date;
+        }
+
         const date = new Date(year, month - 1, day);
-        return isNaN(date.getTime()) ? null : date;
+        if (!isNaN(date.getTime())) return date;
     }
 
-    // Try standard date parsing
-    const date = new Date(dateStr);
+    // Handle dot-separated formats: DD.MM.YYYY, MM.DD.YYYY
+    const dotParts = trimmed.split('.');
+    if (dotParts.length === 3) {
+        let [part1, part2, part3] = dotParts.map(s => s.trim());
+        let month, day, year;
+
+        const num1 = Number(part1);
+        const num2 = Number(part2);
+        const num3 = Number(part3);
+
+        // Assume DD.MM.YYYY (common European format)
+        if (num1 > 12) {
+            day = num1;
+            month = num2;
+        } else {
+            // Could be ambiguous, assume DD.MM.YYYY
+            day = num1;
+            month = num2;
+        }
+        year = num3;
+        if (year < 100) year += year < 50 ? 2000 : 1900;
+
+        const date = new Date(year, month - 1, day);
+        if (!isNaN(date.getTime())) return date;
+    }
+
+    // Try standard date parsing as fallback
+    const date = new Date(trimmed);
     return isNaN(date.getTime()) ? null : date;
 }
 
@@ -88,25 +173,30 @@ function normalizeDepartmentClass(dept) {
 function getMaxTasksForDept(dept, tasks, dates, printType) {
     if (dept === 'Batch' || dept === 'Layout') return 1;
 
-    let max = 0;
+    const deptTasks = tasks.filter(t => t.department === dept);
+
     if (printType === 'week') {
+        if (!dates || dates.length === 0) return 0;
+        let max = 0;
         dates.forEach(date => {
+            if (!date) return;
             const dateString = date.toDateString();
-            const count = tasks.filter(t => {
+            const count = deptTasks.filter(t => {
                 const taskDate = parseDate(t.date);
                 return taskDate && taskDate.toDateString() === dateString;
             }).length;
             if (count > max) max = count;
         });
+        return max;
     } else {
+        // For daily print, count all tasks for the specific day
+        if (!dates || dates.length === 0) return 0;
         const dateString = dates[0].toDateString();
-        const count = tasks.filter(t => {
+        return deptTasks.filter(t => {
             const taskDate = parseDate(t.date);
             return taskDate && taskDate.toDateString() === dateString;
         }).length;
-        max = count;
     }
-    return max;
 }
 
 /**

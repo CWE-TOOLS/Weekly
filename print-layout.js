@@ -40,17 +40,19 @@ function createDepartmentSummary(dept, totalHours, revenue) {
 function createTableHeader(dates, printType) {
     const thead = document.createElement('thead');
     const headerRow = document.createElement('tr');
-    
+
     if (printType === 'week') {
         dates.forEach(date => {
+            if (!date) return;
             const th = document.createElement('th');
             th.innerHTML = `${date.toLocaleDateString('en-US', { weekday: 'short' })}<br>${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
             headerRow.appendChild(th);
         });
-    } else {
+    } else if (dates && dates.length > 0) {
         // Daily print headers
+        const singleDate = Array.isArray(dates) ? dates[0] : dates;
         const headers = [
-            dates[0].toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' }),
+            singleDate.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' }),
             'Revenue', 'Mid-Day', 'End of Day'
         ];
         headers.forEach(text => {
@@ -59,7 +61,7 @@ function createTableHeader(dates, printType) {
             headerRow.appendChild(th);
         });
     }
-    
+
     thead.appendChild(headerRow);
     return thead;
 }
@@ -69,33 +71,34 @@ function createTableHeader(dates, printType) {
  */
 function createTableFooter(dates, tasks, printType) {
     if (printType !== 'week') return null;
-    
+
     const tfoot = document.createElement('tfoot');
     const revenueRow = document.createElement('tr');
     revenueRow.style.borderTop = '2px solid #000';
     revenueRow.style.fontSize = '0.4rem';
-    
+
     dates.forEach(date => {
+        if (!date) return;
         const dateString = date.toDateString();
         const dayTasks = tasks.filter(t => {
             const taskDate = parseDate(t.date);
             return taskDate && taskDate.toDateString() === dateString;
         });
-        
+
         let dayHours = 0;
         dayTasks.forEach(task => {
             const hours = parseFloat(task.hours);
             if (!isNaN(hours)) dayHours += hours;
         });
         const dayRevenue = Math.round(dayHours * 135);
-        
+
         const revenueCell = document.createElement('td');
         revenueCell.textContent = `Daily: $${dayRevenue.toLocaleString()}`;
         revenueCell.style.fontWeight = 'bold';
         revenueCell.style.textAlign = 'center';
         revenueRow.appendChild(revenueCell);
     });
-    
+
     tfoot.appendChild(revenueRow);
     return tfoot;
 }
@@ -140,44 +143,67 @@ function createPrintTaskCard(task, departmentClass) {
  */
 function createTableBody(dates, tasks, maxTasks, printType) {
     const tbody = document.createElement('tbody');
-    
+
     if (printType === 'week') {
+        // Sort tasks by date and then by some consistent ordering
+        const sortedTasks = [...tasks].sort((a, b) => {
+            const dateA = parseDate(a.date);
+            const dateB = parseDate(b.date);
+            if (dateA && dateB) {
+                const dateDiff = dateA - dateB;
+                if (dateDiff !== 0) return dateDiff;
+            }
+            // If dates are the same, sort by some stable criteria (e.g., project name + description)
+            return (a.project + a.description).localeCompare(b.project + b.description);
+        });
+
+        // Group tasks by date
+        const tasksByDate = {};
+        dates.forEach(date => {
+            if (!date) return;
+            const dateString = date.toDateString();
+            tasksByDate[dateString] = sortedTasks.filter(t => {
+                const taskDate = parseDate(t.date);
+                return taskDate && taskDate.toDateString() === dateString;
+            });
+        });
+
         for (let row = 0; row < maxTasks; row++) {
             const tr = document.createElement('tr');
-            
+
             dates.forEach(date => {
+                if (!date) return;
                 const dateString = date.toDateString();
-                const dayTasks = tasks.filter(t => {
-                    const taskDate = parseDate(t.date);
-                    return taskDate && taskDate.toDateString() === dateString;
-                });
-                
+                const dayTasks = tasksByDate[dateString];
+
                 const td = document.createElement('td');
                 td.className = 'print-grid-cell';
-                
-                if (dayTasks[row]) {
+
+                if (dayTasks && dayTasks[row]) {
                     const task = dayTasks[row];
                     const departmentClass = normalizeDepartmentClass(task.department);
                     const card = createPrintTaskCard(task, departmentClass);
                     td.appendChild(card);
                 }
-                
+
                 tr.appendChild(td);
             });
-            
+
             tbody.appendChild(tr);
         }
-    } else {
+    } else if (dates && dates.length > 0) {
         // Daily print layout
+        const singleDate = Array.isArray(dates) ? dates[0] : dates;
+        const dateString = singleDate.toDateString();
+        const dayTasks = tasks.filter(t => {
+            const taskDate = parseDate(t.date);
+            return taskDate && taskDate.toDateString() === dateString;
+        }).sort((a, b) => (a.project + a.description).localeCompare(b.project + b.description)); // Sort for consistency
+
         for (let row = 0; row < maxTasks; row++) {
             const tr = document.createElement('tr');
-            const dateString = dates[0].toDateString();
-            const dayTasks = tasks.filter(t => {
-                const taskDate = parseDate(t.date);
-                return taskDate && taskDate.toDateString() === dateString;
-            });
             const task = dayTasks[row];
-            
+
             // Task cell
             const taskCell = document.createElement('td');
             taskCell.className = 'print-grid-cell';
@@ -190,7 +216,7 @@ function createTableBody(dates, tasks, maxTasks, printType) {
                 taskCell.appendChild(card);
             }
             tr.appendChild(taskCell);
-            
+
             // Revenue cell
             const revenueCell = document.createElement('td');
             revenueCell.className = 'print-grid-cell';
@@ -206,7 +232,7 @@ function createTableBody(dates, tasks, maxTasks, printType) {
                 revenueCell.textContent = '';
             }
             tr.appendChild(revenueCell);
-            
+
             // Mid-Day cell (blank)
             const midDayCell = document.createElement('td');
             midDayCell.className = 'print-grid-cell';
@@ -214,7 +240,7 @@ function createTableBody(dates, tasks, maxTasks, printType) {
             midDayCell.style.width = '13.33%';
             midDayCell.textContent = '';
             tr.appendChild(midDayCell);
-            
+
             // End of Day cell (blank)
             const endOfDayCell = document.createElement('td');
             endOfDayCell.className = 'print-grid-cell';
@@ -222,11 +248,11 @@ function createTableBody(dates, tasks, maxTasks, printType) {
             endOfDayCell.style.width = '13.33%';
             endOfDayCell.textContent = '';
             tr.appendChild(endOfDayCell);
-            
+
             tbody.appendChild(tr);
         }
     }
-    
+
     return tbody;
 }
 
@@ -242,9 +268,17 @@ function createDepartmentTable(dept, tasks, dates, printType, isCompact) {
     table.appendChild(thead);
     
     // Add body
-    const maxTasks = getMaxTasksForDept(dept, tasks, dates, printType);
-    const tbody = createTableBody(dates, tasks, maxTasks, printType);
-    table.appendChild(tbody);
+    if (printType === 'day') {
+        const dailyDate = Array.isArray(dates) ? dates[0] : dates;
+        const maxTasks = getMaxTasksForDept(dept, tasks, [dailyDate], 'day');
+        const tbody = createTableBody([dailyDate], tasks, maxTasks, 'day');
+        table.appendChild(tbody);
+    } else {
+        // Weekly view uses the full dates array
+        const maxTasks = getMaxTasksForDept(dept, tasks, dates, 'week');
+        const tbody = createTableBody(dates, tasks, maxTasks, 'week');
+        table.appendChild(tbody);
+    }
     
     // Add footer (week view only)
     const tfoot = createTableFooter(dates, tasks, printType);
