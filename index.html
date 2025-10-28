@@ -3081,6 +3081,11 @@ const d=localStorage.getItem('editingUnlocked')==='true';if(task){const e=task.d
         function updateWeekDates() {
             const selectedIndex = parseInt(document.getElementById('print-week-select').value);
             const selectedWeekStart = allWeekStartDates[selectedIndex];
+            if (!selectedWeekStart) {
+                console.error('Invalid week start date');
+                currentPrintWeekDates = [];
+                return;
+            }
             currentPrintWeekDates = Array.from({ length: 6 }).map((_, i) => {
                 const date = new Date(selectedWeekStart);
                 date.setDate(selectedWeekStart.getDate() + i);
@@ -3098,9 +3103,19 @@ const d=localStorage.getItem('editingUnlocked')==='true';if(task){const e=task.d
                 return;
             }
 
-            // Update week dates based on selected week
+            // Update dates based on print type
             if (printType === 'week') {
                 updateWeekDates();
+            } else if (printType === 'day') {
+                // For day print, set currentPrintWeekDates to contain only the selected date
+                const value = document.getElementById('print-date-select').value;
+                if (!value) {
+                    alert('Please select a date.');
+                    return;
+                }
+                const [year, month, day] = value.split('-').map(Number);
+                const selectedDate = new Date(year, month - 1, day);
+                currentPrintWeekDates = [selectedDate];
             }
 
             // Generate print content using external utilities
