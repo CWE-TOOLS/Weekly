@@ -151,9 +151,9 @@ function generatePrintContent(printType, selectedDepts, weekDates, allTasks) {
         if (printType === 'week') {
             deptTasks = deptTasks.filter(task => {
                 const taskDate = parseDate(task.date);
-                return taskDate && weekDates.some(date => date.toDateString() === taskDate.toDateString());
+                return taskDate && weekDates.some(date => date && date.toDateString() === taskDate.toDateString());
             });
-        } else {
+        } else if (weekDates && weekDates.length > 0 && weekDates[0]) {
             const dateString = weekDates[0].toDateString();
             deptTasks = deptTasks.filter(task => {
                 const taskDate = parseDate(task.date);
