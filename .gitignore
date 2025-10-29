@@ -1,0 +1,17 @@
+# Logs and diagnostic files
+gcm-diagnose.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+
+# Environment files
+.env
+.env.local
+
+# API keys
+set-api-key.ps1
