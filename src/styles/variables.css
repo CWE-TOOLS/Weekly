@@ -1,0 +1,63 @@
+/* CSS Custom Properties and Variables */
+:root {
+  /* Background Colors */
+  --background-primary: #F3F4F6;
+  --background-secondary: #FFFFFF;
+
+  /* Text Colors */
+  --text-primary: #1F2937;
+  --text-secondary: #6B7280;
+
+  /* Border Colors */
+  --border-primary: #E5E7EB;
+  --border-secondary: #D1D5DB;
+
+  /* Accent Colors */
+  --accent-primary: #4F46E5;
+  --accent-primary-hover: #4338CA;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+
+  /* Border Radius */
+  --border-radius-md: 0.5rem;
+  --border-radius-lg: 0.75rem;
+
+  /* Department Colors */
+  --color-mill: #06B6D4;
+  --color-mill-text: #FFFFFF;
+
+  --color-form-out: #3B82F6;
+  --color-form-out-text: #FFFFFF;
+
+  --color-cast: #EF4444;
+  --color-cast-text: #FFFFFF;
+
+  --color-batch: #800000;
+  --color-batch-text: #FFFFFF;
+
+  --color-layout: #A16207;
+  --color-layout-text: #FFFFFF;
+
+  --color-demold: #F97316;
+  --color-demold-text: #FFFFFF;
+
+  --color-finish: #8B5CF6;
+  --color-finish-text: #FFFFFF;
+
+  --color-seal: #6B7280;
+  --color-seal-text: #FFFFFF;
+
+  --color-special: #EC4899;
+  --color-special-text: #FFFFFF;
+
+  --color-crating: #A16207;
+  --color-crating-text: #FFFFFF;
+
+  --color-load: #F59E0B;
+  --color-load-text: #FFFFFF;
+
+  --color-ship: #22C55E;
+  --color-ship-text: #FFFFFF;
+}

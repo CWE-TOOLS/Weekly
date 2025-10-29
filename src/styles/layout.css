@@ -1,0 +1,259 @@
+/* Layout and Grid Styles */
+
+.container {
+  width: 100%;
+  padding: 2rem;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  position: relative;
+}
+
+header {
+  text-align: center;
+  margin-bottom: 2.5rem;
+}
+
+header p {
+  font-size: 1.125rem;
+  color: var(--text-secondary);
+}
+
+/* Controls Section */
+.controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.action-group {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.navigation-group {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  justify-content: center;
+  flex-grow: 1;
+}
+
+#week-display {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+/* Schedule Wrapper and Grid */
+.schedule-wrapper {
+  overflow-x: scroll;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  flex-grow: 1;
+  overflow-y: auto;
+  contain: layout style paint;
+  will-change: scroll-position;
+}
+
+.schedule-wrapper::-webkit-scrollbar {
+  height: 12px;
+  width: 0;
+}
+
+.schedule-wrapper::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+.schedule-wrapper::-webkit-scrollbar-thumb {
+  background: #555;
+  border-radius: 4px;
+}
+
+.schedule-wrapper::-webkit-scrollbar-thumb:hover {
+  background: #333;
+}
+
+.schedule-container {
+  display: flex;
+  width: max-content;
+  align-items: flex-start;
+}
+
+.schedule-grid {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) repeat(6, minmax(180px, 2fr));
+  width: 100%;
+  scroll-snap-align: start;
+  background-color: var(--background-secondary);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--border-primary);
+}
+
+.grid-header {
+  font-weight: 600;
+  font-size: 0.75rem;
+  padding: 1rem 0.75rem;
+  color: var(--text-secondary);
+  text-align: center;
+  border-bottom: 2px solid var(--border-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  line-height: 1.2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 4.5rem;
+  position: sticky;
+  top: 0;
+  background-color: var(--background-secondary);
+  z-index: 10;
+}
+
+.grid-header:first-child {
+  left: 0;
+  z-index: 15;
+}
+
+.date-weekday {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.date-day {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.date-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+}
+
+.today-highlight {
+  background-color: #fde68a;
+  color: #92400e;
+  border-radius: 8px;
+}
+
+.today-highlight .date-weekday,
+.today-highlight .date-day {
+  color: inherit;
+}
+
+.grid-cell {
+  padding: 0.75rem;
+  border-bottom: 2px solid var(--border-primary);
+  border-right: 2px solid var(--border-primary);
+}
+
+.grid-cell:last-child {
+  border-right: none;
+}
+
+/* Department Labels */
+.department-label {
+  font-weight: 600;
+  font-size: 3rem;
+  padding: 0.25rem 0.75rem;
+  color: #fff;
+  text-align: center;
+  border-right: 2px solid var(--border-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: transparent;
+  position: sticky;
+  left: 0;
+  z-index: 5;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+}
+
+.department-label.department-mill {
+  background-color: var(--color-mill);
+  color: var(--color-mill-text);
+}
+
+.department-label.department-form-out {
+  background-color: var(--color-form-out);
+  color: var(--color-form-out-text);
+}
+
+.department-label.department-cast {
+  background-color: var(--color-cast);
+  color: var(--color-cast-text);
+}
+
+.department-label.department-batch {
+  background-color: var(--color-batch);
+  color: var(--color-batch-text);
+}
+
+.department-label.department-layout {
+  background-color: var(--color-layout);
+  color: var(--color-layout-text);
+}
+
+.department-label.department-demold {
+  background-color: var(--color-demold);
+  color: var(--color-demold-text);
+}
+
+.department-label.department-finish {
+  background-color: var(--color-finish);
+  color: var(--color-finish-text);
+}
+
+.department-label.department-seal {
+  background-color: var(--color-seal);
+  color: var(--color-seal-text);
+}
+
+.department-label.department-special {
+  background-color: var(--color-special);
+  color: var(--color-special-text);
+}
+
+.department-label.department-special-events {
+  background-color: #EF4444 !important;
+  color: #FFFFFF !important;
+}
+
+.department-label.department-crating {
+  background-color: var(--color-crating);
+  color: var(--color-crating-text);
+}
+
+.department-label.department-load {
+  background-color: var(--color-load);
+  color: var(--color-load-text);
+}
+
+.department-label.department-ship {
+  background-color: var(--color-ship);
+  color: var(--color-ship-text);
+}

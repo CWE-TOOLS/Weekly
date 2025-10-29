@@ -1,0 +1,43 @@
+{
+  "name": "Weekly Schedule Viewer",
+  "short_name": "Schedule",
+  "description": "Weekly task schedule viewer with department filtering and real-time collaboration",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#667eea",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%23667eea'/><text x='50' y='75' font-size='80' text-anchor='middle' fill='white'>📋</text></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%23667eea'/><text x='50' y='75' font-size='80' text-anchor='middle' fill='white'>📋</text></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["productivity", "business", "utilities"],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Refresh Data",
+      "short_name": "Refresh",
+      "description": "Refresh schedule data",
+      "url": "/?action=refresh",
+      "icons": []
+    },
+    {
+      "name": "Print Schedule",
+      "short_name": "Print",
+      "description": "Open print dialog",
+      "url": "/?action=print",
+      "icons": []
+    }
+  ],
+  "prefer_related_applications": false
+}
