@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir:*)",
+      "Bash(mv:*)",
+      "Bash(node --version:*)",
+      "Bash(http-server:*)",
+      "WebFetch(domain:127.0.0.1)",
+      "Bash(npx --version:*)",
+      "WebSearch",
+      "Bash(claude mcp --help:*)",
+      "Bash(tree:*)",
+      "Bash(curl:*)",
+      "Bash(npx http-server -p 8080 --cors -o)",
+      "Bash(timeout 3 bash:*)",
+      "mcp__playwright__browser_navigate",
+      "Bash(npx http-server:*)",
+      "mcp__playwright__browser_console_messages",
+      "mcp__playwright__browser_evaluate",
+      "mcp__playwright__browser_snapshot",
+      "mcp__playwright__browser_close",
+      "mcp__playwright__browser_click",
+      "mcp__playwright__browser_take_screenshot",
+      "mcp__playwright__browser_wait_for",
+      "mcp__playwright__browser_press_key",
+      "Bash(git checkout:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
