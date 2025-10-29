@@ -535,7 +535,10 @@ async function saveTaskCardEdit(taskCard) {
 
             // Save to backend
             const { saveToStaging } = await import('../services/sheets-service.js');
-            await saveToStaging(task);
+            await saveToStaging(task.project, [{
+                task: task,
+                newText: newDescription
+            }]);
 
             // Show success notification
             showSuccessNotification('Task updated successfully!');
@@ -618,6 +621,12 @@ function initializeButtonHandlers() {
                 await dataService.fetchAllTasks();
                 hideError();
                 showSuccessNotification('Data refreshed successfully!');
+
+                // Send refresh signal to all other clients
+                await supabaseService.sendRefreshSignal({
+                    action: 'manual_refresh',
+                    source: 'refresh_button'
+                });
             } catch (error) {
                 console.error('Failed to refresh data:', error);
                 errorHandler.handleError(error, {

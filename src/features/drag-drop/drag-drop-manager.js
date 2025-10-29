@@ -156,17 +156,18 @@ async function handleDrop(e) {
     const newWeek = dropTarget.dataset.week;
     const department = dropTarget.dataset.department;
 
-    // Store task ID before draggedTask gets nulled by handleDragEnd
-    const taskId = draggedTask.id;
+    // Store task reference before draggedTask gets nulled by handleDragEnd
+    const task = draggedTask;
+    const taskId = task.id;
 
     // Only allow dropping if department matches
-    if (department !== draggedTask.department) {
+    if (department !== task.department) {
         showSuccessNotification('Cannot move task to different department', true);
         return;
     }
 
     // Only allow dropping if date is different
-    if (newDate === draggedTask.date) {
+    if (newDate === task.date) {
         showSuccessNotification('Task is already on this date', true);
         return;
     }
@@ -180,13 +181,13 @@ async function handleDrop(e) {
         }
 
         // Update task locally
-        draggedTask.date = newDate;
-        draggedTask.week = newWeek;
+        task.date = newDate;
+        task.week = newWeek;
 
         // Save to Supabase
         let supabaseSuccess = false;
         try {
-            await updateTaskInSupabase(draggedTask);
+            await updateTaskInSupabase(task);
             supabaseSuccess = true;
         } catch (supabaseError) {
             console.error('Supabase update failed:', supabaseError);
@@ -197,7 +198,7 @@ async function handleDrop(e) {
         try {
             await sendRefreshSignal({
                 action: 'task_moved',
-                taskId: draggedTask.id,
+                taskId: task.id,
                 newDate: newDate,
                 department: department
             });
