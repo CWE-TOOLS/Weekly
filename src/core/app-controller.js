@@ -297,9 +297,6 @@ export async function initializeApp() {
         console.log('🎉 Phase 9: Performance Optimization Active!');
         console.log('📊 Performance metrics available via window.reportPerformanceMetrics()');
 
-        // Show success notification
-        showSuccessNotification('🎉 Phase 9: Performance Monitoring Active!', false);
-
         // Preload modals on idle (Phase 9)
         preloadModalsOnIdle();
 

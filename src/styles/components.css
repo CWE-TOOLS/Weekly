@@ -591,6 +591,87 @@
   white-space: nowrap;
 }
 
+/* ===================================
+   Drag and Drop Visual Feedback
+   =================================== */
+
+/* Cursor styles for draggable elements */
+.task-card[draggable="true"] {
+  cursor: grab;
+}
+
+.task-card.not-draggable {
+  cursor: default;
+}
+
+/* Global cursor change during drag */
+body.dragging-active {
+  cursor: grabbing !important;
+}
+
+body.dragging-active * {
+  cursor: grabbing !important;
+}
+
+/* Dragged card styling - lightweight */
+.task-card.dragging {
+  opacity: 0.4;
+}
+
+/* Drag handle icon for draggable cards */
+.task-card[draggable="true"]::before {
+  content: '⠿';
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  font-size: 1.2rem;
+  color: rgba(0, 0, 0, 0.3);
+  opacity: 0;
+  pointer-events: none;
+  font-weight: bold;
+  line-height: 1;
+}
+
+.task-card[draggable="true"]:hover::before {
+  opacity: 0.6;
+}
+
+/* Empty cell highlighting when dragging is active */
+body.dragging-active .task-card-placeholder {
+  background: rgba(79, 70, 229, 0.05);
+  border: 2px dashed rgba(79, 70, 229, 0.3);
+  border-radius: var(--border-radius-md);
+}
+
+/* Valid drop zone styling - simple and fast */
+.task-card-placeholder.drag-over {
+  background: rgba(34, 197, 94, 0.1) !important;
+  border: 2px solid #22c55e !important;
+  border-radius: var(--border-radius-md);
+}
+
+/* Invalid drop zone styling - simple and fast */
+.task-card-placeholder.drag-invalid {
+  background: rgba(239, 68, 68, 0.1) !important;
+  border: 2px solid #ef4444 !important;
+  border-radius: var(--border-radius-md);
+}
+
+/* Success animation on drop - quick and simple */
+.task-card.drop-success {
+  animation: dropSuccess 0.3s ease-out;
+}
+
+/* Quick success flash */
+@keyframes dropSuccess {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
 /* Task Card Buttons */
 .task-edit-btn {
   position: absolute;

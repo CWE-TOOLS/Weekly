@@ -9,8 +9,9 @@
 
 /**
  * Create a single department page with proper structure
+ * Can optionally include a synthetic department (Batch for Cast, Layout for Demold)
  */
-function createDepartmentPage(dept, tasks, dates, printType, isCompact, colors) {
+function createDepartmentPage(dept, tasks, dates, printType, isCompact, colors, syntheticTasks = null, syntheticDeptName = null) {
     const pageDiv = document.createElement('div');
     pageDiv.className = `print-page ${printType === 'day' ? 'print-page-day' : ''}`;
     pageDiv.style.display = 'flex';
@@ -18,8 +19,8 @@ function createDepartmentPage(dept, tasks, dates, printType, isCompact, colors) 
     pageDiv.style.justifyContent = 'center';
     pageDiv.style.alignItems = 'center';
     pageDiv.style.minHeight = printType === 'day' ? '10in' : '7.5in';
-    
-    // Calculate totals
+
+    // Calculate totals for main department
     let totalHours = 0;
     tasks.forEach(task => {
         const hours = parseFloat(task.hours);
@@ -28,12 +29,21 @@ function createDepartmentPage(dept, tasks, dates, printType, isCompact, colors) 
         }
     });
     const revenue = Math.round(totalHours * 135);
-    
-    // Create components
+
+    // Create components for main department
     const deptHeader = window.PrintLayout.createDepartmentHeader(dept, printType, colors);
     const table = window.PrintLayout.createDepartmentTable(dept, tasks, dates, printType, isCompact);
     const summary = window.PrintLayout.createDepartmentSummary(dept, totalHours, revenue);
-    
+
+    // Create components for synthetic department if provided
+    let syntheticHeader = null;
+    let syntheticTable = null;
+    if (syntheticTasks && syntheticTasks.length > 0 && syntheticDeptName) {
+        const syntheticColors = getDepartmentColorMapping()[normalizeDepartmentClass(syntheticDeptName)] || { bg: '#333', text: '#FFFFFF' };
+        syntheticHeader = window.PrintLayout.createDepartmentHeader(syntheticDeptName, printType, syntheticColors);
+        syntheticTable = window.PrintLayout.createDepartmentTable(syntheticDeptName, syntheticTasks, dates, printType, isCompact);
+    }
+
     if (printType === 'day') {
         // Day layout: vertical stack
         deptHeader.style.width = '100%';
@@ -48,36 +58,66 @@ function createDepartmentPage(dept, tasks, dates, printType, isCompact, colors) 
         summary.style.width = '100%';
         summary.style.maxWidth = '800px';
         summary.style.margin = '0 auto';
-        
+
         pageDiv.appendChild(deptHeader);
         pageDiv.appendChild(table);
         pageDiv.appendChild(summary);
+
+        // Add synthetic department section if present
+        if (syntheticHeader && syntheticTable) {
+            syntheticHeader.style.width = '100%';
+            syntheticHeader.style.textAlign = 'center';
+            syntheticHeader.style.writingMode = 'horizontal-tb';
+            syntheticHeader.style.textOrientation = 'mixed';
+            syntheticHeader.style.maxWidth = '800px';
+            syntheticHeader.style.margin = '1rem auto 0 auto';
+            syntheticTable.style.width = '100%';
+            syntheticTable.style.maxWidth = '800px';
+            syntheticTable.style.margin = '0 auto';
+
+            pageDiv.appendChild(syntheticHeader);
+            pageDiv.appendChild(syntheticTable);
+        }
     } else {
         // Week layout: sidebar with header, table, summary
         const mainContentDiv = document.createElement('div');
         mainContentDiv.style.display = 'flex';
         mainContentDiv.style.alignItems = 'stretch';
         mainContentDiv.style.justifyContent = 'flex-start';
-        
+
         mainContentDiv.appendChild(deptHeader);
         mainContentDiv.appendChild(table);
-        
+
         // Create a wrapper for mainContent and summary to keep them together
         const contentWrapper = document.createElement('div');
         contentWrapper.style.display = 'flex';
         contentWrapper.style.flexDirection = 'column';
         contentWrapper.style.width = 'fit-content';
-        
+
         contentWrapper.appendChild(mainContentDiv);
-        
+
         // Make summary match the width of mainContentDiv
         summary.style.width = '100%';
         summary.style.boxSizing = 'border-box';
         contentWrapper.appendChild(summary);
-        
+
+        // Add synthetic department section if present
+        if (syntheticHeader && syntheticTable) {
+            const syntheticContentDiv = document.createElement('div');
+            syntheticContentDiv.style.display = 'flex';
+            syntheticContentDiv.style.alignItems = 'stretch';
+            syntheticContentDiv.style.justifyContent = 'flex-start';
+            syntheticContentDiv.style.marginTop = '1rem';
+
+            syntheticContentDiv.appendChild(syntheticHeader);
+            syntheticContentDiv.appendChild(syntheticTable);
+
+            contentWrapper.appendChild(syntheticContentDiv);
+        }
+
         pageDiv.appendChild(contentWrapper);
     }
-    
+
     return pageDiv;
 }
 
@@ -132,22 +172,32 @@ function applyPageBreakRules(pages) {
 function generatePrintContent(printType, selectedDepts, weekDates, allTasks) {
     const printContainer = document.createElement('div');
     printContainer.className = 'print-preview-content';
-    
-    // Filter out batch and layout as they are handled separately
+
+    // Always generate synthetic Batch and Layout tasks
+    // These are automatically merged with Cast and Demold respectively
+    const generateBatchTasks = window.PrintUtils.generateBatchTasks;
+    const generateLayoutTasks = window.PrintUtils.generateLayoutTasks;
+
+    const batchTasks = generateBatchTasks(weekDates, allTasks);
+    const layoutTasks = generateLayoutTasks(weekDates, allTasks);
+
+    // Filter out batch and layout as they are synthetic departments
     const displayDepts = selectedDepts.filter(dept => dept !== 'Batch' && dept !== 'Layout');
-    
+
     // Calculate if layout should be compact
     const totalTasks = displayDepts.reduce((sum, dept) => {
         const deptTasks = allTasks.filter(task => task.department === dept);
         return sum + getMaxTasksForDept(dept, deptTasks, weekDates, printType);
     }, 0);
     const isCompact = displayDepts.length > 4 || printType === 'day' || totalTasks > 20;
-    
+
     const pages = [];
-    
+
     displayDepts.forEach((dept) => {
-        // Filter tasks for this department and date range
+        // Start with tasks for this department only (exclude synthetic tasks)
         let deptTasks = allTasks.filter(task => task.department === dept);
+
+        // Filter by date range
         if (printType === 'week') {
             deptTasks = deptTasks.filter(task => {
                 const taskDate = parseDate(task.date);
@@ -160,22 +210,68 @@ function generatePrintContent(printType, selectedDepts, weekDates, allTasks) {
                 return taskDate && taskDate.toDateString() === dateString;
             });
         }
-        
-        // Skip if no tasks
-        if (deptTasks.length === 0) return;
-        
+
+        // Prepare synthetic department tasks if applicable
+        let syntheticTasks = null;
+        let syntheticDeptName = null;
+
+        // Check for Batch tasks (paired with Cast)
+        if (dept === 'Cast') {
+            // Filter batch tasks by date range
+            const filteredBatchTasks = batchTasks.filter(task => {
+                const taskDate = parseDate(task.date);
+                if (!taskDate) return false;
+
+                if (printType === 'week') {
+                    return weekDates.some(date => date && date.toDateString() === taskDate.toDateString());
+                } else if (weekDates && weekDates.length > 0 && weekDates[0]) {
+                    return taskDate.toDateString() === weekDates[0].toDateString();
+                }
+                return false;
+            });
+
+            if (filteredBatchTasks.length > 0) {
+                syntheticTasks = filteredBatchTasks;
+                syntheticDeptName = 'Batch';
+            }
+        }
+
+        // Check for Layout tasks (paired with Demold)
+        if (dept === 'Demold') {
+            // Filter layout tasks by date range
+            const filteredLayoutTasks = layoutTasks.filter(task => {
+                const taskDate = parseDate(task.date);
+                if (!taskDate) return false;
+
+                if (printType === 'week') {
+                    return weekDates.some(date => date && date.toDateString() === taskDate.toDateString());
+                } else if (weekDates && weekDates.length > 0 && weekDates[0]) {
+                    return taskDate.toDateString() === weekDates[0].toDateString();
+                }
+                return false;
+            });
+
+            if (filteredLayoutTasks.length > 0) {
+                syntheticTasks = filteredLayoutTasks;
+                syntheticDeptName = 'Layout';
+            }
+        }
+
+        // Skip if no tasks in main department and no synthetic tasks
+        if (deptTasks.length === 0 && !syntheticTasks) return;
+
         // Get department colors
         const colors = getDepartmentColorMapping()[normalizeDepartmentClass(dept)] || { bg: '#333', text: '#FFFFFF' };
-        
-        // Create page for this department
-        const page = createDepartmentPage(dept, deptTasks, weekDates, printType, isCompact, colors);
+
+        // Create page for this department with optional synthetic department
+        const page = createDepartmentPage(dept, deptTasks, weekDates, printType, isCompact, colors, syntheticTasks, syntheticDeptName);
         pages.push(page);
         printContainer.appendChild(page);
     });
-    
+
     // Apply page break rules to prevent blank pages
     applyPageBreakRules(pages);
-    
+
     return printContainer;
 }
 
@@ -184,8 +280,9 @@ function generatePrintContent(printType, selectedDepts, weekDates, allTasks) {
  */
 function applyPrintScaling(printContent, printType) {
     const pages = printContent.querySelectorAll('.print-page');
-    const pageMaxHeightPx = printType === 'day' ? 7 * 96 : 6 * 96; // Convert inches to pixels
-    
+    // Increased thresholds to accommodate more compact layout before scaling
+    const pageMaxHeightPx = printType === 'day' ? 8 * 96 : 7 * 96; // Convert inches to pixels
+
     requestAnimationFrame(() => {
         setTimeout(() => {
             pages.forEach(page => {

@@ -13,14 +13,18 @@
 function createDepartmentHeader(dept, printType, colors) {
     const header = document.createElement('div');
     header.className = `print-department-header department-${normalizeDepartmentClass(dept)}`;
-    
+
     if (printType === 'day') {
         header.classList.add('print-department-header-day');
     }
-    
+
+    // Apply department colors directly to the header
+    header.style.backgroundColor = colors.bg;
+    header.style.color = colors.text;
+
     const deptText = dept === 'Special Events' ? dept.replace(' ', '<br>') : dept;
-    header.innerHTML = `<div style="background-color: ${colors.bg}; color: ${colors.text}; padding: 8pt; border-radius: 4pt; font-weight: bold; text-align: center; font-size: 12pt; writing-mode: horizontal-tb; text-orientation: mixed;">${deptText}</div>`;
-    
+    header.textContent = deptText;
+
     return header;
 }
 
@@ -262,30 +266,50 @@ function createTableBody(dates, tasks, maxTasks, printType) {
 function createDepartmentTable(dept, tasks, dates, printType, isCompact) {
     const table = document.createElement('table');
     table.className = `print-table ${printType === 'day' ? 'print-table-day daily-print' : ''} ${isCompact ? 'compact' : ''}`;
-    
+
     // Add header
     const thead = createTableHeader(dates, printType);
     table.appendChild(thead);
-    
+
+    // Calculate max tasks from the already-filtered task list (includes merged Batch/Layout tasks)
+    let maxTasks = 0;
+    if (printType === 'day') {
+        const dailyDate = Array.isArray(dates) ? dates[0] : dates;
+        const dateString = dailyDate.toDateString();
+        maxTasks = tasks.filter(t => {
+            const taskDate = parseDate(t.date);
+            return taskDate && taskDate.toDateString() === dateString;
+        }).length;
+    } else {
+        // Weekly view: find max tasks for any single day
+        dates.forEach(date => {
+            if (!date) return;
+            const dateString = date.toDateString();
+            const count = tasks.filter(t => {
+                const taskDate = parseDate(t.date);
+                return taskDate && taskDate.toDateString() === dateString;
+            }).length;
+            if (count > maxTasks) maxTasks = count;
+        });
+    }
+
     // Add body
     if (printType === 'day') {
         const dailyDate = Array.isArray(dates) ? dates[0] : dates;
-        const maxTasks = getMaxTasksForDept(dept, tasks, [dailyDate], 'day');
         const tbody = createTableBody([dailyDate], tasks, maxTasks, 'day');
         table.appendChild(tbody);
     } else {
         // Weekly view uses the full dates array
-        const maxTasks = getMaxTasksForDept(dept, tasks, dates, 'week');
         const tbody = createTableBody(dates, tasks, maxTasks, 'week');
         table.appendChild(tbody);
     }
-    
+
     // Add footer (week view only)
     const tfoot = createTableFooter(dates, tasks, printType);
     if (tfoot) {
         table.appendChild(tfoot);
     }
-    
+
     return table;
 }
 

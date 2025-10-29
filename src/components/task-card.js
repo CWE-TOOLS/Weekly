@@ -69,7 +69,12 @@ export function createTaskCard(task, rowClass) {
     const descDiv = document.createElement('div');
     descDiv.className = 'task-description';
     if (task.description && task.description.trim()) {
-        descDiv.textContent = task.description;
+        // Use innerHTML for Batch and Layout to support <br> tags, textContent for others for safety
+        if (task.department === 'Batch' || task.department === 'Layout') {
+            descDiv.innerHTML = task.description;
+        } else {
+            descDiv.textContent = task.description;
+        }
     } else {
         descDiv.innerHTML = '<span class="missing-description">Staging Missing</span>';
     }

@@ -200,6 +200,132 @@ function getMaxTasksForDept(dept, tasks, dates, printType) {
 }
 
 /**
+ * Generate batch tasks for print (looks ahead to next day's casting)
+ * Similar to schedule-renderer.js generateBatchTasks()
+ */
+function generateBatchTasks(dates, allTasks) {
+    const batchTasks = [];
+
+    dates.forEach((date, i) => {
+        // Only generate for weekdays (Mon-Fri)
+        const dayOfWeek = date.getDay();
+        if (dayOfWeek === 0 || dayOfWeek === 6) return; // Skip Sunday (0) and Saturday (6)
+
+        let castingProjects = [];
+
+        if (dayOfWeek === 5) { // Friday
+            // Get tasks for Saturday
+            const saturday = new Date(date);
+            saturday.setDate(date.getDate() + 1);
+            const saturdayString = saturday.toDateString();
+            const saturdayProjects = allTasks
+                .filter(t => t.department === 'Cast' && parseDate(t.date) && parseDate(t.date).toDateString() === saturdayString)
+                .map(t => t.project);
+            if (saturdayProjects.length > 0) {
+                castingProjects.push(`<b>Sat:</b> ${saturdayProjects.join(', ')}`);
+            }
+
+            // Get tasks for Monday
+            const monday = new Date(date);
+            monday.setDate(date.getDate() + 3);
+            const mondayString = monday.toDateString();
+            const mondayProjects = allTasks
+                .filter(t => t.department === 'Cast' && parseDate(t.date) && parseDate(t.date).toDateString() === mondayString)
+                .map(t => t.project);
+            if (mondayProjects.length > 0) {
+                castingProjects.push(`<b>Mon:</b> ${mondayProjects.join(', ')}`);
+            }
+        } else {
+            // For Mon-Thu, get next day's tasks
+            const nextDate = new Date(date);
+            nextDate.setDate(date.getDate() + 1);
+            const nextDateString = nextDate.toDateString();
+            castingProjects = allTasks
+                .filter(t => t.department === 'Cast' && parseDate(t.date) && parseDate(t.date).toDateString() === nextDateString)
+                .map(t => t.project);
+        }
+
+        const batchTask = {
+            id: `batch-${date.toISOString()}`,
+            project: 'Batch',
+            projectDescription: '',
+            description: castingProjects.length > 0 ? castingProjects.join('<br>') : '',
+            date: date.toLocaleDateString('en-US'),
+            department: 'Batch',
+            hours: '',
+            dayCounter: '',
+            missingDate: false
+        };
+        batchTasks.push(batchTask);
+    });
+
+    return batchTasks;
+}
+
+/**
+ * Generate layout tasks for print (looks ahead to next day's casting)
+ * Similar to schedule-renderer.js generateLayoutTasks()
+ */
+function generateLayoutTasks(dates, allTasks) {
+    const layoutTasks = [];
+
+    dates.forEach((date, i) => {
+        // Only generate for weekdays (Mon-Fri)
+        const dayOfWeek = date.getDay();
+        if (dayOfWeek === 0 || dayOfWeek === 6) return; // Skip Sunday (0) and Saturday (6)
+
+        let castingProjects = [];
+
+        if (dayOfWeek === 5) { // Friday
+            // Get tasks for Saturday
+            const saturday = new Date(date);
+            saturday.setDate(date.getDate() + 1);
+            const saturdayString = saturday.toDateString();
+            const saturdayProjects = allTasks
+                .filter(t => t.department === 'Cast' && parseDate(t.date) && parseDate(t.date).toDateString() === saturdayString)
+                .map(t => t.project);
+            if (saturdayProjects.length > 0) {
+                castingProjects.push(`<b>Sat:</b> ${saturdayProjects.join(', ')}`);
+            }
+
+            // Get tasks for Monday
+            const monday = new Date(date);
+            monday.setDate(date.getDate() + 3);
+            const mondayString = monday.toDateString();
+            const mondayProjects = allTasks
+                .filter(t => t.department === 'Cast' && parseDate(t.date) && parseDate(t.date).toDateString() === mondayString)
+                .map(t => t.project);
+            if (mondayProjects.length > 0) {
+                castingProjects.push(`<b>Mon:</b> ${mondayProjects.join(', ')}`);
+            }
+        } else {
+            // For Mon-Thu, get next day's tasks
+            const nextDate = new Date(date);
+            nextDate.setDate(date.getDate() + 1);
+            const nextDateString = nextDate.toDateString();
+            castingProjects = allTasks
+                .filter(t => t.department === 'Cast' && parseDate(t.date) && parseDate(t.date).toDateString() === nextDateString)
+                .map(t => t.project);
+        }
+
+        const layoutTask = {
+            id: `layout-${date.toISOString()}`,
+            project: 'Layout',
+            projectDescription: '',
+            description: castingProjects.length > 0 ? castingProjects.join('<br>') : '',
+            date: date.toLocaleDateString('en-US'),
+            department: 'Layout',
+            hours: '',
+            dayCounter: '',
+            missingDate: false
+        };
+        layoutTasks.push(layoutTask);
+    });
+
+    return layoutTasks;
+}
+
+/**
  * Generate complete print content for selected departments
  * This now delegates to the modular print renderer
  */
@@ -296,5 +422,7 @@ window.PrintUtils = {
     normalizeDepartmentClass,
     parseDate,
     getMaxTasksForDept,
+    generateBatchTasks,
+    generateLayoutTasks,
     PRINT_UTILS
 };

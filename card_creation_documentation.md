@@ -20,7 +20,7 @@ The application uses CSS custom properties to define department colors. Each dep
     --color-cast: #EF4444; --color-cast-text: #FFFFFF;       /* Red */
     --color-batch: #800000; --color-batch-text: #FFFFFF;     /* Maroon */
     --color-demold: #F97316; --color-demold-text: #FFFFFF;    /* Orange */
-    --color-finish: #8B5CF6; --color-finish-text: #FFFFFF;    /* Violet */
+    --color-finish: #8B5CF6; --color-finish-text: #c78989ff;    /* Violet */
     --color-seal: #6B7280; --color-seal-text: #FFFFFF;       /* Medium Grey */
     --color-special: #EC4899; --color-special-text: #FFFFFF;   /* Pink */
     --color-crating: #A16207; --color-crating-text: #FFFFFF;  /* Brown */

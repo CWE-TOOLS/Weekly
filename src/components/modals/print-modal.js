@@ -185,11 +185,14 @@ function populatePrintOptions() {
         dateSelectElement.value = tomorrowString;
     }
 
-    // Get all departments, filter out invalid ones
+    // Get all departments, filter out invalid ones and synthetic departments (Batch, Layout)
+    // Batch and Layout are synthetic departments that are automatically included with Cast and Demold
     allDepartmentsForPrint = [...new Set(allTasks.map(task => task.department).filter(dept =>
         dept && dept.toLowerCase() !== 'department' &&
         !dept.toLowerCase().includes('link') &&
-        !dept.toLowerCase().includes('live')
+        !dept.toLowerCase().includes('live') &&
+        dept !== 'Batch' &&
+        dept !== 'Layout'
     ))];
 
     // Sort departments

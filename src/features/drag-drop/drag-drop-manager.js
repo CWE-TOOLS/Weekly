@@ -156,6 +156,9 @@ async function handleDrop(e) {
     const newWeek = dropTarget.dataset.week;
     const department = dropTarget.dataset.department;
 
+    // Store task ID before draggedTask gets nulled by handleDragEnd
+    const taskId = draggedTask.id;
+
     // Only allow dropping if department matches
     if (department !== draggedTask.department) {
         showSuccessNotification('Cannot move task to different department', true);
@@ -170,7 +173,7 @@ async function handleDrop(e) {
 
     try {
         // Show loading state on original card
-        const originalCard = document.querySelector(`.task-card[data-task-id="${draggedTask.id}"]`);
+        const originalCard = document.querySelector(`.task-card[data-task-id="${taskId}"]`);
         if (originalCard) {
             originalCard.style.opacity = '0.5';
             originalCard.style.pointerEvents = 'none';
@@ -213,12 +216,21 @@ async function handleDrop(e) {
             showSuccessNotification('Task moved locally. Sync to server may have failed.', true);
         }
 
+        // Trigger success animation on the newly rendered card
+        setTimeout(() => {
+            const newCard = document.querySelector(`.task-card[data-task-id="${taskId}"]`);
+            if (newCard) {
+                newCard.classList.add('drop-success');
+                setTimeout(() => newCard.classList.remove('drop-success'), 300);
+            }
+        }, 50);
+
     } catch (error) {
         console.error('Failed to move task:', error);
         showSuccessNotification('Failed to move task', true);
 
         // Restore original card if save failed
-        const originalCard = document.querySelector(`.task-card[data-task-id="${draggedTask.id}"]`);
+        const originalCard = document.querySelector(`.task-card[data-task-id="${taskId}"]`);
         if (originalCard) {
             originalCard.style.opacity = '1';
             originalCard.style.pointerEvents = 'auto';
