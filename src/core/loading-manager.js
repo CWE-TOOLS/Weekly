@@ -75,7 +75,7 @@ export function hideLoading(operation = 'default') {
         const nextOp = activeOperations.values().next().value;
         if (nextOp) {
             const overlay = document.getElementById('loading-overlay');
-            const messageEl = overlay?.querySelector('.loading-message');
+            const messageEl = overlay && overlay.querySelector('.loading-message');
             if (messageEl) {
                 messageEl.textContent = nextOp.message;
             }

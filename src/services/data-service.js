@@ -42,7 +42,8 @@ import { setAllTasks } from '../core/state.js';
  * @returns {Promise<Array>} Combined array of tasks
  */
 export async function fetchAllTasks(silent = false, suppressEvents = null) {
-    const modalOpen = document.getElementById('project-modal')?.classList.contains('show');
+    const modalElement = document.getElementById('project-modal');
+    const modalOpen = modalElement && modalElement.classList.contains('show');
     const shouldBeSilent = silent || modalOpen;
 
     // If suppressEvents not explicitly set, default to shouldBeSilent behavior

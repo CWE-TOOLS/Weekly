@@ -50,9 +50,8 @@ function handleDeleteClick(e) {
 
     const taskId = deleteBtn.dataset.taskId;
     const taskCard = deleteBtn.closest('.task-card');
-    const taskName = taskCard
-        ? taskCard.querySelector('.task-title')?.textContent || 'this task'
-        : 'this task';
+    const taskTitleEl = taskCard && taskCard.querySelector('.task-title');
+    const taskName = taskTitleEl ? taskTitleEl.textContent || 'this task' : 'this task';
 
     // Confirm deletion
     if (confirm(`Are you sure you want to delete "${taskName}"? This action cannot be undone.`)) {

@@ -81,7 +81,7 @@ function handleRefreshSignal(payload) {
     // Reload data using fetchAllTasks from data-service
     // This will fetch from both Google Sheets and Supabase, merge, and update state
     // Use silent=true to hide loading spinner, suppressEvents=false to emit events for UI refresh
-    if (window.dataService?.fetchAllTasks) {
+    if (window.dataService && window.dataService.fetchAllTasks) {
         window.dataService.fetchAllTasks(true, false) // silent loading, but emit events to trigger UI update
             .then(() => {
                 console.log('✅ Data refreshed from all sources');

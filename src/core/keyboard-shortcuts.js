@@ -139,7 +139,7 @@ function registerDefaultShortcuts() {
     registerShortcut(SHORTCUTS.ADD_TASK, () => {
         console.log('⌨️ Shortcut: Add task');
         // Only works if editing is unlocked
-        if (window.state?.getIsEditingUnlocked()) {
+        if (window.state && window.state.getIsEditingUnlocked()) {
             const fabBtn = document.getElementById('fab-add-task');
             if (fabBtn) {
                 fabBtn.click();

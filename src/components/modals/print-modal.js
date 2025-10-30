@@ -240,7 +240,8 @@ function populatePrintOptions() {
  * @private
  */
 function updatePrintTypeDisplay() {
-    currentPrintType = document.querySelector('input[name="print-type"]:checked')?.value || 'week';
+    const checkedRadio = document.querySelector('input[name="print-type"]:checked');
+    currentPrintType = (checkedRadio && checkedRadio.value) || 'week';
 
     if (weekSectionElement && daySectionElement) {
         if (currentPrintType === 'week') {
@@ -290,7 +291,8 @@ function saveDepartmentSelection() {
  * @private
  */
 function handlePrintExecute() {
-    const printType = document.querySelector('input[name="print-type"]:checked')?.value || 'week';
+    const checkedRadio = document.querySelector('input[name="print-type"]:checked');
+    const printType = (checkedRadio && checkedRadio.value) || 'week';
     const selectedDepts = Array.from(document.querySelectorAll('.departments-grid input[type="checkbox"]:checked'))
         .map(cb => cb.value);
 

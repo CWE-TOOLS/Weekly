@@ -62,7 +62,7 @@ export function initializeErrorHandler() {
  * @param {Function} context.retry - Retry callback function
  */
 export function handleError(error, context = {}) {
-    const errorMessage = error?.message || error?.toString() || 'An unknown error occurred';
+    const errorMessage = (error && error.message) || (error && error.toString()) || 'An unknown error occurred';
     const isCritical = context.critical || false;
 
     // Log to console with context
@@ -70,7 +70,7 @@ export function handleError(error, context = {}) {
         message: errorMessage,
         error,
         context,
-        stack: error?.stack,
+        stack: error && error.stack,
         timestamp: new Date().toISOString()
     });
 
@@ -257,8 +257,8 @@ export function showWarningNotification(message, duration = 5000) {
 function isNetworkError(error) {
     if (!error) return false;
 
-    const message = error.message?.toLowerCase() || '';
-    const name = error.name?.toLowerCase() || '';
+    const message = (error.message && error.message.toLowerCase()) || '';
+    const name = (error.name && error.name.toLowerCase()) || '';
 
     return (
         name === 'networkerror' ||
@@ -278,8 +278,8 @@ function isNetworkError(error) {
 function isAuthError(error) {
     if (!error) return false;
 
-    const message = error.message?.toLowerCase() || '';
-    const status = error.status || error.response?.status;
+    const message = (error.message && error.message.toLowerCase()) || '';
+    const status = error.status || (error.response && error.response.status);
 
     return (
         status === 401 ||
@@ -299,7 +299,7 @@ function isAuthError(error) {
 function isDataError(error) {
     if (!error) return false;
 
-    const message = error.message?.toLowerCase() || '';
+    const message = (error.message && error.message.toLowerCase()) || '';
 
     return (
         message.includes('data') ||
