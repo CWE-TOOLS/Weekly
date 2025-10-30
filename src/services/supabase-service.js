@@ -69,7 +69,7 @@ function setupRefreshSubscription() {
 }
 
 /**
- * Handle refresh signal by reloading data from Google Sheets
+ * Handle refresh signal by reloading data from all sources
  * @param {Object} payload - Refresh signal payload
  */
 function handleRefreshSignal(payload) {
@@ -78,15 +78,19 @@ function handleRefreshSignal(payload) {
     // Add visual indicator
     showRefreshIndicator();
 
-    // Reload data using fetchTasks function (needs to be passed in or imported)
-    if (window.fetchTasks) {
-        window.fetchTasks()
+    // Reload data using fetchAllTasks from data-service
+    // This will fetch from both Google Sheets and Supabase, merge, and update state
+    // Use silent=true to hide loading spinner, suppressEvents=false to emit events for UI refresh
+    if (window.dataService?.fetchAllTasks) {
+        window.dataService.fetchAllTasks(true, false) // silent loading, but emit events to trigger UI update
             .then(() => {
-                console.log('✅ Data refreshed from Google Sheets');
+                console.log('✅ Data refreshed from all sources');
             })
             .catch(error => {
                 console.error('❌ Failed to refresh data:', error);
             });
+    } else {
+        console.warn('⚠️ dataService.fetchAllTasks not available on window');
     }
 }
 

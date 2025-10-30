@@ -1,0 +1,24 @@
+═══════════════════════════════════════════════════════════
+           CLAUDE API TOGGLE - QUICK REFERENCE
+═══════════════════════════════════════════════════════════
+
+SWITCH TO API KEY (use your Anthropic API):
+    .\toggle-claude.ps1 api
+
+SWITCH TO SUBSCRIPTION (use Claude Code subscription):
+    .\toggle-claude.ps1 subscription
+
+CHECK CURRENT STATUS:
+    .\toggle-claude.ps1 status
+
+SHOW HELP:
+    .\toggle-claude.ps1 help
+
+═══════════════════════════════════════════════════════════
+
+FIRST TIME SETUP:
+1. Copy-Item api-key.txt.template api-key.txt
+2. Edit api-key.txt and paste your Anthropic API key
+3. Run: .\toggle-claude.ps1 api
+
+═══════════════════════════════════════════════════════════

@@ -2,6 +2,28 @@
  * Application Controller
  * Manages app initialization, lifecycle, and coordination
  * @module core/app-controller
+ *
+ * @claude-context
+ * @purpose Main orchestrator for 6-phase application initialization
+ * @dependencies ALL modules (this is the central controller)
+ * @used-by main.js (entry point calls initializeApp)
+ * @exports initializeApp function
+ * @modifies Initializes all systems, sets up DOM, registers event listeners
+ * @events-emitted app-initialized, initialization-phase-*
+ * @events-listened None (controller doesn't listen, it orchestrates)
+ * @initialization-phases
+ *   Phase 1: Error Handler - Set up global error handling
+ *   Phase 2: State Restoration - Load cached state from localStorage
+ *   Phase 3: Services - Initialize auth, sheets, supabase, data services
+ *   Phase 4: UI Components - Initialize schedule, filters, navigation, search
+ *   Phase 5: Features - Initialize drag-drop, context menu, editing features
+ *   Phase 6: Data Loading - Fetch initial data and render
+ * @key-functions
+ *   - initializeApp() - Main entry point for app startup
+ *   - initializeServices() - Phase 3 orchestration
+ *   - initializeComponents() - Phase 4 orchestration
+ *   - initializeFeatures() - Phase 5 orchestration
+ * @phase9-optimization Implements lazy loading for modal components
  */
 
 // Import core systems
@@ -125,8 +147,12 @@ async function loadProjectModal() {
         'project-modal'
     );
     if (!initializedModals.has('project-modal')) {
-        module.initializeProjectModal();
-        initializedModals.add('project-modal');
+        const success = module.initializeProjectModal();
+        if (success !== false) {
+            initializedModals.add('project-modal');
+        } else {
+            console.error('Failed to initialize project modal - DOM elements not found');
+        }
     }
     return module;
 }
@@ -540,6 +566,13 @@ async function saveTaskCardEdit(taskCard) {
                 newText: newDescription
             }]);
 
+            // Send refresh signal to other clients
+            await supabaseService.sendRefreshSignal({
+                operation: 'task_description_update',
+                taskId: taskId,
+                project: task.project
+            });
+
             // Show success notification
             showSuccessNotification('Task updated successfully!');
         }
@@ -849,6 +882,7 @@ export function setupBackwardCompatibility() {
     window.sendRefreshSignal = supabaseService.sendRefreshSignal;
     window.calculateProjectDayCounts = dataService.calculateProjectDayCounts;
     window.getProjectSummaries = dataService.getProjectSummaries;
+    window.dataService = dataService; // Expose entire dataService for refresh signal handling
 
     // Expose state management
     window.state = state;

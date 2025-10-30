@@ -2,6 +2,27 @@
  * Schedule Grid Component
  * Handles rendering of the main weekly schedule grid
  * @module components/schedule-grid
+ *
+ * @claude-context
+ * @purpose Render the main 7-day schedule grid with tasks organized by day and department
+ * @dependencies state.js, event-bus.js, storage.js, date-utils.js, task-card.js, department-config.js
+ * @used-by app-controller.js (initialization), print system
+ * @exports renderAllWeeks, navigateToWeek, equalizeAllCardHeights
+ * @modifies DOM (#schedule-container), state (currentViewedWeekIndex)
+ * @events-emitted weeks-rendered, week-navigated
+ * @events-listened tasks:loaded, week:changed, department-filter:changed, search:changed
+ * @key-functions
+ *   - renderAllWeeks() - Main rendering function
+ *   - navigateToWeek(index) - Navigate to specific week
+ *   - equalizeAllCardHeights() - Balance row heights for consistent layout
+ *   - createWeekGrid() - Generate HTML structure for one week
+ * @rendering-logic
+ *   1. Get week start dates from state
+ *   2. Filter tasks by selected departments and search query
+ *   3. For each week, create 7-column grid (Mon-Sun)
+ *   4. For each department, create row with task cards
+ *   5. Equalize row heights across all weeks
+ *   6. Attach drag-drop zones to cells
  */
 
 import {
@@ -346,11 +367,15 @@ export function renderAllWeeks() {
         return;
     }
 
+    // Hide container during rendering to prevent flicker
+    container.style.opacity = '0';
+
     const filteredTasks = getFilteredTasks();
     container.innerHTML = '';
 
     if (filteredTasks.length === 0) {
         container.innerHTML = '<div class="loading">No tasks found for the selected department.</div>';
+        container.style.opacity = '1';
         showRenderingStatus(false);
         return;
     }
@@ -445,6 +470,10 @@ export function renderAllWeeks() {
     });
     container.appendChild(fragment);
 
+    // Save current scroll position before re-rendering (to preserve position during refresh)
+    const previousScrollPosition = wrapper.scrollLeft;
+    const wasScrolled = previousScrollPosition > 0;
+
     // Determine initial week index
     let currentViewedWeekIndex = getCurrentViewedWeekIndex();
     if (currentViewedWeekIndex === -1 || currentViewedWeekIndex >= allMondays.length) {
@@ -464,7 +493,7 @@ export function renderAllWeeks() {
     }
     setCurrentViewedWeekIndex(currentViewedWeekIndex);
 
-    // Scroll and layout
+    // Scroll and layout - use two animation frames to ensure layout is complete
     requestAnimationFrame(() => {
         const wrapperWidth = wrapper.clientWidth;
         const grids = container.querySelectorAll('.schedule-grid');
@@ -473,25 +502,41 @@ export function renderAllWeeks() {
             grid.style.width = `${wrapperWidth}px`;
         });
 
-        // Scroll to target grid
-        if (grids[currentViewedWeekIndex]) {
-            const savedScrollPosition = loadScrollPosition();
-            if (savedScrollPosition !== null && savedScrollPosition >= 0 && savedScrollPosition <= wrapper.scrollWidth) {
-                wrapper.scrollLeft = savedScrollPosition;
-                const newWeekIndex = Math.round(savedScrollPosition / wrapper.offsetWidth);
-                setCurrentViewedWeekIndex(newWeekIndex);
-            } else {
-                const targetScrollLeft = grids[currentViewedWeekIndex].offsetLeft;
-                wrapper.scrollLeft = targetScrollLeft;
-            }
-        }
-
-        // Update header
-        const finalWeekIndex = Math.min(getCurrentViewedWeekIndex(), allMondays.length - 1);
-        emit(EVENTS.WEEK_CHANGED, { weekIndex: finalWeekIndex, weekDate: allMondays[finalWeekIndex] });
-
+        // Equalize heights FIRST before scrolling to prevent jitter
         equalizeAllCardHeights();
-        wrapper.style.willChange = 'auto';
+
+        // Then scroll in next frame after heights are stable
+        requestAnimationFrame(() => {
+            // Show container now that heights are equalized
+            container.style.opacity = '1';
+
+            // Scroll to target grid
+            if (grids[currentViewedWeekIndex]) {
+                // If page was already scrolled (refresh case), preserve the exact position
+                if (wasScrolled && previousScrollPosition >= 0 && previousScrollPosition <= wrapper.scrollWidth) {
+                    wrapper.scrollLeft = previousScrollPosition;
+                    const newWeekIndex = Math.round(previousScrollPosition / wrapperWidth);
+                    setCurrentViewedWeekIndex(newWeekIndex);
+                } else {
+                    // Otherwise use saved position or calculate from week index
+                    const savedScrollPosition = loadScrollPosition();
+                    if (savedScrollPosition !== null && savedScrollPosition >= 0 && savedScrollPosition <= wrapper.scrollWidth) {
+                        wrapper.scrollLeft = savedScrollPosition;
+                        const newWeekIndex = Math.round(savedScrollPosition / wrapperWidth);
+                        setCurrentViewedWeekIndex(newWeekIndex);
+                    } else {
+                        const targetScrollLeft = grids[currentViewedWeekIndex].offsetLeft;
+                        wrapper.scrollLeft = targetScrollLeft;
+                    }
+                }
+            }
+
+            // Update header
+            const finalWeekIndex = Math.min(getCurrentViewedWeekIndex(), allMondays.length - 1);
+            emit(EVENTS.WEEK_CHANGED, { weekIndex: finalWeekIndex, weekDate: allMondays[finalWeekIndex] });
+
+            wrapper.style.willChange = 'auto';
+        });
     });
 
     // Enable add card indicators

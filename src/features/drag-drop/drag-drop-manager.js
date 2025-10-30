@@ -2,6 +2,32 @@
  * Drag & Drop Manager Module
  * Handles drag and drop functionality for moving tasks between dates
  * @module features/drag-drop/drag-drop-manager
+ *
+ * @claude-context
+ * @purpose Enable drag-and-drop of task cards to move tasks between dates/departments
+ * @dependencies state.js, supabase-service.js, data-service.js, ui-utils.js
+ * @used-by app-controller.js (registered in Phase 5)
+ * @exports initializeDragDrop function
+ * @modifies Task dates/departments in Supabase, DOM (task card positions)
+ * @events-emitted task-moved, task-drop-success, task-drop-error
+ * @events-listened None (handles DOM drag events directly)
+ * @key-functions
+ *   - initializeDragDrop() - Attach drag/drop event listeners
+ *   - handleDragStart() - Store dragged task reference
+ *   - handleDragOver() - Show drop zone indicators
+ *   - handleDrop() - Update task and save to database
+ * @drag-drop-flow
+ *   1. User starts dragging task card (dragstart)
+ *   2. Create visual drag ghost
+ *   3. Highlight drop zones as mouse moves (dragover)
+ *   4. On drop, extract target date from cell dataset
+ *   5. Update task in Supabase
+ *   6. Refresh data and re-render grid
+ *   7. Show success notification
+ * @visual-feedback
+ *   - Drag ghost with rotation effect
+ *   - Drop zone highlighting
+ *   - Success/error notifications
  */
 
 import { getAllTasks } from '../../core/state.js';

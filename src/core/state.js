@@ -5,6 +5,20 @@
  * State is centralized here to provide a single source of truth.
  *
  * @module core/state
+ *
+ * @claude-context
+ * @purpose Centralized state management with automatic event emission
+ * @dependencies event-bus.js (for emitting state change events)
+ * @used-by Almost all modules access state for reading/writing data
+ * @exports get, set, batch, subscribe functions for state access
+ * @modifies Global application state, localStorage (via storage.js)
+ * @events-emitted state-changed:*, data-loaded, tasks-updated
+ * @events-listened None (state is pure data layer)
+ * @key-functions
+ *   - get(key) - Read any state value
+ *   - set(key, value) - Write state and emit change event
+ *   - batch(fn) - Batch multiple state updates
+ *   - subscribe(key, handler) - Listen to specific state changes
  */
 
 import { emit, EVENTS } from './event-bus.js';

@@ -80,9 +80,11 @@ export function performSearch(query) {
             item.appendChild(titleDiv);
             item.appendChild(hoursDiv);
 
-            item.addEventListener('click', () => {
-                // Emit event for project view (to be handled by modal component in Phase 6)
-                emit(EVENTS.PROJECT_SELECTED, { projectName: match.project, tasks: match.tasks });
+            item.addEventListener('click', async () => {
+                // Directly call the lazy-loaded showProjectView function
+                if (typeof window.showProjectView === 'function') {
+                    await window.showProjectView(match.project);
+                }
 
                 // Clear search
                 const searchInput = document.getElementById('project-search');

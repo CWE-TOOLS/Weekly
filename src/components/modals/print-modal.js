@@ -187,12 +187,14 @@ function populatePrintOptions() {
 
     // Get all departments, filter out invalid ones and synthetic departments (Batch, Layout)
     // Batch and Layout are synthetic departments that are automatically included with Cast and Demold
+    // Special Events is excluded as it will never be sent to print layout
     allDepartmentsForPrint = [...new Set(allTasks.map(task => task.department).filter(dept =>
         dept && dept.toLowerCase() !== 'department' &&
         !dept.toLowerCase().includes('link') &&
         !dept.toLowerCase().includes('live') &&
         dept !== 'Batch' &&
-        dept !== 'Layout'
+        dept !== 'Layout' &&
+        dept !== 'Special Events'
     ))];
 
     // Sort departments

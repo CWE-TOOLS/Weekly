@@ -92,6 +92,7 @@ header p {
   display: flex;
   width: max-content;
   align-items: flex-start;
+  transition: opacity 150ms ease-in-out;
 }
 
 .schedule-grid {

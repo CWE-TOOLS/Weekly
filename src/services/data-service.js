@@ -2,6 +2,28 @@
  * Data Service Module
  * Handles data orchestration between Google Sheets and Supabase
  * Merges tasks from both sources and manages task lifecycle
+ *
+ * @module services/data-service
+ *
+ * @claude-context
+ * @purpose Orchestrate data fetching from multiple sources and merge results
+ * @dependencies sheets-service.js, supabase-service.js, state.js, date-utils.js
+ * @used-by app-controller.js (initialization), UI components (refresh)
+ * @exports fetchAllTasks, refreshData, mergeTaskSources
+ * @modifies state.tasks, state.lastSync
+ * @events-emitted data-loaded, data-refreshed
+ * @events-listened None directly (services are stateless)
+ * @key-functions
+ *   - fetchAllTasks() - Fetch and merge from all sources
+ *   - refreshData() - Manual refresh trigger
+ *   - mergeTasks() - Merge Google Sheets + Supabase tasks
+ * @data-flow
+ *   1. Fetch from Google Sheets (read-only source)
+ *   2. Fetch from Supabase (read/write manual tasks)
+ *   3. Merge with manual tasks overriding sheets data
+ *   4. Calculate aggregates (day counts)
+ *   5. Update global state
+ *   6. Emit data-loaded event
  */
 
 import { fetchTasks as fetchSheetsTasks } from './sheets-service.js';
@@ -16,11 +38,15 @@ import { setAllTasks } from '../core/state.js';
  * Automatically updates the state with fetched tasks
  *
  * @param {boolean} silent - If true, skip loading indicators (for background refresh)
+ * @param {boolean} suppressEvents - If true, don't emit events (defaults to silent value)
  * @returns {Promise<Array>} Combined array of tasks
  */
-export async function fetchAllTasks(silent = false) {
+export async function fetchAllTasks(silent = false, suppressEvents = null) {
     const modalOpen = document.getElementById('project-modal')?.classList.contains('show');
     const shouldBeSilent = silent || modalOpen;
+
+    // If suppressEvents not explicitly set, default to shouldBeSilent behavior
+    const shouldSuppressEvents = suppressEvents !== null ? suppressEvents : shouldBeSilent;
 
     if (!shouldBeSilent) {
         showLoading(true);
@@ -40,8 +66,8 @@ export async function fetchAllTasks(silent = false) {
         // Calculate day counts
         calculateProjectDayCounts(allTasks);
 
-        // Update state with fetched tasks (will emit 'tasks:loaded' event)
-        setAllTasks(allTasks, shouldBeSilent);
+        // Update state with fetched tasks (will emit 'tasks:loaded' event unless suppressed)
+        setAllTasks(allTasks, shouldSuppressEvents);
 
         if (!shouldBeSilent) {
             showLoading(false);

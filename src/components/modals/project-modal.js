@@ -44,11 +44,16 @@ export function initializeProjectModal() {
 
     if (!modalElement || !titleElement || !gridElement) {
         console.error('Project modal elements not found in DOM');
-        return;
+        console.error('modalElement:', modalElement);
+        console.error('titleElement:', titleElement);
+        console.error('gridElement:', gridElement);
+        return false;
     }
 
     // Set up event listeners
-    closeButton.addEventListener('click', hideProjectModal);
+    if (closeButton) {
+        closeButton.addEventListener('click', hideProjectModal);
+    }
 
     // Close modal on background click
     modalElement.addEventListener('click', (e) => {
@@ -66,6 +71,7 @@ export function initializeProjectModal() {
     });
 
     console.log('Project modal initialized');
+    return true;
 }
 
 /**
@@ -500,6 +506,16 @@ function stripHtml(html) {
  * @param {string} projectName - Project name
  */
 export function showProjectView(projectName) {
+    // Check if modal is initialized, if not try to initialize it
+    if (!modalElement) {
+        console.warn('Project modal not initialized when showProjectView called, attempting to initialize...');
+        const success = initializeProjectModal();
+        if (success === false) {
+            console.error('Cannot show project modal - DOM elements not available');
+            alert('Error: Project modal cannot be opened. Please refresh the page and try again.');
+            return;
+        }
+    }
     showProjectModal(projectName);
 }
 

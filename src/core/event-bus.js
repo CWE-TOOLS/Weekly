@@ -5,6 +5,25 @@
  * to communicate without tight coupling.
  *
  * @module core/event-bus
+ *
+ * @claude-context
+ * @purpose Decoupled component communication via publish-subscribe pattern
+ * @dependencies None (pure event system)
+ * @used-by All components and services for event-driven communication
+ * @exports on, off, emit, once functions for event handling
+ * @modifies Internal event listener registry
+ * @events-emitted N/A (this IS the event system)
+ * @events-listened N/A (this IS the event system)
+ * @key-functions
+ *   - on(event, handler) - Subscribe to events
+ *   - off(event, handler) - Unsubscribe from events
+ *   - emit(event, data) - Publish events to subscribers
+ *   - once(event, handler) - Subscribe for one-time notification
+ * @event-categories
+ *   - data-* (data-loaded, task-added, task-updated, task-deleted)
+ *   - ui-* (week-changed, department-filter-changed, search-changed)
+ *   - state-changed:* (state property changes)
+ *   - system-* (error, loading-start, loading-end)
  */
 
 // Store for event listeners
