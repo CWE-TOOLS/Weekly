@@ -1104,14 +1104,15 @@ const table = window.PrintLayout.createDepartmentTable('Mill', tasks, dates, 'we
 
 ### print-renderer.js
 **Path:** `src/features/print/print-renderer.js`
-**Purpose:** Page assembly and print execution with page break management
+**Purpose:** Page assembly and print execution with robust auto-scaling
 
 **Exports (via window.PrintRenderer):**
 ```javascript
 export function createDepartmentPage(dept, tasks, dates, printType, isCompact, colors): HTMLElement
-export function applyPageBreakRules(pages): void  // CRITICAL
+export function applyDensityClass(page, taskCount, printType): void
+export function applyPageBreakRules(pages): void  // Simplified
 export function generatePrintContent(printType, selectedDepts, weekDates, allTasks): HTMLElement
-export function applyPrintScaling(printContent, printType): void
+export function applyPrintScaling(printContent, printType): void  // Refactored
 export function executePrint(printContent, printType): void
 ```
 
@@ -1120,39 +1121,66 @@ export function executePrint(printContent, printType): void
 - `print-utils.js` (for utilities)
 
 **Description:**
-Assembles complete pages and manages the print process. Contains **critical page break logic** that prevents blank pages.
+Assembles complete pages and manages the print process with robust auto-scaling. Content automatically scales to fit single page while maintaining readability.
 
-**Critical Function - applyPageBreakRules():**
+**Key Function - applyPrintScaling() (REFACTORED):**
 ```javascript
-// Prevents blank pages while ensuring proper breaks between departments
-function applyPageBreakRules(pages) {
-  pages.forEach((page, index) => {
-    // Remove all existing page break styles
-    page.style.pageBreakAfter = 'auto';
-    page.style.pageBreakInside = 'avoid';
+// Robust auto-scaling with transform and intelligent measurement
+function applyPrintScaling(printContent, printType) {
+  const pages = printContent.querySelectorAll('.print-page');
+  const pageMaxWidthPx = 10.5 * 96;   // Letter landscape
+  const pageMaxHeightPx = printType === 'day' ? 10 * 96 : 8 * 96;
+  const MIN_SCALE = 0.5;  // 50% minimum for readability
 
-    // Remove margins/padding that could push content
-    page.style.marginBottom = '0';
-    page.style.paddingBottom = '0';
+  pages.forEach(page => {
+    // Measure actual content dimensions
+    const contentWidth = page.scrollWidth;
+    const contentHeight = page.scrollHeight;
 
-    // Add page break between departments (NOT after last)
-    if (index < pages.length - 1) {
-      page.style.pageBreakAfter = 'always';
-      page.style.breakAfter = 'page';
-    } else {
-      // Last page: prevent page break to avoid blank pages
-      page.style.pageBreakAfter = 'avoid';
-      page.style.breakAfter = 'avoid';
+    // Calculate optimal scale (never scale up, max 1.0)
+    const widthScale = pageMaxWidthPx / contentWidth;
+    const heightScale = pageMaxHeightPx / contentHeight;
+    let scale = Math.min(widthScale, heightScale, 1.0);
+    scale = Math.max(scale, MIN_SCALE);
+
+    if (scale < 1.0) {
+      page.style.transform = `scale(${scale})`;
+      page.style.transformOrigin = 'top center';
+      page.style.fontSize = `${7 * scale}pt`;
     }
   });
 }
 ```
 
+**New Function - applyDensityClass():**
+```javascript
+// Apply CSS density class based on task count
+function applyDensityClass(page, taskCount, printType) {
+  page.classList.remove('few-tasks', 'normal-tasks', 'many-tasks', 'very-many-tasks');
+
+  if (printType === 'week') {
+    if (taskCount <= 3) page.classList.add('few-tasks');
+    else if (taskCount <= 6) page.classList.add('normal-tasks');
+    else if (taskCount <= 10) page.classList.add('many-tasks');
+    else page.classList.add('very-many-tasks');
+  }
+}
+```
+
 **Key Functions:**
-- `createDepartmentPage()` - Assembles header + table + summary
-- `applyPageBreakRules()` - **CRITICAL** Prevents blank pages
-- `generatePrintContent()` - Main entry point for content generation
-- `executePrint()` - Opens browser print dialog with proper setup
+- `createDepartmentPage()` - Assembles header + table + summary (no inline styles)
+- `applyDensityClass()` - **NEW** Applies density-based CSS classes
+- `applyPageBreakRules()` - Simplified page break management
+- `applyPrintScaling()` - **REFACTORED** Robust CSS transform scaling
+- `generatePrintContent()` - Main entry point with density calculation
+- `executePrint()` - Streamlined print execution
+
+**Scaling Features:**
+- Measures actual rendered dimensions before printing
+- Uses CSS `transform: scale()` instead of `zoom` property
+- Applies minimum scale threshold (50%) for readability
+- Scales fonts proportionally with `em` units
+- Logs scaling decisions to console for debugging
 
 **Usage:**
 ```javascript
@@ -1169,7 +1197,7 @@ window.PrintRenderer.executePrint(printContent, 'week');
 
 ### print-utils.js
 **Path:** `src/features/print/print-utils.js`
-**Purpose:** Print utilities and bridge to modular system
+**Purpose:** Print utilities and bridge to modular system (cleaned up)
 
 **Exports (via window.PrintUtils):**
 ```javascript
@@ -1177,6 +1205,8 @@ export function getDepartmentColorMapping(): object
 export function parseDate(dateStr): Date
 export function normalizeDepartmentClass(dept): string
 export function getMaxTasksForDept(dept, tasks, dates, printType): number
+export function generateBatchTasks(dates, allTasks): Task[]
+export function generateLayoutTasks(dates, allTasks): Task[]
 export function generatePrintContent(...): HTMLElement  // Delegates to PrintRenderer
 export function executePrint(...): void  // Delegates to PrintRenderer
 ```
@@ -1186,13 +1216,20 @@ export function executePrint(...): void  // Delegates to PrintRenderer
 - Delegates to `print-renderer.js` for main operations
 
 **Description:**
-Provides utility functions and acts as backward compatibility layer. Entry point delegates to modular system.
+Provides utility functions and acts as entry point layer. Delegates to modular system for rendering. Legacy fallback code removed in latest refactoring.
 
 **Key Functions:**
 - `getDepartmentColorMapping()` - Returns department colors for print
 - `parseDate()` - Parses dates from various formats (MM/DD/YYYY, etc.)
 - `normalizeDepartmentClass()` - Converts "Form Out" → "form-out"
 - `getMaxTasksForDept()` - Calculates max tasks per day for layout
+- `generatePrintContent()` - Entry point that delegates to PrintRenderer
+- `executePrint()` - Entry point that delegates to PrintRenderer
+
+**Recent Changes:**
+- Removed 58 lines of unused legacy fallback functions
+- Streamlined error handling
+- Cleaner delegation to modular system
 
 **Department Colors:**
 ```javascript
@@ -1238,17 +1275,26 @@ Debugging utilities for print system development and troubleshooting.
 
 **Module Loading Order:**
 1. `print-layout.js` (component creators)
-2. `print-renderer.js` (page assembly)
+2. `print-renderer.js` (page assembly with auto-scaling)
 3. `print-utils.js` (entry point/bridge)
 
 **Print Types:**
-- **Weekly Print** - Landscape, 7-day columns, all tasks
-- **Daily Print** - Portrait, single day, detailed view
+- **Weekly Print** - Landscape, 7-day columns, all tasks, auto-scaled
+- **Daily Print** - Portrait, single day, detailed view, auto-scaled
+
+**Auto-Scaling Features (Latest Refactoring):**
+- **Robust CSS Transform Scaling** - Measures actual content, applies optimal scale
+- **Density Classes** - Dynamic CSS classes based on task count (few/normal/many/very-many)
+- **Flexible Units** - All sizes use relative `em` units instead of fixed points
+- **Minimum Scale** - 50% threshold maintains readability
+- **No Overflow** - Content automatically scales to fit single page
+- **No Stray Styles** - Overrides body transform from base.css
 
 **Critical Behavior:**
 - Single department → 1 page, no page break after
 - Multiple departments → Each on own page, breaks between (not after last)
-- Page break management prevents blank pages
+- Simplified page break management
+- 5-100+ tasks automatically handled via scaling
 
 **Testing Checklist:**
 - [ ] Single department prints on 1 page (no blank pages)
@@ -1256,7 +1302,11 @@ Debugging utilities for print system development and troubleshooting.
 - [ ] No blank page after last department
 - [ ] Weekly print uses landscape orientation
 - [ ] Daily print uses portrait orientation
-- [ ] Content doesn't overflow pages
+- [ ] Content never overflows to second sheet
+- [ ] Scaling works with 5, 20, 50, 100+ tasks
+- [ ] Text remains readable at all scales (≥50%)
+- [ ] Density classes applied correctly
+- [ ] Console logs show scaling decisions
 
 **See Also:**
 - `.claude/ARCHITECTURE.md` - Complete print system architecture

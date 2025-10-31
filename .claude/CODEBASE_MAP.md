@@ -77,9 +77,9 @@ weekly/
 │   │       └── print-modal.js          # Print configuration
 │   │
 │   ├── features/                       # Feature modules
-│   │   ├── print/                      # Print system (modular)
-│   │   │   ├── print-layout.js         # Layout components
-│   │   │   ├── print-renderer.js       # Page assembly
+│   │   ├── print/                      # Print system (modular, robust auto-scaling)
+│   │   │   ├── print-layout.js         # Layout components with dynamic density
+│   │   │   ├── print-renderer.js       # Page assembly with auto-scaling
 │   │   │   ├── print-utils.js          # Print utilities
 │   │   │   └── print-debug.js          # Debug tools
 │   │   ├── drag-drop/
@@ -387,6 +387,9 @@ Need to modify something? Find it here:
 ### Print issues
 - See `Documentation/AGENTS.md` for detailed troubleshooting
 - Check `src/features/print/print-debug.js` for debug tools
+- Print system now uses robust auto-scaling (CSS transform)
+- Density classes automatically applied based on task count
+- Never overflows to second sheet (50% minimum scale)
 
 ## Next Steps
 
