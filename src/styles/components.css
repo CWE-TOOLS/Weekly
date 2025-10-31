@@ -88,7 +88,7 @@
 .task-card {
   color: var(--text-primary);
   border-radius: var(--border-radius-md);
-  padding: 0.75rem;
+  padding: 0.35rem;
   border: none;
   cursor: pointer;
   display: flex;
@@ -489,7 +489,7 @@
 .task-title {
   font-weight: 600;
   font-size: 0.9rem;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.25rem;
   color: inherit;
   text-align: center;
 }
@@ -497,17 +497,17 @@
 .task-description {
   font-size: 1rem;
   font-weight: 600;
-  margin-bottom: 1rem;
+  margin-bottom: 0.25rem;
   color: inherit;
   flex-grow: 1;
   text-align: center;
 }
 
 .project-description {
-  font-size: 1rem;
+  font-size: 0.8rem;
   font-weight: 400;
   font-style: italic;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.25rem;
   color: inherit;
   text-align: center;
   opacity: 0.75;
@@ -527,7 +527,7 @@
   color: inherit;
   opacity: 0.9;
   border-top: 1px solid rgba(0, 0, 0, 0.08);
-  padding-top: 0.5rem;
+  padding-top: 0.25rem;
   margin-top: auto;
 }
 
@@ -541,7 +541,7 @@
   font-weight: 600;
   text-align: center;
   padding: 0.25rem 0;
-  margin: 0.5rem -0.75rem 0.5rem -0.75rem;
+  margin: 0.15rem -0.35rem 0.15rem -0.35rem;
   background-color: rgba(0, 0, 0, 0.08);
   color: inherit;
 }
@@ -1756,6 +1756,405 @@ body.dragging-active .task-card-placeholder {
 
 .print-cancel-btn:hover {
   background: var(--border-secondary);
+}
+
+.print-preview-btn {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: var(--border-radius-md);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: var(--shadow-sm);
+}
+
+.print-preview-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+/* Print Preview Modal */
+.print-preview-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.95);
+  z-index: 10000;
+  display: none;
+  overflow: auto;
+}
+
+.print-preview-modal.show {
+  display: block;
+}
+
+.print-preview-overlay {
+  width: 100%;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
+  box-sizing: border-box;
+}
+
+.print-preview-controls {
+  position: sticky;
+  top: 0;
+  z-index: 10001;
+  background: rgba(0, 0, 0, 0.9);
+  padding: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  border-radius: var(--border-radius-md);
+  margin-bottom: 1rem;
+  box-shadow: var(--shadow-md);
+}
+
+.print-preview-zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.print-preview-zoom-btn {
+  padding: 0.5rem 1rem;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: white;
+  border: none;
+  border-radius: var(--border-radius-md);
+  font-size: 1.25rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow-sm);
+  min-width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.print-preview-zoom-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.print-preview-zoom-btn:active {
+  transform: translateY(0);
+}
+
+.print-preview-zoom-level {
+  color: white;
+  font-size: 1rem;
+  font-weight: 600;
+  min-width: 60px;
+  text-align: center;
+}
+
+.print-preview-close-btn {
+  padding: 0.75rem 1.5rem;
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: white;
+  border: none;
+  border-radius: var(--border-radius-md);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow-sm);
+}
+
+.print-preview-close-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.print-preview-page-info {
+  color: white;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.print-preview-viewport {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2rem;
+  padding: 1rem;
+  background: #808080;
+  border-radius: var(--border-radius-md);
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.3);
+  overflow-x: auto;
+  overflow-y: auto;
+}
+
+/* Style print pages in preview to look like paper - Apply all print styles */
+.print-preview-viewport .print-preview-content {
+  display: flex !important;
+  flex-direction: column;
+  align-items: center;
+  gap: 4rem;
+  width: auto;
+  min-width: min-content;
+  margin: 2rem 0;
+}
+
+.print-preview-viewport .print-page {
+  background: white;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  border-radius: 4px;
+  padding: 0.25in;
+  box-sizing: border-box;
+
+  /* Letter landscape dimensions at ~96 DPI - FIXED WIDTH, NO STRETCHING */
+  width: 11in !important;
+  max-width: 11in !important;
+  min-width: 11in !important;
+  min-height: 8.5in;
+  flex-shrink: 0;
+
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  align-items: center !important;
+
+  /* Zoom is controlled via JavaScript */
+}
+
+.print-preview-viewport .print-page-day {
+  /* Daily print uses portrait orientation - FIXED DIMENSIONS */
+  width: 8.5in !important;
+  max-width: 8.5in !important;
+  min-width: 8.5in !important;
+  min-height: 11in;
+}
+
+/* Apply print table styles to preview */
+.print-preview-viewport .print-table {
+  width: 100%;
+  max-width: 100%;
+  border-collapse: collapse;
+  font-size: 7pt;
+  background: white;
+  margin: 0;
+  table-layout: fixed;
+}
+
+.print-preview-viewport .print-table th,
+.print-preview-viewport .print-table td {
+  border: 1px solid #666;
+  padding: 0.3em;
+  text-align: center;
+  vertical-align: top;
+  font-size: 1em;
+  width: 16.66%;
+  font-weight: 500;
+}
+
+.print-preview-viewport .print-table th {
+  background: #e8e8e8;
+  font-weight: 700;
+  font-size: 1.1em !important;
+  padding: 0.4em;
+  line-height: 1.3;
+}
+
+.print-preview-viewport .print-table tfoot td {
+  background: #e8e8e8 !important;
+  font-weight: 700 !important;
+  border-top: 2px solid #666 !important;
+  padding: 0.4em !important;
+  font-size: 1em !important;
+}
+
+.print-preview-viewport .print-grid-cell {
+  background: #f5f5f5;
+  padding: 0.3em;
+}
+
+/* Density classes for dynamic scaling based on task count */
+.print-preview-viewport .print-page.few-tasks .print-grid-cell {
+  min-height: 5em;
+}
+
+.print-preview-viewport .print-page.normal-tasks .print-grid-cell {
+  min-height: 4em;
+}
+
+.print-preview-viewport .print-page.many-tasks .print-grid-cell {
+  min-height: 3em;
+}
+
+.print-preview-viewport .print-page.very-many-tasks .print-grid-cell {
+  min-height: 2em;
+}
+
+.print-preview-viewport .print-task-card {
+  font-size: 1em;
+  padding: 0.25em;
+  background: white;
+  border: 1px solid #ccc;
+  border-radius: 0.2em;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+}
+
+.print-preview-viewport .print-task-title {
+  font-weight: 700 !important;
+  font-size: 1.1em !important;
+  margin-bottom: 0.25em;
+  color: white !important;
+  text-align: center;
+  padding: 0.3em 0.4em !important;
+  border-radius: 0.2em !important;
+  display: block !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  print-color-adjust: exact !important;
+  -webkit-print-color-adjust: exact !important;
+}
+
+.print-preview-viewport .print-project-description {
+  font-size: 0.85em !important;
+  font-weight: 600 !important;
+  color: #444 !important;
+  text-align: center;
+  margin-bottom: 0.2em;
+  line-height: 1.2;
+}
+
+.print-preview-viewport .print-task-day-counter {
+  font-size: 0.8em !important;
+  font-weight: 600 !important;
+  color: #666 !important;
+  text-align: center;
+  margin-bottom: 0.2em;
+  background: #fef3c7;
+  padding: 0.1em 0.3em;
+  border-radius: 0.1em;
+  display: inline-block;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.print-preview-viewport .print-task-description {
+  font-size: 0.95em !important;
+  font-weight: 600 !important;
+  margin-bottom: 0.25em;
+  color: #222 !important;
+  text-align: center;
+  line-height: 1.3;
+}
+
+.print-preview-viewport .print-task-details {
+  font-size: 0.75em !important;
+  font-weight: 600 !important;
+  color: #444 !important;
+  text-align: center;
+  margin-top: 0.2em;
+  padding-top: 0.2em;
+  border-top: 1px solid #ddd;
+}
+
+.print-preview-viewport .print-department-header {
+  font-weight: 700;
+  font-size: 2.5em;
+  padding: 0.5em 0.3em;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  width: 2.5em;
+  border: 1px solid #666;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 10em;
+  print-color-adjust: exact !important;
+  -webkit-print-color-adjust: exact !important;
+  letter-spacing: 0.05em;
+}
+
+.print-preview-viewport .print-department-header-day {
+  writing-mode: horizontal-tb !important;
+  text-orientation: mixed !important;
+  width: 100% !important;
+  min-height: 0 !important;
+  padding: 0.6em 0.4em !important;
+  font-size: 2.2em !important;
+}
+
+.print-preview-viewport .print-dept-summary {
+  font-weight: 700;
+  font-size: 1em;
+  color: black;
+  margin: 0.2em 0;
+  text-align: center;
+  border: 1px solid #666;
+  background: #f9f9f9;
+  padding: 0.4em 0.5em;
+}
+
+.print-preview-viewport .print-missing-description {
+  color: #ef4444;
+  font-weight: 600;
+}
+
+/* Compact table styles */
+.print-preview-viewport .print-table.compact {
+  font-size: 6pt;
+}
+
+.print-preview-viewport .print-table.compact th,
+.print-preview-viewport .print-table.compact td {
+  padding: 0.2em;
+}
+
+.print-preview-viewport .print-table.compact .print-task-card {
+  font-size: 0.9em;
+  padding: 0.15em;
+}
+
+/* Daily print styles */
+.print-preview-viewport .print-table.daily-print {
+  font-size: 1.2em;
+}
+
+.print-preview-viewport .print-table.daily-print th,
+.print-preview-viewport .print-table.daily-print td {
+  padding: 0.3em;
+}
+
+.print-preview-viewport .print-table.daily-print .print-task-card {
+  font-size: 1.1em;
+  padding: 0.3em;
+}
+
+/* Department color classes */
+.print-preview-viewport .print-department-header.department-mill { background-color: #06B6D4 !important; color: #FFFFFF !important; }
+.print-preview-viewport .print-department-header.department-form-out { background-color: #3B82F6 !important; color: #FFFFFF !important; }
+.print-preview-viewport .print-department-header.department-cast { background-color: #EF4444 !important; color: #FFFFFF !important; }
+.print-preview-viewport .print-department-header.department-batch { background-color: #800000 !important; color: #FFFFFF !important; }
+.print-preview-viewport .print-department-header.department-layout { background-color: #A16207 !important; color: #FFFFFF !important; }
+.print-preview-viewport .print-department-header.department-demold { background-color: #F97316 !important; color: #FFFFFF !important; }
+.print-preview-viewport .print-department-header.department-finish { background-color: #8B5CF6 !important; color: #FFFFFF !important; }
+.print-preview-viewport .print-department-header.department-seal { background-color: #6B7280 !important; color: #FFFFFF !important; }
+.print-preview-viewport .print-department-header.department-special { background-color: #EC4899 !important; color: #FFFFFF !important; }
+.print-preview-viewport .print-department-header.department-crating { background-color: #A16207 !important; color: #FFFFFF !important; }
+.print-preview-viewport .print-department-header.department-load { background-color: #F59E0B !important; color: #FFFFFF !important; }
+.print-preview-viewport .print-department-header.department-ship { background-color: #22C55E !important; color: #FFFFFF !important; }
+
+/* Ensure department colors are visible in preview */
+.print-preview-viewport .print-department-header,
+.print-preview-viewport .print-task-title,
+.print-preview-viewport .print-table th {
+  print-color-adjust: exact !important;
+  -webkit-print-color-adjust: exact !important;
 }
 
 .print-preview-content {
