@@ -78,8 +78,9 @@ function createTableFooter(dates, tasks, printType) {
 
     const tfoot = document.createElement('tfoot');
     const revenueRow = document.createElement('tr');
-    revenueRow.style.borderTop = '2px solid #000';
-    revenueRow.style.fontSize = '0.4rem';
+    revenueRow.style.borderTop = '2px solid #666';
+    revenueRow.style.fontSize = '0.85em';
+    revenueRow.style.background = '#e8e8e8';
 
     dates.forEach(date => {
         if (!date) return;
@@ -97,9 +98,10 @@ function createTableFooter(dates, tasks, printType) {
         const dayRevenue = Math.round(dayHours * 135);
 
         const revenueCell = document.createElement('td');
-        revenueCell.textContent = `Daily: $${dayRevenue.toLocaleString()}`;
+        revenueCell.innerHTML = `<strong>Daily Total</strong><br>$${dayRevenue.toLocaleString()}`;
         revenueCell.style.fontWeight = 'bold';
         revenueCell.style.textAlign = 'center';
+        revenueCell.style.padding = '0.4em';
         revenueRow.appendChild(revenueCell);
     });
 
