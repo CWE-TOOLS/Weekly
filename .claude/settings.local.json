@@ -25,7 +25,9 @@
       "mcp__playwright__browser_press_key",
       "Bash(git checkout:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(claude mcp:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []

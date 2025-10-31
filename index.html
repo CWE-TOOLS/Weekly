@@ -255,9 +255,22 @@
                     </div>
 
                     <div class="print-actions">
-                        <button id="print-execute-btn" class="print-execute-btn">Print Selected</button>
-                        <button id="print-cancel-btn" class="print-cancel-btn">Cancel</button>
+                        <button type="button" id="print-execute-btn" class="print-execute-btn">Print Selected</button>
+                        <button type="button" id="print-cancel-btn" class="print-cancel-btn">Cancel</button>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Print Preview Modal -->
+        <div class="print-preview-modal" id="print-preview-modal">
+            <div class="print-preview-overlay">
+                <div class="print-preview-controls">
+                    <button type="button" id="print-preview-close" class="print-preview-close-btn">Close Preview</button>
+                    <span id="print-preview-page-info" class="print-preview-page-info"></span>
+                </div>
+                <div class="print-preview-viewport" id="print-preview-viewport">
+                    <!-- Print content will be injected here -->
                 </div>
             </div>
         </div>

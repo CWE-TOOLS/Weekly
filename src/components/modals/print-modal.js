@@ -16,6 +16,7 @@ let modalElement = null;
 let closeButton = null;
 let cancelButton = null;
 let executeButton = null;
+let previewButton = null;
 let weekSelectElement = null;
 let dateSelectElement = null;
 let weekSectionElement = null;
@@ -23,6 +24,12 @@ let daySectionElement = null;
 let departmentsGridElement = null;
 let checkAllButton = null;
 let uncheckAllButton = null;
+
+// Preview modal state
+let previewModalElement = null;
+let previewCloseButton = null;
+let previewViewport = null;
+let previewPageInfo = null;
 
 let currentPrintWeekDates = [];
 let allDepartmentsForPrint = [];
@@ -38,6 +45,7 @@ export function initializePrintModal() {
     closeButton = document.getElementById('print-close');
     cancelButton = document.getElementById('print-cancel-btn');
     executeButton = document.getElementById('print-execute-btn');
+    previewButton = document.getElementById('print-preview-btn');
     weekSelectElement = document.getElementById('print-week-select');
     dateSelectElement = document.getElementById('print-date-select');
     weekSectionElement = document.getElementById('week-select-section');
@@ -45,6 +53,12 @@ export function initializePrintModal() {
     departmentsGridElement = document.querySelector('.departments-grid');
     checkAllButton = document.getElementById('check-all-depts');
     uncheckAllButton = document.getElementById('uncheck-all-depts');
+
+    // Get preview modal elements
+    previewModalElement = document.getElementById('print-preview-modal');
+    previewCloseButton = document.getElementById('print-preview-close');
+    previewViewport = document.getElementById('print-preview-viewport');
+    previewPageInfo = document.getElementById('print-preview-page-info');
 
     if (!modalElement) {
         console.error('Print modal elements not found in DOM');
@@ -55,6 +69,21 @@ export function initializePrintModal() {
     closeButton.addEventListener('click', hidePrintModal);
     cancelButton.addEventListener('click', hidePrintModal);
     executeButton.addEventListener('click', handlePrintExecute);
+
+    if (previewButton) {
+        previewButton.addEventListener('click', handlePrintPreview);
+    }
+
+    if (previewCloseButton) {
+        previewCloseButton.addEventListener('click', hidePreviewModal);
+    }
+
+    // Close preview modal on ESC key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && previewModalElement && previewModalElement.classList.contains('show')) {
+            hidePreviewModal();
+        }
+    });
 
     // Close modal on background click
     modalElement.addEventListener('click', (e) => {
@@ -326,6 +355,146 @@ function handlePrintExecute() {
     } else {
         console.error('Print utilities not available');
         alert('Print system not available. Please refresh the page.');
+    }
+}
+
+/**
+ * Handle print preview
+ * @private
+ */
+function handlePrintPreview() {
+    const checkedRadio = document.querySelector('input[name="print-type"]:checked');
+    const printType = (checkedRadio && checkedRadio.value) || 'week';
+    const selectedDepts = Array.from(document.querySelectorAll('.departments-grid input[type="checkbox"]:checked'))
+        .map(cb => cb.value);
+
+    if (selectedDepts.length === 0) {
+        alert('Please select at least one department.');
+        return;
+    }
+
+    // Update dates based on print type
+    if (printType === 'week') {
+        updateWeekDates();
+    } else if (printType === 'day') {
+        const value = dateSelectElement.value;
+        if (!value) {
+            alert('Please select a date.');
+            return;
+        }
+        const [year, month, day] = value.split('-').map(Number);
+        const selectedDate = new Date(year, month - 1, day);
+        currentPrintWeekDates = [selectedDate];
+    }
+
+    // Generate print content using external utilities
+    const allTasks = getAllTasks();
+    if (window.PrintUtils && window.PrintUtils.generatePrintContent) {
+        const printContent = window.PrintUtils.generatePrintContent(printType, selectedDepts, currentPrintWeekDates, allTasks);
+
+        if (printContent) {
+            showPreviewModal(printContent, printType);
+        }
+    } else {
+        console.error('Print utilities not available');
+        alert('Print system not available. Please refresh the page.');
+    }
+}
+
+/**
+ * Fit print pages to viewport height
+ * Scales each page to fit the available viewport height
+ * @private
+ */
+function fitPagesToViewport() {
+    if (!previewViewport) {
+        console.warn('Preview viewport not found');
+        return;
+    }
+
+    // Use requestAnimationFrame to ensure we run after layout
+    requestAnimationFrame(() => {
+        const pages = previewViewport.querySelectorAll('.print-page');
+        if (pages.length === 0) return;
+
+        // Get viewport height and use 98% of it for maximum space usage
+        const viewportHeight = previewViewport.clientHeight * 0.98;
+
+        pages.forEach((page, index) => {
+            // Get the natural height of the page
+            const pageHeight = page.offsetHeight;
+
+            if (pageHeight > 0) {
+                // Calculate scale to fit 98% of viewport height
+                let scale = viewportHeight / pageHeight;
+
+                // Cap at 0.95 to prevent pages from getting too large
+                scale = Math.min(scale, 0.95);
+
+                // Apply the scale using CSS transform
+                page.style.transform = `scale(${scale})`;
+                page.style.transformOrigin = 'top center';
+
+                // Add margin between pages for better separation
+                page.style.marginBottom = '40px';
+
+                console.log(`Page ${index + 1} - Height: ${pageHeight}px, Viewport: ${viewportHeight.toFixed(0)}px, Scale: ${scale.toFixed(3)}`);
+            }
+        });
+    });
+}
+
+/**
+ * Show preview modal with print content
+ * @private
+ */
+function showPreviewModal(printContent, printType) {
+    if (!previewModalElement || !previewViewport) {
+        console.error('Preview modal elements not found');
+        return;
+    }
+
+    // Clear previous content
+    previewViewport.innerHTML = '';
+
+    // Clone the print content to avoid affecting the original
+    const clonedContent = printContent.cloneNode(true);
+
+    // Add to viewport
+    previewViewport.appendChild(clonedContent);
+
+    // Fit pages to viewport
+    fitPagesToViewport();
+
+    // Update page info
+    const pages = clonedContent.querySelectorAll('.print-page');
+    if (previewPageInfo) {
+        previewPageInfo.textContent = `${pages.length} page${pages.length !== 1 ? 's' : ''}`;
+    }
+
+    // Show the modal
+    previewModalElement.classList.add('show');
+    document.body.style.overflow = 'hidden';
+
+    // Hide the print configuration modal
+    if (modalElement) {
+        modalElement.classList.remove('show');
+    }
+}
+
+/**
+ * Hide preview modal
+ * @private
+ */
+function hidePreviewModal() {
+    if (!previewModalElement) return;
+
+    previewModalElement.classList.remove('show');
+    document.body.style.overflow = '';
+
+    // Clear the viewport
+    if (previewViewport) {
+        previewViewport.innerHTML = '';
     }
 }
 
