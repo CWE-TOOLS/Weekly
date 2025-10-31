@@ -327,91 +327,36 @@ function generateLayoutTasks(dates, allTasks) {
 
 /**
  * Generate complete print content for selected departments
- * This now delegates to the modular print renderer
+ * This delegates to the modular print renderer
  */
 function generatePrintContent(printType, selectedDepts, weekDates, allTasks) {
     // Check if modular system is loaded
     if (!window.PrintRenderer || !window.PrintLayout) {
-        console.error('Print modules not loaded. Falling back to legacy system.');
-        return generatePrintContentLegacy(printType, selectedDepts, weekDates, allTasks);
+        console.error('Print modules not loaded. Please ensure print-renderer.js and print-layout.js are included.');
+        const errorContainer = document.createElement('div');
+        errorContainer.className = 'print-preview-content';
+        errorContainer.innerHTML = '<p style="color: red; padding: 20px;">Error: Print modules not loaded</p>';
+        return errorContainer;
     }
-    
-    // Use the new modular renderer
+
+    // Use the modular renderer
     return window.PrintRenderer.generatePrintContent(printType, selectedDepts, weekDates, allTasks);
 }
 
 /**
  * Execute print with proper setup and cleanup
- * This now delegates to the modular print renderer
+ * This delegates to the modular print renderer
  */
 function executePrint(printContent, printType = 'week') {
     // Check if modular system is loaded
     if (!window.PrintRenderer) {
-        console.error('Print renderer not loaded. Falling back to legacy system.');
-        return executePrintLegacy(printContent, printType);
+        console.error('Print renderer not loaded. Please ensure print-renderer.js is included.');
+        alert('Print system not loaded. Please refresh the page and try again.');
+        return;
     }
-    
-    // Use the new modular renderer
+
+    // Use the modular renderer
     window.PrintRenderer.executePrint(printContent, printType);
-}
-
-/**
- * Legacy fallback: Generate print content (old system)
- * Kept for backward compatibility
- */
-function generatePrintContentLegacy(printType, selectedDepts, weekDates, allTasks) {
-    console.warn('Using legacy print system');
-    const printContainer = document.createElement('div');
-    printContainer.className = 'print-preview-content';
-    printContainer.innerHTML = '<p>Legacy print system - please ensure print modules are loaded</p>';
-    return printContainer;
-}
-
-/**
- * Legacy fallback: Execute print (old system)
- * Kept for backward compatibility
- */
-function executePrintLegacy(printContent, printType = 'week') {
-    console.warn('Using legacy print execution');
-    
-    let dynamicStyle = null;
-    if (printType === 'day') {
-        dynamicStyle = document.createElement('style');
-        dynamicStyle.textContent = '@page { size: letter portrait; margin: 0.5in; }';
-        document.head.appendChild(dynamicStyle);
-    }
-    
-    const blankPageFix = document.createElement('style');
-    blankPageFix.textContent = `
-        @media print {
-            * {
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-            }
-            .print-page {
-                page-break-after: avoid !important;
-                page-break-inside: avoid !important;
-                break-inside: avoid !important;
-                margin-bottom: 0 !important;
-            }
-            .print-page:last-child {
-                page-break-after: avoid !important;
-                margin-bottom: 0 !important;
-            }
-        }
-    `;
-    document.head.appendChild(blankPageFix);
-    
-    document.body.appendChild(printContent);
-    
-    setTimeout(() => {
-        window.print();
-        if (dynamicStyle) {
-            document.head.removeChild(dynamicStyle);
-        }
-        document.head.removeChild(blankPageFix);
-        document.body.removeChild(printContent);
-    }, 1500);
 }
 
 // Export functions for global use

@@ -14,11 +14,7 @@
 function createDepartmentPage(dept, tasks, dates, printType, isCompact, colors, syntheticTasks = null, syntheticDeptName = null) {
     const pageDiv = document.createElement('div');
     pageDiv.className = `print-page ${printType === 'day' ? 'print-page-day' : ''}`;
-    pageDiv.style.display = 'flex';
-    pageDiv.style.flexDirection = 'column';
-    pageDiv.style.justifyContent = 'center';
-    pageDiv.style.alignItems = 'center';
-    pageDiv.style.minHeight = printType === 'day' ? '10in' : '7.5in';
+    // Removed inline styles - let CSS handle layout and sizing
 
     // Calculate totals for main department
     let totalHours = 0;
@@ -122,47 +118,48 @@ function createDepartmentPage(dept, tasks, dates, printType, isCompact, colors, 
 }
 
 /**
- * Apply page break rules to prevent blank pages
- * CRITICAL: This ensures page breaks between departments while preventing blank pages
+ * Calculate task density and apply appropriate CSS class
+ * This helps the CSS apply appropriate sizing for different task counts
+ */
+function applyDensityClass(page, taskCount, printType) {
+    // Remove any existing density classes
+    page.classList.remove('few-tasks', 'normal-tasks', 'many-tasks', 'very-many-tasks');
+
+    // Apply density class based on task count
+    if (printType === 'week') {
+        if (taskCount <= 3) {
+            page.classList.add('few-tasks');
+        } else if (taskCount <= 6) {
+            page.classList.add('normal-tasks');
+        } else if (taskCount <= 10) {
+            page.classList.add('many-tasks');
+        } else {
+            page.classList.add('very-many-tasks');
+        }
+    } else {
+        // Daily view has more vertical space
+        if (taskCount <= 5) {
+            page.classList.add('few-tasks');
+        } else if (taskCount <= 10) {
+            page.classList.add('normal-tasks');
+        } else if (taskCount <= 15) {
+            page.classList.add('many-tasks');
+        } else {
+            page.classList.add('very-many-tasks');
+        }
+    }
+}
+
+/**
+ * Simplified page break management - CSS handles most of the work now
  */
 function applyPageBreakRules(pages) {
     if (!pages || pages.length === 0) return;
-    
-    pages.forEach((page, index) => {
-        // Remove all page break styles first
-        page.style.pageBreakAfter = 'auto';
-        page.style.pageBreakBefore = 'auto';
-        page.style.pageBreakInside = 'avoid';
-        page.style.breakAfter = 'auto';
-        page.style.breakBefore = 'auto';
-        page.style.breakInside = 'avoid';
-        
-        // Critical: Ensure no margins/padding that could push content to next page
+
+    // CSS now handles page breaks, but we ensure inline styles don't interfere
+    pages.forEach((page) => {
         page.style.margin = '0';
         page.style.padding = '0';
-        page.style.marginBottom = '0';
-        page.style.paddingBottom = '0';
-        
-        // Prevent orphans and widows
-        page.style.orphans = '999';
-        page.style.widows = '999';
-        
-        // CRITICAL: Add page break after each department page except the last one
-        // This ensures each department prints on its own page when multiple departments are selected
-        if (index < pages.length - 1) {
-            // Force page break between departments
-            page.style.pageBreakAfter = 'always';
-            page.style.breakAfter = 'page';
-            // Ensure the break is respected
-            page.style.pageBreakInside = 'avoid';
-            page.style.breakInside = 'avoid';
-        } else {
-            // Last page: explicitly prevent page break to avoid blank pages
-            page.style.pageBreakAfter = 'avoid';
-            page.style.breakAfter = 'avoid';
-            page.style.pageBreakBefore = 'auto';
-            page.style.breakBefore = 'auto';
-        }
     });
 }
 
@@ -265,35 +262,84 @@ function generatePrintContent(printType, selectedDepts, weekDates, allTasks) {
 
         // Create page for this department with optional synthetic department
         const page = createDepartmentPage(dept, deptTasks, weekDates, printType, isCompact, colors, syntheticTasks, syntheticDeptName);
+
+        // Calculate max tasks for density class
+        const maxTaskCount = getMaxTasksForDept(dept, deptTasks, weekDates, printType);
+        applyDensityClass(page, maxTaskCount, printType);
+
         pages.push(page);
         printContainer.appendChild(page);
     });
 
-    // Apply page break rules to prevent blank pages
+    // Apply simplified page break rules
     applyPageBreakRules(pages);
 
     return printContainer;
 }
 
 /**
- * Apply intelligent scaling to fit content within page bounds
+ * Apply robust auto-scaling to fit content within page bounds
+ * Measures actual rendered dimensions and applies CSS transform scaling
  */
 function applyPrintScaling(printContent, printType) {
     const pages = printContent.querySelectorAll('.print-page');
-    // Increased thresholds to accommodate more compact layout before scaling
-    const pageMaxHeightPx = printType === 'day' ? 8 * 96 : 7 * 96; // Convert inches to pixels
+
+    // Define page dimensions in pixels (96 DPI standard)
+    // Letter landscape: 11" x 8.5" minus 0.25" margins = 10.5" x 8" usable
+    const pageMaxWidthPx = 10.5 * 96;   // ~1008px
+    const pageMaxHeightPx = printType === 'day' ? 10 * 96 : 8 * 96; // ~768px for landscape, ~960px for day
+
+    // Minimum scale to maintain readability (don't go below 50% scale)
+    const MIN_SCALE = 0.5;
+
+    // Base font size for scaling calculations (7pt is about 9.33px at 96 DPI)
+    const BASE_FONT_SIZE = 7; // in points
 
     requestAnimationFrame(() => {
         setTimeout(() => {
             pages.forEach(page => {
-                page.offsetHeight; // Force layout recalculation
-                const height = page.offsetHeight;
-                if (height > pageMaxHeightPx) {
-                    const scale = pageMaxHeightPx / height;
-                    page.style.zoom = scale;
+                // Force layout recalculation
+                page.offsetHeight;
+
+                // Measure actual content dimensions
+                const contentWidth = page.scrollWidth;
+                const contentHeight = page.scrollHeight;
+
+                // Calculate scale factors for both dimensions
+                const widthScale = contentWidth > 0 ? pageMaxWidthPx / contentWidth : 1;
+                const heightScale = contentHeight > 0 ? pageMaxHeightPx / contentHeight : 1;
+
+                // Use the smaller scale to ensure everything fits
+                // Never scale up (max 1.0), always scale down if needed
+                let scale = Math.min(widthScale, heightScale, 1.0);
+
+                // Apply minimum scale threshold
+                scale = Math.max(scale, MIN_SCALE);
+
+                // Only apply scaling if we need to shrink content
+                if (scale < 1.0) {
+                    // Calculate the scaled font size for the base
+                    const scaledFontSize = BASE_FONT_SIZE * scale;
+
+                    // Apply transform scaling to the page container
+                    page.style.transform = `scale(${scale})`;
+                    page.style.transformOrigin = 'top center';
+
+                    // Set base font size on the page to work with em units
+                    page.style.fontSize = `${scaledFontSize}pt`;
+
+                    // Adjust container to account for scaling
+                    page.style.width = `${100 / scale}%`;
+                    page.style.height = 'auto';
+
+                    console.log(`Print scaling applied: ${(scale * 100).toFixed(1)}% (${contentWidth}x${contentHeight}px -> ${pageMaxWidthPx}x${pageMaxHeightPx}px)`);
+                } else {
+                    // No scaling needed - content fits naturally
+                    page.style.fontSize = `${BASE_FONT_SIZE}pt`;
+                    console.log(`Print scaling: No scaling needed (content fits within page bounds)`);
                 }
             });
-        }, 100);
+        }, 100); // Small delay to ensure DOM is fully rendered
     });
 }
 
@@ -301,92 +347,40 @@ function applyPrintScaling(printContent, printType) {
  * Execute print with proper setup and cleanup
  */
 function executePrint(printContent, printType = 'week') {
-    // Create dynamic print styles
+    // Create dynamic print styles for portrait orientation (daily view)
     let dynamicStyle = null;
     if (printType === 'day') {
         dynamicStyle = document.createElement('style');
         dynamicStyle.textContent = '@page { size: letter portrait; margin: 0.5in; }';
         document.head.appendChild(dynamicStyle);
     }
-    
-    // Add comprehensive print-specific CSS to ensure page breaks between departments
-    const blankPageFix = document.createElement('style');
-    blankPageFix.textContent = `
+
+    // Add print color preservation
+    const colorFix = document.createElement('style');
+    colorFix.textContent = `
         @media print {
             * {
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
             }
-            
-            /* Critical: Prevent blank pages while allowing department page breaks */
-            html, body {
-                margin: 0 !important;
-                padding: 0 !important;
-                height: auto !important;
-            }
-            
-            /* Each department page should be kept together and break to new page */
-            .print-page {
-                page-break-inside: avoid !important;
-                break-inside: avoid !important;
-                margin: 0 !important;
-                padding: 0 !important;
-                orphans: 999 !important;
-                widows: 999 !important;
-            }
-            
-            /* Ensure page breaks between departments (except after last) */
-            .print-page:not(:last-child) {
-                page-break-after: always !important;
-                break-after: page !important;
-            }
-            
-            /* Last page should never force a page break to prevent blank pages */
-            .print-page:last-child,
-            .print-page:only-child {
-                page-break-after: avoid !important;
-                break-after: avoid !important;
-                margin-bottom: 0 !important;
-                padding-bottom: 0 !important;
-            }
-            
-            /* Prevent table row breaks but preserve table structure */
-            .print-table {
-                page-break-inside: avoid !important;
-                break-inside: avoid !important;
-            }
-            
-            /* Ensure no forced breaks on container */
-            .print-preview-content {
-                margin: 0 !important;
-                padding: 0 !important;
-            }
-            
-            /* Override any page breaks on last elements to prevent blank pages */
-            .print-preview-content > :last-child {
-                page-break-after: avoid !important;
-                break-after: avoid !important;
-                margin-bottom: 0 !important;
-                padding-bottom: 0 !important;
-            }
         }
     `;
-    document.head.appendChild(blankPageFix);
-    
+    document.head.appendChild(colorFix);
+
     document.body.appendChild(printContent);
-    
+
     // Apply scaling if needed
     applyPrintScaling(printContent, printType);
-    
-    // Execute print after scaling
+
+    // Execute print after scaling completes
     setTimeout(() => {
         window.print();
-        
+
         // Cleanup
         if (dynamicStyle) {
             document.head.removeChild(dynamicStyle);
         }
-        document.head.removeChild(blankPageFix);
+        document.head.removeChild(colorFix);
         document.body.removeChild(printContent);
     }, 1500);
 }
@@ -394,6 +388,7 @@ function executePrint(printContent, printType = 'week') {
 // Export rendering functions
 window.PrintRenderer = {
     createDepartmentPage,
+    applyDensityClass,
     applyPageBreakRules,
     generatePrintContent,
     applyPrintScaling,
