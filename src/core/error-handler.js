@@ -5,6 +5,9 @@
  */
 
 // Error levels
+import { logger } from '../utils/logger.js';
+import { NOTIFICATION_DURATION } from '../config/timing-constants.js';
+
 const ERROR_LEVELS = {
     INFO: 'info',
     WARNING: 'warning',
@@ -21,11 +24,11 @@ let retryCallback = null;
  * Sets up global error listeners
  */
 export function initializeErrorHandler() {
-    console.log('🛡️ Initializing error handler...');
+    logger.info('🛡️ Initializing error handler...');
 
     // Global error handler
     window.addEventListener('error', (event) => {
-        console.error('Global error caught:', event.error);
+        logger.error('Global error caught:', event.error);
         handleError(event.error, {
             context: 'Global error handler',
             filename: event.filename,
@@ -36,7 +39,7 @@ export function initializeErrorHandler() {
 
     // Global unhandled promise rejection handler
     window.addEventListener('unhandledrejection', (event) => {
-        console.error('Unhandled promise rejection:', event.reason);
+        logger.error('Unhandled promise rejection:', event.reason);
         handleError(event.reason, {
             context: 'Unhandled promise rejection',
             promise: event.promise
@@ -50,7 +53,7 @@ export function initializeErrorHandler() {
         closeBtn.addEventListener('click', hideErrorNotification);
     }
 
-    console.log('✅ Error handler initialized');
+    logger.info('✅ Error handler initialized');
 }
 
 /**
@@ -66,7 +69,7 @@ export function handleError(error, context = {}) {
     const isCritical = context.critical || false;
 
     // Log to console with context
-    console.error('Error handled:', {
+    logger.error('Error handled:', {
         message: errorMessage,
         error,
         context,
@@ -91,7 +94,7 @@ export function handleError(error, context = {}) {
     showErrorNotification(userMessage, {
         level: isCritical ? ERROR_LEVELS.CRITICAL : ERROR_LEVELS.ERROR,
         retry: context.retry,
-        duration: isCritical ? 0 : 8000 // Critical errors don't auto-hide
+        duration: isCritical ? 0 : NOTIFICATION_DURATION.NETWORK_ERROR // Critical errors don't auto-hide
     });
 
     // Optional: Send to error tracking service
@@ -119,12 +122,12 @@ export function showErrorNotification(message, options = {}) {
     const {
         level = ERROR_LEVELS.ERROR,
         retry = null,
-        duration = 5000
+        duration = NOTIFICATION_DURATION.WARNING
     } = options;
 
     const notification = document.getElementById('error-notification');
     if (!notification) {
-        console.warn('Error notification element not found');
+        logger.warn('Error notification element not found');
         return;
     }
 
@@ -207,7 +210,7 @@ export function hideErrorNotification() {
  * @param {Error} error - Network error
  */
 export function handleNetworkError(error) {
-    console.error('Network error:', error);
+    logger.error('Network error:', error);
 
     // Check if offline
     if (!navigator.onLine) {
@@ -218,7 +221,7 @@ export function handleNetworkError(error) {
     } else {
         showErrorNotification('Network request failed. Please try again.', {
             level: ERROR_LEVELS.ERROR,
-            duration: 8000
+            duration: NOTIFICATION_DURATION.NETWORK_ERROR
         });
     }
 }
@@ -228,7 +231,7 @@ export function handleNetworkError(error) {
  * @param {string} message - Info message
  * @param {number} duration - Auto-hide duration in ms
  */
-export function showInfoNotification(message, duration = 3000) {
+export function showInfoNotification(message, duration = NOTIFICATION_DURATION.INFO) {
     showErrorNotification(message, {
         level: ERROR_LEVELS.INFO,
         duration
@@ -240,7 +243,7 @@ export function showInfoNotification(message, duration = 3000) {
  * @param {string} message - Warning message
  * @param {number} duration - Auto-hide duration in ms
  */
-export function showWarningNotification(message, duration = 5000) {
+export function showWarningNotification(message, duration = NOTIFICATION_DURATION.WARNING) {
     showErrorNotification(message, {
         level: ERROR_LEVELS.WARNING,
         duration

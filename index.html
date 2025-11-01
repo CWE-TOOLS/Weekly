@@ -13,15 +13,26 @@
     <link rel="stylesheet" href="src/styles/variables.css">
     <link rel="stylesheet" href="src/styles/base.css">
     <link rel="stylesheet" href="src/styles/layout.css">
-    <link rel="stylesheet" href="src/styles/components.css">
+
+    <!-- Component CSS Files (modularized from components.css) -->
+    <link rel="stylesheet" href="src/styles/task-card.css">
+    <link rel="stylesheet" href="src/styles/buttons.css">
+    <link rel="stylesheet" href="src/styles/modals.css">
+    <link rel="stylesheet" href="src/styles/schedule-grid.css">
+    <link rel="stylesheet" href="src/styles/department-filter.css">
+    <link rel="stylesheet" href="src/styles/context-menu.css">
+    <link rel="stylesheet" href="src/styles/notifications.css">
+    <link rel="stylesheet" href="src/styles/misc-components.css">
+
     <link rel="stylesheet" href="src/styles/responsive.css">
     <link rel="stylesheet" href="src/styles/print.css">
 
     <!-- Modular Print System Scripts -->
-    <script src="src/features/print/print-layout.js"></script>
-    <script src="src/features/print/print-renderer.js"></script>
-    <script src="src/features/print/print-utils.js"></script>
-    <script src="src/features/print/print-debug.js"></script>
+    <!-- Load print-utils first as it exports window.PrintUtils used by other modules -->
+    <script type="module" src="src/features/print/print-utils.js"></script>
+    <script type="module" src="src/features/print/print-layout.js"></script>
+    <script type="module" src="src/features/print/print-renderer.js"></script>
+    <script type="module" src="src/features/print/print-debug.js"></script>
 </head>
 <body>
     <!-- Error Notification (Phase 8) -->

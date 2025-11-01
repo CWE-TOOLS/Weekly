@@ -1,18 +1,29 @@
 /**
  * Authentication Service
  * Handles JWT generation and Google OAuth authentication for service account access
+ * @module services/auth-service
  */
 
 import { SERVICE_ACCOUNT } from '../config/api-config.js';
+import { NETWORK_TIMING } from '../config/timing-constants.js';
 
+import { logger } from '../utils/logger.js';
 // Token caching
 let cachedAccessToken = null;
 let tokenExpiry = null;
 
 /**
  * Encode a string to Base64 URL-safe format
+ *
+ * Converts string to Base64 and makes it URL-safe by replacing characters
+ * and removing padding. Used for JWT encoding.
+ *
  * @param {string} str - String to encode
  * @returns {string} Base64 URL-encoded string
+ *
+ * @example
+ * const encoded = base64UrlEncode('{"alg":"RS256"}');
+ * // Returns: URL-safe Base64 string
  */
 export function base64UrlEncode(str) {
     return btoa(str)
@@ -23,8 +34,16 @@ export function base64UrlEncode(str) {
 
 /**
  * Decode a Base64 URL-safe string
+ *
+ * Converts URL-safe Base64 back to standard Base64 and decodes it.
+ * Used for JWT decoding.
+ *
  * @param {string} str - Base64 URL-encoded string
  * @returns {string} Decoded string
+ *
+ * @example
+ * const decoded = base64UrlDecode('eyJhbGciOiJSUzI1NiJ9');
+ * // Returns: '{"alg":"RS256"}'
  */
 export function base64UrlDecode(str) {
     str = str.replace(/-/g, '+').replace(/_/g, '/');
@@ -34,7 +53,16 @@ export function base64UrlDecode(str) {
 
 /**
  * Generate a JWT (JSON Web Token) for service account authentication
- * @returns {Promise<string>} Signed JWT token
+ *
+ * Creates and signs a JWT using RS256 algorithm with the service account's
+ * private key. The JWT is used to authenticate with Google OAuth2.
+ *
+ * @returns {Promise<string>} Signed JWT token in format: header.payload.signature
+ * @throws {Error} If private key decoding or signing fails
+ *
+ * @example
+ * const jwt = await generateJWT();
+ * // Returns: 'eyJhbGc...payload...signature'
  */
 export async function generateJWT() {
     const header = {
@@ -47,7 +75,7 @@ export async function generateJWT() {
         iss: SERVICE_ACCOUNT.client_email,
         scope: 'https://www.googleapis.com/auth/spreadsheets',
         aud: 'https://oauth2.googleapis.com/token',
-        exp: now + 3600,
+        exp: now + NETWORK_TIMING.JWT_EXPIRY_SECONDS,
         iat: now
     };
 
@@ -65,7 +93,7 @@ export async function generateJWT() {
     try {
         privateKeyDer = Uint8Array.from(atob(privateKeyPem), c => c.charCodeAt(0));
     } catch (e) {
-        console.error('Error decoding private key:', e.message);
+        logger.error('Error decoding private key:', e.message);
         throw e;
     }
 
@@ -97,8 +125,17 @@ export async function generateJWT() {
 
 /**
  * Get an OAuth access token for Google Sheets API
- * Uses cached token if available and not expired
- * @returns {Promise<string>} Access token
+ *
+ * Returns cached token if still valid, otherwise generates new JWT and
+ * exchanges it for a fresh access token. Tokens are cached for performance
+ * and refreshed 5 minutes before expiry.
+ *
+ * @returns {Promise<string>} OAuth2 access token for Google Sheets API
+ * @throws {Error} If token generation or exchange fails
+ *
+ * @example
+ * const token = await getAccessToken();
+ * // Use token in Authorization header for Google Sheets API calls
  */
 export async function getAccessToken() {
     // Return cached token if still valid
@@ -132,7 +169,14 @@ export async function getAccessToken() {
 }
 
 /**
- * Clear cached access token (useful for testing or logout)
+ * Clear cached access token
+ *
+ * Invalidates the cached access token, forcing a new token to be generated
+ * on the next getAccessToken() call. Useful for testing or manual refresh.
+ *
+ * @example
+ * clearTokenCache();
+ * // Next getAccessToken() call will generate fresh token
  */
 export function clearTokenCache() {
     cachedAccessToken = null;

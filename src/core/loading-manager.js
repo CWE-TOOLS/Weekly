@@ -5,6 +5,9 @@
  */
 
 // Track active operations
+import { logger } from '../utils/logger.js';
+import { UI_DELAY } from '../config/timing-constants.js';
+
 const activeOperations = new Map();
 
 // Progress state
@@ -15,8 +18,8 @@ let progressMessage = '';
  * Initialize loading manager
  */
 export function initializeLoadingManager() {
-    console.log('⏳ Initializing loading manager...');
-    console.log('✅ Loading manager initialized');
+    logger.debug('⏳ Initializing loading manager...');
+    logger.debug('✅ Loading manager initialized');
 }
 
 /**
@@ -33,7 +36,7 @@ export function showLoading(message = 'Loading...', operation = 'default') {
 
     const overlay = document.getElementById('loading-overlay');
     if (!overlay) {
-        console.warn('Loading overlay element not found');
+        logger.warn('Loading overlay element not found');
         return;
     }
 
@@ -45,7 +48,7 @@ export function showLoading(message = 'Loading...', operation = 'default') {
     // Show overlay
     overlay.classList.remove('hidden');
 
-    console.log(`⏳ Loading started: ${operation} - ${message}`);
+    logger.debug(`⏳ Loading started: ${operation} - ${message}`);
 }
 
 /**
@@ -57,7 +60,7 @@ export function hideLoading(operation = 'default') {
     const op = activeOperations.get(operation);
     if (op) {
         const duration = Date.now() - op.startTime;
-        console.log(`✅ Loading completed: ${operation} (${duration}ms)`);
+        logger.debug(`✅ Loading completed: ${operation} (${duration}ms)`);
         activeOperations.delete(operation);
     }
 
@@ -118,7 +121,7 @@ export function updateProgress(percent, message = '') {
         }
     }
 
-    console.log(`📊 Progress: ${currentProgress}% - ${progressMessage}`);
+    logger.debug(`📊 Progress: ${currentProgress}% - ${progressMessage}`);
 }
 
 /**
@@ -148,10 +151,10 @@ function resetProgress() {
  * @param {string} type - Status type (info, success, warning, error)
  * @param {number} duration - Auto-hide duration in ms (default: 3000)
  */
-export function showStatus(status, type = 'info', duration = 3000) {
+export function showStatus(status, type = 'info', duration = UI_DELAY.STATUS_BANNER) {
     const statusEl = document.getElementById('status-banner');
     if (!statusEl) {
-        console.log(`Status: [${type}] ${status}`);
+        logger.debug(`Status: [${type}] ${status}`);
         return;
     }
 
@@ -171,7 +174,7 @@ export function showStatus(status, type = 'info', duration = 3000) {
         }, duration);
     }
 
-    console.log(`📢 Status: [${type}] ${status}`);
+    logger.debug(`📢 Status: [${type}] ${status}`);
 }
 
 /**
@@ -191,7 +194,7 @@ export function hideStatus() {
  */
 export async function showLoadingWithSteps(steps, operation = 'default') {
     if (!Array.isArray(steps) || steps.length === 0) {
-        console.warn('No steps provided for loading operation');
+        logger.warn('No steps provided for loading operation');
         return;
     }
 
@@ -211,7 +214,7 @@ export async function showLoadingWithSteps(steps, operation = 'default') {
             try {
                 await step.action();
             } catch (error) {
-                console.error(`Step ${i + 1} failed:`, error);
+                logger.error(`Step ${i + 1} failed:`, error);
                 throw error;
             }
         }
@@ -223,7 +226,7 @@ export async function showLoadingWithSteps(steps, operation = 'default') {
     // Hide after brief delay
     setTimeout(() => {
         hideLoading(operation);
-    }, 500);
+    }, UI_DELAY.STATUS_HIDE);
 }
 
 /**
@@ -250,7 +253,7 @@ export function getActiveOperations() {
  * Clear all loading states (emergency cleanup)
  */
 export function clearAllLoading() {
-    console.log('🧹 Clearing all loading states...');
+    logger.debug('🧹 Clearing all loading states...');
     activeOperations.clear();
 
     const overlay = document.getElementById('loading-overlay');

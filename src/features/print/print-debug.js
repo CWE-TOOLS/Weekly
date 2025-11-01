@@ -3,12 +3,15 @@
  * Helps diagnose blank page issues in print reports
  */
 
+import { logger } from '../../utils/logger.js';
+import { Z_INDEX, CONTENT_LIMITS } from '../../config/layout-constants.js';
+
 window.PrintDebug = {
     /**
      * Enable debug mode - adds visual indicators and console logging
      */
     enableDebugMode() {
-        console.log('🔍 Print Debug Mode Enabled');
+        logger.info('Print Debug Mode Enabled');
         window.PRINT_DEBUG_MODE = true;
     },
 
@@ -16,7 +19,7 @@ window.PrintDebug = {
      * Disable debug mode
      */
     disableDebugMode() {
-        console.log('🔍 Print Debug Mode Disabled');
+        logger.info('Print Debug Mode Disabled');
         window.PRINT_DEBUG_MODE = false;
     },
 
@@ -24,25 +27,25 @@ window.PrintDebug = {
      * Analyze print content before printing
      */
     analyzePrintContent(printContent) {
-        console.log('📊 === PRINT CONTENT ANALYSIS ===');
-        
+        logger.info('=== PRINT CONTENT ANALYSIS ===');
+
         const pages = printContent.querySelectorAll('.print-page');
-        console.log(`📄 Total pages: ${pages.length}`);
-        
+        logger.info(`Total pages: ${pages.length}`);
+
         pages.forEach((page, index) => {
-            console.log(`\n📄 Page ${index + 1}:`);
-            console.log(`  Height: ${page.offsetHeight}px`);
-            console.log(`  Width: ${page.offsetWidth}px`);
-            console.log(`  Margin Bottom: ${getComputedStyle(page).marginBottom}`);
-            console.log(`  Padding Bottom: ${getComputedStyle(page).paddingBottom}`);
-            console.log(`  Page Break After: ${getComputedStyle(page).pageBreakAfter}`);
-            console.log(`  Break After: ${getComputedStyle(page).breakAfter}`);
-            
+            logger.debug(`Page ${index + 1}:`);
+            logger.debug(`  Height: ${page.offsetHeight}px`);
+            logger.debug(`  Width: ${page.offsetWidth}px`);
+            logger.debug(`  Margin Bottom: ${getComputedStyle(page).marginBottom}`);
+            logger.debug(`  Padding Bottom: ${getComputedStyle(page).paddingBottom}`);
+            logger.debug(`  Page Break After: ${getComputedStyle(page).pageBreakAfter}`);
+            logger.debug(`  Break After: ${getComputedStyle(page).breakAfter}`);
+
             // Check for overflow
             if (page.scrollHeight > page.offsetHeight) {
-                console.warn(`  ⚠️ Content overflow detected! ScrollHeight: ${page.scrollHeight}px`);
+                logger.warn(`  Content overflow detected! ScrollHeight: ${page.scrollHeight}px`);
             }
-            
+
             // Check for invisible content
             const allElements = page.querySelectorAll('*');
             let invisibleCount = 0;
@@ -53,11 +56,11 @@ window.PrintDebug = {
                 }
             });
             if (invisibleCount > 0) {
-                console.warn(`  ⚠️ ${invisibleCount} invisible elements found`);
+                logger.warn(`  ${invisibleCount} invisible elements found`);
             }
         });
-        
-        console.log('\n📊 === END ANALYSIS ===\n');
+
+        logger.info('=== END ANALYSIS ===');
     },
 
     /**
@@ -78,7 +81,7 @@ window.PrintDebug = {
                 padding: 5px 10px;
                 font-weight: bold;
                 font-size: 14px;
-                z-index: 9999;
+                z-index: ${Z_INDEX.PRINT_DEBUG};
                 border: 2px solid black;
             `;
             indicator.textContent = `PAGE ${index + 1}`;
@@ -97,22 +100,22 @@ window.PrintDebug = {
             }
         });
         
-        console.log('✅ Visual debug markers added');
+        logger.info('Visual debug markers added');
     },
 
     /**
      * Check for common blank page causes
      */
     checkBlankPageCauses(printContent) {
-        console.log('🔍 === CHECKING BLANK PAGE CAUSES ===');
-        
+        logger.info('=== CHECKING BLANK PAGE CAUSES ===');
+
         const issues = [];
         const pages = printContent.querySelectorAll('.print-page');
         
         // Check 1: Empty pages
         pages.forEach((page, index) => {
             const textContent = page.textContent.trim();
-            if (!textContent || textContent.length < 10) {
+            if (!textContent || textContent.length < CONTENT_LIMITS.MIN_TEXT_CONTENT_LENGTH) {
                 issues.push(`Page ${index + 1}: Appears to be empty or has minimal content`);
             }
         });
@@ -132,11 +135,11 @@ window.PrintDebug = {
             const style = getComputedStyle(page);
             const marginBottom = parseInt(style.marginBottom);
             const paddingBottom = parseInt(style.paddingBottom);
-            
-            if (marginBottom > 50) {
+
+            if (marginBottom > CONTENT_LIMITS.MAX_SPACING_THRESHOLD_PX) {
                 issues.push(`Page ${index + 1}: Large margin-bottom: ${marginBottom}px`);
             }
-            if (paddingBottom > 50) {
+            if (paddingBottom > CONTENT_LIMITS.MAX_SPACING_THRESHOLD_PX) {
                 issues.push(`Page ${index + 1}: Large padding-bottom: ${paddingBottom}px`);
             }
         });
@@ -160,14 +163,14 @@ window.PrintDebug = {
         });
         
         if (issues.length === 0) {
-            console.log('✅ No obvious issues found');
+            logger.info('No obvious issues found');
         } else {
-            console.log('⚠️ Potential issues found:');
-            issues.forEach(issue => console.log(`  - ${issue}`));
+            logger.warn('Potential issues found:');
+            issues.forEach(issue => logger.warn(`  - ${issue}`));
         }
-        
-        console.log('🔍 === END CHECK ===\n');
-        
+
+        logger.info('=== END CHECK ===');
+
         return issues;
     },
 
@@ -175,8 +178,8 @@ window.PrintDebug = {
      * Generate a detailed debug report
      */
     generateDebugReport(printContent, printType, selectedDepts) {
-        console.log('📋 === GENERATING DEBUG REPORT ===');
-        
+        logger.info('=== GENERATING DEBUG REPORT ===');
+
         const report = {
             timestamp: new Date().toISOString(),
             printType: printType,
@@ -213,10 +216,10 @@ window.PrintDebug = {
         });
         
         report.issues = this.checkBlankPageCauses(printContent);
-        
-        console.log('📋 Debug Report:', report);
-        console.log('📋 === END REPORT ===\n');
-        
+
+        logger.info('Debug Report:', report);
+        logger.info('=== END REPORT ===');
+
         return report;
     },
 
@@ -224,10 +227,10 @@ window.PrintDebug = {
      * Test print with debug mode
      */
     testPrint(printType, selectedDepts, weekDates, allTasks) {
-        console.log('🧪 === STARTING DEBUG PRINT TEST ===');
-        console.log(`Print Type: ${printType}`);
-        console.log(`Selected Departments: ${selectedDepts.join(', ')}`);
-        
+        logger.info('=== STARTING DEBUG PRINT TEST ===');
+        logger.info(`Print Type: ${printType}`);
+        logger.info(`Selected Departments: ${selectedDepts.join(', ')}`);
+
         // Generate content
         const printContent = window.PrintUtils.generatePrintContent(
             printType,
@@ -252,14 +255,14 @@ window.PrintDebug = {
         document.body.appendChild(printContent);
         printContent.style.display = 'block';
         printContent.style.position = 'relative';
-        printContent.style.zIndex = '10000';
+        printContent.style.zIndex = `${Z_INDEX.PRINT_DEBUG}`;
         printContent.style.background = 'white';
         printContent.style.padding = '20px';
-        
-        console.log('✅ Debug print content added to page. Inspect it before printing.');
-        console.log('💡 To remove: document.querySelector(".print-preview-content").remove()');
-        console.log('🧪 === END DEBUG TEST ===\n');
-        
+
+        logger.info('Debug print content added to page. Inspect it before printing.');
+        logger.info('To remove: document.querySelector(".print-preview-content").remove()');
+        logger.info('=== END DEBUG TEST ===');
+
         return { printContent, report, issues };
     },
 
@@ -293,12 +296,12 @@ window.PrintDebug = {
             el.style.paddingBottom = '0 !important';
         });
         
-        console.log('✅ Force-fixed last page');
+        logger.info('Force-fixed last page');
     }
 };
 
 // Auto-enable debug mode if URL contains ?debug
 if (window.location.search.includes('debug')) {
     window.PrintDebug.enableDebugMode();
-    console.log('🔍 Debug mode auto-enabled via URL parameter');
+    logger.info('Debug mode auto-enabled via URL parameter');
 }

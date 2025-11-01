@@ -6,6 +6,7 @@
 
 import { getAllTasks } from '../../core/state.js';
 
+import { logger } from '../../utils/logger.js';
 // Private state
 let currentTask = null;
 
@@ -113,7 +114,7 @@ async function handleContextMenuClick(e) {
         if (window.showProjectModal) {
             await window.showProjectModal(currentTask.project);
         } else {
-            console.error('showProjectModal is not available');
+            logger.error('showProjectModal is not available');
         }
     }
 
@@ -165,7 +166,7 @@ function handleContextMenuKeyboard(e) {
  * Sets up all event listeners for left-click context menu
  */
 export function initializeContextMenu() {
-    console.log('Initializing context menu...');
+    logger.info('Initializing context menu...');
 
     // Left-click handler - show menu when clicking on task cards
     document.addEventListener('click', handleContextMenu);
@@ -179,7 +180,7 @@ export function initializeContextMenu() {
     // Keyboard support
     document.addEventListener('keydown', handleContextMenuKeyboard);
 
-    console.log('Context menu initialized');
+    logger.info('Context menu initialized');
 }
 
 /**

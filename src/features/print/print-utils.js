@@ -1,10 +1,14 @@
 /**
  * Print Utilities - Centralized print functionality for the Weekly Schedule Viewer
  * Handles print report generation, page breaks, and layout management
- * 
+ *
  * This file now serves as a bridge to the modular print system
  */
 
+import { generateBatchTasks, generateLayoutTasks } from '../../utils/schedule-utils.js';
+import { DATE_BOUNDARIES } from '../../config/layout-constants.js';
+
+import { logger } from '../../utils/logger.js';
 // Print configuration constants
 const PRINT_UTILS = {
     PAGE_WIDTH_INCHES: 10.5,
@@ -69,7 +73,7 @@ function parseDate(dateStr) {
 
         // Handle 2-digit years
         if (num3 < 100) {
-            num3 += num3 < 50 ? 2000 : 1900; // Assume 1950-2049 range
+            num3 += num3 < DATE_BOUNDARIES.YEAR_BOUNDARY_THRESHOLD ? DATE_BOUNDARIES.CENTURY_2000 : DATE_BOUNDARIES.CENTURY_1900; // Assume 1950-2049 range
         }
 
         if (num1 > 12) {
@@ -148,7 +152,7 @@ function parseDate(dateStr) {
             month = num2;
         }
         year = num3;
-        if (year < 100) year += year < 50 ? 2000 : 1900;
+        if (year < 100) year += year < DATE_BOUNDARIES.YEAR_BOUNDARY_THRESHOLD ? DATE_BOUNDARIES.CENTURY_2000 : DATE_BOUNDARIES.CENTURY_1900;
 
         const date = new Date(year, month - 1, day);
         if (!isNaN(date.getTime())) return date;
@@ -200,139 +204,13 @@ function getMaxTasksForDept(dept, tasks, dates, printType) {
 }
 
 /**
- * Generate batch tasks for print (looks ahead to next day's casting)
- * Similar to schedule-renderer.js generateBatchTasks()
- */
-function generateBatchTasks(dates, allTasks) {
-    const batchTasks = [];
-
-    dates.forEach((date, i) => {
-        // Only generate for weekdays (Mon-Fri)
-        const dayOfWeek = date.getDay();
-        if (dayOfWeek === 0 || dayOfWeek === 6) return; // Skip Sunday (0) and Saturday (6)
-
-        let castingProjects = [];
-
-        if (dayOfWeek === 5) { // Friday
-            // Get tasks for Saturday
-            const saturday = new Date(date);
-            saturday.setDate(date.getDate() + 1);
-            const saturdayString = saturday.toDateString();
-            const saturdayProjects = allTasks
-                .filter(t => t.department === 'Cast' && parseDate(t.date) && parseDate(t.date).toDateString() === saturdayString)
-                .map(t => t.project);
-            if (saturdayProjects.length > 0) {
-                castingProjects.push(`<b>Sat:</b> ${saturdayProjects.join(', ')}`);
-            }
-
-            // Get tasks for Monday
-            const monday = new Date(date);
-            monday.setDate(date.getDate() + 3);
-            const mondayString = monday.toDateString();
-            const mondayProjects = allTasks
-                .filter(t => t.department === 'Cast' && parseDate(t.date) && parseDate(t.date).toDateString() === mondayString)
-                .map(t => t.project);
-            if (mondayProjects.length > 0) {
-                castingProjects.push(`<b>Mon:</b> ${mondayProjects.join(', ')}`);
-            }
-        } else {
-            // For Mon-Thu, get next day's tasks
-            const nextDate = new Date(date);
-            nextDate.setDate(date.getDate() + 1);
-            const nextDateString = nextDate.toDateString();
-            castingProjects = allTasks
-                .filter(t => t.department === 'Cast' && parseDate(t.date) && parseDate(t.date).toDateString() === nextDateString)
-                .map(t => t.project);
-        }
-
-        const batchTask = {
-            id: `batch-${date.toISOString()}`,
-            project: 'Batch',
-            projectDescription: '',
-            description: castingProjects.length > 0 ? castingProjects.join('<br>') : '',
-            date: date.toLocaleDateString('en-US'),
-            department: 'Batch',
-            hours: '',
-            dayCounter: '',
-            missingDate: false
-        };
-        batchTasks.push(batchTask);
-    });
-
-    return batchTasks;
-}
-
-/**
- * Generate layout tasks for print (looks ahead to next day's casting)
- * Similar to schedule-renderer.js generateLayoutTasks()
- */
-function generateLayoutTasks(dates, allTasks) {
-    const layoutTasks = [];
-
-    dates.forEach((date, i) => {
-        // Only generate for weekdays (Mon-Fri)
-        const dayOfWeek = date.getDay();
-        if (dayOfWeek === 0 || dayOfWeek === 6) return; // Skip Sunday (0) and Saturday (6)
-
-        let castingProjects = [];
-
-        if (dayOfWeek === 5) { // Friday
-            // Get tasks for Saturday
-            const saturday = new Date(date);
-            saturday.setDate(date.getDate() + 1);
-            const saturdayString = saturday.toDateString();
-            const saturdayProjects = allTasks
-                .filter(t => t.department === 'Cast' && parseDate(t.date) && parseDate(t.date).toDateString() === saturdayString)
-                .map(t => t.project);
-            if (saturdayProjects.length > 0) {
-                castingProjects.push(`<b>Sat:</b> ${saturdayProjects.join(', ')}`);
-            }
-
-            // Get tasks for Monday
-            const monday = new Date(date);
-            monday.setDate(date.getDate() + 3);
-            const mondayString = monday.toDateString();
-            const mondayProjects = allTasks
-                .filter(t => t.department === 'Cast' && parseDate(t.date) && parseDate(t.date).toDateString() === mondayString)
-                .map(t => t.project);
-            if (mondayProjects.length > 0) {
-                castingProjects.push(`<b>Mon:</b> ${mondayProjects.join(', ')}`);
-            }
-        } else {
-            // For Mon-Thu, get next day's tasks
-            const nextDate = new Date(date);
-            nextDate.setDate(date.getDate() + 1);
-            const nextDateString = nextDate.toDateString();
-            castingProjects = allTasks
-                .filter(t => t.department === 'Cast' && parseDate(t.date) && parseDate(t.date).toDateString() === nextDateString)
-                .map(t => t.project);
-        }
-
-        const layoutTask = {
-            id: `layout-${date.toISOString()}`,
-            project: 'Layout',
-            projectDescription: '',
-            description: castingProjects.length > 0 ? castingProjects.join('<br>') : '',
-            date: date.toLocaleDateString('en-US'),
-            department: 'Layout',
-            hours: '',
-            dayCounter: '',
-            missingDate: false
-        };
-        layoutTasks.push(layoutTask);
-    });
-
-    return layoutTasks;
-}
-
-/**
  * Generate complete print content for selected departments
  * This delegates to the modular print renderer
  */
 function generatePrintContent(printType, selectedDepts, weekDates, allTasks) {
     // Check if modular system is loaded
     if (!window.PrintRenderer || !window.PrintLayout) {
-        console.error('Print modules not loaded. Please ensure print-renderer.js and print-layout.js are included.');
+        logger.error('Print modules not loaded. Please ensure print-renderer.js and print-layout.js are included.');
         const errorContainer = document.createElement('div');
         errorContainer.className = 'print-preview-content';
         errorContainer.innerHTML = '<p style="color: red; padding: 20px;">Error: Print modules not loaded</p>';
@@ -350,7 +228,7 @@ function generatePrintContent(printType, selectedDepts, weekDates, allTasks) {
 function executePrint(printContent, printType = 'week') {
     // Check if modular system is loaded
     if (!window.PrintRenderer) {
-        console.error('Print renderer not loaded. Please ensure print-renderer.js is included.');
+        logger.error('Print renderer not loaded. Please ensure print-renderer.js is included.');
         alert('Print system not loaded. Please refresh the page and try again.');
         return;
     }
@@ -367,7 +245,7 @@ window.PrintUtils = {
     normalizeDepartmentClass,
     parseDate,
     getMaxTasksForDept,
-    generateBatchTasks,
-    generateLayoutTasks,
+    generateBatchTasks,  // Re-export from schedule-utils.js
+    generateLayoutTasks,  // Re-export from schedule-utils.js
     PRINT_UTILS
 };

@@ -22,7 +22,8 @@
  */
 
 import { emit, EVENTS } from './event-bus.js';
-
+import { MISC_CONFIG } from '../config/layout-constants.js';
+import { logger } from '../utils/logger.js';
 // ============================================================================
 // Internal State Variables (private)
 // ============================================================================
@@ -309,7 +310,7 @@ export function getTaskCounts() {
         filtered: _filteredTasks.length,
         total: _allTasks.length,
         percentage: _allTasks.length > 0
-            ? Math.round((_filteredTasks.length / _allTasks.length) * 100)
+            ? Math.round((_filteredTasks.length / _allTasks.length) * MISC_CONFIG.PERCENTAGE_DIVISOR)
             : 0
     };
 }
@@ -361,7 +362,7 @@ export function getStateSnapshot() {
  * Debug helper - log current state to console
  */
 export function debugState() {
-    console.log('[State] Current state:', getStateSnapshot());
-    console.log('[State] Task counts:', getTaskCounts());
-    console.log('[State] Initialized:', isStateInitialized());
+    logger.info('[State] Current state:', getStateSnapshot());
+    logger.info('[State] Task counts:', getTaskCounts());
+    logger.info('[State] Initialized:', isStateInitialized());
 }

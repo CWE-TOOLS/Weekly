@@ -10,6 +10,8 @@
 /**
  * Storage keys used throughout the application
  */
+import { logger } from '../utils/logger.js';
+
 export const STORAGE_KEYS = {
     SELECTED_DEPARTMENTS: 'selectedDepartments',
     SCHEDULE_SCROLL_POSITION: 'scheduleScrollPosition',
@@ -29,7 +31,7 @@ function isStorageAvailable() {
         localStorage.removeItem(test);
         return true;
     } catch (error) {
-        console.warn('[Storage] localStorage is not available:', error.message);
+        logger.warn('[Storage] localStorage is not available:', error.message);
         return false;
     }
 }
@@ -54,9 +56,9 @@ export function saveState(key, value) {
         return true;
     } catch (error) {
         if (error.name === 'QuotaExceededError') {
-            console.error('[Storage] Storage quota exceeded. Consider clearing old data.');
+            logger.error('[Storage] Storage quota exceeded. Consider clearing old data.');
         } else {
-            console.error(`[Storage] Failed to save "${key}":`, error.message);
+            logger.error(`[Storage] Failed to save "${key}":`, error.message);
         }
         return false;
     }
@@ -85,7 +87,7 @@ export function loadState(key, defaultValue = null) {
 
         return JSON.parse(item);
     } catch (error) {
-        console.error(`[Storage] Failed to load "${key}":`, error.message);
+        logger.error(`[Storage] Failed to load "${key}":`, error.message);
         return defaultValue;
     }
 }
@@ -107,7 +109,7 @@ export function removeState(key) {
         localStorage.removeItem(key);
         return true;
     } catch (error) {
-        console.error(`[Storage] Failed to remove "${key}":`, error.message);
+        logger.error(`[Storage] Failed to remove "${key}":`, error.message);
         return false;
     }
 }
@@ -129,7 +131,7 @@ export function clearAllState() {
         localStorage.clear();
         return true;
     } catch (error) {
-        console.error('[Storage] Failed to clear storage:', error.message);
+        logger.error('[Storage] Failed to clear storage:', error.message);
         return false;
     }
 }
@@ -150,7 +152,7 @@ export function clearAppState() {
         });
         return true;
     } catch (error) {
-        console.error('[Storage] Failed to clear app state:', error.message);
+        logger.error('[Storage] Failed to clear app state:', error.message);
         return false;
     }
 }
@@ -169,7 +171,7 @@ export function clearAppState() {
  */
 export function saveSelectedDepartments(departments) {
     if (!Array.isArray(departments)) {
-        console.error('[Storage] saveSelectedDepartments expects an array');
+        logger.error('[Storage] saveSelectedDepartments expects an array');
         return false;
     }
     return saveState(STORAGE_KEYS.SELECTED_DEPARTMENTS, departments);
@@ -198,7 +200,7 @@ export function loadSelectedDepartments(defaultValue = []) {
  */
 export function saveScrollPosition(position) {
     if (typeof position !== 'number' || position < 0) {
-        console.error('[Storage] saveScrollPosition expects a non-negative number');
+        logger.error('[Storage] saveScrollPosition expects a non-negative number');
         return false;
     }
     return saveState(STORAGE_KEYS.SCHEDULE_SCROLL_POSITION, position);
@@ -227,7 +229,7 @@ export function loadScrollPosition(defaultValue = 0) {
  */
 export function saveWeekIndex(index) {
     if (typeof index !== 'number' || index < -1) {
-        console.error('[Storage] saveWeekIndex expects a number >= -1');
+        logger.error('[Storage] saveWeekIndex expects a number >= -1');
         return false;
     }
     return saveState(STORAGE_KEYS.CURRENT_WEEK_INDEX, index);
@@ -256,7 +258,7 @@ export function loadWeekIndex(defaultValue = -1) {
  */
 export function saveEditingMode(unlocked) {
     if (typeof unlocked !== 'boolean') {
-        console.error('[Storage] saveEditingMode expects a boolean');
+        logger.error('[Storage] saveEditingMode expects a boolean');
         return false;
     }
     return saveState(STORAGE_KEYS.EDITING_UNLOCKED, unlocked);
@@ -285,7 +287,7 @@ export function loadEditingMode(defaultValue = false) {
  */
 export function savePrintSelectedDepartments(departments) {
     if (!Array.isArray(departments)) {
-        console.error('[Storage] savePrintSelectedDepartments expects an array');
+        logger.error('[Storage] savePrintSelectedDepartments expects an array');
         return false;
     }
     return saveState(STORAGE_KEYS.PRINT_SELECTED_DEPARTMENTS, departments);
@@ -311,7 +313,7 @@ export function loadPrintSelectedDepartments(defaultValue = []) {
  * @example
  * const info = getStorageInfo();
  * if (info) {
- *   console.log(`Using ${info.used} of ${info.quota} bytes`);
+ *   logger.info(`Using ${info.used} of ${info.quota} bytes`);
  * }
  */
 export async function getStorageInfo() {
@@ -327,7 +329,7 @@ export async function getStorageInfo() {
             percentage: estimate.quota ? (estimate.usage / estimate.quota * 100).toFixed(2) : 0
         };
     } catch (error) {
-        console.error('[Storage] Failed to get storage info:', error.message);
+        logger.error('[Storage] Failed to get storage info:', error.message);
         return null;
     }
 }
@@ -338,7 +340,7 @@ export async function getStorageInfo() {
  *
  * @example
  * const backup = exportState();
- * console.log('Backup:', backup);
+ * logger.info('Backup:', backup);
  */
 export function exportState() {
     const state = {};
@@ -363,7 +365,7 @@ export function exportState() {
  */
 export function importState(state) {
     if (typeof state !== 'object' || state === null) {
-        console.error('[Storage] importState expects an object');
+        logger.error('[Storage] importState expects an object');
         return false;
     }
 
@@ -376,7 +378,7 @@ export function importState(state) {
         });
         return true;
     } catch (error) {
-        console.error('[Storage] Failed to import state:', error.message);
+        logger.error('[Storage] Failed to import state:', error.message);
         return false;
     }
 }

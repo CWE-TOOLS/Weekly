@@ -5,11 +5,29 @@
  */
 
 // Imports
-import { getAllTasks, getAllWeekStartDates, getCurrentViewedWeekIndex } from '../../core/state.js';
+import { getAllTasks } from '../../core/state.js';
 import { emit, EVENTS } from '../../core/event-bus.js';
-import { normalizeDepartmentClass } from '../../utils/ui-utils.js';
-import { getMonday, getWeekMonth, getWeekOfMonth } from '../../utils/date-utils.js';
-import { DEPARTMENT_ORDER } from '../../config/department-config.js';
+import { logger } from '../../utils/logger.js';
+import {
+    getCurrentPrintType,
+    setCurrentPrintType,
+    getCurrentPrintWeekDates,
+    populateWeekSelect,
+    setDefaultDate,
+    populateDepartmentsGrid,
+    saveDepartmentSelection,
+    getSelectedDepartments,
+    updateWeekDates,
+    validatePrintConfig,
+    preparePrintDates
+} from './print-config-manager.js';
+import {
+    initializePreviewElements,
+    setupPreviewCloseHandler,
+    setupPreviewKeyHandler,
+    showPreviewModal,
+    hidePreviewModal
+} from './print-preview-renderer.js';
 
 // Private state
 let modalElement = null;
@@ -24,16 +42,6 @@ let daySectionElement = null;
 let departmentsGridElement = null;
 let checkAllButton = null;
 let uncheckAllButton = null;
-
-// Preview modal state
-let previewModalElement = null;
-let previewCloseButton = null;
-let previewViewport = null;
-let previewPageInfo = null;
-
-let currentPrintWeekDates = [];
-let allDepartmentsForPrint = [];
-let currentPrintType = 'week';
 
 /**
  * Initialize print modal
@@ -54,14 +62,11 @@ export function initializePrintModal() {
     checkAllButton = document.getElementById('check-all-depts');
     uncheckAllButton = document.getElementById('uncheck-all-depts');
 
-    // Get preview modal elements
-    previewModalElement = document.getElementById('print-preview-modal');
-    previewCloseButton = document.getElementById('print-preview-close');
-    previewViewport = document.getElementById('print-preview-viewport');
-    previewPageInfo = document.getElementById('print-preview-page-info');
+    // Initialize preview modal elements
+    initializePreviewElements();
 
     if (!modalElement) {
-        console.error('Print modal elements not found in DOM');
+        logger.error('Print modal elements not found in DOM');
         return;
     }
 
@@ -74,16 +79,9 @@ export function initializePrintModal() {
         previewButton.addEventListener('click', handlePrintPreview);
     }
 
-    if (previewCloseButton) {
-        previewCloseButton.addEventListener('click', hidePreviewModal);
-    }
-
-    // Close preview modal on ESC key
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && previewModalElement && previewModalElement.classList.contains('show')) {
-            hidePreviewModal();
-        }
-    });
+    // Setup preview modal handlers
+    setupPreviewCloseHandler(hidePreviewModal);
+    setupPreviewKeyHandler(hidePreviewModal);
 
     // Close modal on background click
     modalElement.addEventListener('click', (e) => {
@@ -99,7 +97,7 @@ export function initializePrintModal() {
 
     // Week select change
     if (weekSelectElement) {
-        weekSelectElement.addEventListener('change', updateWeekDates);
+        weekSelectElement.addEventListener('change', () => updateWeekDates(weekSelectElement));
     }
 
     // Department check all/uncheck all
@@ -117,7 +115,7 @@ export function initializePrintModal() {
         });
     }
 
-    console.log('Print modal initialized');
+    logger.info('Print modal initialized');
 }
 
 /**
@@ -140,7 +138,7 @@ function _showPrintModal() {
     }
 
     if (!modalElement) {
-        console.error('Print modal not initialized');
+        logger.error('Print modal not initialized');
         return;
     }
 
@@ -183,83 +181,14 @@ function hidePrintModal() {
  * @private
  */
 function populatePrintOptions() {
-    const allWeekStartDates = getAllWeekStartDates();
-    const allTasks = getAllTasks();
-    const currentViewedWeekIndex = getCurrentViewedWeekIndex();
-
     // Populate week select
-    if (weekSelectElement) {
-        weekSelectElement.innerHTML = '';
-        allWeekStartDates.forEach((date, index) => {
-            const option = document.createElement('option');
-            option.value = index.toString();
-            const weekStart = new Date(date);
-            const weekEnd = new Date(date);
-            weekEnd.setDate(date.getDate() + 5);
-            const monday = getMonday(date);
-            const month = getWeekMonth(monday);
-            const weekNum = getWeekOfMonth(monday, month);
-            const monthName = new Date(monday.getFullYear(), month, 1).toLocaleDateString('en-US', { month: 'short' });
-            option.textContent = `${monthName} Week ${weekNum}: ${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
-            if (index === currentViewedWeekIndex) option.selected = true;
-            weekSelectElement.appendChild(option);
-        });
-    }
+    populateWeekSelect(weekSelectElement);
 
     // Set date input to tomorrow
-    if (dateSelectElement) {
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        const tomorrowString = tomorrow.toISOString().split('T')[0];
-        dateSelectElement.value = tomorrowString;
-    }
-
-    // Get all departments, filter out invalid ones and synthetic departments (Batch, Layout)
-    // Batch and Layout are synthetic departments that are automatically included with Cast and Demold
-    // Special Events is excluded as it will never be sent to print layout
-    allDepartmentsForPrint = [...new Set(allTasks.map(task => task.department).filter(dept =>
-        dept && dept.toLowerCase() !== 'department' &&
-        !dept.toLowerCase().includes('link') &&
-        !dept.toLowerCase().includes('live') &&
-        dept !== 'Batch' &&
-        dept !== 'Layout' &&
-        dept !== 'Special Events'
-    ))];
-
-    // Sort departments
-    allDepartmentsForPrint.sort((a, b) => {
-        const aIndex = DEPARTMENT_ORDER.indexOf(a);
-        const bIndex = DEPARTMENT_ORDER.indexOf(b);
-        if (aIndex === -1 && bIndex === -1) return a.localeCompare(b);
-        if (aIndex === -1) return 1;
-        if (bIndex === -1) return -1;
-        return aIndex - bIndex;
-    });
+    setDefaultDate(dateSelectElement);
 
     // Populate departments grid
-    if (departmentsGridElement) {
-        departmentsGridElement.innerHTML = '';
-
-        // Restore saved print department selections
-        const savedPrintDepartments = localStorage.getItem('printSelectedDepartments')
-            ? JSON.parse(localStorage.getItem('printSelectedDepartments'))
-            : null;
-        const defaultSelectedDepts = savedPrintDepartments !== null ? savedPrintDepartments : allDepartmentsForPrint;
-
-        allDepartmentsForPrint.forEach(dept => {
-            const checkboxDiv = document.createElement('div');
-            checkboxDiv.className = 'department-checkbox';
-            checkboxDiv.innerHTML = `
-                <input type="checkbox" id="print-dept-${normalizeDepartmentClass(dept)}" value="${dept}" ${defaultSelectedDepts.includes(dept) ? 'checked' : ''}>
-                <label for="print-dept-${normalizeDepartmentClass(dept)}">${dept}</label>
-            `;
-            departmentsGridElement.appendChild(checkboxDiv);
-
-            // Add event listener to save selection when changed
-            const checkbox = checkboxDiv.querySelector('input[type="checkbox"]');
-            checkbox.addEventListener('change', saveDepartmentSelection);
-        });
-    }
+    populateDepartmentsGrid(departmentsGridElement, saveDepartmentSelection);
 
     updatePrintTypeDisplay();
 }
@@ -270,10 +199,11 @@ function populatePrintOptions() {
  */
 function updatePrintTypeDisplay() {
     const checkedRadio = document.querySelector('input[name="print-type"]:checked');
-    currentPrintType = (checkedRadio && checkedRadio.value) || 'week';
+    const printType = (checkedRadio && checkedRadio.value) || 'week';
+    setCurrentPrintType(printType);
 
     if (weekSectionElement && daySectionElement) {
-        if (currentPrintType === 'week') {
+        if (printType === 'week') {
             weekSectionElement.style.display = 'block';
             daySectionElement.style.display = 'none';
         } else {
@@ -284,76 +214,33 @@ function updatePrintTypeDisplay() {
 }
 
 /**
- * Update week dates based on selected week
- * @private
- */
-function updateWeekDates() {
-    const allWeekStartDates = getAllWeekStartDates();
-    const selectedIndex = parseInt(weekSelectElement.value);
-    const selectedWeekStart = allWeekStartDates[selectedIndex];
-
-    if (!selectedWeekStart) {
-        console.error('Invalid week start date');
-        currentPrintWeekDates = [];
-        return;
-    }
-
-    currentPrintWeekDates = Array.from({ length: 6 }).map((_, i) => {
-        const date = new Date(selectedWeekStart);
-        date.setDate(selectedWeekStart.getDate() + i);
-        return date;
-    });
-}
-
-/**
- * Save department selection to localStorage
- * @private
- */
-function saveDepartmentSelection() {
-    const selectedDepts = Array.from(document.querySelectorAll('.departments-grid input[type="checkbox"]:checked'))
-        .map(cb => cb.value);
-    localStorage.setItem('printSelectedDepartments', JSON.stringify(selectedDepts));
-}
-
-/**
  * Handle print execution
  * @private
  */
 function handlePrintExecute() {
-    const checkedRadio = document.querySelector('input[name="print-type"]:checked');
-    const printType = (checkedRadio && checkedRadio.value) || 'week';
-    const selectedDepts = Array.from(document.querySelectorAll('.departments-grid input[type="checkbox"]:checked'))
-        .map(cb => cb.value);
+    const printType = getCurrentPrintType();
+    const selectedDepts = getSelectedDepartments();
 
-    if (selectedDepts.length === 0) {
-        alert('Please select at least one department.');
+    // Validate configuration
+    const validation = validatePrintConfig(printType, selectedDepts, dateSelectElement);
+    if (!validation.valid) {
+        alert(validation.error);
         return;
     }
 
-    // Update dates based on print type
-    if (printType === 'week') {
-        updateWeekDates();
-    } else if (printType === 'day') {
-        const value = dateSelectElement.value;
-        if (!value) {
-            alert('Please select a date.');
-            return;
-        }
-        const [year, month, day] = value.split('-').map(Number);
-        const selectedDate = new Date(year, month - 1, day);
-        currentPrintWeekDates = [selectedDate];
-    }
+    // Prepare print dates
+    const printDates = preparePrintDates(printType, weekSelectElement, dateSelectElement);
 
     // Generate print content using external utilities
     const allTasks = getAllTasks();
     if (window.PrintUtils && window.PrintUtils.generatePrintContent) {
-        const printContent = window.PrintUtils.generatePrintContent(printType, selectedDepts, currentPrintWeekDates, allTasks);
+        const printContent = window.PrintUtils.generatePrintContent(printType, selectedDepts, printDates, allTasks);
 
         if (printContent) {
             window.PrintUtils.executePrint(printContent, printType);
         }
     } else {
-        console.error('Print utilities not available');
+        logger.error('Print utilities not available');
         alert('Print system not available. Please refresh the page.');
     }
 }
@@ -363,138 +250,30 @@ function handlePrintExecute() {
  * @private
  */
 function handlePrintPreview() {
-    const checkedRadio = document.querySelector('input[name="print-type"]:checked');
-    const printType = (checkedRadio && checkedRadio.value) || 'week';
-    const selectedDepts = Array.from(document.querySelectorAll('.departments-grid input[type="checkbox"]:checked'))
-        .map(cb => cb.value);
+    const printType = getCurrentPrintType();
+    const selectedDepts = getSelectedDepartments();
 
-    if (selectedDepts.length === 0) {
-        alert('Please select at least one department.');
+    // Validate configuration
+    const validation = validatePrintConfig(printType, selectedDepts, dateSelectElement);
+    if (!validation.valid) {
+        alert(validation.error);
         return;
     }
 
-    // Update dates based on print type
-    if (printType === 'week') {
-        updateWeekDates();
-    } else if (printType === 'day') {
-        const value = dateSelectElement.value;
-        if (!value) {
-            alert('Please select a date.');
-            return;
-        }
-        const [year, month, day] = value.split('-').map(Number);
-        const selectedDate = new Date(year, month - 1, day);
-        currentPrintWeekDates = [selectedDate];
-    }
+    // Prepare print dates
+    const printDates = preparePrintDates(printType, weekSelectElement, dateSelectElement);
 
     // Generate print content using external utilities
     const allTasks = getAllTasks();
     if (window.PrintUtils && window.PrintUtils.generatePrintContent) {
-        const printContent = window.PrintUtils.generatePrintContent(printType, selectedDepts, currentPrintWeekDates, allTasks);
+        const printContent = window.PrintUtils.generatePrintContent(printType, selectedDepts, printDates, allTasks);
 
         if (printContent) {
-            showPreviewModal(printContent, printType);
+            showPreviewModal(printContent, printType, modalElement);
         }
     } else {
-        console.error('Print utilities not available');
+        logger.error('Print utilities not available');
         alert('Print system not available. Please refresh the page.');
-    }
-}
-
-/**
- * Fit print pages to viewport height
- * Scales each page to fit the available viewport height
- * @private
- */
-function fitPagesToViewport() {
-    if (!previewViewport) {
-        console.warn('Preview viewport not found');
-        return;
-    }
-
-    // Use requestAnimationFrame to ensure we run after layout
-    requestAnimationFrame(() => {
-        const pages = previewViewport.querySelectorAll('.print-page');
-        if (pages.length === 0) return;
-
-        // Get viewport height and use 98% of it for maximum space usage
-        const viewportHeight = previewViewport.clientHeight * 0.98;
-
-        pages.forEach((page, index) => {
-            // Get the natural height of the page
-            const pageHeight = page.offsetHeight;
-
-            if (pageHeight > 0) {
-                // Calculate scale to fit 98% of viewport height
-                let scale = viewportHeight / pageHeight;
-
-                // Cap at 0.95 to prevent pages from getting too large
-                scale = Math.min(scale, 0.95);
-
-                // Apply the scale using CSS transform
-                page.style.transform = `scale(${scale})`;
-                page.style.transformOrigin = 'top center';
-
-                // Add margin between pages for better separation
-                page.style.marginBottom = '40px';
-
-                console.log(`Page ${index + 1} - Height: ${pageHeight}px, Viewport: ${viewportHeight.toFixed(0)}px, Scale: ${scale.toFixed(3)}`);
-            }
-        });
-    });
-}
-
-/**
- * Show preview modal with print content
- * @private
- */
-function showPreviewModal(printContent, printType) {
-    if (!previewModalElement || !previewViewport) {
-        console.error('Preview modal elements not found');
-        return;
-    }
-
-    // Clear previous content
-    previewViewport.innerHTML = '';
-
-    // Clone the print content to avoid affecting the original
-    const clonedContent = printContent.cloneNode(true);
-
-    // Add to viewport
-    previewViewport.appendChild(clonedContent);
-
-    // Fit pages to viewport
-    fitPagesToViewport();
-
-    // Update page info
-    const pages = clonedContent.querySelectorAll('.print-page');
-    if (previewPageInfo) {
-        previewPageInfo.textContent = `${pages.length} page${pages.length !== 1 ? 's' : ''}`;
-    }
-
-    // Show the modal
-    previewModalElement.classList.add('show');
-    document.body.style.overflow = 'hidden';
-
-    // Hide the print configuration modal
-    if (modalElement) {
-        modalElement.classList.remove('show');
-    }
-}
-
-/**
- * Hide preview modal
- * @private
- */
-function hidePreviewModal() {
-    if (!previewModalElement) return;
-
-    previewModalElement.classList.remove('show');
-    document.body.style.overflow = '';
-
-    // Clear the viewport
-    if (previewViewport) {
-        previewViewport.innerHTML = '';
     }
 }
 

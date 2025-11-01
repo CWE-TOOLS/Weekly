@@ -10,6 +10,9 @@
  */
 
 import { parseDate, getMonday, getLocalDateString, getWeekMonth, getWeekOfMonth } from '../../utils/date-utils.js';
+import { generateBatchTasks, generateLayoutTasks } from '../../utils/schedule-utils.js';
+import { Z_INDEX } from '../../config/layout-constants.js';
+import { RENDER_DELAY } from '../../config/timing-constants.js';
 
 // State references (will be set by state.js)
 let filteredTasks = [];
@@ -196,7 +199,7 @@ export function renderAllWeeks() {
             window.enableAddCardIndicators();
         }
         showRenderingStatus(false);
-    }, 100);
+    }, RENDER_DELAY.SCHEDULE_RENDERER);
 }
 
 /**
@@ -221,10 +224,10 @@ export function renderWeekGrid(dateForWeek, maxTasksPerDept) {
     });
 
     // Generate batch tasks (Mon-Fri only)
-    const batchTasks = generateBatchTasks(weekDates, dateForWeek);
+    const batchTasks = generateBatchTasks(weekDates, monday, () => allTasks);
 
     // Generate layout tasks (Mon-Fri only)
-    const layoutTasks = generateLayoutTasks(weekDates, dateForWeek);
+    const layoutTasks = generateLayoutTasks(weekDates, monday, () => allTasks);
 
     // --- Header Row ---
     let headerHTML = `<div class="grid-header">Department</div>`;
@@ -292,7 +295,7 @@ export function renderWeekGrid(dateForWeek, maxTasksPerDept) {
                 deptLabel.textContent = dept;
             }
             deptLabel.style.gridRow = `span ${maxTasksInRow}`;
-            deptLabel.style.zIndex = '10'; // Ensure department labels stay above dragging cards
+            deptLabel.style.zIndex = `${Z_INDEX.DEPT_LABEL}`; // Ensure department labels stay above dragging cards
             grid.appendChild(deptLabel);
 
             for (let i = 0; i < maxTasksInRow; i++) {
@@ -303,6 +306,9 @@ export function renderWeekGrid(dateForWeek, maxTasksPerDept) {
                     const dateString = date.toDateString();
                     const dayCell = document.createElement('div');
                     dayCell.className = 'grid-cell';
+                    // Add data attributes for smart renderer targeting
+                    dayCell.dataset.date = dateString;
+                    dayCell.dataset.department = dept;
 
                     const task = tasksByDate[dateString] ? tasksByDate[dateString][i] : undefined;
 
@@ -332,124 +338,6 @@ export function renderWeekGrid(dateForWeek, maxTasksPerDept) {
 
     grid.dataset.rowClasses = [...allRowClasses].join(',');
     return grid;
-}
-
-/**
- * Generate batch tasks for a week (looks ahead to next day's casting)
- */
-function generateBatchTasks(weekDates, dateForWeek) {
-    const batchTasks = [];
-    weekDates.forEach((date, i) => {
-        if (i < 5) { // Mon to Fri
-            let castingProjects = [];
-            if (i === 4) { // Friday
-                // Get tasks for Saturday
-                const saturday = new Date(date);
-                saturday.setDate(date.getDate() + 1);
-                const saturdayString = saturday.toDateString();
-                const saturdayProjects = allTasks
-                    .filter(t => t.department === 'Cast' && parseDate(t.date) && parseDate(t.date).toDateString() === saturdayString)
-                    .map(t => t.project);
-                if (saturdayProjects.length > 0) {
-                    castingProjects.push(`<b>Sat:</b> ${saturdayProjects.join(', ')}`);
-                }
-
-                // Get tasks for Monday
-                const monday = new Date(date);
-                monday.setDate(date.getDate() + 3);
-                const mondayString = monday.toDateString();
-                const mondayProjects = allTasks
-                    .filter(t => t.department === 'Cast' && parseDate(t.date) && parseDate(t.date).toDateString() === mondayString)
-                    .map(t => t.project);
-                if (mondayProjects.length > 0) {
-                    castingProjects.push(`<b>Mon:</b> ${mondayProjects.join(', ')}`);
-                }
-            } else {
-                // For Mon-Thu, get next day's tasks
-                const nextDate = new Date(date);
-                nextDate.setDate(date.getDate() + 1);
-                const nextDateString = nextDate.toDateString();
-                castingProjects = allTasks
-                    .filter(t => t.department === 'Cast' && parseDate(t.date) && parseDate(t.date).toDateString() === nextDateString)
-                    .map(t => t.project);
-            }
-            const batchTask = {
-                id: `batch-${date.toISOString()}`,
-                week: getLocalDateString(getMonday(dateForWeek)),
-                project: 'Batch',
-                description: castingProjects.length > 0 ? castingProjects.join('<br>') : '',
-                date: getLocalDateString(date),
-                department: 'Batch',
-                value: '',
-                hours: '',
-                dayNumber: '',
-                totalDays: '',
-                dayCounter: '',
-                missingDate: false
-            };
-            batchTasks.push(batchTask);
-        }
-    });
-    return batchTasks;
-}
-
-/**
- * Generate layout tasks for a week (looks ahead to next day's casting)
- */
-function generateLayoutTasks(weekDates, dateForWeek) {
-    const layoutTasks = [];
-    weekDates.forEach((date, i) => {
-        if (i < 5) { // Mon to Fri
-            let castingProjects = [];
-            if (i === 4) { // Friday
-                // Get tasks for Saturday
-                const saturday = new Date(date);
-                saturday.setDate(date.getDate() + 1);
-                const saturdayString = saturday.toDateString();
-                const saturdayProjects = allTasks
-                    .filter(t => t.department === 'Cast' && parseDate(t.date) && parseDate(t.date).toDateString() === saturdayString)
-                    .map(t => t.project);
-                if (saturdayProjects.length > 0) {
-                    castingProjects.push(`<b>Sat:</b> ${saturdayProjects.join(', ')}`);
-                }
-
-                // Get tasks for Monday
-                const monday = new Date(date);
-                monday.setDate(date.getDate() + 3);
-                const mondayString = monday.toDateString();
-                const mondayProjects = allTasks
-                    .filter(t => t.department === 'Cast' && parseDate(t.date) && parseDate(t.date).toDateString() === mondayString)
-                    .map(t => t.project);
-                if (mondayProjects.length > 0) {
-                    castingProjects.push(`<b>Mon:</b> ${mondayProjects.join(', ')}`);
-                }
-            } else {
-                // For Mon-Thu, get next day's tasks
-                const nextDate = new Date(date);
-                nextDate.setDate(date.getDate() + 1);
-                const nextDateString = nextDate.toDateString();
-                castingProjects = allTasks
-                    .filter(t => t.department === 'Cast' && parseDate(t.date) && parseDate(t.date).toDateString() === nextDateString)
-                    .map(t => t.project);
-            }
-            const layoutTask = {
-                id: `layout-${date.toISOString()}`,
-                week: getLocalDateString(getMonday(dateForWeek)),
-                project: 'Layout',
-                description: castingProjects.length > 0 ? castingProjects.join('<br>') : '',
-                date: getLocalDateString(date),
-                department: 'Layout',
-                value: '',
-                hours: '',
-                dayNumber: '',
-                totalDays: '',
-                dayCounter: '',
-                missingDate: false
-            };
-            layoutTasks.push(layoutTask);
-        }
-    });
-    return layoutTasks;
 }
 
 /**

@@ -8,9 +8,9 @@
 
 import { initializeApp, setupBackwardCompatibility, getAppStatus } from './core/app-controller.js';
 import { initializeErrorHandler } from './core/error-handler.js';
-
-console.log('📋 Weekly Schedule Viewer - Phase 8');
-console.log('⚡ ES6 Modules: Loading...');
+import { logger } from './utils/logger.js';
+logger.debug('📋 Weekly Schedule Viewer - Phase 8');
+logger.debug('⚡ ES6 Modules: Loading...');
 
 // Initialize error handler first (to catch any initialization errors)
 initializeErrorHandler();
@@ -20,7 +20,7 @@ setupBackwardCompatibility();
 
 // Start the application
 initializeApp().catch(error => {
-    console.error('💥 Failed to initialize application:', error);
+    logger.error('💥 Failed to initialize application:', error);
 
     // Show critical error UI
     const appError = document.getElementById('app-error');
@@ -38,5 +38,5 @@ initializeApp().catch(error => {
 window.getAppStatus = getAppStatus;
 
 // Log Phase 8 completion message
-console.log('✅ Phase 8: Application Controller Active');
-console.log('💡 Type `window.getAppStatus()` in console for app health check');
+logger.debug('✅ Phase 8: Application Controller Active');
+logger.debug('💡 Type `window.getAppStatus()` in console for app health check');

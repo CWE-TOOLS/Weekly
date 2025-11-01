@@ -1,1 +1,2 @@
-- use sub agent when posible for code exploration and code editing to keep context size down
+- always use sub agents when posible for code exploration and code editing to keep context size down
+

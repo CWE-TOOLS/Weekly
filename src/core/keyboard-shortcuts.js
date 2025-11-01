@@ -2,11 +2,41 @@
  * Keyboard Shortcuts Manager
  * Centralized keyboard shortcut handling
  * @module core/keyboard-shortcuts
+ *
+ * FUTURE ENHANCEMENTS:
+ * ===================
+ *
+ * 1. Keyboard Shortcuts Help Modal (Priority: Medium, Effort: 0.5 days)
+ *    - Replace console logging with dedicated modal UI
+ *    - See showShortcutsHelp() for detailed implementation plan
+ *    - Would improve discoverability and user experience
+ *
+ * 2. Customizable Shortcuts (Priority: Low, Effort: 4-5 days)
+ *    - Allow users to customize keyboard shortcuts
+ *    - Settings UI for configuration
+ *    - Conflict detection and resolution
+ *    - LocalStorage persistence
+ *    - Import/export profiles
+ *    - Prerequisites: Settings modal framework
+ *
+ * 3. Context-Aware Shortcuts (Priority: Low, Effort: 1-2 days)
+ *    - Enable/disable shortcuts based on app state
+ *    - Different shortcuts for different views/modes
+ *    - Show only available shortcuts in help
+ *    - Example: editing shortcuts only when editing unlocked
+ *
+ * 4. Shortcut Recording (Priority: Low, Effort: 2-3 days)
+ *    - UI to "record" new shortcuts by pressing keys
+ *    - Visual feedback during recording
+ *    - Validation and conflict checking
+ *    - Would enhance customization feature
  */
 
 import * as dataService from '../services/data-service.js';
 import { showInfoNotification } from './error-handler.js';
+import { NOTIFICATION_DURATION } from '../config/timing-constants.js';
 
+import { logger } from '../utils/logger.js';
 // Shortcut definitions
 export const SHORTCUTS = {
     REFRESH: { key: 'r', ctrlKey: true, description: 'Refresh data' },
@@ -31,7 +61,7 @@ let keyboardListener = null;
  * Initialize keyboard shortcuts
  */
 export function initializeKeyboardShortcuts() {
-    console.log('⌨️ Initializing keyboard shortcuts...');
+    logger.debug('⌨️ Initializing keyboard shortcuts...');
 
     // Register default shortcuts
     registerDefaultShortcuts();
@@ -40,8 +70,8 @@ export function initializeKeyboardShortcuts() {
     keyboardListener = (event) => handleKeyboardEvent(event);
     document.addEventListener('keydown', keyboardListener);
 
-    console.log('✅ Keyboard shortcuts initialized');
-    console.log('💡 Press Shift+? to see all shortcuts');
+    logger.debug('✅ Keyboard shortcuts initialized');
+    logger.debug('💡 Press Shift+? to see all shortcuts');
 }
 
 /**
@@ -54,7 +84,7 @@ export function cleanupKeyboardShortcuts() {
     }
 
     shortcutRegistry.clear();
-    console.log('🧹 Keyboard shortcuts cleaned up');
+    logger.debug('🧹 Keyboard shortcuts cleaned up');
 }
 
 /**
@@ -63,7 +93,7 @@ export function cleanupKeyboardShortcuts() {
 function registerDefaultShortcuts() {
     // Refresh data (Ctrl+R)
     registerShortcut(SHORTCUTS.REFRESH, async () => {
-        console.log('⌨️ Shortcut: Refresh data');
+        logger.debug('⌨️ Shortcut: Refresh data');
         try {
             if (typeof window.showLoading === 'function') {
                 window.showLoading();
@@ -71,13 +101,13 @@ function registerDefaultShortcuts() {
             await dataService.fetchAllTasks();
             showInfoNotification('✅ Data refreshed');
         } catch (error) {
-            console.error('Failed to refresh:', error);
+            logger.error('Failed to refresh:', error);
         }
     });
 
     // Print (Ctrl+P)
     registerShortcut(SHORTCUTS.PRINT, () => {
-        console.log('⌨️ Shortcut: Print');
+        logger.debug('⌨️ Shortcut: Print');
         if (typeof window.showPrintModal === 'function') {
             window.showPrintModal();
         }
@@ -85,7 +115,7 @@ function registerDefaultShortcuts() {
 
     // Search (Ctrl+F)
     registerShortcut(SHORTCUTS.SEARCH, () => {
-        console.log('⌨️ Shortcut: Focus search');
+        logger.debug('⌨️ Shortcut: Focus search');
         const searchInput = document.getElementById('project-search');
         if (searchInput) {
             searchInput.focus();
@@ -95,7 +125,7 @@ function registerDefaultShortcuts() {
 
     // Unlock editing (Ctrl+Shift+E)
     registerShortcut(SHORTCUTS.UNLOCK_EDITING, () => {
-        console.log('⌨️ Shortcut: Unlock editing');
+        logger.debug('⌨️ Shortcut: Unlock editing');
         const editingBtn = document.getElementById('main-editing-btn');
         if (editingBtn) {
             editingBtn.click();
@@ -104,7 +134,7 @@ function registerDefaultShortcuts() {
 
     // Next week (Alt+Right Arrow)
     registerShortcut(SHORTCUTS.NEXT_WEEK, () => {
-        console.log('⌨️ Shortcut: Next week');
+        logger.debug('⌨️ Shortcut: Next week');
         const nextBtn = document.getElementById('next-week-btn');
         if (nextBtn && !nextBtn.disabled) {
             nextBtn.click();
@@ -113,7 +143,7 @@ function registerDefaultShortcuts() {
 
     // Previous week (Alt+Left Arrow)
     registerShortcut(SHORTCUTS.PREV_WEEK, () => {
-        console.log('⌨️ Shortcut: Previous week');
+        logger.debug('⌨️ Shortcut: Previous week');
         const prevBtn = document.getElementById('prev-week-btn');
         if (prevBtn && !prevBtn.disabled) {
             prevBtn.click();
@@ -122,13 +152,13 @@ function registerDefaultShortcuts() {
 
     // Show help (Shift+?)
     registerShortcut(SHORTCUTS.SHOW_HELP, () => {
-        console.log('⌨️ Shortcut: Show help');
+        logger.debug('⌨️ Shortcut: Show help');
         showShortcutsHelp();
     });
 
     // Toggle fullscreen (Alt+F)
     registerShortcut(SHORTCUTS.FULLSCREEN, () => {
-        console.log('⌨️ Shortcut: Toggle fullscreen');
+        logger.debug('⌨️ Shortcut: Toggle fullscreen');
         const fullscreenBtn = document.getElementById('fullscreen-btn');
         if (fullscreenBtn) {
             fullscreenBtn.click();
@@ -137,7 +167,7 @@ function registerDefaultShortcuts() {
 
     // Add task (Ctrl+N)
     registerShortcut(SHORTCUTS.ADD_TASK, () => {
-        console.log('⌨️ Shortcut: Add task');
+        logger.debug('⌨️ Shortcut: Add task');
         // Only works if editing is unlocked
         if (window.state && window.state.getIsEditingUnlocked()) {
             const fabBtn = document.getElementById('fab-add-task');
@@ -169,7 +199,7 @@ function handleKeyboardEvent(event) {
             try {
                 handler(event);
             } catch (error) {
-                console.error('Shortcut handler error:', error);
+                logger.error('Shortcut handler error:', error);
             }
 
             break; // Only trigger first matching shortcut
@@ -216,7 +246,7 @@ export function registerShortcut(shortcut, handler) {
     const key = generateShortcutKey(shortcut);
 
     if (shortcutRegistry.has(key)) {
-        console.warn(`Shortcut already registered: ${key}`);
+        logger.warn(`Shortcut already registered: ${key}`);
     }
 
     shortcutRegistry.set(key, { shortcut, handler });
@@ -290,6 +320,50 @@ function formatShortcut(shortcut) {
 
 /**
  * Show keyboard shortcuts help
+ *
+ * FUTURE_ENHANCEMENT: Keyboard Shortcuts Help Modal
+ *
+ * Create a dedicated modal UI for displaying keyboard shortcuts instead of
+ * logging to console. This would provide a better user experience.
+ *
+ * Proposed implementation:
+ * 1. Create ShortcutsHelpModal component:
+ *    - Modal overlay with dark backdrop
+ *    - Centered modal dialog (max-width: 600px)
+ *    - Header: "Keyboard Shortcuts" with close button
+ *    - Body: Grid layout of shortcuts (2 columns on desktop)
+ *    - Each shortcut: formatted keys + description
+ *    - Footer: "Press Escape to close" hint
+ *
+ * 2. Styling considerations:
+ *    - Group shortcuts by category (Navigation, Actions, Editing, etc.)
+ *    - Use kbd-style elements for key display (rounded, bordered)
+ *    - Platform-specific symbols (⌘ on Mac, Ctrl on Windows)
+ *    - Responsive: single column on mobile
+ *    - Accessible: focus trap, ARIA labels, keyboard navigation
+ *
+ * 3. Integration:
+ *    - Add modal HTML to index.html
+ *    - Create showShortcutsModal() function
+ *    - Update this function to call showShortcutsModal()
+ *    - Add CSS to styles/modals.css
+ *    - Register modal with modal-manager.js
+ *
+ * 4. Additional features:
+ *    - Search/filter shortcuts
+ *    - Show only available shortcuts based on context
+ *    - Indicate disabled shortcuts (grayed out)
+ *    - Print-friendly layout option
+ *
+ * Complexity: Medium (3-4 hours)
+ * Priority: Medium (current console logging works but not ideal)
+ * Dependencies: None (standalone modal component)
+ * Estimated effort: Half day
+ *
+ * Alternative approach:
+ * - Use a tooltip/popover instead of full modal for quicker implementation
+ * - Generate modal content dynamically from SHORTCUTS constant
+ * - Consider third-party library like tippy.js for tooltips
  */
 export function showShortcutsHelp() {
     let helpText = '⌨️ Keyboard Shortcuts:\n\n';
@@ -302,13 +376,12 @@ export function showShortcutsHelp() {
     });
 
     // Show in console
-    console.log(helpText);
+    logger.debug(helpText);
 
     // Show as notification
-    showInfoNotification('💡 Keyboard shortcuts logged to console', 3000);
+    showInfoNotification('💡 Keyboard shortcuts logged to console', NOTIFICATION_DURATION.KEYBOARD_HELP);
 
-    // TODO: Create a proper modal for shortcuts help
-    // For now, just show in console
+    // Currently logs to console - see FUTURE_ENHANCEMENT above for modal implementation
 }
 
 /**

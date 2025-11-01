@@ -5,6 +5,9 @@
  */
 
 // Performance metrics storage
+import { logger } from '../utils/logger.js';
+import { MONITORING } from '../config/timing-constants.js';
+
 const metrics = {
   marks: new Map(),
   measures: new Map(),
@@ -21,7 +24,7 @@ let clsObserver = null;
  * Sets up Core Web Vitals tracking and custom metrics
  */
 export function initializePerformanceMonitor() {
-  console.log('📊 Initializing performance monitor...');
+  logger.info('📊 Initializing performance monitor...');
 
   // Mark app start
   mark('app-start');
@@ -30,7 +33,7 @@ export function initializePerformanceMonitor() {
   if ('PerformanceObserver' in window) {
     observeCoreWebVitals();
   } else {
-    console.warn('⚠️ PerformanceObserver not supported');
+    logger.warn('⚠️ PerformanceObserver not supported');
   }
 
   // Report on page unload
@@ -39,12 +42,12 @@ export function initializePerformanceMonitor() {
   // Report periodically in development
   if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
     setTimeout(() => {
-      console.log('📊 Development Performance Report:');
+      logger.info('📊 Development Performance Report:');
       reportPerformanceMetrics();
-    }, 5000);
+    }, MONITORING.PERF_MONITOR_INTERVAL);
   }
 
-  console.log('✅ Performance monitor initialized');
+  logger.info('✅ Performance monitor initialized');
 }
 
 /**
@@ -57,7 +60,7 @@ export function mark(name) {
       performance.mark(name);
       metrics.marks.set(name, performance.now());
     } catch (error) {
-      console.warn(`Failed to create mark ${name}:`, error);
+      logger.warn(`Failed to create mark ${name}:`, error);
     }
   }
 }
@@ -85,11 +88,11 @@ export function measure(name, startMark, endMark) {
     const duration = measure ? measure.duration : 0;
 
     metrics.measures.set(name, duration);
-    console.log(`⏱️  ${name}: ${duration.toFixed(2)}ms`);
+    logger.debug(`⏱️  ${name}: ${duration.toFixed(2)}ms`);
 
     return duration;
   } catch (error) {
-    console.warn(`Failed to measure ${name}:`, error);
+    logger.warn(`Failed to measure ${name}:`, error);
     return 0;
   }
 }
@@ -108,11 +111,11 @@ function observeCoreWebVitals() {
       metrics.vitals.LCP = lcpValue;
 
       const rating = lcpValue <= 2500 ? '✅ Good' : lcpValue <= 4000 ? '⚠️ Needs Improvement' : '❌ Poor';
-      console.log(`📊 LCP: ${lcpValue.toFixed(2)}ms ${rating}`);
+      logger.debug(`📊 LCP: ${lcpValue.toFixed(2)}ms ${rating}`);
     });
     lcpObserver.observe({ type: 'largest-contentful-paint', buffered: true });
   } catch (e) {
-    console.warn('⚠️ LCP observation not supported');
+    logger.warn('⚠️ LCP observation not supported');
   }
 
   // FID (First Input Delay)
@@ -124,12 +127,12 @@ function observeCoreWebVitals() {
         metrics.vitals.FID = fidValue;
 
         const rating = fidValue <= 100 ? '✅ Good' : fidValue <= 300 ? '⚠️ Needs Improvement' : '❌ Poor';
-        console.log(`📊 FID: ${fidValue.toFixed(2)}ms ${rating}`);
+        logger.debug(`📊 FID: ${fidValue.toFixed(2)}ms ${rating}`);
       });
     });
     fidObserver.observe({ type: 'first-input', buffered: true });
   } catch (e) {
-    console.warn('⚠️ FID observation not supported');
+    logger.warn('⚠️ FID observation not supported');
   }
 
   // CLS (Cumulative Layout Shift)
@@ -144,11 +147,11 @@ function observeCoreWebVitals() {
       metrics.vitals.CLS = clsScore;
 
       const rating = clsScore <= 0.1 ? '✅ Good' : clsScore <= 0.25 ? '⚠️ Needs Improvement' : '❌ Poor';
-      console.log(`📊 CLS: ${clsScore.toFixed(4)} ${rating}`);
+      logger.debug(`📊 CLS: ${clsScore.toFixed(4)} ${rating}`);
     });
     clsObserver.observe({ type: 'layout-shift', buffered: true });
   } catch (e) {
-    console.warn('⚠️ CLS observation not supported');
+    logger.warn('⚠️ CLS observation not supported');
   }
 
   // TTFB (Time to First Byte) - from Navigation Timing
@@ -161,13 +164,13 @@ function observeCoreWebVitals() {
           metrics.vitals.TTFB = ttfb;
 
           const rating = ttfb <= 600 ? '✅ Good' : ttfb <= 1500 ? '⚠️ Needs Improvement' : '❌ Poor';
-          console.log(`📊 TTFB: ${ttfb.toFixed(2)}ms ${rating}`);
+          logger.debug(`📊 TTFB: ${ttfb.toFixed(2)}ms ${rating}`);
         }
       });
     });
     observer.observe({ type: 'navigation', buffered: true });
   } catch (e) {
-    console.warn('⚠️ TTFB observation not supported');
+    logger.warn('⚠️ TTFB observation not supported');
   }
 }
 
@@ -246,12 +249,12 @@ export function reportPerformanceMetrics() {
   const metrics = getPerformanceMetrics();
 
   console.group('📊 Performance Report');
-  console.log('🎯 Core Web Vitals:', metrics.vitals);
-  console.log('⏱️  Custom Measures:', metrics.measures);
-  console.log('🗺️  Marks:', metrics.marks);
-  console.log('🌐 Navigation Timing:', metrics.navigation);
-  console.log('💾 Memory Usage:', metrics.memory);
-  console.log('📦 Resources:', metrics.resources);
+  logger.info('🎯 Core Web Vitals:', metrics.vitals);
+  logger.info('⏱️  Custom Measures:', metrics.measures);
+  logger.info('🗺️  Marks:', metrics.marks);
+  logger.info('🌐 Navigation Timing:', metrics.navigation);
+  logger.info('💾 Memory Usage:', metrics.memory);
+  logger.info('📦 Resources:', metrics.resources);
   console.groupEnd();
 
   return metrics;
@@ -265,11 +268,11 @@ export function reportPerformanceMetrics() {
  */
 export function startMemoryMonitoring(interval = 60000) {
   if (!performance.memory) {
-    console.warn('⚠️ Memory monitoring not supported');
+    logger.warn('⚠️ Memory monitoring not supported');
     return null;
   }
 
-  console.log(`💾 Starting memory monitoring (interval: ${interval}ms)`);
+  logger.debug(`💾 Starting memory monitoring (interval: ${interval}ms)`);
 
   return setInterval(() => {
     const memory = performance.memory;
@@ -278,11 +281,11 @@ export function startMemoryMonitoring(interval = 60000) {
     const limit = (memory.jsHeapSizeLimit / 1048576).toFixed(2);
     const percent = ((memory.usedJSHeapSize / memory.jsHeapSizeLimit) * 100).toFixed(1);
 
-    console.log(`💾 Memory: ${used}MB / ${total}MB (Limit: ${limit}MB) - ${percent}% used`);
+    logger.debug(`💾 Memory: ${used}MB / ${total}MB (Limit: ${limit}MB) - ${percent}% used`);
 
     // Warn if memory usage is high
     if (memory.usedJSHeapSize / memory.jsHeapSizeLimit > 0.9) {
-      console.warn('⚠️ High memory usage detected! (>90%)');
+      logger.warn('⚠️ High memory usage detected! (>90%)');
     }
   }, interval);
 }
@@ -294,7 +297,7 @@ export function stopPerformanceMonitoring() {
   if (lcpObserver) lcpObserver.disconnect();
   if (fidObserver) fidObserver.disconnect();
   if (clsObserver) clsObserver.disconnect();
-  console.log('🛑 Performance monitoring stopped');
+  logger.info('🛑 Performance monitoring stopped');
 }
 
 // Expose utilities for debugging

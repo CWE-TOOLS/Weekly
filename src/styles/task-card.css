@@ -1,0 +1,345 @@
+/* Task Cards */
+.task-card {
+  color: var(--text-primary);
+  border-radius: var(--border-radius-md);
+  padding: 0.35rem;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  min-height: 140px;
+  background-color: var(--background-secondary);
+  position: relative;
+}
+
+.task-card.department-mill {
+  background-color: var(--color-mill);
+  color: var(--color-mill-text);
+}
+
+.task-card.department-form-out {
+  background-color: var(--color-form-out);
+  color: var(--color-form-out-text);
+}
+
+.task-card.department-cast {
+  background-color: var(--color-cast);
+  color: var(--color-cast-text);
+}
+
+.task-card.department-batch {
+  background-color: var(--color-batch);
+  color: var(--color-batch-text);
+}
+
+.task-card.department-layout {
+  background-color: var(--color-layout);
+  color: var(--color-layout-text);
+}
+
+.task-card.department-demold {
+  background-color: var(--color-demold);
+  color: var(--color-demold-text);
+}
+
+.task-card.department-finish {
+  background-color: var(--color-finish);
+  color: var(--color-finish-text);
+}
+
+.task-card.department-seal {
+  background-color: var(--color-seal);
+  color: var(--color-seal-text);
+}
+
+.task-card.department-special {
+  background-color: var(--color-special) !important;
+  color: var(--color-special-text) !important;
+}
+
+.task-card.department-special-events {
+  background-color: #EF4444;
+  color: #FFFFFF;
+}
+
+.task-card.department-crating {
+  background-color: var(--color-crating);
+  color: var(--color-crating-text);
+}
+
+.task-card.department-load {
+  background-color: var(--color-load);
+  color: var(--color-load-text);
+}
+
+.task-card.department-ship {
+  background-color: var(--color-ship);
+  color: var(--color-ship-text);
+}
+
+.task-card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.task-card::after {
+  content: '⋮';
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  font-size: 1.2rem;
+  color: rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.task-card:hover::after {
+  opacity: 1;
+}
+
+/* Special Events Task Card Styling */
+.task-card.department-special-events .project-description,
+.task-card.department-special-events .task-day-counter,
+.task-card.department-special-events .task-description,
+.task-card.department-special-events .task-details {
+  display: none;
+}
+
+.task-card.department-special-events {
+  justify-content: center;
+}
+
+.task-card.department-special-events .task-title {
+  font-size: 1.5rem;
+  margin-bottom: 0;
+}
+
+/* Task Card Content */
+.task-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 0.25rem;
+  color: inherit;
+  text-align: center;
+}
+
+.task-description {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+  color: inherit;
+  flex-grow: 1;
+  text-align: center;
+}
+
+.project-description {
+  font-size: 0.8rem;
+  font-weight: 400;
+  font-style: italic;
+  margin-bottom: 0.25rem;
+  color: inherit;
+  text-align: center;
+  opacity: 0.75;
+}
+
+.missing-description {
+  color: #ef4444;
+  font-weight: 600;
+  opacity: 1;
+  background-color: #fee2e2;
+  border-radius: 4px;
+  padding: 2px 4px;
+}
+
+.task-details {
+  font-size: 1rem;
+  color: inherit;
+  opacity: 0.9;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  padding-top: 0.25rem;
+  margin-top: auto;
+}
+
+.task-details strong {
+  color: inherit;
+  font-weight: 600;
+}
+
+.task-day-counter {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-align: center;
+  padding: 0.25rem 0;
+  margin: 0.15rem -0.35rem 0.15rem -0.35rem;
+  background-color: rgba(0, 0, 0, 0.08);
+  color: inherit;
+}
+
+.task-card-placeholder {
+  min-height: 140px;
+  background: transparent;
+  border: none;
+  position: relative;
+  /* Performance optimization: Only transition properties that actually change during drag operations
+     instead of using 'transition: all' which forces the browser to watch all properties */
+  transition: background 0.2s ease, border 0.2s ease, border-radius 0.2s ease;
+}
+
+/* Hover indicator for empty cells when editing is enabled */
+.task-card-placeholder.add-enabled {
+  cursor: pointer;
+}
+
+.task-card-placeholder.add-enabled:hover {
+  background: rgba(var(--accent-primary-rgb, 79, 70, 229), 0.05);
+  border: 2px dashed rgba(var(--accent-primary-rgb, 79, 70, 229), 0.3);
+  border-radius: var(--border-radius-md);
+}
+
+.task-card-placeholder.add-enabled:hover::before {
+  content: '+';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 3rem;
+  color: var(--accent-primary);
+  opacity: 0.4;
+  font-weight: 300;
+  pointer-events: none;
+}
+
+.task-card-placeholder.add-enabled:hover::after {
+  content: 'Click to add task';
+  position: absolute;
+  bottom: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  opacity: 0.7;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* ===================================
+   Drag and Drop Visual Feedback
+   =================================== */
+
+/* Cursor styles for draggable elements */
+.task-card[draggable="true"] {
+  cursor: grab;
+}
+
+.task-card.not-draggable {
+  cursor: default;
+}
+
+/* Global cursor change during drag */
+body.dragging-active {
+  cursor: grabbing !important;
+}
+
+body.dragging-active * {
+  cursor: grabbing !important;
+}
+
+/* Dragged card styling - lightweight */
+.task-card.dragging {
+  opacity: 0.4;
+  /* Performance optimization: Opacity changes are GPU-accelerated and efficient */
+}
+
+/* Drag handle icon for draggable cards */
+.task-card[draggable="true"]::before {
+  content: '⠿';
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  font-size: 1.2rem;
+  color: rgba(0, 0, 0, 0.3);
+  opacity: 0;
+  pointer-events: none;
+  font-weight: bold;
+  line-height: 1;
+}
+
+.task-card[draggable="true"]:hover::before {
+  opacity: 0.6;
+}
+
+/* Empty cell highlighting when dragging is active */
+body.dragging-active .task-card-placeholder {
+  background: rgba(79, 70, 229, 0.05);
+  border: 2px dashed rgba(79, 70, 229, 0.3);
+  border-radius: var(--border-radius-md);
+  /* Performance hint: Inform browser these properties will change during drag operations
+     This allows the browser to optimize rendering by creating a separate composite layer */
+  will-change: background, border;
+}
+
+/* Valid drop zone styling - simple and fast */
+.task-card-placeholder.drag-over {
+  background: rgba(34, 197, 94, 0.1) !important;
+  border: 2px solid #22c55e !important;
+  border-radius: var(--border-radius-md);
+  /* No will-change needed here as it's already declared on the base placeholder during drag */
+}
+
+/* Invalid drop zone styling - simple and fast */
+.task-card-placeholder.drag-invalid {
+  background: rgba(239, 68, 68, 0.1) !important;
+  border: 2px solid #ef4444 !important;
+  border-radius: var(--border-radius-md);
+  /* No will-change needed here as it's already declared on the base placeholder during drag */
+}
+
+/* Success animation on drop - quick and simple */
+.task-card.drop-success {
+  animation: dropSuccess 0.3s ease-out;
+}
+
+/* Quick success flash */
+@keyframes dropSuccess {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.task-card.editing {
+  position: relative;
+  box-shadow: 0 0 0 2px var(--accent-primary);
+}
+
+.task-card.editing .task-edit-btn,
+.task-card.editing .task-plan-btn {
+  display: none;
+}
+
+.edit-description {
+  width: 100%;
+  min-height: 60px;
+  padding: 0.625rem 0.875rem;
+  border: 1.5px solid var(--border-primary);
+  border-radius: var(--border-radius-md);
+  font-size: 0.875rem;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+               Helvetica, Arial, sans-serif;
+  resize: vertical;
+  background-color: var(--background-primary);
+  color: var(--text-primary);
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+.edit-description:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+  background: var(--background-secondary);
+}
+
+/* Task Card (Base styles - NOT from components.css, already here) */
+/* The following styles were already in this file and are kept as-is */

@@ -27,6 +27,8 @@
  */
 
 // Store for event listeners
+import { logger } from '../utils/logger.js';
+
 const listeners = new Map();
 
 // Debug mode flag
@@ -40,12 +42,12 @@ let debugMode = false;
  *
  * @example
  * const unsubscribe = on('tasks:loaded', (data) => {
- *   console.log('Tasks loaded:', data);
+ *   logger.info('Tasks loaded:', data);
  * });
  */
 export function on(event, handler) {
     if (typeof handler !== 'function') {
-        console.error(`[EventBus] Handler for "${event}" must be a function`);
+        logger.error(`[EventBus] Handler for "${event}" must be a function`);
         return () => {};
     }
 
@@ -91,7 +93,7 @@ export function off(event, handler) {
 export function emit(event, data) {
     // Debug logging if enabled
     if (debugMode) {
-        console.log(`[EventBus] Emit "${event}":`, data);
+        logger.info(`[EventBus] Emit "${event}":`, data);
     }
 
     if (!listeners.has(event)) {
@@ -105,7 +107,7 @@ export function emit(event, data) {
         try {
             handler(data);
         } catch (error) {
-            console.error(`[EventBus] Error in handler for "${event}":`, error);
+            logger.error(`[EventBus] Error in handler for "${event}":`, error);
         }
     });
 }
@@ -119,7 +121,7 @@ export function emit(event, data) {
  *
  * @example
  * once('tasks:loaded', (data) => {
- *   console.log('First load only:', data);
+ *   logger.info('First load only:', data);
  * });
  */
 export function once(event, handler) {
@@ -168,7 +170,7 @@ export function getListenerCount(event) {
  *
  * @example
  * const events = getAllEvents();
- * console.log('Registered events:', events);
+ * logger.info('Registered events:', events);
  */
 export function getAllEvents() {
     return Array.from(listeners.keys());
@@ -181,7 +183,7 @@ export function getAllEvents() {
 export function setDebugMode(enable) {
     debugMode = enable;
     if (enable) {
-        console.log('[EventBus] Debug mode enabled');
+        logger.info('[EventBus] Debug mode enabled');
     }
 }
 

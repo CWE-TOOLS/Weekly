@@ -9,6 +9,7 @@ import { emit, on, EVENTS } from '../core/event-bus.js';
 import { saveState, loadState } from '../core/storage.js';
 import { DEPARTMENT_ORDER } from '../config/department-config.js';
 
+import { logger } from '../utils/logger.js';
 /**
  * Normalize department name to CSS class format
  * @param {string} dept - Department name
@@ -93,7 +94,7 @@ export function populateDepartmentCheckboxes() {
     const list = document.getElementById('department-list');
 
     if (!list) {
-        console.warn('Department list element not found');
+        logger.warn('Department list element not found');
         return;
     }
 

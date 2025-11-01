@@ -3,6 +3,18 @@
  * Handles page assembly and print execution with proper page break management
  */
 
+import { logger } from '../../utils/logger.js';
+import { REVENUE } from '../../config/business-constants.js';
+import { PRINT_LAYOUT, CONTENT_LIMITS } from '../../config/layout-constants.js';
+import { RENDER_DELAY } from '../../config/timing-constants.js';
+
+// Wait for print-utils.js to load and define its globals
+// These are loaded as modules but export to window for cross-module access
+const getDepartmentColorMapping = () => window.PrintUtils.getDepartmentColorMapping();
+const normalizeDepartmentClass = (dept) => window.PrintUtils.normalizeDepartmentClass(dept);
+const parseDate = (dateStr) => window.PrintUtils.parseDate(dateStr);
+const getMaxTasksForDept = (...args) => window.PrintUtils.getMaxTasksForDept(...args);
+
 // ============================================
 // PAGE ASSEMBLY
 // ============================================
@@ -11,6 +23,7 @@
  * Create a single department page with proper structure
  * Can optionally include a synthetic department (Batch for Cast, Layout for Demold)
  */
+
 function createDepartmentPage(dept, tasks, dates, printType, isCompact, colors, syntheticTasks = null, syntheticDeptName = null) {
     const pageDiv = document.createElement('div');
     pageDiv.className = `print-page ${printType === 'day' ? 'print-page-day' : ''}`;
@@ -24,7 +37,7 @@ function createDepartmentPage(dept, tasks, dates, printType, isCompact, colors, 
             totalHours += hours;
         }
     });
-    const revenue = Math.round(totalHours * 135);
+    const revenue = Math.round(totalHours * REVENUE.HOURLY_RATE);
 
     // Create components for main department
     const deptHeader = window.PrintLayout.createDepartmentHeader(dept, printType, colors);
@@ -175,8 +188,15 @@ function generatePrintContent(printType, selectedDepts, weekDates, allTasks) {
     const generateBatchTasks = window.PrintUtils.generateBatchTasks;
     const generateLayoutTasks = window.PrintUtils.generateLayoutTasks;
 
-    const batchTasks = generateBatchTasks(weekDates, allTasks);
-    const layoutTasks = generateLayoutTasks(weekDates, allTasks);
+    // Calculate monday from weekDates for the unified function signature
+    let monday = null;
+    if (weekDates && weekDates.length > 0) {
+        const firstDate = new Date(weekDates[0]);
+        monday = new Date(firstDate);
+        monday.setDate(firstDate.getDate() - (firstDate.getDay() || 7) + 1);
+    }
+    const batchTasks = monday ? generateBatchTasks(weekDates, monday, () => allTasks) : [];
+    const layoutTasks = monday ? generateLayoutTasks(weekDates, monday, () => allTasks) : [];
 
     // Filter out batch and layout as they are synthetic departments
     const displayDepts = selectedDepts.filter(dept => dept !== 'Batch' && dept !== 'Layout');
@@ -186,7 +206,7 @@ function generatePrintContent(printType, selectedDepts, weekDates, allTasks) {
         const deptTasks = allTasks.filter(task => task.department === dept);
         return sum + getMaxTasksForDept(dept, deptTasks, weekDates, printType);
     }, 0);
-    const isCompact = displayDepts.length > 4 || printType === 'day' || totalTasks > 20;
+    const isCompact = displayDepts.length > CONTENT_LIMITS.COMPACT_LAYOUT_DEPT_THRESHOLD || printType === 'day' || totalTasks > CONTENT_LIMITS.COMPACT_LAYOUT_TASK_THRESHOLD;
 
     const pages = [];
 
@@ -286,14 +306,14 @@ function applyPrintScaling(printContent, printType) {
 
     // Define page dimensions in pixels (96 DPI standard)
     // Letter landscape: 11" x 8.5" minus 0.25" margins = 10.5" x 8" usable
-    const pageMaxWidthPx = 10.5 * 96;   // ~1008px
-    const pageMaxHeightPx = printType === 'day' ? 10 * 96 : 8 * 96; // ~768px for landscape, ~960px for day
+    const pageMaxWidthPx = PRINT_LAYOUT.PAGE_MAX_WIDTH_PX;
+    const pageMaxHeightPx = printType === 'day' ? PRINT_LAYOUT.PAGE_MAX_HEIGHT_PX_DAY : PRINT_LAYOUT.PAGE_MAX_HEIGHT_PX_LANDSCAPE;
 
-    // Minimum scale to maintain readability (don't go below 50% scale)
-    const MIN_SCALE = 0.5;
+    // Minimum scale to maintain readability
+    const MIN_SCALE = PRINT_LAYOUT.MIN_SCALE;
 
-    // Base font size for scaling calculations (7pt is about 9.33px at 96 DPI)
-    const BASE_FONT_SIZE = 7; // in points
+    // Base font size for scaling calculations
+    const BASE_FONT_SIZE = PRINT_LAYOUT.BASE_FONT_SIZE_PT; // in points
 
     requestAnimationFrame(() => {
         setTimeout(() => {
@@ -332,14 +352,14 @@ function applyPrintScaling(printContent, printType) {
                     page.style.width = `${100 / scale}%`;
                     page.style.height = 'auto';
 
-                    console.log(`Print scaling applied: ${(scale * 100).toFixed(1)}% (${contentWidth}x${contentHeight}px -> ${pageMaxWidthPx}x${pageMaxHeightPx}px)`);
+                    logger.info(`Print scaling applied: ${(scale * 100).toFixed(1)}% (${contentWidth}x${contentHeight}px -> ${pageMaxWidthPx}x${pageMaxHeightPx}px)`);
                 } else {
                     // No scaling needed - content fits naturally
                     page.style.fontSize = `${BASE_FONT_SIZE}pt`;
-                    console.log(`Print scaling: No scaling needed (content fits within page bounds)`);
+                    logger.info(`Print scaling: No scaling needed (content fits within page bounds)`);
                 }
             });
-        }, 100); // Small delay to ensure DOM is fully rendered
+        }, RENDER_DELAY.PRINT_RENDER); // Small delay to ensure DOM is fully rendered
     });
 }
 
@@ -382,7 +402,7 @@ function executePrint(printContent, printType = 'week') {
         }
         document.head.removeChild(colorFix);
         document.body.removeChild(printContent);
-    }, 1500);
+    }, RENDER_DELAY.PRINT_EXEC);
 }
 
 // Export rendering functions

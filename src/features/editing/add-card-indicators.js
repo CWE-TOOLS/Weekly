@@ -8,6 +8,7 @@ import { on, EVENTS } from '../../core/event-bus.js';
 import { openAddTaskModal } from '../../components/modals/add-task-modal.js';
 import { getIsEditingUnlocked } from '../../core/state.js';
 
+import { logger } from '../../utils/logger.js';
 /**
  * Enable add card indicators on empty cells
  * Only shows indicators when editing is unlocked
@@ -16,7 +17,7 @@ export function enableAddCardIndicators() {
     const isEditingUnlocked = getIsEditingUnlocked();
 
     if (!isEditingUnlocked) {
-        console.log('Editing not unlocked, skipping add card indicators');
+        logger.info('Editing not unlocked, skipping add card indicators');
         // Remove add-enabled class if editing is locked
         const placeholders = document.querySelectorAll('.task-card-placeholder.add-enabled');
         placeholders.forEach(placeholder => {
@@ -30,7 +31,7 @@ export function enableAddCardIndicators() {
         placeholder.classList.add('add-enabled');
     });
 
-    console.log('Add card indicators enabled');
+    logger.info('Add card indicators enabled');
 }
 
 /**
@@ -42,7 +43,7 @@ export function disableAddCardIndicators() {
         placeholder.classList.remove('add-enabled');
     });
 
-    console.log('Add card indicators disabled');
+    logger.info('Add card indicators disabled');
 }
 
 /**
@@ -62,12 +63,12 @@ function handlePlaceholderClick(placeholder) {
     const dateStr = placeholder.dataset.date;
     const weekText = placeholder.dataset.week;
 
-    console.log('Clicked placeholder with data:', { department, dateStr, weekText });
+    logger.info('Clicked placeholder with data:', { department, dateStr, weekText });
 
     if (department && dateStr && weekText) {
         openAddTaskModal({ department, date: dateStr, week: weekText });
     } else {
-        console.log('Missing data attributes, showing modal with empty context');
+        logger.info('Missing data attributes, showing modal with empty context');
         // Fallback: show modal with empty context
         openAddTaskModal({});
     }
@@ -93,19 +94,19 @@ function handleClick(e) {
  * Sets up event listeners for empty cell clicks
  */
 export function initializeAddCardIndicators() {
-    console.log('Initializing add card indicators...');
+    logger.info('Initializing add card indicators...');
 
     // Click handler for placeholders
     document.addEventListener('click', handleClick);
 
     // Listen for editing unlock/lock events
     on(EVENTS.EDITING_UNLOCKED, () => {
-        console.log('Editing unlocked - enabling add card indicators');
+        logger.info('Editing unlocked - enabling add card indicators');
         enableAddCardIndicators();
     });
 
     on(EVENTS.EDITING_LOCKED, () => {
-        console.log('Editing locked - disabling add card indicators');
+        logger.info('Editing locked - disabling add card indicators');
         disableAddCardIndicators();
     });
 
@@ -123,5 +124,5 @@ export function initializeAddCardIndicators() {
         enableAddCardIndicators();
     }
 
-    console.log('Add card indicators initialized');
+    logger.info('Add card indicators initialized');
 }

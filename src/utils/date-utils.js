@@ -3,6 +3,8 @@
  * @module date-utils
  */
 
+import { TIME_CONSTANTS } from '../config/timing-constants.js';
+
 /**
  * Parse a date string in multiple formats (MM/DD/YYYY, YYYY-MM-DD, or ISO)
  * @param {string} dateStr - The date string to parse
@@ -105,10 +107,10 @@ export function getWeekOfMonth(monday, month) {
     let startOfWeek1 = getMonday(new Date(year, month, 1));
     // Find the first Monday whose week has majority days in the month
     while (getWeekMonth(startOfWeek1) !== month) {
-        startOfWeek1 = new Date(startOfWeek1.getTime() + 7 * 24 * 60 * 60 * 1000);
+        startOfWeek1 = new Date(startOfWeek1.getTime() + TIME_CONSTANTS.DAYS_IN_WEEK_MS);
     }
     const diffMs = monday - startOfWeek1;
-    const diffDays = diffMs / (1000 * 60 * 60 * 24);
-    const weekNum = 1 + Math.floor(diffDays / 7);
+    const diffDays = diffMs / TIME_CONSTANTS.MILLISECONDS_PER_DAY;
+    const weekNum = 1 + Math.floor(diffDays / TIME_CONSTANTS.DAYS_IN_WEEK);
     return Math.max(1, weekNum);
 }

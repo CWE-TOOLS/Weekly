@@ -1,29 +1,27 @@
 /**
  * Application Controller
- * Manages app initialization, lifecycle, and coordination
+ * Main orchestrator for 6-phase application initialization
  * @module core/app-controller
  *
  * @claude-context
  * @purpose Main orchestrator for 6-phase application initialization
- * @dependencies ALL modules (this is the central controller)
+ * @dependencies Refactored into specialized modules for better organization
  * @used-by main.js (entry point calls initializeApp)
- * @exports initializeApp function
- * @modifies Initializes all systems, sets up DOM, registers event listeners
- * @events-emitted app-initialized, initialization-phase-*
- * @events-listened None (controller doesn't listen, it orchestrates)
+ * @exports initializeApp, setupBackwardCompatibility, getAppStatus, shutdownApp, restartApp
+ * @modifies Initializes all systems, coordinates startup phases
  * @initialization-phases
  *   Phase 1: Error Handler - Set up global error handling
  *   Phase 2: State Restoration - Load cached state from localStorage
  *   Phase 3: Services - Initialize auth, sheets, supabase, data services
  *   Phase 4: UI Components - Initialize schedule, filters, navigation, search
- *   Phase 5: Features - Initialize drag-drop, context menu, editing features
- *   Phase 6: Data Loading - Fetch initial data and render
- * @key-functions
- *   - initializeApp() - Main entry point for app startup
- *   - initializeServices() - Phase 3 orchestration
- *   - initializeComponents() - Phase 4 orchestration
- *   - initializeFeatures() - Phase 5 orchestration
- * @phase9-optimization Implements lazy loading for modal components
+ *   Phase 5: Data Loading - Fetch initial data and render
+ *   Phase 6: Global Features - Initialize listeners and shortcuts
+ * @refactoring Split into focused modules:
+ *   - modal-loader.js: Lazy loading for modals
+ *   - button-handlers.js: UI event listeners
+ *   - task-card-editor.js: Inline editing logic
+ *   - component-events.js: Event bus subscriptions
+ *   - initialization-orchestrator.js: Phase coordination
  */
 
 // Import core systems
@@ -35,7 +33,6 @@ import * as state from './state.js';
 import * as eventBus from './event-bus.js';
 import * as storage from './storage.js';
 import * as performanceMonitor from './performance-monitor.js';
-import * as offlineManager from './offline-manager.js';
 
 // Import services
 import * as authService from '../services/auth-service.js';
@@ -44,52 +41,55 @@ import * as supabaseService from '../services/supabase-service.js';
 import * as dataService from '../services/data-service.js';
 
 // Import UI components
-import { renderAllWeeks, equalizeAllCardHeights, navigateToWeek } from '../components/schedule-grid.js';
-import { initializeDepartmentFilter, filterTasks } from '../components/department-filter.js';
-import { initializeWeekNavigation } from '../components/week-navigation.js';
-import { initializeSearch } from '../components/search-bar.js';
-
-// Modals will be lazy loaded (Phase 9 optimization)
-// import { initializePasswordModal, showPasswordModal, lockEditing } from '../components/modals/password-modal.js';
-// import { initializeAddTaskModal, openAddTaskModal, showAddCardModal } from '../components/modals/add-task-modal.js';
-// import { initializeProjectModal, showProjectModal, showProjectView } from '../components/modals/project-modal.js';
-// import { initializePrintModal, openPrintModal, showPrintModal } from '../components/modals/print-modal.js';
-
-// Import lazy loader (Phase 9)
-import { lazyLoad, preloadOnIdle } from '../utils/lazy-loader.js';
-
-// Import Feature modules
-import { initializeContextMenu } from '../features/context-menu/context-menu.js';
-import { initializeDragDrop } from '../features/drag-drop/drag-drop-manager.js';
-import { initializeAddCardIndicators, enableAddCardIndicators } from '../features/editing/add-card-indicators.js';
-import { initializeDeleteHandler } from '../features/editing/delete-task-handler.js';
+import { renderAllWeeks, equalizeAllCardHeights } from '../components/schedule-grid.js';
+import { filterTasks } from '../components/department-filter.js';
 
 // Import configuration
 import { GOOGLE_SHEETS, SUPABASE } from '../config/api-config.js';
-import { DEPARTMENT_ORDER } from '../config/department-config.js';
-import * as constants from '../config/constants.js';
 
 // Import utilities
 import {
     parseDate,
     getLocalDateString,
     formatDateToMMDDYYYY,
-    getMonday,
-    getWeekMonth,
-    getWeekOfMonth
+    getMonday
 } from '../utils/date-utils.js';
 
 import {
     showLoading,
     showError,
     hideError,
-    showRenderingStatus,
-    showSuccessNotification,
-    stripHtml,
     normalizeDepartment,
     normalizeDepartmentClass
 } from '../utils/ui-utils.js';
 
+// Import constants
+import { UI_DELAY } from '../config/timing-constants.js';
+
+// Import new modular components
+import {
+    exposeModalFunctionsGlobally,
+    preloadFeaturesOnIdle,
+    loadPasswordModal,
+    loadAddTaskModal,
+    loadProjectModal,
+    loadPrintModal,
+    loadContextMenu,
+    loadDragDrop
+} from './modal-loader.js';
+
+import {
+    restoreState,
+    initializeServices,
+    initializeComponents,
+    loadInitialData,
+    initializeCoreSystems
+} from './initialization-orchestrator.js';
+
+// Import feature functions
+import { enableAddCardIndicators } from '../features/editing/add-card-indicators.js';
+
+import { logger } from '../utils/logger.js';
 // Application state
 let appState = {
     initialized: false,
@@ -99,131 +99,56 @@ let appState = {
     initializationTime: 0
 };
 
-// === Lazy Loading Modal Wrappers (Phase 9) ===
-
-// Track which modules have been initialized (ES6 modules are not extensible)
-const initializedModals = new Set();
-
-/**
- * Lazy load and initialize password modal
- * @returns {Promise<Object>} Password modal module
- */
-async function loadPasswordModal() {
-    const module = await lazyLoad(
-        () => import('../components/modals/password-modal.js'),
-        'password-modal'
-    );
-    // Initialize once on first load
-    if (!initializedModals.has('password-modal')) {
-        module.initializePasswordModal();
-        initializedModals.add('password-modal');
-    }
-    return module;
-}
+// Track lazy-loaded feature state
+let contextMenuLoaded = false;
+let dragDropLoaded = false;
 
 /**
- * Lazy load and initialize add task modal
- * @returns {Promise<Object>} Add task modal module
+ * Setup lazy load trigger for context menu
+ * Loads context menu on first click interaction
+ * @private
  */
-async function loadAddTaskModal() {
-    const module = await lazyLoad(
-        () => import('../components/modals/add-task-modal.js'),
-        'add-task-modal'
-    );
-    if (!initializedModals.has('add-task-modal')) {
-        module.initializeAddTaskModal();
-        initializedModals.add('add-task-modal');
-    }
-    return module;
-}
+function setupContextMenuTrigger() {
+    const triggerContextMenu = async (e) => {
+        if (contextMenuLoaded) return;
 
-/**
- * Lazy load and initialize project modal
- * @returns {Promise<Object>} Project modal module
- */
-async function loadProjectModal() {
-    const module = await lazyLoad(
-        () => import('../components/modals/project-modal.js'),
-        'project-modal'
-    );
-    if (!initializedModals.has('project-modal')) {
-        const success = module.initializeProjectModal();
-        if (success !== false) {
-            initializedModals.add('project-modal');
-        } else {
-            console.error('Failed to initialize project modal - DOM elements not found');
+        // Check if clicking on a task card or if it's a potential context menu trigger
+        if (e.target instanceof Element) {
+            const taskCard = e.target.closest('.task-card');
+            if (taskCard) {
+                contextMenuLoaded = true;
+                await loadContextMenu();
+                logger.debug('Context menu lazy loaded on first interaction');
+            }
         }
-    }
-    return module;
+    };
+
+    // Listen for first click that might trigger context menu
+    document.addEventListener('click', triggerContextMenu, { once: false, capture: true });
 }
 
 /**
- * Lazy load and initialize print modal
- * @returns {Promise<Object>} Print modal module
+ * Setup lazy load trigger for drag-drop
+ * Loads drag-drop on first mousedown on schedule grid
+ * @private
  */
-async function loadPrintModal() {
-    const module = await lazyLoad(
-        () => import('../components/modals/print-modal.js'),
-        'print-modal'
-    );
-    if (!initializedModals.has('print-modal')) {
-        module.initializePrintModal();
-        initializedModals.add('print-modal');
-    }
-    return module;
-}
+function setupDragDropTrigger() {
+    const triggerDragDrop = async (e) => {
+        if (dragDropLoaded) return;
 
-/**
- * Show project modal (lazy loaded)
- * Exposed globally for context menu
- * @param {string} projectName - Project name
- */
-async function showProjectViewLazy(projectName) {
-    const module = await loadProjectModal();
-    module.showProjectView(projectName);
-}
-
-/**
- * Show add card modal (lazy loaded)
- * Exposed globally for add card indicators
- * @param {Object} data - Modal data
- */
-async function showAddCardModalLazy(data) {
-    const module = await loadAddTaskModal();
-    module.showAddCardModal(data);
-}
-
-// Expose lazy modal functions globally
-if (typeof window !== 'undefined') {
-    window.showProjectView = showProjectViewLazy;
-    window.showAddCardModal = showAddCardModalLazy;
-}
-
-/**
- * Preload modals on browser idle time (Phase 9)
- * Loads modals in background for better perceived performance
- */
-function preloadModalsOnIdle() {
-    console.log('🔮 Scheduling modal preload on idle...');
-
-    preloadOnIdle([
-        {
-            importer: () => import('../components/modals/password-modal.js'),
-            key: 'password-modal'
-        },
-        {
-            importer: () => import('../components/modals/print-modal.js'),
-            key: 'print-modal'
-        },
-        {
-            importer: () => import('../components/modals/project-modal.js'),
-            key: 'project-modal'
-        },
-        {
-            importer: () => import('../components/modals/add-task-modal.js'),
-            key: 'add-task-modal'
+        // Check if interacting with a draggable task card
+        if (e.target instanceof Element) {
+            const taskCard = e.target.closest('.task-card[draggable="true"]');
+            if (taskCard) {
+                dragDropLoaded = true;
+                await loadDragDrop();
+                logger.debug('Drag-drop lazy loaded on first interaction');
+            }
         }
-    ], 2000);
+    };
+
+    // Listen for first mousedown on draggable elements
+    document.addEventListener('mousedown', triggerDragDrop, { once: false, capture: true });
 }
 
 /**
@@ -234,33 +159,24 @@ export async function initializeApp() {
     const startTime = performance.now();
 
     try {
-        console.log('🚀 Weekly Schedule Viewer - Starting initialization...');
-        console.log('📦 ES6 Modules: Loaded');
+        logger.info('🚀 Weekly Schedule Viewer - Starting initialization...');
+        logger.info('📦 ES6 Modules: Loaded');
 
         // === Phase 1: Core Systems (Critical) ===
-        console.log('\n=== Phase 1: Core Systems ===');
         performanceMonitor.mark('app-init-start');
         loadingManager.showLoading('Initializing application...', 'init');
         loadingManager.updateProgress(5, 'Starting core systems...');
 
-        // Error handler is already initialized in main.js
+        // Initialize core systems (performance monitor, loading manager, offline manager)
+        initializeCoreSystems();
 
-        // Initialize performance monitoring (Phase 9)
-        performanceMonitor.initializePerformanceMonitor();
-        console.log('  ✅ Performance monitor initialized');
-
-        // Initialize loading manager
-        loadingManager.initializeLoadingManager();
-        console.log('  ✅ Loading manager initialized');
-
-        // Initialize offline manager (Phase 9)
-        offlineManager.initializeOfflineManager();
-        console.log('  ✅ Offline manager initialized');
+        // Expose modal functions globally for backward compatibility
+        exposeModalFunctionsGlobally();
 
         loadingManager.updateProgress(10, 'Core systems ready');
 
         // === Phase 2: State Restoration ===
-        console.log('\n=== Phase 2: State Restoration ===');
+        logger.info('\n=== Phase 2: State Restoration ===');
         performanceMonitor.mark('phase2-start');
         loadingManager.updateProgress(15, 'Restoring state...');
 
@@ -269,7 +185,7 @@ export async function initializeApp() {
         loadingManager.updateProgress(25, 'State restored');
 
         // === Phase 3: Services Initialization ===
-        console.log('\n=== Phase 3: Services ===');
+        logger.info('\n=== Phase 3: Services ===');
         performanceMonitor.mark('phase3-start');
         loadingManager.updateProgress(30, 'Initializing services...');
 
@@ -279,7 +195,7 @@ export async function initializeApp() {
         loadingManager.updateProgress(45, 'Services initialized');
 
         // === Phase 4: UI Components ===
-        console.log('\n=== Phase 4: UI Components ===');
+        logger.info('\n=== Phase 4: UI Components ===');
         performanceMonitor.mark('phase4-start');
         loadingManager.updateProgress(50, 'Initializing UI components...');
 
@@ -289,7 +205,7 @@ export async function initializeApp() {
         loadingManager.updateProgress(70, 'UI components ready');
 
         // === Phase 5: Data Loading ===
-        console.log('\n=== Phase 5: Data Loading ===');
+        logger.info('\n=== Phase 5: Data Loading ===');
         performanceMonitor.mark('phase5-start');
         loadingManager.updateProgress(75, 'Loading initial data...');
 
@@ -298,12 +214,17 @@ export async function initializeApp() {
         loadingManager.updateProgress(90, 'Data loaded');
 
         // === Phase 6: Global Listeners & Features ===
-        console.log('\n=== Phase 6: Global Features ===');
+        logger.info('\n=== Phase 6: Global Features ===');
         performanceMonitor.mark('phase6-start');
         loadingManager.updateProgress(95, 'Initializing global features...');
 
         globalListeners.initializeGlobalListeners();
         keyboardShortcuts.initializeKeyboardShortcuts();
+
+        // Setup lazy load triggers for context menu and drag-drop
+        setupContextMenuTrigger();
+        setupDragDropTrigger();
+        logger.debug('  Lazy load triggers set up');
 
         performanceMonitor.measure('phase6-global-features', 'phase6-start');
         loadingManager.updateProgress(100, 'Application ready');
@@ -319,15 +240,15 @@ export async function initializeApp() {
         loadingManager.hideLoading('init');
         loadingManager.showStatus('✅ Application ready', 'success', 3000);
 
-        console.log(`\n✅ Application initialized successfully in ${Math.round(appState.initializationTime)}ms`);
-        console.log('🎉 Phase 9: Performance Optimization Active!');
-        console.log('📊 Performance metrics available via window.reportPerformanceMetrics()');
+        logger.info(`\n✅ Application initialized successfully in ${Math.round(appState.initializationTime)}ms`);
+        logger.info('🎉 Phase 9: Performance Optimization Active!');
+        logger.info('📊 Performance metrics available via window.reportPerformanceMetrics()');
 
-        // Preload modals on idle (Phase 9)
-        preloadModalsOnIdle();
+        // Preload features on idle (Phase 9)
+        preloadFeaturesOnIdle();
 
     } catch (error) {
-        console.error('❌ Application initialization failed:', error);
+        logger.error('❌ Application initialization failed:', error);
         appState.errors.push(error);
 
         loadingManager.hideLoading('init');
@@ -335,7 +256,7 @@ export async function initializeApp() {
             critical: true,
             operation: 'Application Initialization',
             retry: () => {
-                console.log('🔄 Retrying initialization...');
+                logger.info('🔄 Retrying initialization...');
                 location.reload();
             }
         });
@@ -345,445 +266,10 @@ export async function initializeApp() {
 }
 
 /**
- * Restore persisted state from localStorage
- * @returns {Promise<void>}
- */
-async function restoreState() {
-    console.log('🔄 Restoring persisted state...');
-
-    try {
-        // Restore week index
-        const savedWeekIndex = storage.loadWeekIndex();
-        if (savedWeekIndex !== -1) {
-            state.setCurrentViewedWeekIndex(savedWeekIndex, true);
-            console.log('  ✅ Restored week index:', savedWeekIndex);
-        }
-
-        // Restore editing mode
-        const savedEditingMode = storage.loadEditingMode();
-        if (savedEditingMode) {
-            state.setIsEditingUnlocked(savedEditingMode);
-            console.log('  ✅ Restored editing mode:', savedEditingMode);
-        }
-
-        // Set up event listeners for state persistence
-        eventBus.on(eventBus.EVENTS.WEEK_CHANGED, (data) => {
-            storage.saveWeekIndex(data.weekIndex);
-        });
-
-        eventBus.on(eventBus.EVENTS.EDITING_TOGGLED, (data) => {
-            storage.saveEditingMode(data.unlocked);
-        });
-
-        console.log('✅ State restored successfully');
-    } catch (error) {
-        console.warn('⚠️ Failed to restore state:', error);
-        // Non-critical error, continue initialization
-    }
-}
-
-/**
- * Initialize services (Supabase, Google Sheets, etc.)
- * @returns {Promise<void>}
- */
-async function initializeServices() {
-    console.log('⚙️ Initializing services...');
-
-    // Initialize Supabase (critical service)
-    try {
-        await supabaseService.initializeSupabase();
-        console.log('  ✅ Supabase initialized');
-    } catch (error) {
-        console.error('  ❌ Failed to initialize Supabase:', error);
-        // Continue even if Supabase fails (graceful degradation)
-        errorHandler.handleError(error, {
-            critical: false,
-            operation: 'Supabase initialization'
-        });
-    }
-
-    console.log('✅ Services initialized');
-}
-
-/**
- * Initialize UI components
- * @returns {Promise<void>}
- */
-async function initializeComponents() {
-    console.log('🎨 Initializing UI components...');
-
-    try {
-        // Core UI Components
-        initializeDepartmentFilter();
-        console.log('  ✅ Department filter');
-
-        initializeWeekNavigation();
-        console.log('  ✅ Week navigation');
-
-        initializeSearch();
-        console.log('  ✅ Search bar');
-
-        // Modals are lazy loaded (Phase 9) - will be initialized on first use
-        console.log('  📦 Modals: Lazy loaded (will initialize on demand)');
-
-        // Feature Modules
-        initializeContextMenu();
-        console.log('  ✅ Context menu');
-
-        initializeDragDrop();
-        console.log('  ✅ Drag & drop');
-
-        initializeAddCardIndicators();
-        console.log('  ✅ Add card indicators');
-
-        initializeDeleteHandler();
-        console.log('  ✅ Delete handler');
-
-        // Set up component event listeners
-        setupComponentEvents();
-
-        // Initialize button event listeners
-        initializeButtonHandlers();
-
-        console.log('✅ UI components initialized');
-    } catch (error) {
-        console.error('❌ Failed to initialize components:', error);
-        throw error;
-    }
-}
-
-/**
- * Set up component event listeners
- */
-function setupComponentEvents() {
-    // Tasks filtered → render schedule
-    eventBus.on(eventBus.EVENTS.TASKS_FILTERED, () => {
-        renderAllWeeks();
-    });
-
-    // Tasks loaded → render schedule
-    eventBus.on(eventBus.EVENTS.TASKS_LOADED, () => {
-        console.log('📊 Tasks loaded, rendering schedule...');
-    });
-}
-
-/**
- * Make a task card editable inline
- * @param {HTMLElement} taskCard - Task card element to make editable
- */
-function makeTaskCardEditable(taskCard) {
-    if (!taskCard) return;
-
-    // Mark card as editing
-    taskCard.classList.add('editing');
-
-    // Get task description element
-    const descDiv = taskCard.querySelector('.task-description');
-    if (!descDiv) return;
-
-    // Store original value
-    const originalValue = descDiv.textContent.trim() === 'Staging Missing' ? '' : descDiv.textContent.trim();
-    taskCard.dataset.originalDescription = originalValue;
-
-    // Replace with textarea
-    const textarea = document.createElement('textarea');
-    textarea.className = 'edit-description';
-    textarea.value = originalValue;
-    textarea.placeholder = 'Enter task description...';
-    descDiv.replaceWith(textarea);
-    textarea.focus();
-
-    // Hide the existing Edit and Plan buttons
-    const editBtn = taskCard.querySelector('.task-edit-btn');
-    const planBtn = taskCard.querySelector('.task-plan-btn');
-    if (editBtn) editBtn.style.display = 'none';
-    if (planBtn) planBtn.style.display = 'none';
-
-    // Create edit action buttons container
-    const editActions = document.createElement('div');
-    editActions.className = 'edit-actions';
-
-    // Create Save button
-    const saveBtn = document.createElement('button');
-    saveBtn.className = 'edit-save-btn';
-    saveBtn.textContent = 'Save';
-    saveBtn.title = 'Save changes (Enter)';
-    saveBtn.onclick = (e) => {
-        e.stopPropagation();
-        saveTaskCardEdit(taskCard);
-    };
-
-    // Create Cancel button
-    const cancelBtn = document.createElement('button');
-    cancelBtn.className = 'edit-cancel-btn';
-    cancelBtn.textContent = 'Cancel';
-    cancelBtn.title = 'Cancel editing (Esc)';
-    cancelBtn.onclick = (e) => {
-        e.stopPropagation();
-        cancelTaskCardEdit(taskCard);
-    };
-
-    editActions.appendChild(saveBtn);
-    editActions.appendChild(cancelBtn);
-    taskCard.appendChild(editActions);
-
-    // Handle save on Enter (Ctrl+Enter for new line)
-    textarea.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.ctrlKey) {
-            e.preventDefault();
-            saveTaskCardEdit(taskCard);
-        }
-        if (e.key === 'Escape') {
-            e.preventDefault();
-            cancelTaskCardEdit(taskCard);
-        }
-    });
-}
-
-/**
- * Save inline task card edits
- * @param {HTMLElement} taskCard - Task card being edited
- */
-async function saveTaskCardEdit(taskCard) {
-    if (!taskCard) return;
-
-    const textarea = taskCard.querySelector('.edit-description');
-    const taskId = taskCard.dataset.taskId;
-    const newDescription = textarea ? textarea.value.trim() : '';
-
-    try {
-        // Update task in state
-        const allTasks = state.getAllTasks();
-        const task = allTasks.find(t => t.id === taskId);
-
-        if (task) {
-            task.description = newDescription;
-
-            // Save to backend
-            const { saveToStaging } = await import('../services/sheets-service.js');
-            await saveToStaging(task.project, [{
-                task: task,
-                newText: newDescription
-            }]);
-
-            // Send refresh signal to other clients
-            await supabaseService.sendRefreshSignal({
-                operation: 'task_description_update',
-                taskId: taskId,
-                project: task.project
-            });
-
-            // Show success notification
-            showSuccessNotification('Task updated successfully!');
-        }
-
-        // Restore normal view
-        restoreTaskCardView(taskCard, newDescription);
-
-    } catch (error) {
-        console.error('Failed to save task:', error);
-        errorHandler.handleError(error, {
-            operation: 'Save task edit',
-            retry: () => saveTaskCardEdit(taskCard)
-        });
-    }
-}
-
-/**
- * Cancel inline task card edits
- * @param {HTMLElement} taskCard - Task card being edited
- */
-function cancelTaskCardEdit(taskCard) {
-    if (!taskCard) return;
-
-    const originalDescription = taskCard.dataset.originalDescription || '';
-    restoreTaskCardView(taskCard, originalDescription);
-}
-
-/**
- * Restore task card to normal view after editing
- * @param {HTMLElement} taskCard - Task card to restore
- * @param {string} description - Description text to display
- */
-function restoreTaskCardView(taskCard, description) {
-    if (!taskCard) return;
-
-    taskCard.classList.remove('editing');
-
-    // Restore description
-    const textarea = taskCard.querySelector('.edit-description');
-    if (textarea) {
-        const descDiv = document.createElement('div');
-        descDiv.className = 'task-description';
-        if (description && description.trim()) {
-            descDiv.textContent = description;
-        } else {
-            descDiv.innerHTML = '<span class="missing-description">Staging Missing</span>';
-        }
-        textarea.replaceWith(descDiv);
-    }
-
-    // Remove edit actions container
-    const editActions = taskCard.querySelector('.edit-actions');
-    if (editActions) {
-        editActions.remove();
-    }
-
-    // Restore original Edit and Plan buttons
-    const editBtn = taskCard.querySelector('.task-edit-btn');
-    const planBtn = taskCard.querySelector('.task-plan-btn');
-    if (editBtn) editBtn.style.display = '';
-    if (planBtn) planBtn.style.display = '';
-
-    // Clean up
-    delete taskCard.dataset.originalDescription;
-}
-
-/**
- * Initialize button event handlers
- */
-function initializeButtonHandlers() {
-    console.log('🔌 Wiring up button event listeners...');
-
-    // Refresh button
-    const refreshBtn = document.getElementById('refresh-btn');
-    if (refreshBtn) {
-        refreshBtn.addEventListener('click', async () => {
-            try {
-                showLoading();
-                await dataService.fetchAllTasks();
-                hideError();
-                showSuccessNotification('Data refreshed successfully!');
-
-                // Send refresh signal to all other clients
-                await supabaseService.sendRefreshSignal({
-                    action: 'manual_refresh',
-                    source: 'refresh_button'
-                });
-            } catch (error) {
-                console.error('Failed to refresh data:', error);
-                errorHandler.handleError(error, {
-                    operation: 'Data refresh',
-                    retry: () => refreshBtn.click()
-                });
-            }
-        });
-    }
-
-    // Print button (lazy loaded)
-    const printBtn = document.getElementById('print-btn');
-    if (printBtn) {
-        printBtn.addEventListener('click', async () => {
-            const module = await loadPrintModal();
-            module.showPrintModal();
-        });
-    }
-
-    // Main editing button (lazy loaded)
-    const mainEditingBtn = document.getElementById('main-editing-btn');
-    if (mainEditingBtn) {
-        mainEditingBtn.addEventListener('click', async () => {
-            const isUnlocked = state.getIsEditingUnlocked();
-            if (isUnlocked) {
-                const module = await loadPasswordModal();
-                module.lockEditing();
-            } else {
-                const module = await loadPasswordModal();
-                module.showPasswordModal();
-            }
-        });
-    }
-
-    // FAB add task button (lazy loaded)
-    const fabAddTask = document.getElementById('fab-add-task');
-    if (fabAddTask) {
-        fabAddTask.addEventListener('click', async () => {
-            const module = await loadAddTaskModal();
-            module.openAddTaskModal({});
-        });
-    }
-
-    // Fullscreen button
-    const fullscreenBtn = document.getElementById('fullscreen-btn');
-    if (fullscreenBtn) {
-        fullscreenBtn.addEventListener('click', () => {
-            if (!document.fullscreenElement) {
-                document.documentElement.requestFullscreen();
-            } else {
-                document.exitFullscreen();
-            }
-        });
-    }
-
-    // Event delegation for task card Plan buttons - show project modal
-    document.addEventListener('click', async (e) => {
-        const planBtn = e.target.closest('.task-plan-btn');
-        if (planBtn) {
-            const taskId = planBtn.dataset.taskId;
-            const allTasks = state.getAllTasks();
-            const task = allTasks.find(t => t.id === taskId);
-            if (task) {
-                const module = await loadProjectModal();
-                module.showProjectModal(task.project);
-            }
-        }
-    });
-
-    // Event delegation for task card Edit buttons - make card editable inline
-    document.addEventListener('click', (e) => {
-        const editBtn = e.target.closest('.task-edit-btn');
-        if (editBtn) {
-            const taskCard = editBtn.closest('.task-card');
-            if (taskCard && !taskCard.classList.contains('editing')) {
-                makeTaskCardEditable(taskCard);
-            }
-        }
-    });
-
-    // Event delegation for empty cells - click to add task
-    document.addEventListener('click', async (e) => {
-        const placeholder = e.target.closest('.task-card-placeholder');
-        if (placeholder) {
-            const isEditingUnlocked = state.getIsEditingUnlocked();
-            if (!isEditingUnlocked) return; // Only allow adding tasks when editing is unlocked
-
-            const department = placeholder.dataset.department;
-            const date = placeholder.dataset.date;
-            const week = placeholder.dataset.week;
-
-            const module = await loadAddTaskModal();
-            module.openAddTaskModal({ department, date, week });
-        }
-    });
-
-    console.log('✅ Button event listeners initialized');
-}
-
-/**
- * Load initial data
- * @returns {Promise<void>}
- */
-async function loadInitialData() {
-    console.log('📊 Loading initial data...');
-
-    try {
-        await dataService.fetchAllTasks();
-        console.log('✅ Initial data loaded');
-    } catch (error) {
-        console.error('❌ Failed to load initial data:', error);
-        errorHandler.handleError(error, {
-            operation: 'Initial data load',
-            retry: loadInitialData
-        });
-        throw error;
-    }
-}
-
-/**
  * Shutdown the application gracefully
  */
 export function shutdownApp() {
-    console.log('🛑 Shutting down application...');
+    logger.info('🛑 Shutting down application...');
 
     try {
         // Clean up global listeners
@@ -804,9 +290,9 @@ export function shutdownApp() {
 
         appState.initialized = false;
 
-        console.log('✅ Application shutdown complete');
+        logger.info('✅ Application shutdown complete');
     } catch (error) {
-        console.error('❌ Error during shutdown:', error);
+        logger.error('❌ Error during shutdown:', error);
     }
 }
 
@@ -815,15 +301,15 @@ export function shutdownApp() {
  * @returns {Promise<void>}
  */
 export async function restartApp() {
-    console.log('🔄 Restarting application...');
+    logger.info('🔄 Restarting application...');
 
     shutdownApp();
 
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise(resolve => setTimeout(resolve, UI_DELAY.RESTART));
 
     await initializeApp();
 
-    console.log('✅ Application restarted');
+    logger.info('✅ Application restarted');
 }
 
 /**
@@ -848,7 +334,7 @@ export function getAppStatus() {
  * Expose necessary functions to window object for legacy code
  */
 export function setupBackwardCompatibility() {
-    console.log('🔗 Setting up backward compatibility...');
+    logger.info('🔗 Setting up backward compatibility...');
 
     // Expose configuration
     window.API_KEY = GOOGLE_SHEETS.API_KEY;
@@ -936,8 +422,8 @@ export function setupBackwardCompatibility() {
     window.equalizeAllCardHeights = equalizeAllCardHeights;
     window.filterTasks = filterTasks;
 
-    // Modal functions are already exposed via lazy loading wrappers (Phase 9)
-    // See lines 168-171 for showProjectView and showAddCardModal
+    // Modal functions (lazy loaded via modal-loader.js)
+    // showProjectView and showAddCardModal already exposed by modal-loader.js
     // Additional lazy modal functions:
     window.showPasswordModal = async () => {
         const module = await loadPasswordModal();
@@ -967,5 +453,5 @@ export function setupBackwardCompatibility() {
     // Expose feature functions
     window.enableAddCardIndicators = enableAddCardIndicators;
 
-    console.log('✅ Backward compatibility setup complete');
+    logger.info('✅ Backward compatibility setup complete');
 }

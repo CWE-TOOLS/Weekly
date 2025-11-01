@@ -8,6 +8,7 @@
 import * as eventBus from './event-bus.js';
 import { showWarningNotification, showInfoNotification } from './error-handler.js';
 
+import { logger } from '../utils/logger.js';
 let isOffline = !navigator.onLine;
 let offlineQueue = [];
 let offlineIndicator = null;
@@ -18,7 +19,7 @@ let queueCountElement = null;
  * Sets up connection listeners and UI
  */
 export function initializeOfflineManager() {
-  console.log('📡 Initializing offline manager...');
+  logger.info('📡 Initializing offline manager...');
 
   // Get UI elements
   offlineIndicator = document.getElementById('offline-indicator');
@@ -34,7 +35,7 @@ export function initializeOfflineManager() {
   window.addEventListener('online', () => handleConnectionChange({ online: true }));
   window.addEventListener('offline', () => handleConnectionChange({ online: false }));
 
-  console.log(`✅ Offline manager initialized (currently ${isOffline ? 'OFFLINE' : 'ONLINE'})`);
+  logger.info(`✅ Offline manager initialized (currently ${isOffline ? 'OFFLINE' : 'ONLINE'})`);
 }
 
 /**
@@ -46,17 +47,17 @@ function handleConnectionChange({ online }) {
   const wasOffline = isOffline;
   isOffline = !online;
 
-  console.log(`📡 Connection changed: ${online ? 'ONLINE' : 'OFFLINE'}`);
+  logger.info(`📡 Connection changed: ${online ? 'ONLINE' : 'OFFLINE'}`);
 
   updateOfflineState();
 
   if (wasOffline && online) {
     // Came back online - sync queued operations
-    console.log('🔄 Connection restored, syncing queued operations...');
+    logger.info('🔄 Connection restored, syncing queued operations...');
     syncOfflineQueue();
   } else if (!wasOffline && !online) {
     // Went offline
-    console.warn('⚠️ Connection lost');
+    logger.warn('⚠️ Connection lost');
   }
 }
 
@@ -111,7 +112,7 @@ export function queueOfflineOperation(operation, context = {}, description = 'Op
     timestamp: Date.now()
   });
 
-  console.log(`📥 Queued offline operation: ${description} (${offlineQueue.length} in queue)`);
+  logger.info(`📥 Queued offline operation: ${description} (${offlineQueue.length} in queue)`);
   updateQueueCount();
 
   // Show notification
@@ -124,11 +125,11 @@ export function queueOfflineOperation(operation, context = {}, description = 'Op
  */
 async function syncOfflineQueue() {
   if (offlineQueue.length === 0) {
-    console.log('✅ No offline operations to sync');
+    logger.info('✅ No offline operations to sync');
     return { success: 0, failed: 0 };
   }
 
-  console.log(`📤 Syncing ${offlineQueue.length} offline operations...`);
+  logger.info(`📤 Syncing ${offlineQueue.length} offline operations...`);
   showInfoNotification(`🔄 Syncing ${offlineQueue.length} offline changes...`);
 
   const operations = [...offlineQueue];
@@ -140,12 +141,12 @@ async function syncOfflineQueue() {
 
   for (const { operation, context, description, timestamp } of operations) {
     try {
-      console.log(`🔄 Syncing: ${description}`);
+      logger.info(`🔄 Syncing: ${description}`);
       await operation(context);
       successCount++;
-      console.log(`✅ Synced: ${description}`);
+      logger.info(`✅ Synced: ${description}`);
     } catch (error) {
-      console.error(`❌ Failed to sync: ${description}`, error);
+      logger.error(`❌ Failed to sync: ${description}`, error);
       failCount++;
       // Re-queue failed operations
       failedOps.push({ operation, context, description, timestamp });
@@ -167,7 +168,7 @@ async function syncOfflineQueue() {
     );
   }
 
-  console.log(`📤 Sync complete: ${successCount} succeeded, ${failCount} failed`);
+  logger.info(`📤 Sync complete: ${successCount} succeeded, ${failCount} failed`);
 
   return { success: successCount, failed: failCount };
 }
@@ -221,7 +222,7 @@ export function clearQueue() {
   const count = offlineQueue.length;
   offlineQueue = [];
   updateQueueCount();
-  console.warn(`🗑️ Cleared ${count} queued operations`);
+  logger.warn(`🗑️ Cleared ${count} queued operations`);
 }
 
 // Expose utilities for debugging

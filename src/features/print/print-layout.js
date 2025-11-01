@@ -3,6 +3,15 @@
  * Handles component creation and layout management
  */
 
+import { REVENUE } from '../../config/business-constants.js';
+import { PRINT_LAYOUT } from '../../config/layout-constants.js';
+
+// Helper functions that access window.PrintUtils (loaded asynchronously)
+// These ensure print-layout.js can access utilities from print-utils.js
+const getDepartmentColorMapping = () => window.PrintUtils.getDepartmentColorMapping();
+const normalizeDepartmentClass = (dept) => window.PrintUtils.normalizeDepartmentClass(dept);
+const parseDate = (dateStr) => window.PrintUtils.parseDate(dateStr);
+
 // ============================================
 // LAYOUT COMPONENT CREATORS
 // ============================================
@@ -79,7 +88,7 @@ function createTableFooter(dates, tasks, printType) {
     const tfoot = document.createElement('tfoot');
     const revenueRow = document.createElement('tr');
     revenueRow.style.borderTop = '2px solid #666';
-    revenueRow.style.fontSize = '0.85em';
+    revenueRow.style.fontSize = `${PRINT_LAYOUT.REVENUE_ROW_FONT_SIZE_EM}em`;
     revenueRow.style.background = '#e8e8e8';
 
     dates.forEach(date => {
@@ -95,13 +104,13 @@ function createTableFooter(dates, tasks, printType) {
             const hours = parseFloat(task.hours);
             if (!isNaN(hours)) dayHours += hours;
         });
-        const dayRevenue = Math.round(dayHours * 135);
+        const dayRevenue = Math.round(dayHours * REVENUE.HOURLY_RATE);
 
         const revenueCell = document.createElement('td');
         revenueCell.innerHTML = `<strong>Daily Total</strong><br>$${dayRevenue.toLocaleString()}`;
         revenueCell.style.fontWeight = 'bold';
         revenueCell.style.textAlign = 'center';
-        revenueCell.style.padding = '0.4em';
+        revenueCell.style.padding = `${PRINT_LAYOUT.REVENUE_CELL_PADDING_EM}em`;
         revenueRow.appendChild(revenueCell);
     });
 
@@ -120,7 +129,7 @@ function createPrintTaskCard(task, departmentClass) {
     
     // Calculate revenue based on hours
     const hours = parseFloat(task.hours || 0);
-    const revenue = hours * 135;
+    const revenue = hours * REVENUE.HOURLY_RATE;
     
     card.innerHTML = `
         <div class="print-task-title" style="background-color: ${colors.bg} !important; color: ${colors.text} !important;">
@@ -213,12 +222,12 @@ function createTableBody(dates, tasks, maxTasks, printType) {
             // Task cell
             const taskCell = document.createElement('td');
             taskCell.className = 'print-grid-cell';
-            taskCell.style.width = '60%';
+            taskCell.style.width = `${PRINT_LAYOUT.TASK_CELL_WIDTH_PERCENT}%`;
             if (task) {
                 const departmentClass = normalizeDepartmentClass(task.department);
                 const card = createPrintTaskCard(task, departmentClass);
                 card.style.margin = '0 auto';
-                card.style.maxWidth = '180px';
+                card.style.maxWidth = `${PRINT_LAYOUT.CARD_MAX_WIDTH_PX}px`;
                 taskCell.appendChild(card);
             }
             tr.appendChild(taskCell);
@@ -227,12 +236,12 @@ function createTableBody(dates, tasks, maxTasks, printType) {
             const revenueCell = document.createElement('td');
             revenueCell.className = 'print-grid-cell';
             revenueCell.style.textAlign = 'center';
-            revenueCell.style.fontSize = '0.5rem';
+            revenueCell.style.fontSize = `${PRINT_LAYOUT.REVENUE_FONT_SIZE_REM}rem`;
             revenueCell.style.fontWeight = 'bold';
-            revenueCell.style.width = '13.33%';
+            revenueCell.style.width = `${PRINT_LAYOUT.PERIOD_CELL_WIDTH_PERCENT}%`;
             if (task && task.hours) {
                 const hours = parseFloat(task.hours);
-                const revenue = isNaN(hours) ? 0 : Math.round(Math.round(hours) * 135);
+                const revenue = isNaN(hours) ? 0 : Math.round(Math.round(hours) * REVENUE.HOURLY_RATE);
                 revenueCell.textContent = `$${revenue.toLocaleString()}`;
             } else {
                 revenueCell.textContent = '';
@@ -243,7 +252,7 @@ function createTableBody(dates, tasks, maxTasks, printType) {
             const midDayCell = document.createElement('td');
             midDayCell.className = 'print-grid-cell';
             midDayCell.style.textAlign = 'center';
-            midDayCell.style.width = '13.33%';
+            midDayCell.style.width = `${PRINT_LAYOUT.PERIOD_CELL_WIDTH_PERCENT}%`;
             midDayCell.textContent = '';
             tr.appendChild(midDayCell);
 
@@ -251,7 +260,7 @@ function createTableBody(dates, tasks, maxTasks, printType) {
             const endOfDayCell = document.createElement('td');
             endOfDayCell.className = 'print-grid-cell';
             endOfDayCell.style.textAlign = 'center';
-            endOfDayCell.style.width = '13.33%';
+            endOfDayCell.style.width = `${PRINT_LAYOUT.PERIOD_CELL_WIDTH_PERCENT}%`;
             endOfDayCell.textContent = '';
             tr.appendChild(endOfDayCell);
 

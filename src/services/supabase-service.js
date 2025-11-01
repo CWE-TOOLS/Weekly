@@ -1,11 +1,15 @@
 /**
  * Supabase Service
  * Handles all Supabase operations including task CRUD, real-time sync, and refresh signals
+ * @module services/supabase-service
  */
 
 import { SUPABASE, REFRESH_CONFIG } from '../config/api-config.js';
 import { normalizeDepartment } from '../utils/ui-utils.js';
+import { UI_DELAY, NOTIFICATION_DURATION, NETWORK_TIMING } from '../config/timing-constants.js';
+import { POSITION_OFFSET, Z_INDEX, INDICATOR_STYLE } from '../config/layout-constants.js';
 
+import { logger } from '../utils/logger.js';
 // Supabase client and channel state
 let supabaseClient = null;
 let refreshChannel = null;
@@ -13,7 +17,16 @@ const tasksTable = SUPABASE.TASKS_TABLE;
 
 /**
  * Initialize Supabase for task management and refresh signaling
+ *
+ * Loads the Supabase client library if needed, creates client instance,
+ * and sets up real-time subscription for refresh signals from other clients.
+ *
  * @returns {Promise<Object>} Supabase client instance
+ * @throws {Error} If Supabase library fails to load
+ *
+ * @example
+ * const client = await initializeSupabase();
+ * // Returns singleton Supabase client instance
  */
 export async function initializeSupabase() {
     if (supabaseClient) return supabaseClient;
@@ -34,13 +47,22 @@ export async function initializeSupabase() {
     // Subscribe to refresh signals
     setupRefreshSubscription();
 
-    console.log('✅ Supabase initialized');
+    logger.info('✅ Supabase initialized');
     return supabaseClient;
 }
 
 /**
  * Get Supabase client instance
- * @returns {Object|null} Supabase client
+ *
+ * Returns the singleton Supabase client instance if initialized, or null otherwise.
+ *
+ * @returns {Object|null} Supabase client or null if not initialized
+ *
+ * @example
+ * const client = getSupabaseClient();
+ * if (client) {
+ *   // Use client for queries
+ * }
  */
 export function getSupabaseClient() {
     return supabaseClient;
@@ -54,16 +76,16 @@ function setupRefreshSubscription() {
     refreshChannel = supabaseClient
         .channel(REFRESH_CONFIG.CHANNEL_NAME)
         .on('broadcast', { event: REFRESH_CONFIG.EVENT_NAME }, (payload) => {
-            console.log('🔄 Refresh signal received:', payload);
+            logger.debug('🔄 Refresh signal received:', payload);
             handleRefreshSignal(payload);
         })
         .subscribe((status) => {
             if (status === 'SUBSCRIBED') {
-                console.log('✅ Subscribed to refresh signals');
+                logger.debug('✅ Subscribed to refresh signals');
             } else if (status === 'CLOSED') {
-                console.log('⚠️ Refresh subscription closed');
+                logger.warn('⚠️ Refresh subscription closed');
             } else if (status === 'CHANNEL_ERROR') {
-                console.error('❌ Refresh subscription error');
+                logger.error('❌ Refresh subscription error');
             }
         });
 }
@@ -73,10 +95,10 @@ function setupRefreshSubscription() {
  * @param {Object} payload - Refresh signal payload
  */
 function handleRefreshSignal(payload) {
-    console.log('🔄 Processing refresh signal...');
+    logger.debug('🔄 Processing refresh signal (silent mode)...');
 
-    // Add visual indicator
-    showRefreshIndicator();
+    // No visual indicator - silent refresh per user preference
+    // Smart rendering will handle updates without disruption
 
     // Reload data using fetchAllTasks from data-service
     // This will fetch from both Google Sheets and Supabase, merge, and update state
@@ -84,13 +106,13 @@ function handleRefreshSignal(payload) {
     if (window.dataService && window.dataService.fetchAllTasks) {
         window.dataService.fetchAllTasks(true, false) // silent loading, but emit events to trigger UI update
             .then(() => {
-                console.log('✅ Data refreshed from all sources');
+                logger.debug('✅ Data refreshed from all sources (silent)');
             })
             .catch(error => {
-                console.error('❌ Failed to refresh data:', error);
+                logger.error('❌ Failed to refresh data:', error);
             });
     } else {
-        console.warn('⚠️ dataService.fetchAllTasks not available on window');
+        logger.warn('⚠️ dataService.fetchAllTasks not available on window');
     }
 }
 
@@ -102,15 +124,15 @@ function showRefreshIndicator() {
     indicator.textContent = '🔄 Refreshing...';
     indicator.style.cssText = `
         position: fixed;
-        top: 20px;
-        right: 20px;
+        top: ${POSITION_OFFSET.INDICATOR}px;
+        right: ${POSITION_OFFSET.INDICATOR}px;
         background: #3b82f6;
         color: white;
-        padding: 8px 16px;
+        padding: ${INDICATOR_STYLE.PADDING_VERTICAL_PX}px ${INDICATOR_STYLE.PADDING_HORIZONTAL_PX}px;
         border-radius: 8px;
         font-size: 14px;
         font-weight: 500;
-        z-index: 10000;
+        z-index: ${Z_INDEX.INDICATOR};
         box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     `;
 
@@ -119,7 +141,7 @@ function showRefreshIndicator() {
         if (indicator.parentNode) {
             indicator.parentNode.removeChild(indicator);
         }
-    }, 2000);
+    }, UI_DELAY.REFRESH_INDICATOR);
 }
 
 /**
@@ -128,20 +150,20 @@ function showRefreshIndicator() {
  * @param {string} type - Notification type (info, success, error)
  */
 function showNotification(message, type = 'info') {
-    console.log(`[${type.toUpperCase()}] ${message}`);
+    logger.debug(`[${type.toUpperCase()}] ${message}`);
 
     const notification = document.createElement('div');
     notification.textContent = message;
     notification.style.cssText = `
         position: fixed;
-        top: 20px;
-        right: 20px;
+        top: ${POSITION_OFFSET.NOTIFICATION}px;
+        right: ${POSITION_OFFSET.NOTIFICATION}px;
         background: ${type === 'success' ? '#22c55e' : type === 'error' ? '#ef4444' : '#3b82f6'};
         color: white;
-        padding: 12px 20px;
+        padding: ${INDICATOR_STYLE.NOTIFICATION_PADDING_VERTICAL_PX}px ${INDICATOR_STYLE.NOTIFICATION_PADDING_HORIZONTAL_PX}px;
         border-radius: 8px;
         font-weight: 500;
-        z-index: 10000;
+        z-index: ${Z_INDEX.NOTIFICATION};
         box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     `;
 
@@ -150,23 +172,32 @@ function showNotification(message, type = 'info') {
         if (notification.parentNode) {
             notification.parentNode.removeChild(notification);
         }
-    }, 4000);
+    }, NOTIFICATION_DURATION.ERROR);
 }
 
 /**
  * Send a refresh signal to all other clients
- * Call this after successfully updating Google Sheets or Supabase
- * @param {Object} updateInfo - Information about the update
+ *
+ * Broadcasts a refresh event via Supabase real-time channels to notify
+ * other connected clients to reload their data. Call this after successfully
+ * updating Google Sheets or Supabase to keep all clients in sync.
+ *
+ * @param {Object} [updateInfo={}] - Optional metadata about the update
  * @returns {Promise<void>}
+ *
+ * @example
+ * // After saving task changes
+ * await saveTaskToSupabase(task);
+ * await sendRefreshSignal({action: 'task_updated', taskId: task.id});
  */
 export async function sendRefreshSignal(updateInfo = {}) {
     if (!supabaseClient) {
-        console.warn('⚠️ Supabase not initialized, cannot send refresh signal');
+        logger.warn('⚠️ Supabase not initialized, cannot send refresh signal');
         return;
     }
 
     try {
-        console.log('📡 Sending refresh signal to all clients...');
+        logger.debug('📡 Sending refresh signal to all clients...');
 
         // Send broadcast signal
         const { error } = await supabaseClient
@@ -182,19 +213,27 @@ export async function sendRefreshSignal(updateInfo = {}) {
             });
 
         if (error) {
-            console.error('❌ Failed to send refresh signal:', error);
+            logger.error('❌ Failed to send refresh signal:', error);
         } else {
-            console.log('✅ Refresh signal sent successfully');
+            logger.debug('✅ Refresh signal sent successfully');
         }
 
     } catch (error) {
-        console.error('❌ Error sending refresh signal:', error);
+        logger.error('❌ Error sending refresh signal:', error);
     }
 }
 
 /**
- * Load manual tasks from Supabase and merge with Google Sheets data
- * @returns {Promise<Array>} Array of manual tasks
+ * Load manual tasks from Supabase
+ *
+ * Fetches all manually-created tasks from Supabase, converts them to match
+ * the Google Sheets task structure, and calculates day counters.
+ *
+ * @returns {Promise<Array<Object>>} Array of manual tasks with isManual flag set
+ *
+ * @example
+ * const manualTasks = await loadManualTasks();
+ * // Returns: [{id: 'custom-1', project: 'Manual Project', isManual: true, ...}]
  */
 export async function loadManualTasks() {
     if (!supabaseClient) {
@@ -236,15 +275,30 @@ export async function loadManualTasks() {
 
         return manualTasks;
     } catch (error) {
-        console.error('❌ Failed to load manual tasks:', error);
+        logger.error('❌ Failed to load manual tasks:', error);
         return [];
     }
 }
 
 /**
  * Update task in Supabase
- * @param {Object} task - Task object to update
- * @returns {Promise<boolean>} Success status
+ *
+ * Updates an existing manual task in Supabase with new date and week values.
+ * Includes timeout protection to prevent hanging requests.
+ *
+ * @param {Object} task - Task object containing id, date, and week
+ * @param {string} task.id - Task ID
+ * @param {string} task.date - New date value
+ * @param {string} task.week - New week value
+ * @returns {Promise<boolean>} True if update successful
+ * @throws {Error} If update fails or times out
+ *
+ * @example
+ * await updateTaskInSupabase({
+ *   id: 'task-123',
+ *   date: '2025-01-15',
+ *   week: '2025-01-13'
+ * });
  */
 export async function updateTaskInSupabase(task) {
     if (!supabaseClient) {
@@ -253,37 +307,63 @@ export async function updateTaskInSupabase(task) {
 
     // Add timeout to prevent hanging
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), NETWORK_TIMING.FETCH_TIMEOUT);
 
     try {
-        const { error } = await supabaseClient
+        const { data, error } = await supabaseClient
             .from(tasksTable)
             .update({
                 date: task.date,
                 week: task.week,
                 updated_at: new Date().toISOString()
             })
-            .eq('id', task.id);
+            .eq('id', task.id)
+            .select(); // Add this to return updated rows
 
         clearTimeout(timeoutId);
 
         if (error) {
+            logger.error('Supabase update error:', error);
             throw error;
         }
 
-        console.log('✅ Task updated in Supabase');
+        if (!data || data.length === 0) {
+            const errorMsg = `Failed to update task: No task found with ID "${task.id}"`;
+            logger.error(errorMsg);
+            throw new Error(errorMsg);
+        }
+
+        logger.debug('Task updated successfully in Supabase:', { id: task.id, date: task.date, week: task.week });
         return true;
     } catch (error) {
         clearTimeout(timeoutId);
-        console.error('❌ Failed to update task in Supabase:', error);
+        logger.error('❌ Failed to update task in Supabase:', error);
         throw error;
     }
 }
 
 /**
  * Save a new task to Supabase
+ *
+ * Creates a new manual task in Supabase with all provided fields.
+ * Generates ID if not provided.
+ *
  * @param {Object} taskData - Task data to save
- * @returns {Promise<Object>} Saved task data
+ * @param {string} [taskData.id] - Task ID (auto-generated if omitted)
+ * @param {string} taskData.week - Week date
+ * @param {string} taskData.project - Project name
+ * @param {string} taskData.date - Task date
+ * @param {string} taskData.department - Department name
+ * @returns {Promise<Object>} Saved task data from Supabase
+ * @throws {Error} If save fails
+ *
+ * @example
+ * const newTask = await saveTaskToSupabase({
+ *   week: '2025-01-13',
+ *   project: 'Custom Project',
+ *   date: '2025-01-15',
+ *   department: 'Mill'
+ * });
  */
 export async function saveTaskToSupabase(taskData) {
     if (!supabaseClient) {
@@ -313,18 +393,25 @@ export async function saveTaskToSupabase(taskData) {
             throw error;
         }
 
-        console.log('✅ Task saved to Supabase');
+        logger.debug('✅ Task saved to Supabase');
         return data;
     } catch (error) {
-        console.error('❌ Failed to save task to Supabase:', error);
+        logger.error('❌ Failed to save task to Supabase:', error);
         throw error;
     }
 }
 
 /**
  * Delete a task from Supabase
+ *
+ * Permanently removes a manual task from Supabase by ID.
+ *
  * @param {string} taskId - ID of task to delete
- * @returns {Promise<boolean>} Success status
+ * @returns {Promise<boolean>} True if deletion successful
+ * @throws {Error} If deletion fails
+ *
+ * @example
+ * await deleteTaskFromSupabase('task-123');
  */
 export async function deleteTaskFromSupabase(taskId) {
     if (!supabaseClient) {
@@ -341,10 +428,10 @@ export async function deleteTaskFromSupabase(taskId) {
             throw error;
         }
 
-        console.log('✅ Task deleted from Supabase');
+        logger.debug('✅ Task deleted from Supabase');
         return true;
     } catch (error) {
-        console.error('❌ Failed to delete task from Supabase:', error);
+        logger.error('❌ Failed to delete task from Supabase:', error);
         throw error;
     }
 }

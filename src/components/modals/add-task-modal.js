@@ -10,6 +10,8 @@ import { saveTaskToSupabase, sendRefreshSignal } from '../../services/supabase-s
 import { fetchAllTasks } from '../../services/data-service.js';
 import { showError } from '../../utils/ui-utils.js';
 
+import { logger } from '../../utils/logger.js';
+import { FOCUS_DELAY } from '../../config/timing-constants.js';
 // Private state
 let modalElement = null;
 let formElement = null;
@@ -31,7 +33,7 @@ export function initializeAddTaskModal() {
     closeButton = document.getElementById('add-card-close');
 
     if (!modalElement || !formElement) {
-        console.error('Add task modal elements not found in DOM');
+        logger.error('Add task modal elements not found in DOM');
         return;
     }
 
@@ -49,7 +51,7 @@ export function initializeAddTaskModal() {
     // Handle form submission
     formElement.addEventListener('submit', handleAddCardSubmit);
 
-    console.log('Add task modal initialized');
+    logger.info('Add task modal initialized');
 }
 
 /**
@@ -67,7 +69,7 @@ export function initializeAddTaskModal() {
  */
 export function openAddTaskModal(options = {}) {
     if (!modalElement) {
-        console.error('Add task modal not initialized');
+        logger.error('Add task modal not initialized');
         return;
     }
 
@@ -79,7 +81,7 @@ export function openAddTaskModal(options = {}) {
         week: options.week || ''
     };
 
-    console.log('openAddTaskModal called with:', currentAddCardContext);
+    logger.info('openAddTaskModal called with:', currentAddCardContext);
 
     // Show modal
     modalElement.classList.add('show');
@@ -120,7 +122,7 @@ export function openAddTaskModal(options = {}) {
         if (taskProjectEl) {
             taskProjectEl.focus();
         }
-    }, 50);
+    }, FOCUS_DELAY.MODAL);
 
     // Emit event
     emit(EVENTS.MODAL_OPENED, { modalName: 'add-task-modal' });
@@ -210,10 +212,10 @@ async function handleAddCardSubmit(e) {
         // Hide modal
         hideAddTaskModal();
 
-        console.log('Task added successfully:', taskData);
+        logger.info('Task added successfully:', taskData);
 
     } catch (error) {
-        console.error('Failed to add task:', error);
+        logger.error('Failed to add task:', error);
         showError('Failed to add task. Please try again.');
     } finally {
         // Restore button state

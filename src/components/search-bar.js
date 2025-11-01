@@ -7,6 +7,7 @@
 import { getAllTasks } from '../core/state.js';
 import { emit, EVENTS } from '../core/event-bus.js';
 
+import { logger } from '../utils/logger.js';
 /**
  * Get project summaries with total hours
  * @returns {Object} Object mapping project names to summary data
@@ -126,7 +127,7 @@ export function initializeSearch() {
     const searchResults = document.getElementById('search-results');
 
     if (!searchInput) {
-        console.warn('Search input element not found');
+        logger.warn('Search input element not found');
         return;
     }
 

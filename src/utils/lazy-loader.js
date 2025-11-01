@@ -4,7 +4,10 @@
  * @module utils/lazy-loader
  */
 
+import { logger } from './logger.js';
+
 // Cache for loaded modules
+
 const cache = new Map();
 
 // Track in-flight loading promises
@@ -25,24 +28,24 @@ const loading = new Map();
 export async function lazyLoad(importer, cacheKey) {
   // Return cached module if available
   if (cache.has(cacheKey)) {
-    console.log(`📦 Lazy load: Using cached module '${cacheKey}'`);
+    logger.info(`📦 Lazy load: Using cached module '${cacheKey}'`);
     return cache.get(cacheKey);
   }
 
   // Return in-flight promise if already loading
   if (loading.has(cacheKey)) {
-    console.log(`⏳ Lazy load: Waiting for in-flight module '${cacheKey}'`);
+    logger.info(`⏳ Lazy load: Waiting for in-flight module '${cacheKey}'`);
     return loading.get(cacheKey);
   }
 
   // Start loading
-  console.log(`🔄 Lazy load: Loading module '${cacheKey}'...`);
+  logger.info(`🔄 Lazy load: Loading module '${cacheKey}'...`);
   const startTime = performance.now();
 
   const loadPromise = importer()
     .then(module => {
       const loadTime = (performance.now() - startTime).toFixed(2);
-      console.log(`✅ Lazy load: Module '${cacheKey}' loaded in ${loadTime}ms`);
+      logger.info(`✅ Lazy load: Module '${cacheKey}' loaded in ${loadTime}ms`);
 
       cache.set(cacheKey, module);
       loading.delete(cacheKey);
@@ -50,7 +53,7 @@ export async function lazyLoad(importer, cacheKey) {
     })
     .catch(error => {
       loading.delete(cacheKey);
-      console.error(`❌ Lazy load: Failed to load module '${cacheKey}':`, error);
+      logger.error(`❌ Lazy load: Failed to load module '${cacheKey}':`, error);
       throw error;
     });
 
@@ -69,10 +72,10 @@ export async function lazyLoad(importer, cacheKey) {
  */
 export function preload(importer, cacheKey) {
   if (!cache.has(cacheKey) && !loading.has(cacheKey)) {
-    console.log(`🔮 Preload: Scheduling module '${cacheKey}'`);
+    logger.info(`🔮 Preload: Scheduling module '${cacheKey}'`);
     lazyLoad(importer, cacheKey).catch(() => {
       // Silently fail preload - not critical
-      console.warn(`⚠️ Preload: Failed to preload '${cacheKey}' (non-critical)`);
+      logger.warn(`⚠️ Preload: Failed to preload '${cacheKey}' (non-critical)`);
     });
   }
 }
@@ -91,7 +94,7 @@ export function preload(importer, cacheKey) {
 export function preloadOnIdle(modules, timeout = 2000) {
   if ('requestIdleCallback' in window) {
     requestIdleCallback(() => {
-      console.log(`💤 Preload: Starting idle preload for ${modules.length} modules`);
+      logger.info(`💤 Preload: Starting idle preload for ${modules.length} modules`);
       modules.forEach(({ importer, key }) => {
         preload(importer, key);
       });
@@ -99,7 +102,7 @@ export function preloadOnIdle(modules, timeout = 2000) {
   } else {
     // Fallback for browsers without requestIdleCallback
     setTimeout(() => {
-      console.log(`⏱️ Preload: Starting deferred preload for ${modules.length} modules`);
+      logger.info(`⏱️ Preload: Starting deferred preload for ${modules.length} modules`);
       modules.forEach(({ importer, key }) => {
         preload(importer, key);
       });
@@ -115,7 +118,7 @@ export function clearCache() {
   const cacheSize = cache.size;
   cache.clear();
   loading.clear();
-  console.log(`🗑️ Lazy load: Cleared cache (${cacheSize} modules)`);
+  logger.info(`🗑️ Lazy load: Cleared cache (${cacheSize} modules)`);
 }
 
 /**

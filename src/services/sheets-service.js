@@ -1,12 +1,14 @@
 /**
  * Google Sheets Service
  * Handles all Google Sheets API operations including reading and writing data
+ * @module services/sheets-service
  */
 
 import { getAccessToken } from './auth-service.js';
 import { GOOGLE_SHEETS } from '../config/api-config.js';
 import { normalizeDepartment } from '../utils/ui-utils.js';
 
+import { logger } from '../utils/logger.js';
 const { API_KEY, SPREADSHEET_ID, SHEET_NAME, STAGING_SHEET_NAME } = GOOGLE_SHEETS;
 
 // Department to row mapping for staging sheet
@@ -48,7 +50,16 @@ export const departmentDayMapping = {
 
 /**
  * Fetch tasks from Google Sheets
- * @returns {Promise<Array>} Array of task objects
+ *
+ * Retrieves all task data from the configured Google Sheet and parses it
+ * into structured task objects. Uses read-only API key authentication.
+ *
+ * @returns {Promise<Array<Object>>} Array of task objects with all fields populated
+ * @throws {Error} If the API request fails or no data is found
+ *
+ * @example
+ * const tasks = await fetchTasks();
+ * // Returns: [{id: 'task-1', project: 'A', department: 'Mill', ...}, ...]
  */
 export async function fetchTasks() {
     const response = await fetch(
@@ -70,8 +81,20 @@ export async function fetchTasks() {
 
 /**
  * Parse sheet data into task objects
- * @param {Array<Array>} rows - Raw sheet data rows
- * @returns {Array} Array of task objects
+ *
+ * Converts raw Google Sheets data (2D array) into structured task objects.
+ * Assumes first row is headers and normalizes department names.
+ *
+ * @param {Array<Array<string>>} rows - Raw sheet data rows (first row is headers)
+ * @returns {Array<Object>} Array of parsed task objects
+ *
+ * @example
+ * const rows = [
+ *   ['Week', 'Project', 'Description', 'Date', 'Department', ...],
+ *   ['2025-01-01', 'Project A', 'Desc', '2025-01-05', 'mill', ...]
+ * ];
+ * const tasks = parseSheetData(rows);
+ * // Returns: [{id: 'task-1', week: '2025-01-01', project: 'Project A', department: 'Mill', ...}]
  */
 export function parseSheetData(rows) {
     const tasks = [];
@@ -113,8 +136,17 @@ function stripHtml(html) {
 
 /**
  * Get sheet ID by sheet name
- * @param {string} sheetName - Name of the sheet
+ *
+ * Queries spreadsheet metadata to find the numeric sheet ID for a given sheet name.
+ * Required for batchUpdate operations that target specific sheets.
+ *
+ * @param {string} sheetName - Name of the sheet to find
  * @returns {Promise<number|null>} Sheet ID or null if not found
+ * @throws {Error} If metadata fetch fails
+ *
+ * @example
+ * const sheetId = await getSheetId('Staging');
+ * // Returns: 123456789 (numeric sheet ID)
  */
 export async function getSheetId(sheetName) {
     const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}?key=${API_KEY}`);
@@ -126,7 +158,16 @@ export async function getSheetId(sheetName) {
 
 /**
  * Get staging sheet data
- * @returns {Promise<Array<Array>>} Staging sheet data
+ *
+ * Fetches all data from the staging sheet for reading or modification.
+ * Used to check if project columns exist before saving.
+ *
+ * @returns {Promise<Array<Array<string>>>} 2D array of staging sheet data
+ * @throws {Error} If staging data fetch fails
+ *
+ * @example
+ * const data = await getStagingData();
+ * // Returns: [['Header1', 'Header2', ...], ['Row1Col1', 'Row1Col2', ...], ...]
  */
 export async function getStagingData() {
     const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(STAGING_SHEET_NAME)}!A1:ZZ?key=${API_KEY}`);
@@ -137,9 +178,21 @@ export async function getStagingData() {
 
 /**
  * Save changes to staging sheet
- * @param {string} projectName - Project name
- * @param {Array} changedTasks - Array of changed tasks
- * @returns {Promise<boolean>} Success status
+ *
+ * Updates or creates a project column in the staging sheet and writes task
+ * descriptions to the appropriate department/day rows. Uses authenticated
+ * batchUpdate API for atomic operations.
+ *
+ * @param {string} projectName - Project name (becomes column header)
+ * @param {Array<{task: Object, newText: string}>} changedTasks - Array of task updates
+ * @returns {Promise<boolean>} True if save successful
+ * @throws {Error} If sheet update fails
+ *
+ * @example
+ * const changes = [
+ *   {task: {department: 'Mill', dayNumber: '1'}, newText: 'Updated description'}
+ * ];
+ * await saveToStaging('Project Alpha', changes);
  */
 export async function saveToStaging(projectName, changedTasks) {
     try {
@@ -220,12 +273,12 @@ export async function saveToStaging(projectName, changedTasks) {
                 const error = await response.text();
                 throw new Error('Failed to update sheet: ' + error);
             }
-            console.log('Successfully saved to staging sheet');
+            logger.info('Successfully saved to staging sheet');
             return true;
         }
         return true;
     } catch (error) {
-        console.error('Error saving to staging:', error);
+        logger.error('Error saving to staging:', error);
         throw error; // Re-throw to handle in caller
     }
 }

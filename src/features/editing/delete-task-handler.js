@@ -8,6 +8,7 @@ import { deleteTaskFromSupabase, sendRefreshSignal } from '../../services/supaba
 import { fetchAllTasks } from '../../services/data-service.js';
 import { showSuccessNotification } from '../../utils/ui-utils.js';
 
+import { logger } from '../../utils/logger.js';
 /**
  * Handle task deletion
  * @param {string} taskId - Task ID to delete
@@ -30,7 +31,7 @@ async function handleTaskDelete(taskId, taskName) {
 
         showSuccessNotification('Task deleted successfully!');
     } catch (error) {
-        console.error('Failed to delete task:', error);
+        logger.error('Failed to delete task:', error);
         showSuccessNotification('Failed to delete task.', true);
     }
 }
@@ -64,10 +65,10 @@ function handleDeleteClick(e) {
  * Sets up click listener for delete buttons
  */
 export function initializeDeleteHandler() {
-    console.log('Initializing delete task handler...');
+    logger.info('Initializing delete task handler...');
 
     // Click handler for delete buttons
     document.addEventListener('click', handleDeleteClick);
 
-    console.log('Delete task handler initialized');
+    logger.info('Delete task handler initialized');
 }

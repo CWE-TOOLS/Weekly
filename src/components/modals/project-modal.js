@@ -4,14 +4,34 @@
  * @module components/modals/project-modal
  */
 
-// Imports
+// Core imports
 import { getAllTasks, getIsEditingUnlocked } from '../../core/state.js';
 import { on, emit, EVENTS } from '../../core/event-bus.js';
 import { saveToStaging } from '../../services/sheets-service.js';
-import { normalizeDepartmentClass } from '../../utils/ui-utils.js';
 import { parseDate } from '../../utils/date-utils.js';
 import { DEPARTMENT_ORDER } from '../../config/department-config.js';
 import { showPasswordModal } from './password-modal.js';
+
+import { logger } from '../../utils/logger.js';
+import { RENDER_DELAY, UI_DELAY } from '../../config/timing-constants.js';
+// Field rendering module
+import {
+    renderDepartmentSection,
+    createEditableDescriptionField,
+    createReadOnlyDescriptionField,
+    updateWeeklyViewCard,
+    equalizeProjectCardHeights,
+    calculateTotalHours,
+    formatProjectTitle
+} from './project-modal-fields.js';
+
+// Validation module
+import {
+    stripHtml,
+    hasDescriptionChanged,
+    showSuccessNotification,
+    collectChangedTasks
+} from '../../utils/project-modal-validation.js';
 
 // Private state
 let modalElement = null;
@@ -43,10 +63,10 @@ export function initializeProjectModal() {
     cancelBtn = document.getElementById('cancel-changes-btn');
 
     if (!modalElement || !titleElement || !gridElement) {
-        console.error('Project modal elements not found in DOM');
-        console.error('modalElement:', modalElement);
-        console.error('titleElement:', titleElement);
-        console.error('gridElement:', gridElement);
+        logger.error('Project modal elements not found in DOM');
+        logger.error('modalElement:', modalElement);
+        logger.error('titleElement:', titleElement);
+        logger.error('gridElement:', gridElement);
         return false;
     }
 
@@ -70,7 +90,7 @@ export function initializeProjectModal() {
         showProjectModal(projectName);
     });
 
-    console.log('Project modal initialized');
+    logger.info('Project modal initialized');
     return true;
 }
 
@@ -80,7 +100,7 @@ export function initializeProjectModal() {
  */
 export function showProjectModal(projectName) {
     if (!modalElement) {
-        console.error('Project modal not initialized');
+        logger.error('Project modal not initialized');
         return;
     }
 
@@ -88,17 +108,11 @@ export function showProjectModal(projectName) {
     const allTasks = getAllTasks();
     const projectTasks = allTasks.filter(task => task.project === projectName);
 
-    // Calculate total hours
-    let totalHours = 0;
-    projectTasks.forEach(task => {
-        const hours = parseFloat(task.hours);
-        if (!isNaN(hours)) {
-            totalHours += hours;
-        }
-    });
+    // Calculate total hours using field module
+    const totalHours = calculateTotalHours(projectTasks);
 
-    // Update title
-    titleElement.textContent = `Build Plan: ${projectName} - Total Hours: ${Math.round(totalHours)}`;
+    // Update title using field module
+    titleElement.textContent = formatProjectTitle(projectName, totalHours);
 
     // Clear grid
     gridElement.innerHTML = '';
@@ -115,7 +129,7 @@ export function showProjectModal(projectName) {
     const sortedDepts = DEPARTMENT_ORDER.filter(dept => tasksByDept[dept]);
     if (tasksByDept['Other']) sortedDepts.push('Other');
 
-    // Render each department section
+    // Render each department section using field module
     sortedDepts.forEach(dept => {
         const deptTasks = tasksByDept[dept].sort((a, b) => {
             // Sort by date, then by day number
@@ -128,43 +142,7 @@ export function showProjectModal(projectName) {
             return parseInt(a.dayNumber || 0) - parseInt(b.dayNumber || 0);
         });
 
-        // Add department section
-        const deptSection = document.createElement('div');
-        deptSection.className = 'project-dept-section';
-        const deptText = dept === 'Special Events' ? 'Special<br>Events' : dept;
-        deptSection.innerHTML = `
-            <div class="project-dept-header department-label department-${normalizeDepartmentClass(dept)}">
-                ${deptText}
-            </div>
-            <div class="project-cards-container">
-                ${deptTasks.map((task, index) => {
-                    const taskDate = parseDate(task.date);
-                    const formattedDate = task.missingDate ? 'No date' : (taskDate ? taskDate.toLocaleDateString('en-US', {
-                        weekday: 'short',
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric'
-                    }) : 'No date');
-
-                    return `
-                        <div class="project-task-card task-card department-${normalizeDepartmentClass(task.department)}"
-                             style="animation-delay: ${index * 0.1}s"
-                             data-task-id="${task.id}"
-                             title="Click for options">
-                            <div class="task-title">${task.project}</div>
-                            <div class="project-description">${task.projectDescription || ''}</div>
-                            <div class="task-day-counter">${task.dayCounter || ''}</div>
-                            <div class="task-description">${task.description && task.description.trim() ? task.description : '<span class="missing-description">Staging Missing</span>'}</div>
-                            <div class="task-details">
-                                <strong>Date:</strong> ${formattedDate}<br>
-                                <strong>Hours:</strong> ${task.hours}<br>
-                                <strong>Code:</strong> ${task.value}
-                            </div>
-                        </div>
-                    `;
-                }).join('')}
-            </div>
-        `;
+        const deptSection = renderDepartmentSection(dept, deptTasks);
         gridElement.appendChild(deptSection);
     });
 
@@ -175,7 +153,7 @@ export function showProjectModal(projectName) {
     // Equalize card heights after a short delay
     setTimeout(() => {
         equalizeProjectCardHeights();
-    }, 100);
+    }, RENDER_DELAY.CARD_HEIGHT_EQUALIZE);
 
     // Update edit mode UI
     updateEditModeUI();
@@ -206,9 +184,7 @@ function hideProjectModal() {
             const taskId = taskCard.dataset.taskId;
             const allTasks = getAllTasks();
             const task = allTasks.find(t => t.id === taskId);
-            const descDiv = document.createElement('div');
-            descDiv.className = 'task-description';
-            descDiv.innerHTML = task && task.description ? task.description : '<span class="missing-description">Staging Missing</span>';
+            const descDiv = createReadOnlyDescriptionField(task && task.description ? task.description : '');
             textarea.replaceWith(descDiv);
         });
 
@@ -230,7 +206,7 @@ function hideProjectModal() {
  */
 function initializeEditMode() {
     if (!unlockBtn || !editBtn || !lockBtn || !saveBtn || !cancelBtn) {
-        console.error('Edit mode buttons not found');
+        logger.error('Edit mode buttons not found');
         return;
     }
 
@@ -309,9 +285,7 @@ function enterEditMode() {
         const originalText = desc.innerHTML;
         originalDescriptions.set(taskId, originalText);
 
-        const textarea = document.createElement('textarea');
-        textarea.className = 'edit-description';
-        textarea.value = desc.textContent.trim() === 'Staging Missing' ? '' : desc.textContent.trim();
+        const textarea = createEditableDescriptionField(desc);
         desc.replaceWith(textarea);
     });
 }
@@ -332,13 +306,14 @@ async function saveChanges() {
 
     try {
         const textareas = gridElement.querySelectorAll('.edit-description');
-        const changedTasks = [];
         const allTasks = getAllTasks();
+
+        // Collect changed tasks using validation module
+        const changedTasks = [];
 
         textareas.forEach(textarea => {
             const taskId = textarea.closest('.project-task-card').dataset.taskId;
             const originalText = originalDescriptions.get(taskId);
-            const originalStripped = stripHtml(originalText).trim();
             const newText = textarea.value.trim();
 
             // Update the task
@@ -346,24 +321,16 @@ async function saveChanges() {
             if (task) {
                 task.description = newText;
 
-                // Update weekly view cards
-                const weeklyCard = document.querySelector(`.task-card[data-task-id="${taskId}"]`);
-                if (weeklyCard) {
-                    const descElement = weeklyCard.querySelector('.task-description');
-                    if (descElement) {
-                        descElement.innerHTML = newText || '<span class="missing-description">Staging Missing</span>';
-                    }
-                }
+                // Update weekly view cards using field module
+                updateWeeklyViewCard(taskId, newText);
             }
 
-            // Replace textarea
-            const descDiv = document.createElement('div');
-            descDiv.className = 'task-description';
-            descDiv.innerHTML = newText || '<span class="missing-description">Staging Missing</span>';
+            // Replace textarea with read-only div
+            const descDiv = createReadOnlyDescriptionField(newText);
             textarea.replaceWith(descDiv);
 
-            // Check if changed
-            if (newText !== originalStripped) {
+            // Check if changed using validation module
+            if (hasDescriptionChanged(originalText, newText)) {
                 changedTasks.push({ task, newText });
             }
         });
@@ -375,34 +342,27 @@ async function saveChanges() {
                 await saveToStaging(currentProjectName, changedTasks);
             } catch (error) {
                 syncSuccess = false;
-                console.error('Staging sync failed:', error);
+                logger.error('Staging sync failed:', error);
             }
         }
 
         // Exit edit mode
         exitEditMode();
 
-        // Show success notification
-        const successNotif = document.getElementById('project-success-notification');
-        if (successNotif) {
-            const syncStatus = syncSuccess
-                ? '✅ Changes saved and synced!'
-                : '✅ Changes saved locally. Sync to backend failed - please try again.';
-            successNotif.textContent = syncStatus;
-            successNotif.style.display = 'block';
-            setTimeout(() => {
-                successNotif.style.display = 'none';
-            }, syncSuccess ? 2500 : 5000);
-        }
+        // Show success notification using validation module
+        const syncStatus = syncSuccess
+            ? '✅ Changes saved and synced!'
+            : '✅ Changes saved locally. Sync to backend failed - please try again.';
+        showSuccessNotification(syncStatus, syncSuccess ? 2500 : UI_DELAY.SYNC_STATUS * 2.5);
 
     } catch (error) {
-        console.error('Save failed:', error);
+        logger.error('Save failed:', error);
         // Show error feedback
         saveBtn.innerHTML = '❌ Save Failed';
         saveBtn.style.background = 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
         setTimeout(() => {
             restoreSaveButton();
-        }, 2000);
+        }, UI_DELAY.SYNC_STATUS);
     } finally {
         if (!saveBtn.innerHTML.includes('Failed')) {
             restoreSaveButton();
@@ -460,58 +420,16 @@ function exitEditMode() {
 }
 
 /**
- * Equalize card heights in project view
- * @private
- */
-function equalizeProjectCardHeights() {
-    const projectSections = document.querySelectorAll('.project-dept-section');
-
-    projectSections.forEach(section => {
-        const cards = section.querySelectorAll('.project-task-card');
-        if (cards.length === 0) return;
-
-        // Find max height
-        let maxHeight = 0;
-        cards.forEach(card => {
-            const originalHeight = card.style.minHeight;
-            card.style.minHeight = 'auto';
-            const currentHeight = card.offsetHeight;
-            if (currentHeight > maxHeight) maxHeight = currentHeight;
-            card.style.minHeight = originalHeight;
-        });
-
-        // Apply max height to all cards in this section
-        if (maxHeight > 0) {
-            cards.forEach(card => {
-                card.style.minHeight = `${maxHeight}px`;
-            });
-        }
-    });
-}
-
-/**
- * Strip HTML tags from string
- * @param {string} html - HTML string
- * @returns {string} Plain text
- * @private
- */
-function stripHtml(html) {
-    const div = document.createElement('div');
-    div.innerHTML = html;
-    return div.textContent || div.innerText || '';
-}
-
-/**
  * Alias for showProjectModal (for backward compatibility)
  * @param {string} projectName - Project name
  */
 export function showProjectView(projectName) {
     // Check if modal is initialized, if not try to initialize it
     if (!modalElement) {
-        console.warn('Project modal not initialized when showProjectView called, attempting to initialize...');
+        logger.warn('Project modal not initialized when showProjectView called, attempting to initialize...');
         const success = initializeProjectModal();
         if (success === false) {
-            console.error('Cannot show project modal - DOM elements not available');
+            logger.error('Cannot show project modal - DOM elements not available');
             alert('Error: Project modal cannot be opened. Please refresh the page and try again.');
             return;
         }

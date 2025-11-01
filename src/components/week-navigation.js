@@ -14,6 +14,8 @@ import { saveScrollPosition, saveWeekIndex } from '../core/storage.js';
 import { getMonday, getWeekMonth, getWeekOfMonth } from '../utils/date-utils.js';
 import { navigateToWeek } from './schedule-grid.js';
 
+import { logger } from '../utils/logger.js';
+import { RENDER_DELAY } from '../config/timing-constants.js';
 /**
  * Update the week display header with current week information
  * @param {Date} date - A date within the week to display
@@ -50,7 +52,7 @@ export function navigateToPreviousWeek() {
         navigateToWeek(newIndex);
     } else {
         // Already at first week
-        console.log('Already at the first week');
+        logger.debug('Already at the first week');
     }
 }
 
@@ -66,7 +68,7 @@ export function navigateToNextWeek() {
         navigateToWeek(newIndex);
     } else {
         // Already at last week
-        console.log('Already at the last week');
+        logger.debug('Already at the last week');
     }
 }
 
@@ -123,7 +125,7 @@ function setupScrollListener() {
 
             // Save scroll position
             saveScrollPosition(scrollLeft);
-        }, 100);
+        }, RENDER_DELAY.WEEK_NAV_UPDATE);
     });
 }
 

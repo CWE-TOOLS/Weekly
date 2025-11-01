@@ -2,11 +2,49 @@
  * Global Event Listeners
  * Manages global DOM event listeners
  * @module core/global-listeners
+ *
+ * FUTURE ENHANCEMENTS:
+ * ===================
+ *
+ * 1. Unsaved Changes Detection (Priority: High, Effort: 1-2 days)
+ *    - Implement comprehensive tracking of unsaved changes
+ *    - Warn users before navigating away with unsaved edits
+ *    - See handleBeforeUnload() for detailed implementation plan
+ *    - Prevents data loss and improves UX
+ *    - Prerequisites: State manager dirty state tracking
+ *
+ * 2. Auto-Refresh on Return (Priority: Medium, Effort: 0.5 days)
+ *    - Currently suggests refresh after 5min absence
+ *    - Could implement automatic data refresh
+ *    - Add user preference to enable/disable
+ *    - Show notification when auto-refresh occurs
+ *    - See handleVisibilityChange() lines 158-160
+ *
+ * 3. Network Status Sync (Priority: Medium, Effort: 1-2 days)
+ *    - Auto-sync pending changes when back online
+ *    - Queue changes while offline
+ *    - Retry failed requests
+ *    - Show sync status in UI
+ *    - See handleOnline() lines 204-207
+ *
+ * 4. Performance Monitoring (Priority: Low, Effort: 1 day)
+ *    - Track performance metrics on visibility change
+ *    - Log slow renders after resize
+ *    - Detect memory leaks
+ *    - Report to analytics service
+ *
+ * 5. Idle Detection (Priority: Low, Effort: 0.5 days)
+ *    - Detect when user is idle (no interaction)
+ *    - Auto-lock editing after idle period
+ *    - Show "still there?" prompt
+ *    - Pause background tasks when idle
  */
 
 import * as eventBus from './event-bus.js';
 import { showWarningNotification } from './error-handler.js';
+import { DEBOUNCE_DELAY } from '../config/timing-constants.js';
 
+import { logger } from '../utils/logger.js';
 // Store listener references for cleanup
 const listeners = [];
 
@@ -19,7 +57,7 @@ let lastVisibilityChange = Date.now();
  * Initialize global event listeners
  */
 export function initializeGlobalListeners() {
-    console.log('🌐 Initializing global event listeners...');
+    logger.debug('🌐 Initializing global event listeners...');
 
     // Window resize handler
     addListener(window, 'resize', handleResize);
@@ -41,14 +79,14 @@ export function initializeGlobalListeners() {
     // Note: Specific shortcuts handled by keyboard-shortcuts.js
     addListener(document, 'keydown', handleGlobalKeydown);
 
-    console.log('✅ Global event listeners initialized');
+    logger.debug('✅ Global event listeners initialized');
 }
 
 /**
  * Clean up global event listeners
  */
 export function cleanupGlobalListeners() {
-    console.log('🧹 Cleaning up global event listeners...');
+    logger.debug('🧹 Cleaning up global event listeners...');
 
     listeners.forEach(({ target, type, handler }) => {
         target.removeEventListener(type, handler);
@@ -56,7 +94,7 @@ export function cleanupGlobalListeners() {
 
     listeners.length = 0;
 
-    console.log('✅ Global event listeners cleaned up');
+    logger.debug('✅ Global event listeners cleaned up');
 }
 
 /**
@@ -79,7 +117,7 @@ function handleResize() {
     clearTimeout(resizeTimeout);
 
     resizeTimeout = setTimeout(() => {
-        console.log('📐 Window resized:', {
+        logger.debug('📐 Window resized:', {
             width: window.innerWidth,
             height: window.innerHeight
         });
@@ -94,7 +132,7 @@ function handleResize() {
         if (typeof window.equalizeAllCardHeights === 'function') {
             window.equalizeAllCardHeights();
         }
-    }, 250); // 250ms debounce
+    }, DEBOUNCE_DELAY.RESIZE);
 }
 
 /**
@@ -103,7 +141,7 @@ function handleResize() {
 function handleFullscreenChange() {
     const isFullscreen = !!document.fullscreenElement;
 
-    console.log(`🖥️ Fullscreen ${isFullscreen ? 'entered' : 'exited'}`);
+    logger.debug(`🖥️ Fullscreen ${isFullscreen ? 'entered' : 'exited'}`);
 
     // Update fullscreen button icons
     const expandIcon = document.getElementById('fullscreen-icon-expand');
@@ -127,7 +165,7 @@ function handleFullscreenChange() {
         if (typeof window.equalizeAllCardHeights === 'function') {
             window.equalizeAllCardHeights();
         }
-    }, 100);
+    }, DEBOUNCE_DELAY.FULLSCREEN);
 }
 
 /**
@@ -141,22 +179,17 @@ function handleVisibilityChange() {
     lastVisibilityChange = Date.now();
 
     if (isPageVisible && !wasVisible) {
-        console.log('👁️ Page became visible');
+        logger.debug('👁️ Page became visible');
 
         // If page was hidden for more than 5 minutes, suggest refresh
         if (timeSinceLastChange > 5 * 60 * 1000) {
-            console.log('⚠️ Page was hidden for a long time, data might be stale');
+            logger.debug('⚠️ Page was hidden for a long time, data might be stale');
 
             // Emit event for components to refresh if needed
             eventBus.emit(eventBus.EVENTS.PAGE_VISIBLE, {
                 wasHiddenForLong: true,
                 hiddenDuration: timeSinceLastChange
             });
-
-            // Optional: Auto-refresh data
-            // if (typeof window.fetchAllTasks === 'function') {
-            //     window.fetchAllTasks();
-            // }
         } else {
             eventBus.emit(eventBus.EVENTS.PAGE_VISIBLE, {
                 wasHiddenForLong: false,
@@ -164,7 +197,7 @@ function handleVisibilityChange() {
             });
         }
     } else if (!isPageVisible && wasVisible) {
-        console.log('👁️ Page became hidden');
+        logger.debug('👁️ Page became hidden');
         eventBus.emit(eventBus.EVENTS.PAGE_HIDDEN, {});
     }
 }
@@ -172,11 +205,78 @@ function handleVisibilityChange() {
 /**
  * Handle before unload (warn about unsaved changes)
  * @param {BeforeUnloadEvent} event
+ *
+ * FUTURE_ENHANCEMENT: Unsaved Changes Detection
+ *
+ * Implement comprehensive unsaved changes tracking to prevent data loss
+ * when users navigate away or close the tab.
+ *
+ * Current situation:
+ * - Framework is in place but hasUnsavedChanges always returns false
+ * - No tracking of edit state or pending changes
+ *
+ * Proposed implementation:
+ *
+ * 1. State Management Integration:
+ *    Add to state-manager.js:
+ *    - isDirty flag: tracks if any changes made since last save
+ *    - dirtyFields: Set of modified field IDs
+ *    - lastSaveTimestamp: when data was last persisted
+ *    - pendingSaves: Map of unsaved changes per card/task
+ *
+ * 2. Change Tracking:
+ *    - Listen to eventBus.EVENTS.TASK_UPDATED
+ *    - Listen to eventBus.EVENTS.CARD_UPDATED
+ *    - Mark state as dirty when edits occur
+ *    - Clear dirty flag on successful save (TASK_SAVED event)
+ *
+ * 3. Implementation in this function:
+ *    const hasUnsavedChanges = window.state?.hasUnsavedChanges() || false;
+ *
+ *    In state-manager.js:
+ *    hasUnsavedChanges() {
+ *        return this.isDirty || this.pendingSaves.size > 0;
+ *    }
+ *
+ * 4. Edge cases to handle:
+ *    - Auto-save feature (if implemented): only warn if auto-save failed
+ *    - Read-only mode: never show warning if editing locked
+ *    - Rapid save/edit cycles: debounce dirty flag updates
+ *    - Multiple tabs: coordinate via localStorage events
+ *
+ * 5. User Experience considerations:
+ *    - Don't warn on every single keystroke save
+ *    - Only warn for "significant" unsaved changes
+ *    - Show what will be lost: "3 tasks have unsaved changes"
+ *    - Provide "Save and Exit" option (requires custom modal)
+ *
+ * 6. Testing requirements:
+ *    - Test with rapid edits
+ *    - Test with navigation (router events)
+ *    - Test with browser refresh
+ *    - Test with tab close
+ *    - Test with editing locked/unlocked
+ *
+ * Complexity: Medium
+ * Priority: High (prevents data loss)
+ * Prerequisites:
+ *   - State manager tracking of dirty state
+ *   - Event bus integration for save events
+ * Estimated effort: 1-2 days (including testing)
+ *
+ * Alternative approaches:
+ * - Simpler: Only track if editing is unlocked + time since last edit
+ * - Advanced: Track changes in IndexedDB with change log
+ * - Hybrid: Auto-save all changes + warn only if auto-save fails
+ *
+ * Note: Modern browsers limit customization of beforeunload messages
+ * for security reasons. The message parameter is often ignored and
+ * browsers show their own generic confirmation dialog.
  */
 function handleBeforeUnload(event) {
-    // Check if there are unsaved changes
-    // This would be determined by your state management
-    const hasUnsavedChanges = false; // TODO: Implement this check
+    // Check if there are unsaved changes via state management
+    // Currently always returns false - see FUTURE_ENHANCEMENT above
+    const hasUnsavedChanges = false;
 
     if (hasUnsavedChanges) {
         // Show confirmation dialog
@@ -191,7 +291,7 @@ function handleBeforeUnload(event) {
  * Handle online status
  */
 function handleOnline() {
-    console.log('🌐 Connection restored - Back online');
+    logger.debug('🌐 Connection restored - Back online');
 
     showWarningNotification('✅ Connection restored', 3000);
 
@@ -210,7 +310,7 @@ function handleOnline() {
  * Handle offline status
  */
 function handleOffline() {
-    console.log('🌐 Connection lost - Offline');
+    logger.debug('🌐 Connection lost - Offline');
 
     showWarningNotification('⚠️ You are offline. Some features may not work.', 0);
 

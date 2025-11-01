@@ -10,6 +10,8 @@ import { emit, EVENTS } from '../../core/event-bus.js';
 import { saveState } from '../../core/storage.js';
 import { EDIT_PASSWORD } from '../../config/constants.js';
 
+import { logger } from '../../utils/logger.js';
+import { FOCUS_DELAY } from '../../config/timing-constants.js';
 // Private state
 let modalElement = null;
 let passwordInput = null;
@@ -30,7 +32,7 @@ export function initializePasswordModal() {
     closeButton = document.getElementById('password-close');
 
     if (!modalElement || !passwordInput || !submitButton) {
-        console.error('Password modal elements not found in DOM');
+        logger.error('Password modal elements not found in DOM');
         return;
     }
 
@@ -53,7 +55,7 @@ export function initializePasswordModal() {
         }
     });
 
-    console.log('Password modal initialized');
+    logger.info('Password modal initialized');
 }
 
 /**
@@ -62,7 +64,7 @@ export function initializePasswordModal() {
  */
 export function showPasswordModal() {
     if (!modalElement) {
-        console.error('Password modal not initialized');
+        logger.error('Password modal not initialized');
         return;
     }
 
@@ -74,7 +76,7 @@ export function showPasswordModal() {
         if (passwordInput) {
             passwordInput.focus();
         }
-    }, 100);
+    }, FOCUS_DELAY.PASSWORD_MODAL);
 
     // Emit event
     emit(EVENTS.MODAL_OPENED, { modalName: 'password-modal' });
@@ -130,7 +132,7 @@ function handlePasswordSubmit() {
             window.enableAddCardIndicators();
         }
 
-        console.log('Editing unlocked successfully');
+        logger.info('Editing unlocked successfully');
     } else {
         // Incorrect password
         alert('Incorrect password. Editing remains locked.');
@@ -189,7 +191,7 @@ export function lockEditing() {
     // Emit editing locked event
     emit(EVENTS.EDITING_LOCKED);
 
-    console.log('Editing locked');
+    logger.info('Editing locked');
 }
 
 /**
