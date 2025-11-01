@@ -179,9 +179,7 @@
   background: transparent;
   border: none;
   position: relative;
-  /* Performance optimization: Only transition properties that actually change during drag operations
-     instead of using 'transition: all' which forces the browser to watch all properties */
-  transition: background 0.2s ease, border 0.2s ease, border-radius 0.2s ease;
+  /* No transition - instant feedback is better UX for drag operations */
 }
 
 /* Hover indicator for empty cells when editing is enabled */

@@ -551,7 +551,7 @@
   background: transparent;
   border: none;
   position: relative;
-  transition: all 0.2s ease;
+  /* No transition - instant feedback is better UX for drag operations */
 }
 
 /* Hover indicator for empty cells when editing is enabled */

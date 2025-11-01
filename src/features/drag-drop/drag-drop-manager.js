@@ -14,48 +14,40 @@
  * @key-functions
  *   - initializeDragDrop() - Attach drag/drop event listeners
  *   - handleDragStart() - Store dragged task reference
- *   - handleDragOver() - Show drop zone indicators
+ *   - handleDragOver() - Show drop zone indicators (IMMEDIATE feedback)
  *   - handleDrop() - Update task and save to database
  * @drag-drop-flow
  *   1. User starts dragging task card (dragstart)
- *   2. Create visual drag ghost
- *   3. Highlight drop zones as mouse moves (dragover)
- *   4. On drop, extract target date from cell dataset
- *   5. Update task in Supabase
- *   6. Refresh data and re-render grid
- *   7. Show success notification
+ *   2. Highlight drop zones immediately as mouse moves (dragover)
+ *   3. On drop, extract target date from cell dataset
+ *   4. Update task in Supabase
+ *   5. Refresh data and re-render grid
+ *   6. Show success notification
  * @visual-feedback
- *   - Drag ghost with rotation effect
- *   - Drop zone highlighting
+ *   - Immediate drop zone highlighting (no delays)
  *   - Success/error notifications
+ * @performance
+ *   - Removed RAF throttling for instant feedback
+ *   - Removed custom drag ghost creation
+ *   - Removed placeholder caching
+ *   - Direct DOM manipulation for speed
  */
 
 import { getAllTasks, getFilteredTasks } from '../../core/state.js';
 import { updateTaskInSupabase, sendRefreshSignal } from '../../services/supabase-service.js';
 import { fetchAllTasks } from '../../services/data-service.js';
 import { showSuccessNotification, showError } from '../../utils/ui-utils.js';
-import { POSITION_OFFSET } from '../../config/layout-constants.js';
-import { OPACITY, ANIMATION_CONFIG } from '../../config/visual-constants.js';
+import { OPACITY } from '../../config/visual-constants.js';
 import { DRAG_DROP_TIMING } from '../../config/timing-constants.js';
 import { renderAllWeeks } from '../../components/schedule-grid.js';
 import { filterTasks } from '../../components/department-filter.js';
-
 import { logger } from '../../utils/logger.js';
+
 // Private state
 let draggedTask = null;
-let dragGhost = null;
 let isInitialized = false;
-let animationTimeoutIds = new Set(); // Track animation timeouts for cleanup
-
-// Performance optimization: RAF throttling for dragover events
-let rafId = null;
-let lastDragOverEvent = null;
-
-// Performance optimization: Cache placeholder elements during drag
-let cachedPlaceholders = null;
-
-// Performance optimization: Track currently highlighted element
 let currentHighlightedElement = null;
+let animationTimeoutIds = new Set(); // Track animation timeouts for cleanup
 
 /**
  * Handle dragstart event - task starts being dragged
@@ -78,74 +70,21 @@ function handleDragStart(e) {
     e.dataTransfer.setData('text/plain', draggedTask.id);
     e.dataTransfer.effectAllowed = 'move';
 
-    // Performance optimization: Cache placeholder elements once at drag start
-    cachedPlaceholders = Array.from(document.querySelectorAll('.task-card-placeholder'));
-
-    // Performance optimization: Use RAF to defer ghost creation and batch style updates
-    requestAnimationFrame(() => {
-        // Create a custom drag image
-        dragGhost = taskCard.cloneNode(true);
-        dragGhost.classList.add('dragging');
-
-        // Batch style updates by building a style string for better performance
-        const styleString = `
-            position: absolute;
-            top: ${POSITION_OFFSET.OFFSCREEN}px;
-            left: ${POSITION_OFFSET.OFFSCREEN}px;
-            width: ${taskCard.offsetWidth}px;
-            height: ${taskCard.offsetHeight}px;
-            opacity: ${OPACITY.DRAG_GHOST};
-            pointer-events: none;
-            transform: rotate(${ANIMATION_CONFIG.DRAG_GHOST_ROTATION_DEG}deg);
-            will-change: transform;
-        `;
-        dragGhost.style.cssText = styleString;
-
-        document.body.appendChild(dragGhost);
-    });
-
-    // Set drag image with current taskCard (will be replaced by ghost when ready)
-    e.dataTransfer.setDragImage(taskCard, e.offsetX, e.offsetY);
-
+    // Apply immediate visual feedback
     taskCard.style.opacity = `${OPACITY.DRAGGING_CARD}`;
     taskCard.classList.add('dragging');
-
-    // Add dragging-active class to body for visual feedback
     document.body.classList.add('dragging-active');
 }
 
 /**
  * Comprehensive cleanup function for drag-drop operations
- * Removes all temporary DOM elements, clears references, and resets visual state
+ * Removes all temporary visual state
  * Safe to call multiple times (idempotent)
  * @private
  */
 function cleanupDragState() {
-    // Clear drag ghost element from DOM
-    if (dragGhost) {
-        try {
-            if (dragGhost.parentNode) {
-                dragGhost.parentNode.removeChild(dragGhost);
-            }
-        } catch (error) {
-            logger.error('Failed to remove drag ghost:', error);
-        }
-        dragGhost = null; // Clear reference for garbage collection
-    }
-
-    // Clear dragged task reference
     draggedTask = null;
-
-    // Performance optimization: Clear RAF and cached state
-    if (rafId !== null) {
-        cancelAnimationFrame(rafId);
-        rafId = null;
-    }
-    lastDragOverEvent = null;
-    cachedPlaceholders = null;
     currentHighlightedElement = null;
-
-    // Remove dragging visual indicators from body
     document.body.classList.remove('dragging-active');
 
     // Remove all drag-over and drag-invalid classes from placeholders
@@ -175,13 +114,12 @@ function handleDragEnd(e) {
         taskCard.classList.remove('dragging');
     }
 
-    // Perform comprehensive cleanup
     cleanupDragState();
 }
 
 /**
- * Handle dragover event - visual feedback on drop zones
- * Performance optimized with RAF throttling and element tracking
+ * Handle dragover event - IMMEDIATE visual feedback on drop zones
+ * No throttling - applies highlights instantly
  * @param {DragEvent} e - Drag event
  * @private
  */
@@ -189,56 +127,32 @@ function handleDragOver(e) {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
 
-    // Performance optimization: Store event and only process once per frame using RAF
-    lastDragOverEvent = e;
+    if (!draggedTask || !(e.target instanceof Element)) return;
 
-    // Only schedule RAF if one isn't already pending
-    if (rafId !== null) return;
+    const dropTarget = e.target.closest('.task-card-placeholder');
 
-    rafId = requestAnimationFrame(() => {
-        rafId = null; // Reset RAF ID for next frame
+    // Only update highlights when the target changes
+    if (dropTarget && dropTarget !== currentHighlightedElement) {
+        const isValidDrop = dropTarget.dataset.department === draggedTask.department;
 
-        const event = lastDragOverEvent;
-        if (!event || !(event.target instanceof Element) || !draggedTask) return;
-
-        const dropTarget = event.target.closest('.task-card-placeholder');
-
-        // Performance optimization: Only update highlights when the target changes
-        if (dropTarget && dropTarget !== currentHighlightedElement) {
-            const isValidDrop = dropTarget.dataset.department === draggedTask.department;
-
-            // Clear previous highlight if it exists
-            if (currentHighlightedElement) {
-                currentHighlightedElement.classList.remove('drag-over', 'drag-invalid');
-            }
-
-            // Performance optimization: Use cached placeholders instead of querySelectorAll
-            // Only iterate if we need to clear other elements (defensive cleanup)
-            if (cachedPlaceholders) {
-                for (const placeholder of cachedPlaceholders) {
-                    if (placeholder !== dropTarget &&
-                        (placeholder.classList.contains('drag-over') ||
-                         placeholder.classList.contains('drag-invalid'))) {
-                        placeholder.classList.remove('drag-over', 'drag-invalid');
-                    }
-                }
-            }
-
-            // Add appropriate highlight class to current target
-            if (isValidDrop) {
-                dropTarget.classList.add('drag-over');
-            } else {
-                dropTarget.classList.add('drag-invalid');
-            }
-
-            // Track the newly highlighted element
-            currentHighlightedElement = dropTarget;
-        } else if (!dropTarget && currentHighlightedElement) {
-            // Clear highlight if we're no longer over a valid drop target
+        // Clear previous highlight if it exists
+        if (currentHighlightedElement) {
             currentHighlightedElement.classList.remove('drag-over', 'drag-invalid');
-            currentHighlightedElement = null;
         }
-    });
+
+        // Apply immediate highlight to current target
+        if (isValidDrop) {
+            dropTarget.classList.add('drag-over');
+        } else {
+            dropTarget.classList.add('drag-invalid');
+        }
+
+        currentHighlightedElement = dropTarget;
+    } else if (!dropTarget && currentHighlightedElement) {
+        // Clear highlight if we're no longer over a valid drop target
+        currentHighlightedElement.classList.remove('drag-over', 'drag-invalid');
+        currentHighlightedElement = null;
+    }
 }
 
 /**
@@ -247,7 +161,6 @@ function handleDragOver(e) {
  * @private
  */
 function handleDragLeave(e) {
-    // Only remove highlight if actually leaving the drop zone
     if (!(e.target instanceof Element)) return;
 
     const relatedTarget = e.relatedTarget;
@@ -272,7 +185,6 @@ async function handleDrop(e) {
     e.preventDefault();
 
     if (!draggedTask) return;
-
     if (!(e.target instanceof Element)) return;
 
     const dropTarget = e.target.closest('.task-card-placeholder');
@@ -348,8 +260,6 @@ async function handleDrop(e) {
 
             // Cleanup drag state
             cleanupDragState();
-
-            // Don't continue with the rest of the flow
             return;
         }
 
@@ -375,7 +285,6 @@ async function handleDrop(e) {
         console.log('Moved task in _allTasks:', movedTask ? { id: movedTask.id, date: movedTask.date, week: movedTask.week } : 'NOT FOUND');
 
         // Update filtered tasks immediately to avoid race condition
-        // Without this, renderAllWeeks() would read stale _filteredTasks
         filterTasks();
 
         console.log('=== DRAG-DROP: After filterTasks ===');
@@ -384,14 +293,12 @@ async function handleDrop(e) {
         console.log('Moved task in _filteredTasks:', filteredMovedTask ? { id: filteredMovedTask.id, date: filteredMovedTask.date, week: filteredMovedTask.week } : 'NOT FOUND');
 
         // Force UI update to ensure the card appears in its new position
-        // This is necessary because event emission may be suppressed
         renderAllWeeks();
 
         // Show success message
         showSuccessNotification('Task moved successfully!');
 
         // Trigger success animation on the newly rendered card
-        // Track timeout IDs for potential cleanup
         const outerTimeoutId = setTimeout(() => {
             const newCard = document.querySelector(`.task-card[data-task-id="${taskId}"]`);
             if (newCard) {
