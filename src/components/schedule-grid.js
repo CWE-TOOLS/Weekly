@@ -74,11 +74,15 @@ function enableAddCardIndicators() {
  * Render all weeks in the schedule
  */
 export function renderAllWeeks() {
+    console.log('[Startup] Starting renderAllWeeks');
+    console.time('[Startup] renderAllWeeks');
+
     const container = document.getElementById('schedule-container');
     const wrapper = document.getElementById('schedule-wrapper');
 
     if (!container || !wrapper) {
         logger.error('Schedule container or wrapper not found');
+        console.timeEnd('[Startup] renderAllWeeks');
         return;
     }
 
@@ -115,10 +119,14 @@ export function renderAllWeeks() {
             // Equalize heights if there were changes
             if (updateStats.updated > 0 || updateStats.removed > 0) {
                 requestAnimationFrame(() => {
+                    console.log('[Startup] Starting equalizeAllCardHeights (smart update path)');
+                    console.time('[Startup] equalizeAllCardHeights (smart update)');
                     equalizeAllCardHeights();
+                    console.timeEnd('[Startup] equalizeAllCardHeights (smart update)');
                 });
             }
 
+            console.timeEnd('[Startup] renderAllWeeks');
             return; // Exit early - no full re-render needed
         }
 
@@ -137,6 +145,7 @@ export function renderAllWeeks() {
         container.innerHTML = '<div class="loading">No tasks found for the selected department.</div>';
         showRenderingStatus(false);
         _previousTasks = []; // Update tracking
+        console.timeEnd('[Startup] renderAllWeeks');
         return;
     }
 
@@ -261,7 +270,10 @@ export function renderAllWeeks() {
         setGridWidths(container, wrapper);
 
         // Equalize heights FIRST before scrolling to prevent jitter
+        console.log('[Startup] Starting equalizeAllCardHeights (full render path)');
+        console.time('[Startup] equalizeAllCardHeights (full render)');
         equalizeAllCardHeights();
+        console.timeEnd('[Startup] equalizeAllCardHeights (full render)');
 
         // Then scroll in next frame after heights are stable
         requestAnimationFrame(() => {
@@ -306,6 +318,7 @@ export function renderAllWeeks() {
     setTimeout(() => {
         enableAddCardIndicators();
         showRenderingStatus(false);
+        console.timeEnd('[Startup] renderAllWeeks');
     }, RENDER_DELAY.SCHEDULE);
 
     // Emit render complete event

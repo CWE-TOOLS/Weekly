@@ -85,6 +85,9 @@ async function fetchWithTimeout(promise, timeoutMs, source) {
  * const tasks = await fetchAllTasks(true, false);
  */
 export async function fetchAllTasks(silent = false, suppressEvents = null) {
+    console.log('[Startup] Starting fetchAllTasks');
+    console.time('[Startup] fetchAllTasks');
+
     const modalElement = document.getElementById('project-modal');
     const modalOpen = modalElement && modalElement.classList.contains('show');
     const shouldBeSilent = silent || modalOpen;
@@ -101,32 +104,55 @@ export async function fetchAllTasks(silent = false, suppressEvents = null) {
         // Fetch Google Sheets data and Supabase tasks in parallel for faster loading
         // Each source has a 15s timeout to prevent infinite hanging
         logger.info('🚀 Starting parallel data fetch...');
+        console.log('[Startup] Starting parallel data fetch (Google Sheets + Supabase)');
+        console.time('[Startup] Parallel data fetch');
         const startTime = performance.now();
+
+        console.log('[Startup] Starting Google Sheets fetch');
+        console.time('[Startup] Google Sheets fetch');
+        console.log('[Startup] Starting Supabase manual tasks fetch');
+        console.time('[Startup] Supabase manual tasks fetch');
 
         const [sheetsTasks, manualTasks] = await Promise.all([
             fetchWithTimeout(fetchSheetsTasks(), 15000, 'Google Sheets'),
             fetchWithTimeout(loadManualTasks(), 15000, 'Supabase')
         ]);
 
+        console.timeEnd('[Startup] Google Sheets fetch');
+        console.timeEnd('[Startup] Supabase manual tasks fetch');
+        console.timeEnd('[Startup] Parallel data fetch');
+
         const fetchTime = (performance.now() - startTime).toFixed(0);
         logger.info(`✅ Parallel data fetch complete in ${fetchTime}ms`);
         logger.info(`   Sheets: ${sheetsTasks.length} tasks, Supabase: ${manualTasks.length} tasks`);
 
         // Merge tasks, with manual tasks taking precedence for same ID
+        console.log('[Startup] Starting task merge');
+        console.time('[Startup] Task merge');
         const allTasks = mergeTasks(sheetsTasks, manualTasks);
+        console.timeEnd('[Startup] Task merge');
 
         // Calculate day counts
+        console.log('[Startup] Starting day count calculation');
+        console.time('[Startup] Day count calculation');
         calculateProjectDayCounts(allTasks);
+        console.timeEnd('[Startup] Day count calculation');
 
         // Update state with fetched tasks (will emit 'tasks:loaded' event unless suppressed)
+        console.log('[Startup] Starting state update');
+        console.time('[Startup] State update');
         setAllTasks(allTasks, shouldSuppressEvents);
+        console.timeEnd('[Startup] State update');
 
         if (!shouldBeSilent) {
             showLoading(false);
         }
 
+        console.log('[Startup] Emitting TASKS_LOADED event');
+        console.timeEnd('[Startup] fetchAllTasks');
         return allTasks;
     } catch (error) {
+        console.timeEnd('[Startup] fetchAllTasks');
         logger.error('❌ Failed to fetch tasks:', error);
 
         // On timeout or fetch failure, keep existing data

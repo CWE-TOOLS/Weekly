@@ -62,21 +62,106 @@ export const departmentDayMapping = {
  * // Returns: [{id: 'task-1', project: 'A', department: 'Mill', ...}, ...]
  */
 export async function fetchTasks() {
-    const response = await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(SHEET_NAME)}!A1:Z?key=${API_KEY}`
-    );
+    const fetchStartTime = performance.now();
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(SHEET_NAME)}!A1:Z?key=${API_KEY}`;
+
+    logger.info('[Startup] 📋 fetchTasks() called');
+    logger.info(`[Startup]   → URL: ${url.replace(/key=[^&]+/, 'key=***REDACTED***')}`);
+    logger.info(`[Startup]   → Spreadsheet ID: ${SPREADSHEET_ID}`);
+    logger.info(`[Startup]   → Sheet Name: ${SHEET_NAME}`);
+    logger.info(`[Startup]   → API Key present: ${API_KEY ? 'Yes (length: ' + API_KEY.length + ')' : 'No'}`);
+    logger.info(`[Startup]   → Network state: ${navigator.onLine ? 'Online' : 'Offline'}`);
+
+    logger.info('[Startup] 🌐 Initiating fetch() call...');
+    const fetchInitTime = performance.now();
+
+    let response;
+    try {
+        response = await fetch(url);
+        const fetchCompleteTime = performance.now();
+        const fetchDuration = (fetchCompleteTime - fetchInitTime).toFixed(0);
+
+        logger.info(`[Startup] ✅ Fetch completed in ${fetchDuration}ms`);
+        logger.info(`[Startup]   → Response status: ${response.status} ${response.statusText}`);
+        logger.info(`[Startup]   → Response ok: ${response.ok}`);
+        logger.info(`[Startup]   → Response headers:`);
+
+        // Log important response headers
+        const headersToLog = ['content-type', 'content-length', 'cache-control', 'date', 'server', 'x-frame-options'];
+        headersToLog.forEach(header => {
+            const value = response.headers.get(header);
+            if (value) {
+                logger.info(`[Startup]     • ${header}: ${value}`);
+            }
+        });
+    } catch (fetchError) {
+        const fetchErrorTime = performance.now();
+        const errorDuration = (fetchErrorTime - fetchInitTime).toFixed(0);
+
+        logger.error(`[Startup] ❌ Fetch failed after ${errorDuration}ms`);
+        logger.error(`[Startup]   → Error type: ${fetchError.name}`);
+        logger.error(`[Startup]   → Error message: ${fetchError.message}`);
+        logger.error(`[Startup]   → Network state: ${navigator.onLine ? 'Online' : 'Offline'}`);
+        logger.error(`[Startup]   → Error stack:`, fetchError.stack);
+        throw fetchError;
+    }
 
     if (!response.ok) {
+        logger.error(`[Startup] ❌ Response not OK: ${response.status} ${response.statusText}`);
+
+        // Try to get error details from response body
+        try {
+            const errorText = await response.text();
+            logger.error(`[Startup]   → Response body: ${errorText.substring(0, 500)}`);
+        } catch (e) {
+            logger.error(`[Startup]   → Could not read response body`);
+        }
+
         throw new Error(`Failed to fetch tasks: ${response.statusText}`);
     }
 
-    const data = await response.json();
+    logger.info('[Startup] 📦 Parsing JSON response...');
+    const parseStartTime = performance.now();
+
+    let data;
+    try {
+        data = await response.json();
+        const parseCompleteTime = performance.now();
+        const parseDuration = (parseCompleteTime - parseStartTime).toFixed(0);
+
+        logger.info(`[Startup] ✅ JSON parsed in ${parseDuration}ms`);
+        logger.info(`[Startup]   → Data has 'values' property: ${!!data.values}`);
+
+        if (data.values) {
+            logger.info(`[Startup]   → Rows count: ${data.values.length}`);
+            logger.info(`[Startup]   → First row columns: ${data.values[0] ? data.values[0].length : 0}`);
+        }
+    } catch (parseError) {
+        const parseErrorTime = performance.now();
+        const errorDuration = (parseErrorTime - parseStartTime).toFixed(0);
+
+        logger.error(`[Startup] ❌ JSON parsing failed after ${errorDuration}ms`);
+        logger.error(`[Startup]   → Error: ${parseError.message}`);
+        throw parseError;
+    }
 
     if (!data.values) {
+        logger.error('[Startup] ❌ No values in response data');
         throw new Error('No data found in sheet');
     }
 
-    return parseSheetData(data.values);
+    logger.info('[Startup] 🔄 Parsing sheet data into task objects...');
+    const parseDataStartTime = performance.now();
+    const tasks = parseSheetData(data.values);
+    const parseDataCompleteTime = performance.now();
+    const parseDataDuration = (parseDataCompleteTime - parseDataStartTime).toFixed(0);
+
+    const totalDuration = (parseDataCompleteTime - fetchStartTime).toFixed(0);
+    logger.info(`[Startup] ✅ Sheet data parsed in ${parseDataDuration}ms`);
+    logger.info(`[Startup]   → Total tasks parsed: ${tasks.length}`);
+    logger.info(`[Startup] ✅ fetchTasks() complete - Total time: ${totalDuration}ms`);
+
+    return tasks;
 }
 
 /**
@@ -149,11 +234,31 @@ function stripHtml(html) {
  * // Returns: 123456789 (numeric sheet ID)
  */
 export async function getSheetId(sheetName) {
-    const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}?key=${API_KEY}`);
-    if (!response.ok) throw new Error('Failed to fetch sheet metadata');
+    const startTime = performance.now();
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}?key=${API_KEY}`;
+
+    logger.info(`[Startup] 🔍 getSheetId('${sheetName}') called`);
+    logger.info(`[Startup]   → URL: ${url.replace(/key=[^&]+/, 'key=***REDACTED***')}`);
+
+    const response = await fetch(url);
+
+    const fetchTime = (performance.now() - startTime).toFixed(0);
+    logger.info(`[Startup]   → Fetch completed in ${fetchTime}ms`);
+    logger.info(`[Startup]   → Response status: ${response.status}`);
+
+    if (!response.ok) {
+        logger.error(`[Startup] ❌ Failed to fetch sheet metadata: ${response.statusText}`);
+        throw new Error('Failed to fetch sheet metadata');
+    }
+
     const data = await response.json();
     const sheet = data.sheets.find(s => s.properties.title === sheetName);
-    return sheet ? sheet.properties.sheetId : null;
+    const sheetId = sheet ? sheet.properties.sheetId : null;
+
+    const totalTime = (performance.now() - startTime).toFixed(0);
+    logger.info(`[Startup] ✅ getSheetId() complete in ${totalTime}ms - Sheet ID: ${sheetId}`);
+
+    return sheetId;
 }
 
 /**
@@ -170,10 +275,30 @@ export async function getSheetId(sheetName) {
  * // Returns: [['Header1', 'Header2', ...], ['Row1Col1', 'Row1Col2', ...], ...]
  */
 export async function getStagingData() {
-    const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(STAGING_SHEET_NAME)}!A1:ZZ?key=${API_KEY}`);
-    if (!response.ok) throw new Error('Failed to fetch staging data');
+    const startTime = performance.now();
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(STAGING_SHEET_NAME)}!A1:ZZ?key=${API_KEY}`;
+
+    logger.info('[Startup] 📊 getStagingData() called');
+    logger.info(`[Startup]   → URL: ${url.replace(/key=[^&]+/, 'key=***REDACTED***')}`);
+
+    const response = await fetch(url);
+
+    const fetchTime = (performance.now() - startTime).toFixed(0);
+    logger.info(`[Startup]   → Fetch completed in ${fetchTime}ms`);
+    logger.info(`[Startup]   → Response status: ${response.status}`);
+
+    if (!response.ok) {
+        logger.error(`[Startup] ❌ Failed to fetch staging data: ${response.statusText}`);
+        throw new Error('Failed to fetch staging data');
+    }
+
     const data = await response.json();
-    return data.values || [];
+    const values = data.values || [];
+
+    const totalTime = (performance.now() - startTime).toFixed(0);
+    logger.info(`[Startup] ✅ getStagingData() complete in ${totalTime}ms - Rows: ${values.length}`);
+
+    return values;
 }
 
 /**
@@ -195,14 +320,38 @@ export async function getStagingData() {
  * await saveToStaging('Project Alpha', changes);
  */
 export async function saveToStaging(projectName, changedTasks) {
+    const startTime = performance.now();
+
+    logger.info(`[Startup] 💾 saveToStaging('${projectName}') called`);
+    logger.info(`[Startup]   → Changed tasks count: ${changedTasks.length}`);
+
     try {
+        logger.info('[Startup] 🔍 Getting sheet ID...');
+        const sheetIdStartTime = performance.now();
         const sheetId = await getSheetId(STAGING_SHEET_NAME);
-        if (!sheetId) throw new Error('Staging sheet not found');
+        const sheetIdTime = (performance.now() - sheetIdStartTime).toFixed(0);
+        logger.info(`[Startup] ✅ Sheet ID retrieved in ${sheetIdTime}ms: ${sheetId}`);
+
+        if (!sheetId) {
+            logger.error('[Startup] ❌ Staging sheet not found');
+            throw new Error('Staging sheet not found');
+        }
+
+        logger.info('[Startup] 📊 Getting staging data...');
+        const stagingDataStartTime = performance.now();
         const stagingData = await getStagingData();
+        const stagingDataTime = (performance.now() - stagingDataStartTime).toFixed(0);
+        logger.info(`[Startup] ✅ Staging data retrieved in ${stagingDataTime}ms`);
+
         const headers = stagingData[0] || [];
         let projectCol = headers.indexOf(projectName);
+
+        logger.info(`[Startup]   → Project column index: ${projectCol}`);
+
         const requests = [];
         if (projectCol === -1) {
+            logger.info('[Startup] ➕ Project column not found, will insert new column');
+
             // Insert column after D (index 3, so startIndex 4)
             requests.push({
                 "insertDimension": {
@@ -235,7 +384,9 @@ export async function saveToStaging(projectName, changedTasks) {
             });
             projectCol = 4;
         }
+
         // Now update the changed descriptions
+        logger.info('[Startup] 📝 Building update requests...');
         changedTasks.forEach(({task, newText}) => {
             const deptDay = task.department + ' ' + task.dayNumber;
             const rowIndex = departmentDayMapping[deptDay];
@@ -259,8 +410,19 @@ export async function saveToStaging(projectName, changedTasks) {
                 });
             }
         });
+
+        logger.info(`[Startup]   → Total requests: ${requests.length}`);
+
         if (requests.length > 0) {
+            logger.info('[Startup] 🎫 Getting access token...');
+            const tokenStartTime = performance.now();
             const accessToken = await getAccessToken();
+            const tokenTime = (performance.now() - tokenStartTime).toFixed(0);
+            logger.info(`[Startup] ✅ Access token retrieved in ${tokenTime}ms`);
+
+            logger.info('[Startup] 🌐 Sending batchUpdate request...');
+            const updateStartTime = performance.now();
+
             const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}:batchUpdate`, {
                 method: 'POST',
                 headers: {
@@ -269,16 +431,30 @@ export async function saveToStaging(projectName, changedTasks) {
                 },
                 body: JSON.stringify({ requests })
             });
+
+            const updateTime = (performance.now() - updateStartTime).toFixed(0);
+            logger.info(`[Startup] ✅ BatchUpdate completed in ${updateTime}ms`);
+            logger.info(`[Startup]   → Response status: ${response.status}`);
+
             if (!response.ok) {
                 const error = await response.text();
+                logger.error(`[Startup] ❌ Update failed: ${error}`);
                 throw new Error('Failed to update sheet: ' + error);
             }
+
+            const totalTime = (performance.now() - startTime).toFixed(0);
+            logger.info(`[Startup] ✅ saveToStaging() complete in ${totalTime}ms`);
             logger.info('Successfully saved to staging sheet');
             return true;
         }
+
+        const totalTime = (performance.now() - startTime).toFixed(0);
+        logger.info(`[Startup] ✅ saveToStaging() complete in ${totalTime}ms (no changes needed)`);
         return true;
     } catch (error) {
-        logger.error('Error saving to staging:', error);
+        const errorTime = (performance.now() - startTime).toFixed(0);
+        logger.error(`[Startup] ❌ saveToStaging() failed after ${errorTime}ms`);
+        logger.error('[Startup] Error saving to staging:', error);
         throw error; // Re-throw to handle in caller
     }
 }

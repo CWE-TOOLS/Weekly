@@ -12,6 +12,9 @@ import { logger } from './utils/logger.js';
 logger.debug('📋 Weekly Schedule Viewer - Phase 8');
 logger.debug('⚡ ES6 Modules: Loading...');
 
+console.log('[Startup] Starting application initialization');
+console.time('[Startup] Total application initialization');
+
 // Initialize error handler first (to catch any initialization errors)
 initializeErrorHandler();
 
@@ -19,7 +22,13 @@ initializeErrorHandler();
 setupBackwardCompatibility();
 
 // Start the application
-initializeApp().catch(error => {
+initializeApp()
+    .then(() => {
+        console.timeEnd('[Startup] Total application initialization');
+    })
+    .catch(error => {
+        console.timeEnd('[Startup] Total application initialization');
+
     logger.error('💥 Failed to initialize application:', error);
 
     // Show critical error UI

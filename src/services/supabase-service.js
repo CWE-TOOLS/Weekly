@@ -29,10 +29,18 @@ const tasksTable = SUPABASE.TASKS_TABLE;
  * // Returns singleton Supabase client instance
  */
 export async function initializeSupabase() {
-    if (supabaseClient) return supabaseClient;
+    console.log('[Startup] Starting initializeSupabase');
+    console.time('[Startup] initializeSupabase');
+
+    if (supabaseClient) {
+        console.timeEnd('[Startup] initializeSupabase');
+        return supabaseClient;
+    }
 
     // Load Supabase library if not already loaded
     if (!window.supabase) {
+        console.log('[Startup] Starting Supabase CDN loading');
+        console.time('[Startup] Supabase CDN loading');
         await new Promise((resolve, reject) => {
             const script = document.createElement('script');
             script.src = SUPABASE.CDN_URL;
@@ -40,14 +48,22 @@ export async function initializeSupabase() {
             script.onerror = reject;
             document.head.appendChild(script);
         });
+        console.timeEnd('[Startup] Supabase CDN loading');
     }
 
+    console.log('[Startup] Starting Supabase client creation');
+    console.time('[Startup] Supabase client creation');
     supabaseClient = window.supabase.createClient(SUPABASE.URL, SUPABASE.ANON_KEY);
+    console.timeEnd('[Startup] Supabase client creation');
 
     // Subscribe to refresh signals
+    console.log('[Startup] Starting refresh subscription setup');
+    console.time('[Startup] Refresh subscription setup');
     setupRefreshSubscription();
+    console.timeEnd('[Startup] Refresh subscription setup');
 
     logger.info('✅ Supabase initialized');
+    console.timeEnd('[Startup] initializeSupabase');
     return supabaseClient;
 }
 

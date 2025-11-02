@@ -156,6 +156,8 @@ function setupDragDropTrigger() {
  * @returns {Promise<void>}
  */
 export async function initializeApp() {
+    console.log('[Startup] Starting initializeApp');
+    console.time('[Startup] initializeApp');
     const startTime = performance.now();
 
     try {
@@ -163,6 +165,8 @@ export async function initializeApp() {
         logger.info('📦 ES6 Modules: Loaded');
 
         // === Phase 1: Core Systems (Critical) ===
+        console.log('[Startup] Starting Phase 1: Core Systems');
+        console.time('[Startup] Phase 1: Core Systems');
         performanceMonitor.mark('app-init-start');
         loadingManager.showLoading('Initializing application...', 'init');
         loadingManager.updateProgress(5, 'Starting core systems...');
@@ -173,18 +177,24 @@ export async function initializeApp() {
         // Expose modal functions globally for backward compatibility
         exposeModalFunctionsGlobally();
 
+        console.timeEnd('[Startup] Phase 1: Core Systems');
         loadingManager.updateProgress(10, 'Core systems ready');
 
         // === Phase 2: State Restoration ===
+        console.log('[Startup] Starting Phase 2: State Restoration');
+        console.time('[Startup] Phase 2: State Restoration');
         logger.info('\n=== Phase 2: State Restoration ===');
         performanceMonitor.mark('phase2-start');
         loadingManager.updateProgress(15, 'Restoring state...');
 
         await restoreState();
         performanceMonitor.measure('phase2-state-restoration', 'phase2-start');
+        console.timeEnd('[Startup] Phase 2: State Restoration');
         loadingManager.updateProgress(25, 'State restored');
 
         // === Phase 3: Services Initialization ===
+        console.log('[Startup] Starting Phase 3: Services');
+        console.time('[Startup] Phase 3: Services');
         logger.info('\n=== Phase 3: Services ===');
         performanceMonitor.mark('phase3-start');
         loadingManager.updateProgress(30, 'Initializing services...');
@@ -192,9 +202,12 @@ export async function initializeApp() {
         await initializeServices();
         appState.servicesReady = true;
         performanceMonitor.measure('phase3-services-init', 'phase3-start');
+        console.timeEnd('[Startup] Phase 3: Services');
         loadingManager.updateProgress(45, 'Services initialized');
 
         // === Phase 4: UI Components ===
+        console.log('[Startup] Starting Phase 4: UI Components');
+        console.time('[Startup] Phase 4: UI Components');
         logger.info('\n=== Phase 4: UI Components ===');
         performanceMonitor.mark('phase4-start');
         loadingManager.updateProgress(50, 'Initializing UI components...');
@@ -202,18 +215,24 @@ export async function initializeApp() {
         await initializeComponents();
         appState.componentsReady = true;
         performanceMonitor.measure('phase4-components-init', 'phase4-start');
+        console.timeEnd('[Startup] Phase 4: UI Components');
         loadingManager.updateProgress(70, 'UI components ready');
 
         // === Phase 5: Data Loading ===
+        console.log('[Startup] Starting Phase 5: Data Loading');
+        console.time('[Startup] Phase 5: Data Loading');
         logger.info('\n=== Phase 5: Data Loading ===');
         performanceMonitor.mark('phase5-start');
         loadingManager.updateProgress(75, 'Loading initial data...');
 
         await loadInitialData();
         performanceMonitor.measure('phase5-data-loading', 'phase5-start');
+        console.timeEnd('[Startup] Phase 5: Data Loading');
         loadingManager.updateProgress(90, 'Data loaded');
 
         // === Phase 6: Global Listeners & Features ===
+        console.log('[Startup] Starting Phase 6: Global Features');
+        console.time('[Startup] Phase 6: Global Features');
         logger.info('\n=== Phase 6: Global Features ===');
         performanceMonitor.mark('phase6-start');
         loadingManager.updateProgress(95, 'Initializing global features...');
@@ -227,6 +246,7 @@ export async function initializeApp() {
         logger.debug('  Lazy load triggers set up');
 
         performanceMonitor.measure('phase6-global-features', 'phase6-start');
+        console.timeEnd('[Startup] Phase 6: Global Features');
         loadingManager.updateProgress(100, 'Application ready');
 
         // === Initialization Complete ===
@@ -247,7 +267,9 @@ export async function initializeApp() {
         // Preload features on idle (Phase 9)
         preloadFeaturesOnIdle();
 
+        console.timeEnd('[Startup] initializeApp');
     } catch (error) {
+        console.timeEnd('[Startup] initializeApp');
         logger.error('❌ Application initialization failed:', error);
         appState.errors.push(error);
 

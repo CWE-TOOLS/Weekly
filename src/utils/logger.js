@@ -61,8 +61,8 @@ class Logger {
     this.enabled = !this.isProduction;
 
     // Minimum log level (logs below this level are ignored)
-    // Changed to WARN to reduce verbose logging - only show warnings and errors by default
-    this.minLevel = this.isProduction ? LogLevel.ERROR : LogLevel.WARN;
+    // Set to INFO to show detailed startup diagnostics
+    this.minLevel = this.isProduction ? LogLevel.ERROR : LogLevel.INFO;
 
     // Individual level controls
     this.levelEnabled = {
