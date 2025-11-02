@@ -159,7 +159,7 @@ export async function initializeComponents() {
 
 /**
  * Load initial data
- * Non-blocking - loads data in background and updates UI when ready
+ * Blocks until data is fully loaded to prevent race conditions
  * @returns {Promise<void>}
  */
 export async function loadInitialData() {
@@ -167,24 +167,22 @@ export async function loadInitialData() {
     console.time('[Startup] loadInitialData');
     logger.debug('Loading initial data...');
 
-    // Start data fetch in background (non-blocking, silent mode)
-    // The data-service will show its own loading indicator via fetchAllTasks()
-    dataService.fetchAllTasks(false) // silent=false to show loading UI
-        .then(() => {
-            logger.debug('Initial data loaded successfully');
-            console.timeEnd('[Startup] loadInitialData');
-        })
-        .catch((error) => {
-            logger.error('Failed to load initial data:', error);
-            console.timeEnd('[Startup] loadInitialData');
-            errorHandler.handleError(error, {
-                operation: 'Initial data load',
-                retry: loadInitialData
-            });
-        });
+    try {
+        // Wait for data fetch to complete before proceeding
+        // This prevents race conditions with Supabase initialization on cold start
+        await dataService.fetchAllTasks(false); // silent=false to show loading UI
 
-    // Return immediately - don't wait for data, UI is ready
-    logger.debug('Initial data fetch started (background)');
+        logger.debug('Initial data loaded successfully');
+        console.timeEnd('[Startup] loadInitialData');
+    } catch (error) {
+        logger.error('Failed to load initial data:', error);
+        console.timeEnd('[Startup] loadInitialData');
+        errorHandler.handleError(error, {
+            operation: 'Initial data load',
+            retry: loadInitialData
+        });
+        throw error;
+    }
 }
 
 /**
