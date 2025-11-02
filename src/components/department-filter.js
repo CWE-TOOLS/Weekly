@@ -56,7 +56,7 @@ export function updateMultiSelectLabel() {
 /**
  * Filter tasks by selected departments and update state
  */
-export function filterTasks() {
+export function filterTasks(silent = false) {
     const selectedDepartments = getSelectedDepartments();
     const allTasks = getAllTasks();
 
@@ -81,8 +81,10 @@ export function filterTasks() {
     // Update label
     updateMultiSelectLabel();
 
-    // Emit filter event
-    emit(EVENTS.DEPARTMENT_FILTERED, { departments: selectedDepartments, tasks: filtered });
+    // Emit filter event (unless silent mode for initial load)
+    if (!silent) {
+        emit(EVENTS.DEPARTMENT_FILTERED, { departments: selectedDepartments, tasks: filtered });
+    }
 }
 
 /**
@@ -136,17 +138,23 @@ export function populateDepartmentCheckboxes() {
  * Initialize department filter component
  */
 export function initializeDepartmentFilter() {
+    let isInitialLoad = true;
+
     // Populate checkboxes on initialization
     populateDepartmentCheckboxes();
 
     // Listen for tasks loaded event to re-populate if needed
     on(EVENTS.TASKS_LOADED, () => {
         populateDepartmentCheckboxes();
-        filterTasks();
+
+        // Call filterTasks in silent mode on initial load to prevent duplicate render
+        // The render is already handled by component-events.js responding to TASKS_LOADED
+        filterTasks(isInitialLoad);
+        isInitialLoad = false;
     });
 
-    // Perform initial filter
-    filterTasks();
+    // Perform initial filter (silent mode since no tasks loaded yet)
+    filterTasks(true);
 }
 
 /**
