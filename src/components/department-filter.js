@@ -55,6 +55,7 @@ export function updateMultiSelectLabel() {
 
 /**
  * Filter tasks by selected departments and update state
+ * Note: Batch and Layout are synthetic departments that are always included
  */
 export function filterTasks(silent = false) {
     const selectedDepartments = getSelectedDepartments();
@@ -71,6 +72,8 @@ export function filterTasks(silent = false) {
         if (allDeptsSelected) {
             filtered = [...allTasks];
         } else {
+            // Filter tasks normally, but synthetic departments (Batch/Layout) are handled separately
+            // They will always be rendered regardless of filter state
             filtered = allTasks.filter(task => selectedDepartments.includes(task.department));
         }
     }
@@ -103,7 +106,18 @@ export function populateDepartmentCheckboxes() {
     list.innerHTML = ''; // Clear previous list
 
     // Load saved selections, default to all departments
-    const savedDepartments = loadState('selectedDepartments', departments);
+    let savedDepartments = loadState('selectedDepartments', departments);
+
+    // IMPORTANT: Always ensure Batch and Layout synthetic departments are included
+    // These are special departments that should always be selected by default
+    // If they're missing from saved state (e.g., user saved before they were added),
+    // we need to add them automatically
+    if (!savedDepartments.includes('Batch')) {
+        savedDepartments = [...savedDepartments, 'Batch'];
+    }
+    if (!savedDepartments.includes('Layout')) {
+        savedDepartments = [...savedDepartments, 'Layout'];
+    }
 
     departments.forEach(dept => {
         const listItem = document.createElement('li');
