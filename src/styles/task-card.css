@@ -27,6 +27,11 @@
   color: var(--color-cast-text);
 }
 
+.task-card.department-sample {
+  background-color: var(--color-sample);
+  color: var(--color-sample-text);
+}
+
 .task-card.department-batch {
   background-color: var(--color-batch);
   color: var(--color-batch-text);

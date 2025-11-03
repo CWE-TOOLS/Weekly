@@ -271,8 +271,9 @@ export function renderWeekGrid(dateForWeek, maxTasksPerDept) {
     const weekDates = createWeekDates(monday);
 
     // Generate special department tasks
-    const batchTasks = generateBatchTasks(weekDates, monday, getAllTasks);
-    const layoutTasks = generateLayoutTasks(weekDates, monday, getAllTasks);
+    const allTasks = getAllTasks(); // Explicitly get the latest state
+    const batchTasks = generateBatchTasks(weekDates, monday, () => allTasks);
+    const layoutTasks = generateLayoutTasks(weekDates, monday, () => allTasks);
 
     console.log('[SYNTHETIC] Generated batchTasks:', batchTasks.length, batchTasks);
     console.log('[SYNTHETIC] Generated layoutTasks:', layoutTasks.length, layoutTasks);

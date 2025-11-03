@@ -10,7 +10,6 @@
  */
 
 import { parseDate, getMonday, getLocalDateString, getWeekMonth, getWeekOfMonth } from '../../utils/date-utils.js';
-import { generateBatchTasks, generateLayoutTasks } from '../../utils/schedule-utils.js';
 import { Z_INDEX } from '../../config/layout-constants.js';
 import { RENDER_DELAY } from '../../config/timing-constants.js';
 
@@ -24,7 +23,10 @@ let currentViewedWeekIndex = -1;
  * Render all weeks in the schedule
  * Main entry point for rendering the complete schedule view
  */
+import { getFilteredTasks } from '../../core/state.js';
+
 export function renderAllWeeks() {
+    const filteredTasks = getFilteredTasks(); // Always get the latest filtered tasks
     showRenderingStatus(true, 'Rendering schedule...');
     const container = document.getElementById('schedule-container');
     const wrapper = document.getElementById('schedule-wrapper');
@@ -111,10 +113,9 @@ export function renderAllWeeks() {
             maxTasksPerDept[dept] = maxTasks;
         }
     });
-    // ALWAYS set synthetic departments (Batch/Layout) to 1 since they're generated dynamically
-    // These departments should ALWAYS be visible regardless of department filter state
-    maxTasksPerDept['Batch'] = 1;
-    maxTasksPerDept['Layout'] = 1;
+    // Synthetic departments (Batch/Layout) are now part of the main task list,
+    // so they will be handled by the normal max tasks calculation.
+    // No need to hardcode them here anymore.
 
     // Render a grid for each week using the global max tasks count - use document fragment for better performance
     const fragment = document.createDocumentFragment();
@@ -225,11 +226,8 @@ export function renderWeekGrid(dateForWeek, maxTasksPerDept) {
         return date;
     });
 
-    // Generate batch tasks (Mon-Fri only)
-    const batchTasks = generateBatchTasks(weekDates, monday, () => allTasks);
-
-    // Generate layout tasks (Mon-Fri only)
-    const layoutTasks = generateLayoutTasks(weekDates, monday, () => allTasks);
+    // Synthetic tasks are now generated in the data service and are part of the `filteredTasks`
+    // No need to generate them here anymore.
 
     // --- Header Row ---
     let headerHTML = `<div class="grid-header">Department</div>`;
@@ -250,8 +248,7 @@ export function renderWeekGrid(dateForWeek, maxTasksPerDept) {
         if (!tasksByDept[dept]) tasksByDept[dept] = [];
         tasksByDept[dept].push(task);
     });
-    tasksByDept['Batch'] = batchTasks;
-    tasksByDept['Layout'] = layoutTasks;
+    // Synthetic tasks are now part of the main task list and will be grouped like any other task.
     // Ensure Special Events always exists even if empty
     if (!tasksByDept['Special Events']) {
         tasksByDept['Special Events'] = [];

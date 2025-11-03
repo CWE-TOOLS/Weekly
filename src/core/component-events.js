@@ -22,21 +22,22 @@ import { logger } from '../utils/logger.js';
  */
 export function setupComponentEvents() {
     // Tasks filtered → render schedule (with editing check)
+    // The TASKS_FILTERED event is now only for manual filter changes.
+    // The main render after a data load is handled by TASKS_READY_FOR_RENDER.
+    // This listener is kept in case other parts of the app rely on TASKS_FILTERED
+    // for non-rendering UI updates. For now, we will just log it.
     eventBus.on(eventBus.EVENTS.TASKS_FILTERED, () => {
-        if (isEditingActive()) {
-            logger.info('📊 Tasks filtered but editing active, queueing refresh');
-            queueRefresh(() => renderAllWeeks(), { event: 'TASKS_FILTERED' });
-        } else {
-            renderAllWeeks();
-        }
+        logger.info('📊 Tasks filtered event received. No re-render triggered by this event.');
+        // Previously, this would call renderAllWeeks(), creating a race condition.
+        // That responsibility is now handled by the TASKS_READY_FOR_RENDER event.
     });
 
-    // Tasks loaded → render schedule (with editing check)
-    eventBus.on(eventBus.EVENTS.TASKS_LOADED, () => {
-        logger.info('📊 Tasks loaded, rendering schedule...');
+    // Tasks ready for render → render schedule (with editing check)
+    eventBus.on(eventBus.EVENTS.TASKS_READY_FOR_RENDER, () => {
+        logger.info('✅ Tasks ready for render, rendering schedule...');
         if (isEditingActive()) {
-            logger.info('📊 Editing active, queueing refresh');
-            queueRefresh(() => renderAllWeeks(), { event: 'TASKS_LOADED' });
+            logger.info('📝 Editing active, queueing refresh');
+            queueRefresh(() => renderAllWeeks(), { event: 'TASKS_READY_FOR_RENDER' });
         } else {
             renderAllWeeks();
         }

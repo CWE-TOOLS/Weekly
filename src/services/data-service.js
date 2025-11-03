@@ -28,9 +28,10 @@
 
 import { fetchTasks as fetchSheetsTasks } from './sheets-service.js';
 import { loadManualTasks } from './supabase-service.js';
-import { parseDate } from '../utils/date-utils.js';
+import { parseDate, getMonday, getLocalDateString } from '../utils/date-utils.js';
 import { showLoading, hideError, showError } from '../utils/ui-utils.js';
 import { setAllTasks, getAllTasks } from '../core/state.js';
+import { generateBatchTasks, generateLayoutTasks } from '../utils/schedule-utils.js';
 
 import { logger } from '../utils/logger.js';
 
@@ -114,8 +115,8 @@ export async function fetchAllTasks(silent = false, suppressEvents = null) {
         console.time('[Startup] Supabase manual tasks fetch');
 
         const [sheetsTasks, manualTasks] = await Promise.all([
-            fetchWithTimeout(fetchSheetsTasks(), 15000, 'Google Sheets'),
-            fetchWithTimeout(loadManualTasks(), 15000, 'Supabase')
+            fetchWithTimeout(fetchSheetsTasks(), 60000, 'Google Sheets'),
+            fetchWithTimeout(loadManualTasks(), 60000, 'Supabase')
         ]);
 
         console.timeEnd('[Startup] Google Sheets fetch');
@@ -131,6 +132,12 @@ export async function fetchAllTasks(silent = false, suppressEvents = null) {
         console.time('[Startup] Task merge');
         const allTasks = mergeTasks(sheetsTasks, manualTasks);
         console.timeEnd('[Startup] Task merge');
+
+        // Generate and inject synthetic tasks (Batch and Layout)
+        console.log('[Startup] Starting synthetic task generation');
+        console.time('[Startup] Synthetic task generation');
+        generateAndInjectSyntheticTasks(allTasks);
+        console.timeEnd('[Startup] Synthetic task generation');
 
         // Calculate day counts
         console.log('[Startup] Starting day count calculation');
@@ -199,6 +206,60 @@ export async function fetchAllTasks(silent = false, suppressEvents = null) {
 export function mergeTasks(sheetsTasks, manualTasks) {
     const manualTaskIds = new Set(manualTasks.map(t => t.id));
     return [...sheetsTasks.filter(t => !manualTaskIds.has(t.id)), ...manualTasks];
+}
+
+/**
+ * Generates and injects synthetic tasks (Batch, Layout) into the main task list.
+ * This function modifies the tasks array in-place.
+ * @param {Array<Object>} tasks - The array of all tasks.
+ */
+function generateAndInjectSyntheticTasks(tasks) {
+    if (tasks.length === 0) return;
+
+    // Find the date range of the existing tasks to generate synthetic tasks for the same range
+    let minDate = null;
+    let maxDate = null;
+
+    tasks.forEach(task => {
+        const taskDate = parseDate(task.date);
+        if (taskDate) {
+            if (!minDate || taskDate < minDate) {
+                minDate = taskDate;
+            }
+            if (!maxDate || taskDate > maxDate) {
+                maxDate = taskDate;
+            }
+        }
+    });
+
+    if (!minDate || !maxDate) return; // Cannot generate tasks without a date range
+
+    const allMondays = new Set();
+    let current = getMonday(minDate);
+    while (current <= maxDate) {
+        allMondays.add(getLocalDateString(current));
+        current.setDate(current.getDate() + 7);
+    }
+
+    const syntheticTasks = [];
+    const getAllTasksFn = () => tasks; // Pass a function that returns the current task list
+
+    allMondays.forEach(mondayString => {
+        const monday = new Date(mondayString + 'T00:00:00');
+        const weekDates = Array.from({ length: 6 }).map((_, i) => {
+            const date = new Date(monday);
+            date.setDate(monday.getDate() + i);
+            return date;
+        });
+
+        const batchTasks = generateBatchTasks(weekDates, monday, getAllTasksFn);
+        const layoutTasks = generateLayoutTasks(weekDates, monday, getAllTasksFn);
+        syntheticTasks.push(...batchTasks, ...layoutTasks);
+    });
+
+    // Add the new synthetic tasks to the main list
+    tasks.push(...syntheticTasks);
+    logger.info(`✅ Injected ${syntheticTasks.length} synthetic tasks (Batch, Layout)`);
 }
 
 /**

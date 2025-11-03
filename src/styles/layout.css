@@ -209,6 +209,11 @@ header p {
   color: var(--color-cast-text);
 }
 
+.department-label.department-sample {
+  background-color: var(--color-sample);
+  color: var(--color-sample-text);
+}
+
 .department-label.department-batch {
   background-color: var(--color-batch);
   color: var(--color-batch-text);

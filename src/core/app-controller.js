@@ -392,6 +392,13 @@ export function setupBackwardCompatibility() {
     window.getProjectSummaries = dataService.getProjectSummaries;
     window.dataService = dataService; // Expose entire dataService for refresh signal handling
 
+    // Expose a dedicated refresh function that always does a full render
+    window.refreshData = async () => {
+        await dataService.fetchAllTasks(true); // Silent fetch
+        filterTasks(false, true); // Re-apply filters using saved state
+        renderAllWeeks(); // Force full re-render
+    };
+
     // Expose state management
     window.state = state;
     window.eventBus = eventBus;

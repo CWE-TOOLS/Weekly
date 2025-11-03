@@ -196,6 +196,7 @@ export const EVENTS = {
     TASKS_LOADED: 'tasks:loaded',
     TASKS_UPDATED: 'tasks:updated',
     TASKS_FILTERED: 'tasks:filtered',
+    TASKS_READY_FOR_RENDER: 'tasks:ready-for-render', // New event
     TASK_CREATED: 'task:created',
     TASK_DELETED: 'task:deleted',
 

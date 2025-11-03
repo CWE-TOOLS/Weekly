@@ -9,6 +9,7 @@ export const DEPARTMENT_ORDER = [
     'Mill',
     'Form Out',
     'Cast',
+    'Sample',
     'Batch',
     'Demold',
     'Layout',
@@ -71,6 +72,10 @@ export const DEPARTMENT_COLORS = {
         background: '#EF4444',
         text: '#FFFFFF'
     },
+    sample: {
+        background: '#22C55E', // Green
+        text: '#FFFFFF'
+    },
     batch: {
         background: '#800000',
         text: '#FFFFFF'
@@ -127,6 +132,7 @@ export function normalizeDepartment(dept) {
     if (normalized === 'mill') return 'Mill';
     if (normalized === 'formout' || normalized === 'form out') return 'Form Out';
     if (normalized === 'cast') return 'Cast';
+    if (normalized === 'sample') return 'Sample';
     if (normalized === 'batch') return 'Batch';
     if (normalized === 'demold') return 'Demold';
     if (normalized === 'layout') return 'Layout';

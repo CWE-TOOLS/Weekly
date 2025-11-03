@@ -142,7 +142,10 @@ export function renderAllWeeks() {
     const allTasks = getAllTasks();
     container.innerHTML = '';
 
-    if (filteredTasks.length === 0) {
+    // CRITICAL FIX: Use the LATEST filteredTasks for the full render path
+    const currentFilteredTasks = getFilteredTasks();
+
+    if (currentFilteredTasks.length === 0) {
         container.innerHTML = '<div class="loading">No tasks found for the selected department.</div>';
         showRenderingStatus(false);
         _previousTasks = []; // Update tracking
@@ -154,7 +157,7 @@ export function renderAllWeeks() {
     const tasksByWeek = {};
     let currentMonday = getMonday(new Date());
 
-    filteredTasks.forEach(task => {
+    currentFilteredTasks.forEach(task => {
         let taskDate = parseDate(task.date);
         if (!taskDate) {
             task.missingDate = true;
@@ -212,7 +215,7 @@ export function renderAllWeeks() {
     const selectedDepartments = getSelectedDepartments();
 
     DEPARTMENT_ORDER.forEach(dept => {
-        const deptTasks = filteredTasks.filter(t => t.department === dept);
+        const deptTasks = currentFilteredTasks.filter(t => t.department === dept);
         if (deptTasks.length === 0) return;
 
         const tasksByDate = {};
@@ -332,7 +335,7 @@ export function renderAllWeeks() {
     emit(EVENTS.SCHEDULE_RENDERED);
 
     // Track tasks for future smart updates
-    _previousTasks = filteredTasks.map(task => ({...task}));
+    _previousTasks = currentFilteredTasks.map(task => ({...task}));
 }
 
 /**

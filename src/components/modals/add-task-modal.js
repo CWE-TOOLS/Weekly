@@ -8,6 +8,8 @@
 import { emit, EVENTS } from '../../core/event-bus.js';
 import { saveTaskToSupabase, sendRefreshSignal } from '../../services/supabase-service.js';
 import { fetchAllTasks } from '../../services/data-service.js';
+import { filterTasks } from '../department-filter.js';
+import { renderAllWeeks } from '../../features/schedule/schedule-renderer.js';
 import { showError } from '../../utils/ui-utils.js';
 
 import { logger } from '../../utils/logger.js';
@@ -203,8 +205,15 @@ async function handleAddCardSubmit(e) {
             date: taskData.date
         });
 
-        // Refresh local data
-        await fetchAllTasks();
+        // Use the global, reliable refresh function
+        if (window.refreshData) {
+            await window.refreshData();
+        } else {
+            // Fallback to old method if global is not available
+            await fetchAllTasks(true);
+            filterTasks();
+            renderAllWeeks();
+        }
 
         // Emit task created event
         emit(EVENTS.TASK_CREATED, { task: taskData });

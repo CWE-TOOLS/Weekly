@@ -57,9 +57,11 @@ export function updateMultiSelectLabel() {
  * Filter tasks by selected departments and update state
  * Note: Batch and Layout are synthetic departments that are always included
  */
-export function filterTasks(silent = false) {
-    const selectedDepartments = getSelectedDepartments();
+export function filterTasks(silent = false, useSavedState = false) {
     const allTasks = getAllTasks();
+    const selectedDepartments = useSavedState
+        ? loadState('selectedDepartments', DEPARTMENT_ORDER)
+        : getSelectedDepartments();
 
     // Save selection to localStorage
     saveState('selectedDepartments', selectedDepartments);
@@ -79,7 +81,7 @@ export function filterTasks(silent = false) {
     }
 
     // Update state
-    setFilteredTasks(filtered);
+    setFilteredTasks(filtered, silent);
 
     // Update label
     updateMultiSelectLabel();
@@ -108,15 +110,18 @@ export function populateDepartmentCheckboxes() {
     // Load saved selections, default to all departments
     let savedDepartments = loadState('selectedDepartments', departments);
 
-    // IMPORTANT: Always ensure Batch and Layout synthetic departments are included
+    // IMPORTANT: Always ensure Batch, Layout, and Sample synthetic departments are included
     // These are special departments that should always be selected by default
     // If they're missing from saved state (e.g., user saved before they were added),
     // we need to add them automatically
     if (!savedDepartments.includes('Batch')) {
-        savedDepartments = [...savedDepartments, 'Batch'];
+        savedDepartments.push('Batch');
     }
     if (!savedDepartments.includes('Layout')) {
-        savedDepartments = [...savedDepartments, 'Layout'];
+        savedDepartments.push('Layout');
+    }
+    if (!savedDepartments.includes('Sample')) {
+        savedDepartments.push('Sample');
     }
 
     departments.forEach(dept => {
@@ -212,9 +217,12 @@ export function initializeDepartmentFilter() {
         populateDepartmentCheckboxes();
 
         // Call filterTasks in silent mode on initial load to prevent duplicate render
-        // The render is already handled by component-events.js responding to TASKS_LOADED
         filterTasks(isInitialLoad);
         isInitialLoad = false;
+
+        // NEW: Emit event to signal that initial filtering is complete and rendering can now proceed.
+        // This solves the race condition where rendering would start before the initial filter was applied.
+        emit(EVENTS.TASKS_READY_FOR_RENDER);
     });
 
     // Perform initial filter (silent mode since no tasks loaded yet)
