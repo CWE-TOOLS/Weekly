@@ -73,6 +73,12 @@ export function generateSpecialDepartmentTasks(weekDates, monday, departmentName
     const allTasks = getAllTasks();
     const specialTasks = [];
 
+    logger.info(`generateSpecialDepartmentTasks: Generating ${departmentName} tasks`, {
+        weekDatesCount: weekDates.length,
+        allTasksCount: allTasks.length,
+        castTasksCount: allTasks.filter(t => t.department === 'Cast').length
+    });
+
     // Generate tasks for weekdays only (Mon-Fri)
     weekDates.forEach((date, i) => {
         // Only process Mon-Fri (index 0-4 in typical Mon-Sat array)
@@ -137,9 +143,16 @@ export function generateSpecialDepartmentTasks(weekDates, monday, departmentName
                 missingDate: false
             };
 
+            logger.info(`${departmentName} task for ${getLocalDateString(date)}`, {
+                castingProjectsCount: castingProjects.length,
+                hasDescription: task.description.length > 0
+            });
+
             specialTasks.push(task);
         }
     });
+
+    logger.info(`generateSpecialDepartmentTasks: Generated ${specialTasks.length} ${departmentName} tasks`);
 
     return specialTasks;
 }

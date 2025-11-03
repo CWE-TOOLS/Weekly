@@ -143,6 +143,56 @@ export function initializeDepartmentFilter() {
     // Populate checkboxes on initialization
     populateDepartmentCheckboxes();
 
+    // Get dropdown elements
+    const dropdown = document.getElementById('multi-select-dropdown');
+    const button = document.getElementById('multi-select-btn');
+    const selectAllBtn = document.getElementById('select-all-btn');
+    const selectNoneBtn = document.getElementById('select-none-btn');
+
+    // Event listener to toggle dropdown open/closed
+    if (button && dropdown) {
+        button.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isOpen = dropdown.classList.toggle('open');
+            button.setAttribute('aria-expanded', isOpen);
+        });
+    }
+
+    // Event listener to check all department checkboxes
+    if (selectAllBtn) {
+        selectAllBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const checkboxes = document.querySelectorAll('#department-list input[type="checkbox"]');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = true;
+            });
+            filterTasks();
+        });
+    }
+
+    // Event listener to uncheck all department checkboxes
+    if (selectNoneBtn) {
+        selectNoneBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const checkboxes = document.querySelectorAll('#department-list input[type="checkbox"]');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = false;
+            });
+            filterTasks();
+        });
+    }
+
+    // Click outside listener to close dropdown
+    document.addEventListener('click', (e) => {
+        if (dropdown && button) {
+            // Check if click is outside the dropdown
+            if (!dropdown.contains(e.target) && !button.contains(e.target)) {
+                dropdown.classList.remove('open');
+                button.setAttribute('aria-expanded', 'false');
+            }
+        }
+    });
+
     // Listen for tasks loaded event to re-populate if needed
     on(EVENTS.TASKS_LOADED, () => {
         populateDepartmentCheckboxes();

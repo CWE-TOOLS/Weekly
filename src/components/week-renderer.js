@@ -28,6 +28,7 @@ import { DEPARTMENT_ORDER } from '../config/department-config.js';
 import { createTaskCard, createTaskCardPlaceholder, normalizeDepartmentClass } from './task-card.js';
 import { generateBatchTasks, generateLayoutTasks } from '../utils/schedule-utils.js';
 import { Z_INDEX } from '../config/layout-constants.js';
+import { logger } from '../utils/logger.js';
 
 /**
  * Create array of dates for a week (Monday through Saturday)
@@ -119,7 +120,9 @@ function groupTasksByDate(deptTasks, weekDates) {
     weekDates.forEach(date => {
         const dateString = date.toDateString();
         tasksByDate[dateString] = deptTasks.filter(t => {
-            if (!t.date) return false;
+            if (!t.date) {
+                return false;
+            }
             const taskDate = parseDate(t.date);
             return taskDate && taskDate.toDateString() === dateString;
         });
@@ -197,6 +200,13 @@ function renderDepartmentRows(grid, sortedDepts, tasksByDept, weekDates, maxTask
             const tasksByDate = groupTasksByDate(deptTasks, weekDates);
             const maxTasksInRow = maxTasksPerDept[dept] || 0;
 
+            // Debug Batch and Layout
+            if (dept === 'Batch' || dept === 'Layout') {
+                console.log(`[${dept}] deptTasks:`, deptTasks.length, deptTasks);
+                console.log(`[${dept}] tasksByDate:`, tasksByDate);
+                console.log(`[${dept}] maxTasksInRow:`, maxTasksInRow);
+            }
+
             if (maxTasksInRow === 0) return;
 
             // Add department label
@@ -210,6 +220,12 @@ function renderDepartmentRows(grid, sortedDepts, tasksByDept, weekDates, maxTask
                 weekDates.forEach(date => {
                     const dateString = date.toDateString();
                     const task = tasksByDate[dateString] ? tasksByDate[dateString][i] : undefined;
+
+                    // Debug Batch and Layout task retrieval
+                    if (dept === 'Batch' || dept === 'Layout') {
+                        console.log(`[${dept}] Date: ${dateString}, Task at [${i}]:`, task);
+                    }
+
                     const dayCell = createGridCell(task, date, dept, rowClass);
                     grid.appendChild(dayCell);
                 });
