@@ -111,6 +111,8 @@ export function renderAllWeeks() {
             maxTasksPerDept[dept] = maxTasks;
         }
     });
+    // ALWAYS set synthetic departments (Batch/Layout) to 1 since they're generated dynamically
+    // These departments should ALWAYS be visible regardless of department filter state
     maxTasksPerDept['Batch'] = 1;
     maxTasksPerDept['Layout'] = 1;
 
@@ -283,7 +285,14 @@ export function renderWeekGrid(dateForWeek, maxTasksPerDept) {
                 });
             });
 
-            const maxTasksInRow = maxTasksPerDept[dept] || 0;
+            let maxTasksInRow = maxTasksPerDept[dept] || 0;
+
+            // ALWAYS render Batch and Layout synthetic departments, even if maxTasksInRow is 0
+            // These are special departments that should always be visible
+            if ((dept === 'Batch' || dept === 'Layout') && maxTasksInRow === 0) {
+                maxTasksInRow = 1;
+            }
+
             if (maxTasksInRow === 0) return;
 
             // Add department label, spanning all its potential rows

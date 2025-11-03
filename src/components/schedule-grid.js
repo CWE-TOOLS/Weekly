@@ -35,6 +35,7 @@ import { loadScrollPosition, saveScrollPosition, loadWeekIndex, saveWeekIndex } 
 import { parseDate, getMonday, getLocalDateString } from '../utils/date-utils.js';
 import { showRenderingStatus } from '../utils/ui-utils.js';
 import { DEPARTMENT_ORDER } from '../config/department-config.js';
+import { getSelectedDepartments } from './department-filter.js';
 import { renderWeekGrid } from './week-renderer.js';
 import { logger } from '../utils/logger.js';
 import {
@@ -208,6 +209,8 @@ export function renderAllWeeks() {
 
     // Calculate max tasks per department for normalization
     const maxTasksPerDept = {};
+    const selectedDepartments = getSelectedDepartments();
+
     DEPARTMENT_ORDER.forEach(dept => {
         const deptTasks = filteredTasks.filter(t => t.department === dept);
         if (deptTasks.length === 0) return;
@@ -229,6 +232,10 @@ export function renderAllWeeks() {
             maxTasksPerDept[dept] = maxTasks;
         }
     });
+
+    // ALWAYS set synthetic departments (Batch/Layout) to 1 since they're generated dynamically
+    // These departments should ALWAYS be visible regardless of department filter state
+    // They will be forced to render in week-renderer.js even if maxTasksPerDept is 0
     maxTasksPerDept['Batch'] = 1;
     maxTasksPerDept['Layout'] = 1;
 

@@ -112,21 +112,31 @@ function sortDepartments(tasksByDept) {
  * Group department tasks by date
  * @param {Object[]} deptTasks - Tasks for a department
  * @param {Date[]} weekDates - Array of dates for the week
+ * @param {string} dept - Department name for debug logging
  * @returns {Object} Tasks grouped by date string
  */
-function groupTasksByDate(deptTasks, weekDates) {
+function groupTasksByDate(deptTasks, weekDates, dept) {
     const tasksByDate = {};
 
     weekDates.forEach(date => {
         const dateString = date.toDateString();
         tasksByDate[dateString] = deptTasks.filter(t => {
-            if (!t.date) {
-                return false;
-            }
+            if (!t.date) return false;
             const taskDate = parseDate(t.date);
-            return taskDate && taskDate.toDateString() === dateString;
+            const matches = taskDate && taskDate.toDateString() === dateString;
+
+            // DEBUG for Batch/Layout
+            if (dept === 'Batch' || dept === 'Layout') {
+                console.log(`[${dept}] Task:`, t.date, '→ parsed:', taskDate?.toDateString(), '→ matches:', matches, '→ expected:', dateString);
+            }
+
+            return matches;
         });
     });
+
+    if (dept === 'Batch' || dept === 'Layout') {
+        console.log(`[${dept}] tasksByDate:`, tasksByDate);
+    }
 
     return tasksByDate;
 }
@@ -197,14 +207,20 @@ function renderDepartmentRows(grid, sortedDepts, tasksByDept, weekDates, maxTask
     sortedDepts.forEach(dept => {
         if (tasksByDept[dept] !== undefined) {
             const deptTasks = tasksByDept[dept];
-            const tasksByDate = groupTasksByDate(deptTasks, weekDates);
-            const maxTasksInRow = maxTasksPerDept[dept] || 0;
+            const tasksByDate = groupTasksByDate(deptTasks, weekDates, dept);
+            let maxTasksInRow = maxTasksPerDept[dept] || 0;
+
+            // ALWAYS render Batch and Layout synthetic departments, even if maxTasksInRow is 0
+            // These are special departments that should always be visible
+            if ((dept === 'Batch' || dept === 'Layout') && maxTasksInRow === 0) {
+                maxTasksInRow = 1;
+            }
 
             // Debug Batch and Layout
             if (dept === 'Batch' || dept === 'Layout') {
                 console.log(`[${dept}] deptTasks:`, deptTasks.length, deptTasks);
                 console.log(`[${dept}] tasksByDate:`, tasksByDate);
-                console.log(`[${dept}] maxTasksInRow:`, maxTasksInRow);
+                console.log(`[${dept}] maxTasksInRow (forced to 1 if 0):`, maxTasksInRow);
             }
 
             if (maxTasksInRow === 0) return;
@@ -257,6 +273,9 @@ export function renderWeekGrid(dateForWeek, maxTasksPerDept) {
     // Generate special department tasks
     const batchTasks = generateBatchTasks(weekDates, monday, getAllTasks);
     const layoutTasks = generateLayoutTasks(weekDates, monday, getAllTasks);
+
+    console.log('[SYNTHETIC] Generated batchTasks:', batchTasks.length, batchTasks);
+    console.log('[SYNTHETIC] Generated layoutTasks:', layoutTasks.length, layoutTasks);
 
     // Create header row
     grid.innerHTML = createHeaderRow(weekDates);
