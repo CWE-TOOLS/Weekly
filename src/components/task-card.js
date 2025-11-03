@@ -32,6 +32,16 @@ function normalizeDepartmentClass(dept) {
  * @returns {HTMLElement} Task card element
  */
 export function createTaskCard(task, rowClass) {
+    // DEBUG for Batch/Layout
+    if (task.department === 'Batch' || task.department === 'Layout') {
+        console.log(`[CARD CREATE] ${task.department}:`, {
+            project: task.project,
+            description: task.description,
+            date: task.date,
+            hasDescription: !!task.description
+        });
+    }
+
     const isEditingUnlocked = getIsEditingUnlocked();
     const showHours = task.department !== 'Batch' && task.department !== 'Layout';
     const isDraggable = task.isManual && isEditingUnlocked;
@@ -118,6 +128,15 @@ export function createTaskCard(task, rowClass) {
         deleteBtn.title = 'Delete this manual task';
         deleteBtn.textContent = '🗑️';
         card.appendChild(deleteBtn);
+    }
+
+    // DEBUG for Batch/Layout - show final card
+    if (task.department === 'Batch' || task.department === 'Layout') {
+        console.log(`[CARD CREATED] ${task.department}:`, {
+            className: card.className,
+            children: card.children.length,
+            innerHTML: card.innerHTML.substring(0, 200)
+        });
     }
 
     return card;
