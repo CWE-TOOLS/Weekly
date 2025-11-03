@@ -137,8 +137,8 @@ export function getQueueStatus() {
         isEditing: _isEditingActive,
         editingCardId: _editingCardId,
         queuedCount: _queuedRefreshes.length,
-        oldestTimestamp: _queuedRefreshes[0]?.timestamp || null,
-        newestTimestamp: _queuedRefreshes[_queuedRefreshes.length - 1]?.timestamp || null
+        oldestTimestamp: _queuedRefreshes.length > 0 ? _queuedRefreshes[0].timestamp : null,
+        newestTimestamp: _queuedRefreshes.length > 0 ? _queuedRefreshes[_queuedRefreshes.length - 1].timestamp : null
     };
 }
 
