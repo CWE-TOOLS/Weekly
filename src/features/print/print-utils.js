@@ -6,8 +6,8 @@
  */
 
 import { generateBatchTasks, generateLayoutTasks } from '../../utils/schedule-utils.js';
-import { DATE_BOUNDARIES } from '../../config/layout-constants.js';
-
+import { DATE_BOUNDARIES, PRINT_LAYOUT } from '../../config/layout-constants.js';
+import { RENDER_DELAY } from '../../config/timing-constants.js';
 import { logger } from '../../utils/logger.js';
 // Print configuration constants
 const PRINT_UTILS = {
@@ -26,7 +26,8 @@ const PRINT_UTILS = {
         'Special',
         'Crating',
         'Load',
-        'Ship'
+        'Ship',
+        'Samples'
     ]
 };
 
@@ -207,18 +208,11 @@ function getMaxTasksForDept(dept, tasks, dates, printType) {
  * Generate complete print content for selected departments
  * This delegates to the modular print renderer
  */
-function generatePrintContent(printType, selectedDepts, weekDates, allTasks) {
-    // Check if modular system is loaded
-    if (!window.PrintRenderer || !window.PrintLayout) {
-        logger.error('Print modules not loaded. Please ensure print-renderer.js and print-layout.js are included.');
-        const errorContainer = document.createElement('div');
-        errorContainer.className = 'print-preview-content';
-        errorContainer.innerHTML = '<p style="color: red; padding: 20px;">Error: Print modules not loaded</p>';
-        return errorContainer;
-    }
+import * as PrintRenderer from './print-renderer.js';
 
+function generatePrintContent(printType, selectedDepts, weekDates, allTasks) {
     // Use the modular renderer
-    return window.PrintRenderer.generatePrintContent(printType, selectedDepts, weekDates, allTasks);
+    return PrintRenderer.generatePrintContent(printType, selectedDepts, weekDates, allTasks);
 }
 
 /**
@@ -226,16 +220,74 @@ function generatePrintContent(printType, selectedDepts, weekDates, allTasks) {
  * This delegates to the modular print renderer
  */
 function executePrint(printContent, printType = 'week') {
-    // Check if modular system is loaded
-    if (!window.PrintRenderer) {
-        logger.error('Print renderer not loaded. Please ensure print-renderer.js is included.');
-        alert('Print system not loaded. Please refresh the page and try again.');
-        return;
-    }
-
     // Use the modular renderer
-    window.PrintRenderer.executePrint(printContent, printType);
+    PrintRenderer.executePrint(printContent, printType);
 }
+
+/**
+ * Apply intelligent auto-scaling with department-per-page optimization
+ * Enhanced scaling that respects department boundaries and prevents content overflow
+ */
+function applyScaling(printContent, printType, isPreview = false) {
+    const pages = printContent.querySelectorAll('.print-page');
+    if (!pages.length) return;
+
+    // Define the printable area, accounting for 0.25" margins on a standard letter page
+    const printableWidth = (printType === 'day' ? 8.0 : 10.5) * 96; // 8.5" - 0.5" margins
+    const printableHeight = (printType === 'day' ? 10.5 : 8.0) * 96; // 11" - 0.5" margins
+
+    // Use configuration constants for scaling parameters
+    const BASE_FONT_SIZE = PRINT_LAYOUT.BASE_FONT_SIZE_PT;
+    const MIN_FONT_SIZE = PRINT_LAYOUT.DEPARTMENT_PER_PAGE.MIN_FONT_SIZE_PT;
+    const MAX_FONT_SIZE = PRINT_LAYOUT.DEPARTMENT_PER_PAGE.MAX_FONT_SIZE_PT;
+
+    requestAnimationFrame(() => {
+        setTimeout(() => {
+            pages.forEach((page, index) => {
+                // Reset styles for accurate measurement
+                page.style.transform = 'none';
+                page.style.width = 'auto'; // Let content determine width
+                page.style.height = 'auto';
+                
+                // For non-optimized pages, we do font-size reduction first
+                if (!page.classList.contains('print-page-optimized')) {
+                    page.style.fontSize = `${BASE_FONT_SIZE}pt`;
+                    page.offsetHeight; // Force reflow
+
+                    let currentFontSize = Math.min(BASE_FONT_SIZE, MAX_FONT_SIZE);
+                    const FONT_STEP = 0.5;
+
+                    // Iteratively shrink font size until the content fits height
+                    while (page.scrollHeight > printableHeight && currentFontSize > MIN_FONT_SIZE) {
+                        currentFontSize -= FONT_STEP;
+                        page.style.fontSize = `${currentFontSize}pt`;
+                        page.offsetHeight; // Re-measure
+                    }
+                }
+
+                page.offsetHeight; // reflow to get final dimensions
+
+                const contentWidth = page.scrollWidth;
+                const contentHeight = page.scrollHeight;
+
+                const widthScale = contentWidth > 0 ? printableWidth / contentWidth : 1;
+                const heightScale = contentHeight > 0 ? printableHeight / contentHeight : 1;
+
+                let finalScale = Math.min(widthScale, heightScale, 1.0);
+
+                // Apply additional 5% reduction for margins
+                finalScale *= 0.95;
+
+                page.style.width = `${printableWidth}px`; // Set fixed width for transform
+                page.style.transform = `scale(${finalScale})`;
+                page.style.transformOrigin = 'top left'; // Use top left for consistency with margins
+
+                logger.info(`Page ${index + 1} scaling applied: ${(finalScale * 100).toFixed(1)}%`);
+            });
+        }, RENDER_DELAY.PRINT_RENDER);
+    });
+}
+
 
 // Export functions for global use
 window.PrintUtils = {
@@ -247,5 +299,6 @@ window.PrintUtils = {
     getMaxTasksForDept,
     generateBatchTasks,  // Re-export from schedule-utils.js
     generateLayoutTasks,  // Re-export from schedule-utils.js
+    applyScaling,
     PRINT_UTILS
 };

@@ -77,11 +77,14 @@ li:last-child {
 }
 
 /* Print-specific styles for index.html (weekly and daily reports) */
+
+/* Set landscape orientation for all print pages */
+@page {
+    size: letter landscape;
+    margin: 0.25in;
+}
+
 @media print {
-    @page {
-        size: letter landscape;
-        margin: 0.25in;
-    }
 
     /* CRITICAL: Override stray body styles from base.css that interfere with print */
     body {
@@ -168,7 +171,7 @@ li:last-child {
         font-weight: 700 !important;
         border-top: 2px solid #666 !important;
         padding: 0.4em !important;
-        font-size: 1em !important;
+        font-size: 1.25em !important;
     }
 
     /* Flexible cell sizing - no fixed heights */
@@ -179,21 +182,13 @@ li:last-child {
     }
 
     /* Density classes for dynamic scaling based on task count */
-    .print-page.few-tasks .print-grid-cell {
-        min-height: 5em;
-    }
+    .print-page.few-tasks .print-grid-cell {}
 
-    .print-page.normal-tasks .print-grid-cell {
-        min-height: 4em;
-    }
+    .print-page.normal-tasks .print-grid-cell {}
 
-    .print-page.many-tasks .print-grid-cell {
-        min-height: 3em;
-    }
+    .print-page.many-tasks .print-grid-cell {}
 
-    .print-page.very-many-tasks .print-grid-cell {
-        min-height: 2em;
-    }
+    .print-page.very-many-tasks .print-grid-cell {}
 
     .print-task-grid {
         border: none;
@@ -208,7 +203,8 @@ li:last-child {
     /* Task card styling with flexible sizes */
     .print-task-card {
         font-size: 1em;
-        padding: 0.25em;
+        padding: 0.1em;
+        margin: 0.1em 0;
         background: white;
         border: 1px solid #ccc;
         border-radius: 0.2em;
@@ -217,12 +213,12 @@ li:last-child {
 
     .print-task-title {
         font-weight: 700 !important;
-        font-size: 1.1em !important;
-        margin-bottom: 0.25em;
+        font-size: 1.0em !important;
+        margin-bottom: 0.1em;
         color: white !important;
         text-align: center;
         background-color: var(--bg-color, #3B82F6) !important;
-        padding: 0.3em 0.4em !important;
+        padding: 0.15em 0.4em !important;
         border-radius: 0.2em !important;
         display: block !important;
         width: 100% !important;
@@ -231,17 +227,9 @@ li:last-child {
         -webkit-print-color-adjust: exact !important;
     }
 
-    .print-project-description {
-        font-size: 1.1em !important;
-        font-weight: 600 !important;
-        color: #444 !important;
-        text-align: center;
-        margin-bottom: 0.2em;
-        line-height: 1.2;
-    }
 
     .print-task-day-counter {
-        font-size: 1.04em !important;
+        font-size: 0.75em !important;
         font-weight: 600 !important;
         color: #666 !important;
         text-align: center;
@@ -255,7 +243,7 @@ li:last-child {
     }
 
     .print-task-description {
-        font-size: 1.23em !important;
+        font-size: 1.08em !important;
         font-weight: 600 !important;
         margin-bottom: 0.25em;
         color: #222 !important;
@@ -300,17 +288,20 @@ li:last-child {
     }
 
     .print-dept-summary {
-        font-weight: 700;
-        font-size: 1em;
-        color: black;
-        margin: 0.2em 0;
-        text-align: center;
-        border: 1px solid #666;
-        background: #f9f9f9;
-        padding: 0.4em 0.5em;
+        font-weight: 700 !important;
+        font-size: 1.25em !important;
+        color: black !important;
+        text-align: center !important;
+        background: #e8e8e8 !important;
+        padding: 0.4em 0.5em !important;
+        border-top: 2px solid #666 !important;
     }
 
     /* Daily print specific adjustments */
+    .daily-print .print-dept-summary {
+        font-size: 2em !important;
+    }
+
     .print-page.daily-print th,
     .print-page.daily-print td {
         padding: 0.3em;
@@ -332,7 +323,7 @@ li:last-child {
     }
 
     .print-page.daily-print .print-task-description {
-        font-size: 1.42em;
+        font-size: 1.27em;
         margin-bottom: 0.3em;
     }
 
@@ -346,221 +337,121 @@ li:last-child {
         page-break-after: always !important;
         break-after: page !important;
     }
+
+    /* Optimized department pages for large task counts */
+    .print-page-optimized {
+        width: 100% !important;
+        height: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        box-sizing: border-box !important;
+        background: white !important;
+        page-break-after: auto !important;
+        page-break-inside: avoid !important;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: flex-start !important;
+        align-items: center !important;
+    }
+
+    /* Enhanced scaling for departments with many tasks */
+    .print-page-optimized .print-table {
+        width: 100% !important;
+        max-width: 100% !important;
+        font-size: 6pt !important;
+        border-collapse: collapse !important;
+        table-layout: fixed !important;
+        margin: 0 !important;
+    }
+
+    .print-page-optimized .print-table th,
+    .print-page-optimized .print-table td {
+        border: 1px solid #666 !important;
+        padding: 0.1em !important;
+        text-align: center !important;
+        vertical-align: top !important;
+        font-size: 6pt !important;
+        font-weight: 500 !important;
+        width: auto !important;
+    }
+
+    .print-page-optimized .print-task-card {
+        font-size: 6pt !important;
+        padding: 0.05em !important;
+        margin: 0.02em 0 !important;
+        border: 1px solid #ccc !important;
+        border-radius: 0.05em !important;
+        box-shadow: none !important;
+        background: white !important;
+    }
+
+    .print-page-optimized .print-task-title {
+        font-size: 7pt !important;
+        padding: 0.1em 0.2em !important;
+        margin-bottom: 0.05em !important;
+        line-height: 1.1 !important;
+    }
+
+    .print-page-optimized .print-project-description {
+        font-size: 6.5pt !important;
+        font-weight: 600 !important;
+        color: #444 !important;
+        text-align: center !important;
+        margin-bottom: 0.05em !important;
+        line-height: 1.1 !important;
+    }
+
+    .print-page-optimized .print-task-description {
+        font-size: 6pt !important;
+        font-weight: 600 !important;
+        margin-bottom: 0.05em !important;
+        color: #222 !important;
+        text-align: center !important;
+        line-height: 1.1 !important;
+    }
+
+    .print-page-optimized .print-task-details {
+        font-size: 5.5pt !important;
+        font-weight: 600 !important;
+        color: #444 !important;
+        text-align: center !important;
+        margin-top: 0.05em !important;
+        padding-top: 0.05em !important;
+        border-top: 1px solid #ddd !important;
+    }
+
+    .print-page-optimized .print-department-header {
+        font-size: 8pt !important;
+        padding: 0.2em 0.1em !important;
+        margin: 0 !important;
+        border: 1px solid #666 !important;
+        writing-mode: vertical-rl !important;
+        text-orientation: mixed !important;
+        width: 1.8em !important;
+        min-height: 6em !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        letter-spacing: 0.02em !important;
+    }
+
+    .print-page-optimized .print-department-header-day {
+        writing-mode: horizontal-tb !important;
+        text-orientation: mixed !important;
+        width: 100% !important;
+        min-height: 0 !important;
+        padding: 0.3em 0.2em !important;
+        font-size: 8pt !important;
+    }
+
+    .print-page-optimized .print-dept-summary {
+        font-size: 6pt !important;
+        font-weight: 700 !important;
+        color: black !important;
+        margin: 0.05em 0 0 0 !important;
+        padding: 0.1em 0.2em !important;
+        text-align: center !important;
+        border: 1px solid #666 !important;
+        background: #f9f9f9 !important;
+    }
 }
-
-/* Preview mode - Apply same styles as print */
-.print-preview-viewport {
-    /* Override stray body styles */
-    transform: none !important;
-    width: 100% !important;
-    height: auto !important;
-    overflow: visible !important;
-}
-
-.print-preview-viewport .print-preview-content {
-    display: flex !important;
-    flex-direction: column;
-    align-items: center;
-    gap: 4rem;
-    width: auto;
-    min-width: min-content;
-    position: relative;
-    margin: 2rem 0;
-    padding: 0;
-}
-
-/* Flexible print page container - FIXED DIMENSIONS */
-.print-preview-viewport .print-page {
-    page-break-after: auto;
-    page-break-inside: avoid;
-    margin: 0 !important;
-    padding: 0.25in !important;
-    width: 11in !important;
-    max-width: 11in !important;
-    min-width: 11in !important;
-    min-height: 8.5in;
-    height: auto;
-    box-sizing: border-box;
-    background: white;
-    display: flex !important;
-    flex-direction: column !important;
-    justify-content: center !important;
-    align-items: center !important;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-    border-radius: 4px;
-    flex-shrink: 0;
-
-    /* Zoom is controlled via JavaScript */
-}
-
-.print-preview-viewport .print-page-day {
-    width: 8.5in !important;
-    max-width: 8.5in !important;
-    min-width: 8.5in !important;
-    min-height: 11in;
-}
-
-/* Apply all print table styles to preview */
-.print-preview-viewport .print-table {
-    width: 100%;
-    max-width: 100%;
-    border-collapse: collapse;
-    font-size: 1em;
-    background: white;
-    margin: 0;
-    table-layout: fixed;
-}
-
-.print-preview-viewport .print-table th,
-.print-preview-viewport .print-table td {
-    border: 1px solid #666;
-    padding: 0.3em;
-    text-align: center;
-    vertical-align: top;
-    font-size: 1em;
-    width: 16.66%;
-    font-weight: 500;
-}
-
-.print-preview-viewport .print-table th {
-    background: #e8e8e8;
-    font-weight: 700;
-    font-size: 1.1em !important;
-    padding: 0.4em;
-    line-height: 1.3;
-}
-
-.print-preview-viewport .print-table tfoot td {
-    background: #e8e8e8 !important;
-    font-weight: 700 !important;
-    border-top: 2px solid #666 !important;
-    padding: 0.4em !important;
-    font-size: 1em !important;
-}
-
-.print-preview-viewport .print-grid-cell {
-    background: #f5f5f5;
-    padding: 0.3em;
-}
-
-.print-preview-viewport .print-page.few-tasks .print-grid-cell { min-height: 5em; }
-.print-preview-viewport .print-page.normal-tasks .print-grid-cell { min-height: 4em; }
-.print-preview-viewport .print-page.many-tasks .print-grid-cell { min-height: 3em; }
-.print-preview-viewport .print-page.very-many-tasks .print-grid-cell { min-height: 2em; }
-
-.print-preview-viewport .print-task-card {
-    font-size: 1em;
-    padding: 0.25em;
-    background: white;
-    border: 1px solid #ccc;
-    border-radius: 0.2em;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.08);
-}
-
-.print-preview-viewport .print-task-title {
-    font-weight: 700 !important;
-    font-size: 1.1em !important;
-    margin-bottom: 0.25em;
-    color: white !important;
-    text-align: center;
-    padding: 0.3em 0.4em !important;
-    border-radius: 0.2em !important;
-    display: block !important;
-    width: 100% !important;
-    box-sizing: border-box !important;
-    print-color-adjust: exact !important;
-    -webkit-print-color-adjust: exact !important;
-}
-
-.print-preview-viewport .print-project-description {
-    font-size: 1.1em !important;
-    font-weight: 600 !important;
-    color: #444 !important;
-    text-align: center;
-    margin-bottom: 0.2em;
-    line-height: 1.2;
-}
-
-.print-preview-viewport .print-task-day-counter {
-    font-size: 1.04em !important;
-    font-weight: 600 !important;
-    color: #666 !important;
-    text-align: center;
-    margin-bottom: 0.2em;
-    background: #fef3c7;
-    padding: 0.1em 0.3em;
-    border-radius: 0.1em;
-    display: inline-block;
-    width: 100%;
-    box-sizing: border-box;
-}
-
-.print-preview-viewport .print-task-description {
-    font-size: 1.23em !important;
-    font-weight: 600 !important;
-    margin-bottom: 0.25em;
-    color: #222 !important;
-    text-align: center;
-    line-height: 1.3;
-}
-
-.print-preview-viewport .print-task-details {
-    font-size: 0.97em !important;
-    font-weight: 600 !important;
-    color: #444 !important;
-    text-align: center;
-    margin-top: 0.2em;
-    padding-top: 0.2em;
-    border-top: 1px solid #ddd;
-}
-
-.print-preview-viewport .print-department-header {
-    font-weight: 700;
-    font-size: 2.5em;
-    padding: 0.5em 0.3em;
-    writing-mode: vertical-rl;
-    text-orientation: mixed;
-    width: 2.5em;
-    border: 1px solid #666;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 10em;
-    print-color-adjust: exact !important;
-    -webkit-print-color-adjust: exact !important;
-    letter-spacing: 0.05em;
-}
-
-.print-preview-viewport .print-department-header-day {
-    writing-mode: horizontal-tb !important;
-    text-orientation: mixed !important;
-    width: 100% !important;
-    min-height: 0 !important;
-    padding: 0.6em 0.4em !important;
-    font-size: 2.2em !important;
-}
-
-.print-preview-viewport .print-dept-summary {
-    font-weight: 700;
-    font-size: 1em;
-    color: black;
-    margin: 0.2em 0;
-    text-align: center;
-    border: 1px solid #666;
-    background: #f9f9f9;
-    padding: 0.4em 0.5em;
-}
-
-/* Department colors */
-.print-preview-viewport .print-department-header.department-mill { background-color: #06B6D4 !important; color: #FFFFFF !important; }
-.print-preview-viewport .print-department-header.department-form-out { background-color: #3B82F6 !important; color: #FFFFFF !important; }
-.print-preview-viewport .print-department-header.department-cast { background-color: #EF4444 !important; color: #FFFFFF !important; }
-.print-preview-viewport .print-department-header.department-batch { background-color: #800000 !important; color: #FFFFFF !important; }
-.print-preview-viewport .print-department-header.department-layout { background-color: #A16207 !important; color: #FFFFFF !important; }
-.print-preview-viewport .print-department-header.department-demold { background-color: #F97316 !important; color: #FFFFFF !important; }
-.print-preview-viewport .print-department-header.department-finish { background-color: #8B5CF6 !important; color: #FFFFFF !important; }
-.print-preview-viewport .print-department-header.department-seal { background-color: #6B7280 !important; color: #FFFFFF !important; }
-.print-preview-viewport .print-department-header.department-special { background-color: #EC4899 !important; color: #FFFFFF !important; }
-.print-preview-viewport .print-department-header.department-crating { background-color: #A16207 !important; color: #FFFFFF !important; }
-.print-preview-viewport .print-department-header.department-load { background-color: #F59E0B !important; color: #FFFFFF !important; }
-.print-preview-viewport .print-department-header.department-ship { background-color: #22C55E !important; color: #FFFFFF !important; }

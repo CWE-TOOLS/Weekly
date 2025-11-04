@@ -39,7 +39,7 @@ import { fetchAllTasks } from '../../services/data-service.js';
 import { showSuccessNotification, showError } from '../../utils/ui-utils.js';
 import { OPACITY } from '../../config/visual-constants.js';
 import { DRAG_DROP_TIMING } from '../../config/timing-constants.js';
-import { renderAllWeeks } from '../../components/schedule-grid.js';
+import { render } from '../../core/renderer.js';
 import { filterTasks } from '../../components/department-filter.js';
 import { logger } from '../../utils/logger.js';
 
@@ -250,7 +250,7 @@ async function handleDrop(e) {
             showError('Failed to move task: ' + (supabaseError.message || 'Unknown error'));
 
             // Re-render to show task in original position
-            renderAllWeeks();
+            render();
 
             // Restore original card state
             if (originalCard) {
@@ -293,7 +293,7 @@ async function handleDrop(e) {
         console.log('Moved task in _filteredTasks:', filteredMovedTask ? { id: filteredMovedTask.id, date: filteredMovedTask.date, week: filteredMovedTask.week } : 'NOT FOUND');
 
         // Force UI update to ensure the card appears in its new position
-        renderAllWeeks();
+        render();
 
         // Show success message
         showSuccessNotification('Task moved successfully!');

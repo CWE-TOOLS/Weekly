@@ -10,7 +10,7 @@
  */
 
 import { parseDate, getMonday, getLocalDateString, getWeekMonth, getWeekOfMonth } from '../../utils/date-utils.js';
-import { generateBatchTasks, generateLayoutTasks } from '../../utils/schedule-utils.js';
+import { renderWeekGrid } from '../../components/week-renderer.js';
 import { Z_INDEX } from '../../config/layout-constants.js';
 import { RENDER_DELAY } from '../../config/timing-constants.js';
 
@@ -113,6 +113,7 @@ export function renderAllWeeks() {
     });
     maxTasksPerDept['Batch'] = 1;
     maxTasksPerDept['Layout'] = 1;
+    maxTasksPerDept['Sample'] = 1;
 
     // Render a grid for each week using the global max tasks count - use document fragment for better performance
     const fragment = document.createDocumentFragment();
@@ -202,143 +203,6 @@ export function renderAllWeeks() {
     }, RENDER_DELAY.SCHEDULE_RENDERER);
 }
 
-/**
- * Render a single week grid
- *
- * @param {Date} dateForWeek - Date within the week to render
- * @param {Object} maxTasksPerDept - Object mapping department names to max task counts
- * @returns {HTMLElement} The grid element
- */
-export function renderWeekGrid(dateForWeek, maxTasksPerDept) {
-    const grid = document.createElement('div');
-    grid.className = 'schedule-grid';
-
-    // --- Date Setup ---
-    const monday = new Date(dateForWeek);
-    monday.setDate(dateForWeek.getDate() - (dateForWeek.getDay() || 7) + 1);
-    grid.dataset.mondayDate = getLocalDateString(monday);
-    const weekDates = Array.from({ length: 6 }).map((_, i) => {
-        const date = new Date(monday);
-        date.setDate(monday.getDate() + i);
-        return date;
-    });
-
-    // Generate batch tasks (Mon-Fri only)
-    const batchTasks = generateBatchTasks(weekDates, monday, () => allTasks);
-
-    // Generate layout tasks (Mon-Fri only)
-    const layoutTasks = generateLayoutTasks(weekDates, monday, () => allTasks);
-
-    // --- Header Row ---
-    let headerHTML = `<div class="grid-header">Department</div>`;
-    weekDates.forEach(date => {
-        const isToday = date.toDateString() === new Date().toDateString();
-        headerHTML += `<div class="grid-header"><div class="date-container ${isToday ? "today-highlight" : ""}"><div class="date-weekday">${date.toLocaleDateString("en-US", { weekday: "short" })}</div><div class="date-day">${date.toLocaleDateString("en-US", { day: "numeric" })}</div></div></div>`;
-    });
-    grid.innerHTML = headerHTML;
-
-    // --- Data Grouping ---
-    const tasksByDept = {};
-    // Initialize all departments from DEPARTMENT_ORDER with empty arrays
-    window.DEPARTMENT_ORDER.forEach(dept => {
-        tasksByDept[dept] = [];
-    });
-    filteredTasks.forEach(task => {
-        const dept = task.department || 'Other';
-        if (!tasksByDept[dept]) tasksByDept[dept] = [];
-        tasksByDept[dept].push(task);
-    });
-    tasksByDept['Batch'] = batchTasks;
-    tasksByDept['Layout'] = layoutTasks;
-    // Ensure Special Events always exists even if empty
-    if (!tasksByDept['Special Events']) {
-        tasksByDept['Special Events'] = [];
-    }
-
-    // Collect all departments present in tasks, sorted by DEPARTMENT_ORDER priority
-    const allDepts = new Set(window.DEPARTMENT_ORDER);
-    Object.keys(tasksByDept).forEach(dept => allDepts.add(dept));
-    const sortedDepts = Array.from(allDepts).sort((a, b) => {
-        const aIndex = window.DEPARTMENT_ORDER.indexOf(a);
-        const bIndex = window.DEPARTMENT_ORDER.indexOf(b);
-        if (aIndex === -1 && bIndex === -1) return a.localeCompare(b);
-        if (aIndex === -1) return 1;
-        if (bIndex === -1) return -1;
-        return aIndex - bIndex;
-    });
-
-    const allRowClasses = new Set();
-
-    // --- Render Department Rows ---
-    sortedDepts.forEach(dept => {
-        if (tasksByDept[dept] !== undefined) {
-            const deptTasks = tasksByDept[dept];
-            const tasksByDate = {};
-            weekDates.forEach(date => {
-                const dateString = date.toDateString();
-                tasksByDate[dateString] = deptTasks.filter(t => {
-                    if (!t.date) return false;
-                    const taskDate = parseDate(t.date);
-                    return taskDate && taskDate.toDateString() === dateString;
-                });
-            });
-
-            const maxTasksInRow = maxTasksPerDept[dept] || 0;
-            if (maxTasksInRow === 0) return;
-
-            // Add department label, spanning all its potential rows
-            const deptLabel = document.createElement('div');
-            deptLabel.className = `department-label department-${normalizeDepartmentClass(dept)}`;
-            if (dept === 'Special Events') {
-                deptLabel.innerHTML = 'Special<br>Events';
-            } else {
-                deptLabel.textContent = dept;
-            }
-            deptLabel.style.gridRow = `span ${maxTasksInRow}`;
-            deptLabel.style.zIndex = `${Z_INDEX.DEPT_LABEL}`; // Ensure department labels stay above dragging cards
-            grid.appendChild(deptLabel);
-
-            for (let i = 0; i < maxTasksInRow; i++) {
-                const rowClass = `dept-row-${normalizeDepartmentClass(dept)}-${i}`;
-                allRowClasses.add(rowClass);
-
-                weekDates.forEach(date => {
-                    const dateString = date.toDateString();
-                    const dayCell = document.createElement('div');
-                    dayCell.className = 'grid-cell';
-                    // Add data attributes for smart renderer targeting
-                    dayCell.dataset.date = dateString;
-                    dayCell.dataset.department = dept;
-
-                    const task = tasksByDate[dateString] ? tasksByDate[dateString][i] : undefined;
-
-                    const editingUnlocked = localStorage.getItem('editingUnlocked') === 'true';
-                    if (task) {
-                        const showDetails = task.department !== 'Batch' && task.department !== 'Layout';
-                        const isManualAndEditable = task.isManual && editingUnlocked;
-                        dayCell.innerHTML = `<div class="task-card ${rowClass} department-${normalizeDepartmentClass(task.department)} ${isManualAndEditable ? '' : 'not-draggable'}" data-task-id="${task.id}" ${isManualAndEditable ? 'draggable="true"' : ''} title="${isManualAndEditable ? 'Drag to move to different date' : 'Click for options'}"><div class="task-title">${task.project}</div><div class="project-description">${task.projectDescription || ''}</div><div class="task-day-counter">${task.dayCounter || ''}</div><div class="task-description">${task.description && task.description.trim() ? task.description : '<span class="missing-description">Staging Missing</span>'}</div>${showDetails ? `<div class="task-details">${task.missingDate ? '<strong>Date:</strong> Missing<br>' : ''}<strong>Hours:</strong> ${task.hours}</div>` : ''}${editingUnlocked ? `<button class="task-plan-btn" data-task-id="${task.id}">Plan</button><button class="task-edit-btn" data-task-id="${task.id}">Edit</button>` : ''}${isManualAndEditable ? `<button class="task-delete-btn" data-task-id="${task.id}" title="Delete this manual task">🗑️</button>` : ''}</div>`;
-                    } else {
-                        const year = date.getFullYear();
-                        const month = (date.getMonth() + 1).toString().padStart(2, '0');
-                        const day = date.getDate().toString().padStart(2, '0');
-                        const dateString = `${year}-${month}-${day}`;
-                        const weekString = getLocalDateString(getMonday(date));
-                        const placeholder = document.createElement('div');
-                        placeholder.className = `task-card-placeholder ${rowClass}${editingUnlocked ? ' add-enabled' : ''}`;
-                        placeholder.dataset.department = dept;
-                        placeholder.dataset.date = dateString;
-                        placeholder.dataset.week = weekString;
-                        dayCell.appendChild(placeholder);
-                    }
-                    grid.appendChild(dayCell);
-                });
-            }
-        }
-    });
-
-    grid.dataset.rowClasses = [...allRowClasses].join(',');
-    return grid;
-}
 
 /**
  * Update the week display header with the current week's date range
@@ -428,11 +292,6 @@ export function setStateReferences(refs) {
     currentViewedWeekIndex = refs.currentViewedWeekIndex;
 }
 
-// Helper function - should be imported from utils
-function normalizeDepartmentClass(dept) {
-    if (!dept) return '';
-    return dept.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-}
 
 // UI Helper function
 function showRenderingStatus(show, message = 'Optimizing layout...') {

@@ -382,3 +382,36 @@ export function importState(state) {
         return false;
     }
 }
+
+
+/**
+ * Clears all localStorage and sessionStorage data.
+ * This is a comprehensive clear operation for application resets.
+ * @returns {boolean} True if both storages were cleared successfully.
+ */
+export function clearAllData() {
+    const localStorageAvailable = isStorageAvailable();
+    let localStorageCleared = !localStorageAvailable;
+    let sessionStorageCleared = false;
+
+    if (localStorageAvailable) {
+        try {
+            localStorage.clear();
+            localStorageCleared = true;
+            logger.log('[Storage] localStorage cleared.');
+        } catch (error) {
+            logger.error('[Storage] Failed to clear localStorage:', error.message);
+        }
+    }
+
+    try {
+        // sessionStorage does not need an availability check like localStorage
+        sessionStorage.clear();
+        sessionStorageCleared = true;
+        logger.log('[Storage] sessionStorage cleared.');
+    } catch (error) {
+        logger.error('[Storage] Failed to clear sessionStorage:', error.message);
+    }
+
+    return localStorageCleared && sessionStorageCleared;
+}

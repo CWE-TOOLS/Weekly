@@ -8,6 +8,10 @@
 import { getAllTasks } from '../../core/state.js';
 import { emit, EVENTS } from '../../core/event-bus.js';
 import { logger } from '../../utils/logger.js';
+
+// Import print utilities to ensure they're loaded and exposed globally
+import '../../features/print/print-utils.js';
+
 import {
     getCurrentPrintType,
     setCurrentPrintType,
@@ -21,20 +25,12 @@ import {
     validatePrintConfig,
     preparePrintDates
 } from './print-config-manager.js';
-import {
-    initializePreviewElements,
-    setupPreviewCloseHandler,
-    setupPreviewKeyHandler,
-    showPreviewModal,
-    hidePreviewModal
-} from './print-preview-renderer.js';
 
 // Private state
 let modalElement = null;
 let closeButton = null;
 let cancelButton = null;
 let executeButton = null;
-let previewButton = null;
 let weekSelectElement = null;
 let dateSelectElement = null;
 let weekSectionElement = null;
@@ -53,7 +49,6 @@ export function initializePrintModal() {
     closeButton = document.getElementById('print-close');
     cancelButton = document.getElementById('print-cancel-btn');
     executeButton = document.getElementById('print-execute-btn');
-    previewButton = document.getElementById('print-preview-btn');
     weekSelectElement = document.getElementById('print-week-select');
     dateSelectElement = document.getElementById('print-date-select');
     weekSectionElement = document.getElementById('week-select-section');
@@ -61,9 +56,6 @@ export function initializePrintModal() {
     departmentsGridElement = document.querySelector('.departments-grid');
     checkAllButton = document.getElementById('check-all-depts');
     uncheckAllButton = document.getElementById('uncheck-all-depts');
-
-    // Initialize preview modal elements
-    initializePreviewElements();
 
     if (!modalElement) {
         logger.error('Print modal elements not found in DOM');
@@ -75,13 +67,6 @@ export function initializePrintModal() {
     cancelButton.addEventListener('click', hidePrintModal);
     executeButton.addEventListener('click', handlePrintExecute);
 
-    if (previewButton) {
-        previewButton.addEventListener('click', handlePrintPreview);
-    }
-
-    // Setup preview modal handlers
-    setupPreviewCloseHandler(hidePreviewModal);
-    setupPreviewKeyHandler(hidePreviewModal);
 
     // Close modal on background click
     modalElement.addEventListener('click', (e) => {
@@ -231,51 +216,41 @@ function handlePrintExecute() {
     // Prepare print dates
     const printDates = preparePrintDates(printType, weekSelectElement, dateSelectElement);
 
-    // Generate print content using external utilities
+// Generate print content using external utilities
     const allTasks = getAllTasks();
+    
+    // Debug logging to help troubleshoot print issues
+    logger.info('Print execution started', {
+        printType,
+        selectedDepartments: selectedDepts,
+        totalTasks: allTasks.length,
+        printUtilsAvailable: !!window.PrintUtils,
+        generatePrintContentAvailable: !!(window.PrintUtils && window.PrintUtils.generatePrintContent)
+    });
+    
     if (window.PrintUtils && window.PrintUtils.generatePrintContent) {
         const printContent = window.PrintUtils.generatePrintContent(printType, selectedDepts, printDates, allTasks);
 
         if (printContent) {
+            logger.info('Print content generated successfully', {
+                pagesCreated: printContent.querySelectorAll('.print-page').length,
+                hasTables: printContent.querySelectorAll('table').length > 0,
+                hasHeaders: printContent.querySelectorAll('.print-department-header').length > 0
+            });
             window.PrintUtils.executePrint(printContent, printType);
+        } else {
+            logger.error('Failed to generate print content');
+            alert('Failed to generate print content. Please try again.');
         }
     } else {
-        logger.error('Print utilities not available');
+        logger.error('Print utilities not available', {
+            windowPrintUtils: !!window.PrintUtils,
+            availableFunctions: window.PrintUtils ? Object.keys(window.PrintUtils) : 'none'
+        });
         alert('Print system not available. Please refresh the page.');
     }
 }
 
-/**
- * Handle print preview
- * @private
- */
-function handlePrintPreview() {
-    const printType = getCurrentPrintType();
-    const selectedDepts = getSelectedDepartments();
-
-    // Validate configuration
-    const validation = validatePrintConfig(printType, selectedDepts, dateSelectElement);
-    if (!validation.valid) {
-        alert(validation.error);
-        return;
-    }
-
-    // Prepare print dates
-    const printDates = preparePrintDates(printType, weekSelectElement, dateSelectElement);
-
-    // Generate print content using external utilities
-    const allTasks = getAllTasks();
-    if (window.PrintUtils && window.PrintUtils.generatePrintContent) {
-        const printContent = window.PrintUtils.generatePrintContent(printType, selectedDepts, printDates, allTasks);
-
-        if (printContent) {
-            showPreviewModal(printContent, printType, modalElement);
-        }
-    } else {
-        logger.error('Print utilities not available');
-        alert('Print system not available. Please refresh the page.');
-    }
-}
 
 /**
  * Show print modal (for backward compatibility)

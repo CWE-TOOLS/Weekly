@@ -42,8 +42,6 @@ import { initializeButtonHandlers } from './button-handlers.js';
  * @returns {Promise<void>}
  */
 export async function restoreState() {
-    console.log('[Startup] Starting restoreState');
-    console.time('[Startup] restoreState');
     logger.debug('Restoring persisted state...');
 
     try {
@@ -71,10 +69,8 @@ export async function restoreState() {
         });
 
         logger.debug('State restored successfully');
-        console.timeEnd('[Startup] restoreState');
     } catch (error) {
         logger.warn('Failed to restore state:', error);
-        console.timeEnd('[Startup] restoreState');
         // Non-critical error, continue initialization
     }
 }
@@ -84,19 +80,13 @@ export async function restoreState() {
  * @returns {Promise<void>}
  */
 export async function initializeServices() {
-    console.log('[Startup] Starting initializeServices');
-    console.time('[Startup] initializeServices');
     logger.debug('Initializing services...');
 
     // Initialize Supabase (critical service)
     try {
-        console.log('[Startup] Starting Supabase initialization');
-        console.time('[Startup] Supabase initialization');
         await supabaseService.initializeSupabase();
-        console.timeEnd('[Startup] Supabase initialization');
         logger.debug('  Supabase initialized');
     } catch (error) {
-        console.timeEnd('[Startup] Supabase initialization');
         logger.error('  Failed to initialize Supabase:', error);
         // Continue even if Supabase fails (graceful degradation)
         errorHandler.handleError(error, {
@@ -106,7 +96,6 @@ export async function initializeServices() {
     }
 
     logger.debug('Services initialized');
-    console.timeEnd('[Startup] initializeServices');
 }
 
 /**
@@ -114,8 +103,6 @@ export async function initializeServices() {
  * @returns {Promise<void>}
  */
 export async function initializeComponents() {
-    console.log('[Startup] Starting initializeComponents');
-    console.time('[Startup] initializeComponents');
     logger.debug('Initializing UI components...');
 
     try {
@@ -149,10 +136,8 @@ export async function initializeComponents() {
         initializeButtonHandlers();
 
         logger.debug('UI components initialized');
-        console.timeEnd('[Startup] initializeComponents');
     } catch (error) {
         logger.error('Failed to initialize components:', error);
-        console.timeEnd('[Startup] initializeComponents');
         throw error;
     }
 }
@@ -163,8 +148,6 @@ export async function initializeComponents() {
  * @returns {Promise<void>}
  */
 export async function loadInitialData() {
-    console.log('[Startup] Starting loadInitialData');
-    console.time('[Startup] loadInitialData');
     logger.debug('Loading initial data...');
 
     try {
@@ -173,10 +156,8 @@ export async function loadInitialData() {
         await dataService.fetchAllTasks(false); // silent=false to show loading UI
 
         logger.debug('Initial data loaded successfully');
-        console.timeEnd('[Startup] loadInitialData');
     } catch (error) {
         logger.error('Failed to load initial data:', error);
-        console.timeEnd('[Startup] loadInitialData');
         errorHandler.handleError(error, {
             operation: 'Initial data load',
             retry: loadInitialData
@@ -190,8 +171,6 @@ export async function loadInitialData() {
  * Called during Phase 1 of initialization
  */
 export function initializeCoreSystems() {
-    console.log('[Startup] Starting initializeCoreSystems');
-    console.time('[Startup] initializeCoreSystems');
     logger.debug('=== Phase 1: Core Systems ===');
 
     // Initialize performance monitoring (Phase 9)
@@ -206,5 +185,4 @@ export function initializeCoreSystems() {
     offlineManager.initializeOfflineManager();
     logger.debug('  Offline manager initialized');
 
-    console.timeEnd('[Startup] initializeCoreSystems');
 }

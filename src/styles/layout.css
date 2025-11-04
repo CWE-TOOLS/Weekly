@@ -258,3 +258,7 @@ header p {
   background-color: var(--color-ship);
   color: var(--color-ship-text);
 }
+.department-label.department-samples {
+  background-color: var(--color-samples);
+  color: var(--color-samples-text);
+}

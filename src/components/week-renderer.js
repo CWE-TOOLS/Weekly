@@ -25,6 +25,7 @@
 import { getFilteredTasks, getAllTasks } from '../core/state.js';
 import { parseDate, getMonday, getLocalDateString } from '../utils/date-utils.js';
 import { DEPARTMENT_ORDER } from '../config/department-config.js';
+import { groupTasksByDepartment } from '../utils/department-utils.js';
 import { createTaskCard, createTaskCardPlaceholder, normalizeDepartmentClass } from './task-card.js';
 import { generateBatchTasks, generateLayoutTasks } from '../utils/schedule-utils.js';
 import { Z_INDEX } from '../config/layout-constants.js';
@@ -57,56 +58,6 @@ function createHeaderRow(weekDates) {
     return headerHTML;
 }
 
-/**
- * Group tasks by department
- * @param {Object[]} filteredTasks - Filtered tasks to group
- * @param {Object[]} batchTasks - Generated batch tasks
- * @param {Object[]} layoutTasks - Generated layout tasks
- * @returns {Object} Tasks grouped by department
- */
-function groupTasksByDepartment(filteredTasks, batchTasks, layoutTasks) {
-    const tasksByDept = {};
-
-    // Initialize with ordered departments
-    DEPARTMENT_ORDER.forEach(dept => {
-        tasksByDept[dept] = [];
-    });
-
-    // Add filtered tasks
-    filteredTasks.forEach(task => {
-        const dept = task.department || 'Other';
-        if (!tasksByDept[dept]) tasksByDept[dept] = [];
-        tasksByDept[dept].push(task);
-    });
-
-    // Add special departments
-    tasksByDept['Batch'] = batchTasks;
-    tasksByDept['Layout'] = layoutTasks;
-    if (!tasksByDept['Special Events']) {
-        tasksByDept['Special Events'] = [];
-    }
-
-    return tasksByDept;
-}
-
-/**
- * Sort departments according to department order
- * @param {Object} tasksByDept - Tasks grouped by department
- * @returns {string[]} Sorted array of department names
- */
-function sortDepartments(tasksByDept) {
-    const allDepts = new Set(DEPARTMENT_ORDER);
-    Object.keys(tasksByDept).forEach(dept => allDepts.add(dept));
-
-    return Array.from(allDepts).sort((a, b) => {
-        const aIndex = DEPARTMENT_ORDER.indexOf(a);
-        const bIndex = DEPARTMENT_ORDER.indexOf(b);
-        if (aIndex === -1 && bIndex === -1) return a.localeCompare(b);
-        if (aIndex === -1) return 1;
-        if (bIndex === -1) return -1;
-        return aIndex - bIndex;
-    });
-}
 
 /**
  * Group department tasks by date
@@ -195,39 +146,51 @@ function renderDepartmentRows(grid, sortedDepts, tasksByDept, weekDates, maxTask
     const allRowClasses = new Set();
 
     sortedDepts.forEach(dept => {
-        if (tasksByDept[dept] !== undefined) {
-            const deptTasks = tasksByDept[dept];
-            const tasksByDate = groupTasksByDate(deptTasks, weekDates);
-            const maxTasksInRow = maxTasksPerDept[dept] || 0;
+        const deptData = tasksByDept[dept];
+        const primaryMaxTasks = maxTasksPerDept[dept] || 0;
 
-            // Debug Batch and Layout
-            if (dept === 'Batch' || dept === 'Layout') {
-                console.log(`[${dept}] deptTasks:`, deptTasks.length, deptTasks);
-                console.log(`[${dept}] tasksByDate:`, tasksByDate);
-                console.log(`[${dept}] maxTasksInRow:`, maxTasksInRow);
+        if (!deptData || (deptData.tasks.length === 0 && (!deptData.syntheticTasks || deptData.syntheticTasks.length === 0))) {
+            if (primaryMaxTasks > 0) {
+                // This case handles departments that have max tasks but no actual tasks in the current week
+                // We still need to render placeholders to maintain grid alignment
+            } else {
+                return;
             }
+        }
 
-            if (maxTasksInRow === 0) return;
+        // --- Render Primary Department ---
+        const primaryTasks = deptData?.tasks || [];
+        const primaryTasksByDate = groupTasksByDate(primaryTasks, weekDates);
+        const rowsToRender = Math.max(primaryMaxTasks, 0);
 
-            // Add department label
-            grid.appendChild(createDepartmentLabel(dept, maxTasksInRow));
-
-            // Render rows for this department
-            for (let i = 0; i < maxTasksInRow; i++) {
+        if (rowsToRender > 0) {
+            grid.appendChild(createDepartmentLabel(dept, rowsToRender));
+            for (let i = 0; i < rowsToRender; i++) {
                 const rowClass = `dept-row-${normalizeDepartmentClass(dept)}-${i}`;
                 allRowClasses.add(rowClass);
-
                 weekDates.forEach(date => {
                     const dateString = date.toDateString();
-                    const task = tasksByDate[dateString] ? tasksByDate[dateString][i] : undefined;
+                    const task = primaryTasksByDate[dateString]?.[i];
+                    grid.appendChild(createGridCell(task, date, dept, rowClass));
+                });
+            }
+        }
 
-                    // Debug Batch and Layout task retrieval
-                    if (dept === 'Batch' || dept === 'Layout') {
-                        console.log(`[${dept}] Date: ${dateString}, Task at [${i}]:`, task);
-                    }
+        // --- Render Synthetic Department (if exists) ---
+        const syntheticTasks = deptData?.syntheticTasks || [];
+        const syntheticDeptName = deptData?.syntheticDeptName;
+        if (syntheticTasks.length > 0 && syntheticDeptName) {
+            const syntheticTasksByDate = groupTasksByDate(syntheticTasks, weekDates);
+            const syntheticMaxTasks = 1; // Always 1 row for synthetic depts
 
-                    const dayCell = createGridCell(task, date, dept, rowClass);
-                    grid.appendChild(dayCell);
+            grid.appendChild(createDepartmentLabel(syntheticDeptName, syntheticMaxTasks));
+            for (let i = 0; i < syntheticMaxTasks; i++) {
+                const rowClass = `dept-row-${normalizeDepartmentClass(syntheticDeptName)}-${i}`;
+                allRowClasses.add(rowClass);
+                weekDates.forEach(date => {
+                    const dateString = date.toDateString();
+                    const task = syntheticTasksByDate[dateString]?.[i];
+                    grid.appendChild(createGridCell(task, date, syntheticDeptName, rowClass));
                 });
             }
         }
@@ -263,7 +226,13 @@ export function renderWeekGrid(dateForWeek, maxTasksPerDept) {
 
     // Group and sort tasks
     const tasksByDept = groupTasksByDepartment(filteredTasks, batchTasks, layoutTasks);
-    const sortedDepts = sortDepartments(tasksByDept);
+    const sortedDepts = Object.keys(tasksByDept).sort((a, b) => {
+        const aIndex = DEPARTMENT_ORDER.indexOf(a);
+        const bIndex = DEPARTMENT_ORDER.indexOf(b);
+        if (aIndex === -1) return 1;
+        if (bIndex === -1) return -1;
+        return aIndex - bIndex;
+    });
 
     // Render department rows
     const allRowClasses = renderDepartmentRows(grid, sortedDepts, tasksByDept, weekDates, maxTasksPerDept);

@@ -12,7 +12,7 @@
  */
 
 import * as eventBus from './event-bus.js';
-import { renderAllWeeks } from '../components/schedule-grid.js';
+import { render } from './renderer.js';
 import { isEditingActive, queueRefresh } from './refresh-queue.js';
 import { logger } from '../utils/logger.js';
 
@@ -25,9 +25,9 @@ export function setupComponentEvents() {
     eventBus.on(eventBus.EVENTS.TASKS_FILTERED, () => {
         if (isEditingActive()) {
             logger.info('📊 Tasks filtered but editing active, queueing refresh');
-            queueRefresh(() => renderAllWeeks(), { event: 'TASKS_FILTERED' });
+            queueRefresh(() => render(), { event: 'TASKS_FILTERED' });
         } else {
-            renderAllWeeks();
+            render();
         }
     });
 
@@ -36,9 +36,9 @@ export function setupComponentEvents() {
         logger.info('📊 Tasks loaded, rendering schedule...');
         if (isEditingActive()) {
             logger.info('📊 Editing active, queueing refresh');
-            queueRefresh(() => renderAllWeeks(), { event: 'TASKS_LOADED' });
+            queueRefresh(() => render(), { event: 'TASKS_LOADED' });
         } else {
-            renderAllWeeks();
+            render();
         }
     });
 }

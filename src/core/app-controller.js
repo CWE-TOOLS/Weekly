@@ -41,7 +41,6 @@ import * as supabaseService from '../services/supabase-service.js';
 import * as dataService from '../services/data-service.js';
 
 // Import UI components
-import { renderAllWeeks, equalizeAllCardHeights } from '../components/schedule-grid.js';
 import { filterTasks } from '../components/department-filter.js';
 
 // Import configuration
@@ -90,6 +89,7 @@ import {
 import { enableAddCardIndicators } from '../features/editing/add-card-indicators.js';
 
 import { logger } from '../utils/logger.js';
+import { checkVersion } from '../features/versioning/version-checker.js';
 // Application state
 let appState = {
     initialized: false,
@@ -156,6 +156,9 @@ function setupDragDropTrigger() {
  * @returns {Promise<void>}
  */
 export async function initializeApp() {
+    // First, check for application updates
+    await checkVersion();
+    
     console.log('[Startup] Starting initializeApp');
     console.time('[Startup] initializeApp');
     const startTime = performance.now();
@@ -440,8 +443,10 @@ export function setupBackwardCompatibility() {
     window.DEPARTMENT_ORDER = state.DEPARTMENT_ORDER;
 
     // Expose UI functions
-    window.renderAllWeeks = renderAllWeeks;
-    window.equalizeAllCardHeights = equalizeAllCardHeights;
+    window.renderAllWeeks = async () => {
+        const renderer = await import('./renderer.js');
+        renderer.render();
+    };
     window.filterTasks = filterTasks;
 
     // Modal functions (lazy loaded via modal-loader.js)

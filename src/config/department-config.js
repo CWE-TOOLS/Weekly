@@ -10,6 +10,7 @@ export const DEPARTMENT_ORDER = [
     'Form Out',
     'Cast',
     'Batch',
+    'Samples',
     'Demold',
     'Layout',
     'Finish',
@@ -110,6 +111,10 @@ export const DEPARTMENT_COLORS = {
     ship: {
         background: '#22C55E',
         text: '#FFFFFF'
+    },
+    sample: {
+        background: '#047857',
+        text: '#FFFFFF'
     }
 };
 
@@ -136,6 +141,7 @@ export function normalizeDepartment(dept) {
     if (normalized === 'crating') return 'Crating';
     if (normalized === 'load') return 'Load';
     if (normalized === 'ship') return 'Ship';
+    if (normalized === 'sample' || normalized === 'custom' || normalized === 'samples') return 'Samples';
 
     return dept;
 }
@@ -149,3 +155,13 @@ export function normalizeDepartmentClass(dept) {
     if (!dept) return '';
     return dept.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
 }
+
+/**
+ * Configuration for synthetic departments that are paired with primary departments
+ * @property {string} synthetic - The name of the synthetic department (e.g., 'Batch')
+ * @property {string} label - The display label for the synthetic department
+ */
+export const SYNTHETIC_DEPARTMENT_CONFIG = {
+    'Cast': { synthetic: 'Batch', label: 'Batch' },
+    'Demold': { synthetic: 'Layout', label: 'Layout' }
+};

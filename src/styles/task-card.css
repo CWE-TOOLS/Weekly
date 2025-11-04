@@ -76,6 +76,10 @@
   background-color: var(--color-ship);
   color: var(--color-ship-text);
 }
+.task-card.department-samples {
+  background-color: var(--color-samples);
+  color: var(--color-samples-text);
+}
 
 .task-card:hover {
   box-shadow: var(--shadow-md);
@@ -129,6 +133,7 @@
   color: inherit;
   flex-grow: 1;
   text-align: center;
+  white-space: pre-wrap;
 }
 
 .project-description {

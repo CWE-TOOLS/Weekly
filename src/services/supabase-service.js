@@ -357,6 +357,56 @@ export async function updateTaskInSupabase(task) {
         throw error;
     }
 }
+/**
+ * Update a manual task in Supabase with new data
+ * @param {Object} task - The full task object to update
+ * @returns {Promise<Object>} Updated task data from Supabase
+ * @throws {Error} If update fails
+ */
+export async function updateManualTask(task) {
+    if (!supabaseClient) {
+        await initializeSupabase();
+    }
+
+    const updateData = {
+        project: task.project,
+        project_description: task.projectDescription,
+        description: task.description,
+        date: task.date,
+        week: task.week,
+        department: task.department,
+        value: task.value,
+        hours: task.hours,
+        day_number: task.dayNumber,
+        total_days: task.totalDays,
+        updated_at: new Date().toISOString()
+    };
+
+    try {
+        const { data, error } = await supabaseClient
+            .from(tasksTable)
+            .update(updateData)
+            .eq('id', task.id)
+            .select();
+
+        if (error) {
+            logger.error('Supabase manual task update error:', error);
+            throw error;
+        }
+
+        if (!data || data.length === 0) {
+            const errorMsg = `Failed to update manual task: No task found with ID "${task.id}"`;
+            logger.error(errorMsg);
+            throw new Error(errorMsg);
+        }
+
+        logger.debug('Manual task updated successfully in Supabase:', { id: task.id });
+        return data[0];
+    } catch (error) {
+        logger.error('❌ Failed to update manual task in Supabase:', error);
+        throw error;
+    }
+}
 
 /**
  * Save a new task to Supabase

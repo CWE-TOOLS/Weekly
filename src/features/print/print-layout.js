@@ -6,11 +6,6 @@
 import { REVENUE } from '../../config/business-constants.js';
 import { PRINT_LAYOUT } from '../../config/layout-constants.js';
 
-// Helper functions that access window.PrintUtils (loaded asynchronously)
-// These ensure print-layout.js can access utilities from print-utils.js
-const getDepartmentColorMapping = () => window.PrintUtils.getDepartmentColorMapping();
-const normalizeDepartmentClass = (dept) => window.PrintUtils.normalizeDepartmentClass(dept);
-const parseDate = (dateStr) => window.PrintUtils.parseDate(dateStr);
 
 // ============================================
 // LAYOUT COMPONENT CREATORS
@@ -21,7 +16,7 @@ const parseDate = (dateStr) => window.PrintUtils.parseDate(dateStr);
  */
 function createDepartmentHeader(dept, printType, colors) {
     const header = document.createElement('div');
-    header.className = `print-department-header department-${normalizeDepartmentClass(dept)}`;
+    header.className = `print-department-header department-${window.PrintUtils.normalizeDepartmentClass(dept)}`;
 
     if (printType === 'day') {
         header.classList.add('print-department-header-day');
@@ -38,13 +33,16 @@ function createDepartmentHeader(dept, printType, colors) {
 }
 
 /**
- * Create a department summary component
+ * Create a department summary row for the table footer
  */
-function createDepartmentSummary(dept, totalHours, revenue) {
-    const summary = document.createElement('div');
-    summary.className = 'print-dept-summary';
-    summary.textContent = `${dept} - Total Hours: ${Math.round(totalHours)}, Revenue: $${revenue.toLocaleString()}`;
-    return summary;
+function createDepartmentSummaryRow(dept, totalHours, revenue, dates, printType) {
+    const summaryRow = document.createElement('tr');
+    const summaryCell = document.createElement('td');
+    summaryCell.colSpan = printType === 'week' ? dates.length : 4;
+    summaryCell.className = 'print-dept-summary';
+    summaryCell.textContent = `${dept} - Total Hours: ${Math.round(totalHours)}, Revenue: $${revenue.toLocaleString()}`;
+    summaryRow.appendChild(summaryCell);
+    return summaryRow;
 }
 
 /**
@@ -95,7 +93,7 @@ function createTableFooter(dates, tasks, printType) {
         if (!date) return;
         const dateString = date.toDateString();
         const dayTasks = tasks.filter(t => {
-            const taskDate = parseDate(t.date);
+            const taskDate = window.PrintUtils.parseDate(t.date);
             return taskDate && taskDate.toDateString() === dateString;
         });
 
@@ -125,7 +123,7 @@ function createPrintTaskCard(task, departmentClass) {
     const card = document.createElement('div');
     card.className = `print-task-card department-${departmentClass}`;
     
-    const colors = getDepartmentColorMapping()[departmentClass] || { bg: '#333', text: '#FFFFFF' };
+    const colors = window.PrintUtils.getDepartmentColorMapping()[departmentClass] || { bg: '#333', text: '#FFFFFF' };
     
     // Calculate revenue based on hours
     const hours = parseFloat(task.hours || 0);
@@ -135,9 +133,6 @@ function createPrintTaskCard(task, departmentClass) {
         <div class="print-task-title" style="background-color: ${colors.bg} !important; color: ${colors.text} !important;">
             ${task.project || 'Unknown Project'}
         </div>
-        <div class="print-project-description">
-            ${task.projectDescription || ''}
-        </div>
         <div class="print-task-day-counter">
             ${task.dayCounter || ''}
         </div>
@@ -146,7 +141,7 @@ function createPrintTaskCard(task, departmentClass) {
         </div>
         <div class="print-task-details">
             ${task.missingDate ? '<strong>Date:</strong> Missing<br>' : ''}
-            <strong>Hours:</strong> ${hours.toFixed(1)} | <strong>Revenue:</strong> $${revenue.toLocaleString()}
+            <strong>hrs:</strong> ${Math.round(hours)} | <strong>Revenue:</strong> $${revenue.toLocaleString()}
         </div>
     `;
     
@@ -162,8 +157,8 @@ function createTableBody(dates, tasks, maxTasks, printType) {
     if (printType === 'week') {
         // Sort tasks by date and then by some consistent ordering
         const sortedTasks = [...tasks].sort((a, b) => {
-            const dateA = parseDate(a.date);
-            const dateB = parseDate(b.date);
+            const dateA = window.PrintUtils.parseDate(a.date);
+            const dateB = window.PrintUtils.parseDate(b.date);
             if (dateA && dateB) {
                 const dateDiff = dateA - dateB;
                 if (dateDiff !== 0) return dateDiff;
@@ -178,7 +173,7 @@ function createTableBody(dates, tasks, maxTasks, printType) {
             if (!date) return;
             const dateString = date.toDateString();
             tasksByDate[dateString] = sortedTasks.filter(t => {
-                const taskDate = parseDate(t.date);
+                const taskDate = window.PrintUtils.parseDate(t.date);
                 return taskDate && taskDate.toDateString() === dateString;
             });
         });
@@ -196,7 +191,7 @@ function createTableBody(dates, tasks, maxTasks, printType) {
 
                 if (dayTasks && dayTasks[row]) {
                     const task = dayTasks[row];
-                    const departmentClass = normalizeDepartmentClass(task.department);
+                    const departmentClass = window.PrintUtils.normalizeDepartmentClass(task.department);
                     const card = createPrintTaskCard(task, departmentClass);
                     td.appendChild(card);
                 }
@@ -211,7 +206,7 @@ function createTableBody(dates, tasks, maxTasks, printType) {
         const singleDate = Array.isArray(dates) ? dates[0] : dates;
         const dateString = singleDate.toDateString();
         const dayTasks = tasks.filter(t => {
-            const taskDate = parseDate(t.date);
+            const taskDate = window.PrintUtils.parseDate(t.date);
             return taskDate && taskDate.toDateString() === dateString;
         }).sort((a, b) => (a.project + a.description).localeCompare(b.project + b.description)); // Sort for consistency
 
@@ -224,7 +219,7 @@ function createTableBody(dates, tasks, maxTasks, printType) {
             taskCell.className = 'print-grid-cell';
             taskCell.style.width = `${PRINT_LAYOUT.TASK_CELL_WIDTH_PERCENT}%`;
             if (task) {
-                const departmentClass = normalizeDepartmentClass(task.department);
+                const departmentClass = window.PrintUtils.normalizeDepartmentClass(task.department);
                 const card = createPrintTaskCard(task, departmentClass);
                 card.style.margin = '0 auto';
                 card.style.maxWidth = `${PRINT_LAYOUT.CARD_MAX_WIDTH_PX}px`;
@@ -236,7 +231,7 @@ function createTableBody(dates, tasks, maxTasks, printType) {
             const revenueCell = document.createElement('td');
             revenueCell.className = 'print-grid-cell';
             revenueCell.style.textAlign = 'center';
-            revenueCell.style.fontSize = `${PRINT_LAYOUT.REVENUE_FONT_SIZE_REM}rem`;
+            revenueCell.style.fontSize = `${PRINT_LAYOUT.REVENUE_FONT_SIZE_REM * 3}rem`;
             revenueCell.style.fontWeight = 'bold';
             revenueCell.style.width = `${PRINT_LAYOUT.PERIOD_CELL_WIDTH_PERCENT}%`;
             if (task && task.hours) {
@@ -274,7 +269,7 @@ function createTableBody(dates, tasks, maxTasks, printType) {
 /**
  * Create a complete table for a department
  */
-function createDepartmentTable(dept, tasks, dates, printType, isCompact) {
+function createDepartmentTable(dept, tasks, dates, printType, isCompact, totalHours, revenue) {
     const table = document.createElement('table');
     table.className = `print-table ${printType === 'day' ? 'print-table-day daily-print' : ''} ${isCompact ? 'compact' : ''}`;
 
@@ -288,7 +283,7 @@ function createDepartmentTable(dept, tasks, dates, printType, isCompact) {
         const dailyDate = Array.isArray(dates) ? dates[0] : dates;
         const dateString = dailyDate.toDateString();
         maxTasks = tasks.filter(t => {
-            const taskDate = parseDate(t.date);
+            const taskDate = window.PrintUtils.parseDate(t.date);
             return taskDate && taskDate.toDateString() === dateString;
         }).length;
     } else {
@@ -297,7 +292,7 @@ function createDepartmentTable(dept, tasks, dates, printType, isCompact) {
             if (!date) return;
             const dateString = date.toDateString();
             const count = tasks.filter(t => {
-                const taskDate = parseDate(t.date);
+                const taskDate = window.PrintUtils.parseDate(t.date);
                 return taskDate && taskDate.toDateString() === dateString;
             }).length;
             if (count > maxTasks) maxTasks = count;
@@ -315,19 +310,23 @@ function createDepartmentTable(dept, tasks, dates, printType, isCompact) {
         table.appendChild(tbody);
     }
 
-    // Add footer (week view only)
-    const tfoot = createTableFooter(dates, tasks, printType);
-    if (tfoot) {
-        table.appendChild(tfoot);
+    // Add footer
+    let tfoot = createTableFooter(dates, tasks, printType);
+    if (!tfoot) {
+        tfoot = document.createElement('tfoot');
     }
+    
+    const summaryRow = createDepartmentSummaryRow(dept, totalHours, revenue, dates, printType);
+    tfoot.appendChild(summaryRow);
+    table.appendChild(tfoot);
 
     return table;
 }
 
 // Export layout components
-window.PrintLayout = {
+export {
     createDepartmentHeader,
-    createDepartmentSummary,
+    createDepartmentSummaryRow,
     createTableHeader,
     createTableFooter,
     createPrintTaskCard,

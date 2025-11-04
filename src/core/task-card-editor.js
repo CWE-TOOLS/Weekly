@@ -63,7 +63,7 @@ export function makeTaskCardEditable(taskCard) {
     const saveBtn = document.createElement('button');
     saveBtn.className = 'edit-save-btn';
     saveBtn.textContent = 'Save';
-    saveBtn.title = 'Save changes (Enter)';
+    saveBtn.title = 'Save changes (Ctrl+Enter)';
     saveBtn.onclick = (e) => {
         e.stopPropagation();
         saveTaskCardEdit(taskCard);
@@ -85,7 +85,7 @@ export function makeTaskCardEditable(taskCard) {
 
     // Handle save on Enter (Ctrl+Enter for new line)
     textarea.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.ctrlKey) {
+        if (e.key === 'Enter' && e.ctrlKey) {
             e.preventDefault();
             saveTaskCardEdit(taskCard);
         }
@@ -116,11 +116,15 @@ export async function saveTaskCardEdit(taskCard) {
             task.description = newDescription;
 
             // Save to backend
-            const { saveToStaging } = await import('../services/sheets-service.js');
-            await saveToStaging(task.project, [{
-                task: task,
-                newText: newDescription
-            }]);
+            if (task.isManual) {
+                await supabaseService.updateManualTask(task);
+            } else {
+                const { saveToStaging } = await import('../services/sheets-service.js');
+                await saveToStaging(task.project, [{
+                    task: task,
+                    newText: newDescription
+                }]);
+            }
 
             // Send refresh signal to other clients
             await supabaseService.sendRefreshSignal({

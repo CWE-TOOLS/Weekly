@@ -113,7 +113,7 @@ export const PRINT_LAYOUT = {
   MIN_SCALE: 0.5,
 
   /** Base font size for print scaling (points) */
-  BASE_FONT_SIZE_PT: 7,
+  BASE_FONT_SIZE_PT: 8,
 
   /** Task cell width percentage */
   TASK_CELL_WIDTH_PERCENT: 60,
@@ -132,6 +132,38 @@ export const PRINT_LAYOUT = {
 
   /** Print revenue font size (rem) */
   REVENUE_FONT_SIZE_REM: 0.5,
+
+  /** Department per page scaling thresholds */
+  DEPARTMENT_PER_PAGE: {
+    /** Enable department-per-page mode */
+    ENABLED: true,
+    
+    /** Maximum tasks before forcing department split */
+    MAX_TASKS_BEFORE_SPLIT: 8,
+    
+    /** Maximum content height percentage to use per department */
+    MAX_CONTENT_HEIGHT_PERCENT: 0.85,
+    
+    /** Minimum font size for department pages (points) */
+    MIN_FONT_SIZE_PT: 4,
+    
+    /** Maximum font size for small departments (points) */
+    MAX_FONT_SIZE_PT: 10,
+    
+    /** Compact mode font size (points) */
+    COMPACT_FONT_SIZE_PT: 6,
+    
+    /** Ultra-compact mode font size (points) */
+    ULTRA_COMPACT_FONT_SIZE_PT: 5,
+    
+    /** Spacing reduction factors */
+    SPACING_REDUCTION: {
+      HEADER_PADDING_MULTIPLIER: 0.7,
+      CELL_PADDING_MULTIPLIER: 0.6,
+      CARD_MARGIN_MULTIPLIER: 0.5,
+      SECTION_MARGIN_MULTIPLIER: 0.6
+    }
+  }
 };
 
 // ============================================================================
