@@ -100,7 +100,7 @@ export function groupTasksByDate(tasks, weekDates, departmentName = '') {
 
             // DEBUG for Batch/Layout synthetic departments
             if (departmentName === 'Batch' || departmentName === 'Layout') {
-                console.log(`[${departmentName}] Task:`, t.date, '→ parsed:', taskDate?.toDateString(), '→ matches:', matches, '→ expected:', dateString);
+                console.log(`[${departmentName}] Task:`, t.date, '→ parsed:', (taskDate && taskDate.toDateString()), '→ matches:', matches, '→ expected:', dateString);
             }
 
             return matches;

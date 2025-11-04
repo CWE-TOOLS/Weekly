@@ -330,7 +330,7 @@ function generatePrintContent(printType, selectedDepts, weekDates, allTasks) {
     printContainer.className = 'print-preview-content';
 
     // 1. Generate all task types
-    let monday = weekDates?.[0] ? new Date(weekDates[0]) : null;
+    let monday = (weekDates && weekDates[0]) ? new Date(weekDates[0]) : null;
     if (monday) {
         // Adjust to the Monday of that week
         const day = monday.getDay();

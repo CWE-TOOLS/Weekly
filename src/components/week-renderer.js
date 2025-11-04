@@ -159,7 +159,7 @@ function renderDepartmentRows(grid, sortedDepts, tasksByDept, weekDates, maxTask
         }
 
         // --- Render Primary Department ---
-        const primaryTasks = deptData?.tasks || [];
+        const primaryTasks = (deptData && deptData.tasks) || [];
         const primaryTasksByDate = groupTasksByDate(primaryTasks, weekDates);
         const rowsToRender = Math.max(primaryMaxTasks, 0);
 
@@ -170,15 +170,15 @@ function renderDepartmentRows(grid, sortedDepts, tasksByDept, weekDates, maxTask
                 allRowClasses.add(rowClass);
                 weekDates.forEach(date => {
                     const dateString = date.toDateString();
-                    const task = primaryTasksByDate[dateString]?.[i];
+                    const task = (primaryTasksByDate[dateString] && primaryTasksByDate[dateString][i]) || undefined;
                     grid.appendChild(createGridCell(task, date, dept, rowClass));
                 });
             }
         }
 
         // --- Render Synthetic Department (if exists) ---
-        const syntheticTasks = deptData?.syntheticTasks || [];
-        const syntheticDeptName = deptData?.syntheticDeptName;
+        const syntheticTasks = (deptData && deptData.syntheticTasks) || [];
+        const syntheticDeptName = deptData && deptData.syntheticDeptName;
         if (syntheticTasks.length > 0 && syntheticDeptName) {
             const syntheticTasksByDate = groupTasksByDate(syntheticTasks, weekDates);
             const syntheticMaxTasks = 1; // Always 1 row for synthetic depts
@@ -189,7 +189,7 @@ function renderDepartmentRows(grid, sortedDepts, tasksByDept, weekDates, maxTask
                 allRowClasses.add(rowClass);
                 weekDates.forEach(date => {
                     const dateString = date.toDateString();
-                    const task = syntheticTasksByDate[dateString]?.[i];
+                    const task = (syntheticTasksByDate[dateString] && syntheticTasksByDate[dateString][i]) || undefined;
                     grid.appendChild(createGridCell(task, date, syntheticDeptName, rowClass));
                 });
             }

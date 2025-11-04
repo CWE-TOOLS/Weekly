@@ -129,7 +129,7 @@ export async function loadContextMenu() {
  */
 export async function loadDragDrop() {
     const module = await lazyLoad(
-        () => import('../features/drag-drop/drag-drop-manager.js'),
+        () => import('../features/drag-drop/drag-drop-manager.js?v=2025110402'),
         'drag-drop'
     );
     if (!initializedModals.has('drag-drop')) {
@@ -168,7 +168,7 @@ export function preloadFeaturesOnIdle() {
             key: 'context-menu'
         },
         {
-            importer: () => import('../features/drag-drop/drag-drop-manager.js'),
+            importer: () => import('../features/drag-drop/drag-drop-manager.js?v=2025110402'),
             key: 'drag-drop'
         }
     ], RENDER_DELAY.MODAL_LOADER);

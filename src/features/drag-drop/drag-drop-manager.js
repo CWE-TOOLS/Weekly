@@ -2,6 +2,7 @@
  * Drag & Drop Manager Module
  * Handles drag and drop functionality for moving tasks between dates
  * @module features/drag-drop/drag-drop-manager
+ * @cache-bust-2025-11-04
  *
  * @claude-context
  * @purpose Enable drag-and-drop of task cards to move tasks between dates/departments
