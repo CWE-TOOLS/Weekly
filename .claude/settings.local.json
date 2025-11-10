@@ -27,7 +27,14 @@
       "mcp__serena__find_file",
       "mcp__serena__read_memory",
       "mcp__serena__list_dir",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git branch:*)",
+      "Bash(git checkout:*)",
+      "Bash(python -m http.server:*)",
+      "Bash(curl:*)",
+      "Bash(git pull:*)"
     ],
     "deny": [],
     "ask": []

@@ -40,6 +40,7 @@ export function renderAllWeeks() {
     const tasksByWeek = {};
     let currentMonday = getMonday(new Date()); // Assign early for missing dates
     filteredTasks.forEach(task => {
+        if (!task.project) return;
         let taskDate = parseDate(task.date);
         if (!taskDate) {
             task.missingDate = true;
@@ -96,6 +97,7 @@ export function renderAllWeeks() {
 
         const tasksByDate = {};
         deptTasks.forEach(task => {
+            if (!task.project) return;
             let taskDate = parseDate(task.date);
             if (!taskDate) {
                 task.missingDate = true;

@@ -87,7 +87,7 @@ export function generateSpecialDepartmentTasks(weekDates, monday, departmentName
                 saturday.setDate(date.getDate() + 1);
                 const saturdayString = saturday.toDateString();
                 const saturdayProjects = allTasks
-                    .filter(t => t.department === 'Cast' && parseDate(t.date) && parseDate(t.date).toDateString() === saturdayString)
+                    .filter(t => t.department === 'Cast' && t.project && parseDate(t.date) && parseDate(t.date).toDateString() === saturdayString)
                     .map(t => t.project);
 
                 if (saturdayProjects.length > 0) {
@@ -99,7 +99,7 @@ export function generateSpecialDepartmentTasks(weekDates, monday, departmentName
                 nextMonday.setDate(date.getDate() + 3); // Friday + 3 days = Monday
                 const mondayString = nextMonday.toDateString();
                 const mondayProjects = allTasks
-                    .filter(t => t.department === 'Cast' && parseDate(t.date) && parseDate(t.date).toDateString() === mondayString)
+                    .filter(t => t.department === 'Cast' && t.project && parseDate(t.date) && parseDate(t.date).toDateString() === mondayString)
                     .map(t => t.project);
 
                 if (mondayProjects.length > 0) {
@@ -111,7 +111,7 @@ export function generateSpecialDepartmentTasks(weekDates, monday, departmentName
                 nextDate.setDate(date.getDate() + 1);
                 const nextDateString = nextDate.toDateString();
                 const nextDayProjects = allTasks
-                    .filter(t => t.department === 'Cast' && parseDate(t.date) && parseDate(t.date).toDateString() === nextDateString)
+                    .filter(t => t.department === 'Cast' && t.project && parseDate(t.date) && parseDate(t.date).toDateString() === nextDateString)
                     .map(t => t.project);
 
                 if (nextDayProjects.length > 0) {

@@ -62,6 +62,7 @@ export async function render() {
         let currentMonday = getMonday(new Date());
 
         filteredTasks.forEach(task => {
+            if (!task.project) return;
             let taskDate = parseDate(task.date);
             if (!taskDate) {
                 task.missingDate = true;
@@ -118,6 +119,7 @@ export async function render() {
 
             const tasksByDate = {};
             deptTasks.forEach(task => {
+                if (!task.project) return;
                 let taskDate = parseDate(task.date);
                 if (!taskDate) {
                     task.missingDate = true;
