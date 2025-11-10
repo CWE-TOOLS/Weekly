@@ -183,7 +183,7 @@ function createProjectControls(project) {
   // Move to previous week button
   const prevBtn = document.createElement('button');
   prevBtn.className = 'project-control-btn';
-  prevBtn.innerHTML = '&#9664;'; // ◀ Left-pointing triangle
+  prevBtn.innerHTML = '&#9650;'; // ▲ Up-pointing triangle
   prevBtn.title = 'Move to previous week';
   prevBtn.dataset.action = 'move-prev';
   prevBtn.dataset.projectId = project.id;
@@ -192,7 +192,7 @@ function createProjectControls(project) {
   // Move to next week button
   const nextBtn = document.createElement('button');
   nextBtn.className = 'project-control-btn';
-  nextBtn.innerHTML = '&#9654;'; // ▶ Right-pointing triangle
+  nextBtn.innerHTML = '&#9660;'; // ▼ Down-pointing triangle
   nextBtn.title = 'Move to next week';
   nextBtn.dataset.action = 'move-next';
   nextBtn.dataset.projectId = project.id;
