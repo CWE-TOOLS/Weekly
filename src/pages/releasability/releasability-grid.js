@@ -109,7 +109,8 @@ function createWeekSection(weekMonday, projects) {
  * @returns {HTMLElement} Week header element
  */
 function createWeekHeader(weekMonday) {
-  const monday = new Date(weekMonday);
+  // Parse date in local timezone (not UTC)
+  const monday = parseLocalDate(weekMonday);
 
   // Use the same logic as the main app
   const month = getWeekMonth(monday);
@@ -337,8 +338,8 @@ function formatWeekLabel(monday, month, weekNum) {
                       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const monthName = monthNames[month];
 
-  // Get Saturday (end of week)
-  const saturday = new Date(monday);
+  // Get Saturday (end of week) - copy the date to avoid mutation
+  const saturday = new Date(monday.getTime());
   saturday.setDate(saturday.getDate() + 5);
 
   // Format dates
@@ -357,6 +358,16 @@ function formatWeekLabel(monday, month, weekNum) {
   }
 
   return `Week ${weekNum}: ${dateRange}`;
+}
+
+/**
+ * Parse a YYYY-MM-DD date string as local timezone
+ * @param {string} dateStr - Date string in YYYY-MM-DD format
+ * @returns {Date} Date object in local timezone
+ */
+function parseLocalDate(dateStr) {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day);
 }
 
 /**
