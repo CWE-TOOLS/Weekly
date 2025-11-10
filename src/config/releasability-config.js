@@ -1,0 +1,200 @@
+/**
+ * Releasability Board Configuration
+ *
+ * Defines tracking items, status types, and visual constants for the
+ * releasability board feature.
+ *
+ * @module config/releasability-config
+ */
+
+// ============================================================================
+// STATUS DEFINITIONS
+// ============================================================================
+
+/**
+ * Status values for tracking items
+ * Used to indicate completion state of each tracking milestone
+ */
+export const STATUS = {
+  /** Item has not been started or completed - Red */
+  INCOMPLETE: 'incomplete',
+
+  /** Item is currently being worked on - Yellow */
+  IN_PROGRESS: 'in_progress',
+
+  /** Item has been finished and verified - Green */
+  COMPLETE: 'complete'
+};
+
+/**
+ * Visual representation for each status type
+ */
+export const STATUS_DISPLAY = {
+  [STATUS.INCOMPLETE]: {
+    color: '#EF4444',      // Red
+    textColor: '#FFFFFF',   // White
+    icon: '−',              // Dash/minus
+    label: 'Incomplete'
+  },
+  [STATUS.IN_PROGRESS]: {
+    color: '#F59E0B',      // Yellow/Orange
+    textColor: '#FFFFFF',   // White
+    icon: '○',              // Circle
+    label: 'In Progress'
+  },
+  [STATUS.COMPLETE]: {
+    color: '#22C55E',      // Green
+    textColor: '#FFFFFF',   // White
+    icon: '✓',              // Checkmark
+    label: 'Complete'
+  }
+};
+
+// ============================================================================
+// TRACKING ITEMS
+// ============================================================================
+
+/**
+ * List of all tracking items for project releasability
+ * These appear as columns in the releasability grid
+ * Order matches the standard workflow sequence
+ */
+export const TRACKING_ITEMS = [
+  'Shop Folder Built',
+  'Sample Approval',
+  'Color Log',
+  'Optimize Hours',
+  'Approved SB2',
+  'Batch Tracking',
+  'Work Order',
+  'Classroom #1',
+  'Final Tracking',
+  'Batching Sheets',
+  'Release to Buildrite Level',
+  'Release or Decline',
+  'Creating Report',
+  'Final Optimizer RRS',
+  'Classroom #2',
+  'Tailor Sales Ticket',
+  '3D Drawings Parts List',
+  'Classroom #3',
+  'Toolpath Program',
+  'Mill 3D Staging'
+];
+
+/**
+ * Shortened display names for tracking items (for narrow columns)
+ * Maps full name to abbreviated version
+ */
+export const TRACKING_ITEM_ABBREVIATIONS = {
+  'Shop Folder Built': 'Shop Folder',
+  'Sample Approval': 'Sample',
+  'Color Log': 'Color',
+  'Optimize Hours': 'Optimize',
+  'Approved SB2': 'SB2',
+  'Batch Tracking': 'Batch Track',
+  'Work Order': 'Work Order',
+  'Classroom #1': 'Class #1',
+  'Final Tracking': 'Final Track',
+  'Batching Sheets': 'Batch Sheet',
+  'Release to Buildrite Level': 'Buildrite',
+  'Release or Decline': 'Release',
+  'Creating Report': 'Report',
+  'Final Optimizer RRS': 'Optimizer',
+  'Classroom #2': 'Class #2',
+  'Tailor Sales Ticket': 'Sales Ticket',
+  '3D Drawings Parts List': '3D Parts',
+  'Classroom #3': 'Class #3',
+  'Toolpath Program': 'Toolpath',
+  'Mill 3D Staging': '3D Staging'
+};
+
+// ============================================================================
+// DEFAULT TEMPLATES
+// ============================================================================
+
+/**
+ * Default tracking status object for new projects
+ * All tracking items start as incomplete
+ */
+export const DEFAULT_TRACKING_STATUS = Object.freeze(
+  TRACKING_ITEMS.reduce((acc, item) => {
+    acc[item] = STATUS.INCOMPLETE;
+    return acc;
+  }, {})
+);
+
+// ============================================================================
+// PROJECT SOURCES
+// ============================================================================
+
+/**
+ * Source types for projects in the releasability board
+ */
+export const PROJECT_SOURCE = {
+  /** Project pulled from Google Sheets schedule */
+  SHEETS: 'sheets',
+
+  /** Project manually added by user */
+  MANUAL: 'manual'
+};
+
+// ============================================================================
+// GRID DISPLAY CONFIGURATION
+// ============================================================================
+
+/**
+ * Visual configuration for the releasability grid
+ */
+export const GRID_CONFIG = {
+  /** Width of the project name column in pixels */
+  PROJECT_COLUMN_WIDTH: 200,
+
+  /** Width of each tracking item column in pixels */
+  TRACKING_COLUMN_WIDTH: 100,
+
+  /** Minimum width of tracking columns in narrow view */
+  TRACKING_COLUMN_MIN_WIDTH: 80,
+
+  /** Gap between grid cells in pixels */
+  CELL_GAP: 1,
+
+  /** Height of each project row in pixels */
+  ROW_HEIGHT: 40,
+
+  /** Height of the header row in pixels */
+  HEADER_HEIGHT: 60
+};
+
+// ============================================================================
+// WEEK RANGE CONFIGURATION
+// ============================================================================
+
+/**
+ * Configuration for week range display
+ */
+export const WEEK_RANGE = {
+  /** Number of past weeks to display relative to current week */
+  PAST_WEEKS: 1,
+
+  /** Whether to display weeks without any projects */
+  SHOW_EMPTY_WEEKS: false
+};
+
+// ============================================================================
+// VALIDATION RULES
+// ============================================================================
+
+/**
+ * Validation rules for project data
+ */
+export const VALIDATION = {
+  /** Minimum length for project name */
+  PROJECT_NAME_MIN_LENGTH: 2,
+
+  /** Maximum length for project name */
+  PROJECT_NAME_MAX_LENGTH: 100,
+
+  /** Required fields for manual project creation */
+  REQUIRED_FIELDS: ['project', 'weekMonday']
+};

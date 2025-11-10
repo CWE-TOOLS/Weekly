@@ -1,0 +1,457 @@
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    margin: 0;
+    padding: 2rem;
+    background-color: #f8f9fa;
+    color: #212529;
+}
+h1 {
+    text-align: center;
+    color: #343a40;
+    font-size: 2.5rem;
+    margin-bottom: 2rem;
+}
+.week-container {
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    background-color: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+h2 {
+    color: #007bff;
+    border-bottom: 2px solid #dee2e6;
+    padding-bottom: 0.5rem;
+    margin-top: 0;
+}
+ul {
+    list-style-type: none;
+    padding-left: 0;
+}
+li {
+    padding: 0.75rem 0;
+    border-bottom: 1px solid #e9ecef;
+}
+li:last-child {
+    border-bottom: none;
+}
+
+/* Print-specific styles for project_starts.html */
+@media print {
+    body {
+        background-color: white !important;
+        color: black !important;
+        margin: 0;
+        padding: 0.5in;
+        font-size: 12pt;
+    }
+    h1 {
+        color: black !important;
+        page-break-after: avoid;
+        font-size: 18pt;
+    }
+    .week-container {
+        background-color: white !important;
+        border: 1px solid #ccc;
+        box-shadow: none !important;
+        page-break-inside: avoid;
+        margin-bottom: 1rem;
+    }
+    h2 {
+        color: black !important;
+        border-bottom: 1px solid #000;
+        page-break-after: avoid;
+    }
+    ul {
+        margin: 0;
+        padding: 0;
+    }
+    li {
+        border-bottom: 1px solid #000;
+        padding: 0.25rem 0;
+        page-break-inside: avoid;
+    }
+    li:last-child {
+        border-bottom: none;
+    }
+}
+
+/* Print-specific styles for index.html (weekly and daily reports) */
+
+/* Set landscape orientation for all print pages */
+@page {
+    size: letter landscape;
+    margin: 0.25in;
+}
+
+@media print {
+
+    /* CRITICAL: Override stray body styles from base.css that interfere with print */
+    body {
+        transform: none !important;
+        width: 100% !important;
+        height: auto !important;
+        overflow: visible !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    /* Hide all screen content, show only print content */
+    body > * {
+        display: none !important;
+    }
+
+    .print-preview-content {
+        display: block !important;
+        position: relative;
+        width: 100%;
+        height: auto;
+        margin: 0;
+        padding: 0;
+    }
+
+    /* Flexible print page container - no fixed dimensions */
+    .print-page {
+        page-break-after: auto;
+        page-break-inside: avoid;
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100%;
+        height: auto;
+        box-sizing: border-box;
+        background: white;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: center !important;
+        align-items: center !important;
+    }
+
+    .print-page-day {
+        /* Daily print pages use portrait orientation via dynamic styles */
+    }
+
+    .print-page:last-child {
+        page-break-after: avoid !important;
+        break-after: avoid !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    /* Flexible table layout - scales to fit content */
+    .print-table {
+        width: 100%;
+        max-width: 100%;
+        border-collapse: collapse;
+        font-size: 1em; /* Relative size - will scale with container */
+        background: white;
+        margin: 0;
+        table-layout: fixed;
+    }
+
+    .print-table th, .print-table td {
+        border: 1px solid #666;
+        padding: 0.3em;
+        text-align: center;
+        vertical-align: top;
+        font-size: 1em;
+        width: 16.66%;
+        font-weight: 500;
+    }
+
+    .print-table th {
+        background: #e8e8e8;
+        font-weight: 700;
+        font-size: 1.1em !important;
+        padding: 0.4em;
+        line-height: 1.3;
+    }
+
+    .print-table tfoot td {
+        background: #e8e8e8 !important;
+        font-weight: 700 !important;
+        border-top: 2px solid #666 !important;
+        padding: 0.4em !important;
+        font-size: 1.15em !important;
+    }
+
+    /* Flexible cell sizing - no fixed heights */
+    .print-grid-cell {
+        background: #f5f5f5;
+        padding: 0.3em;
+        /* Height will be determined by content and density class */
+    }
+
+    /* Density classes for dynamic scaling based on task count */
+    .print-page.few-tasks .print-grid-cell {}
+
+    .print-page.normal-tasks .print-grid-cell {}
+
+    .print-page.many-tasks .print-grid-cell {}
+
+    .print-page.very-many-tasks .print-grid-cell {}
+
+    .print-task-grid {
+        border: none;
+        background: white;
+        padding: 0.1em;
+        margin: 0.05em 0;
+        font-size: 1em;
+        color: black;
+        display: block;
+    }
+
+    /* Task card styling with flexible sizes */
+    .print-task-card {
+        font-size: 1em;
+        padding: 0.1em;
+        margin: 0.1em 0;
+        background: white;
+        border: 1px solid #ccc;
+        border-radius: 0.2em;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+    }
+
+    .print-task-title {
+        font-weight: 700 !important;
+        font-size: 1.0em !important;
+        margin-bottom: 0.1em;
+        color: white !important;
+        text-align: center;
+        background-color: var(--bg-color, #3B82F6) !important;
+        padding: 0.15em 0.4em !important;
+        border-radius: 0.2em !important;
+        display: block !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+        print-color-adjust: exact !important;
+        -webkit-print-color-adjust: exact !important;
+    }
+
+
+    .print-task-day-counter {
+        font-size: 0.75em !important;
+        font-weight: 600 !important;
+        color: #666 !important;
+        text-align: center;
+        margin-bottom: 0.2em;
+        background: #fef3c7;
+        padding: 0.1em 0.3em;
+        border-radius: 0.1em;
+        display: inline-block;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    .print-task-description {
+        font-size: 1.08em !important;
+        font-weight: 600 !important;
+        margin-bottom: 0.25em;
+        color: #222 !important;
+        text-align: center;
+        line-height: 1.3;
+    }
+
+    .print-task-details {
+        font-size: 0.97em !important;
+        font-weight: 600 !important;
+        color: #444 !important;
+        text-align: center;
+        margin-top: 0.2em;
+        padding-top: 0.2em;
+        border-top: 1px solid #ddd;
+    }
+
+    .print-department-header {
+        font-weight: 700;
+        font-size: 2.5em;
+        padding: 0.5em 0.3em;
+        writing-mode: vertical-rl;
+        text-orientation: mixed;
+        width: 2.5em;
+        border: 1px solid #666;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 10em;
+        print-color-adjust: exact !important;
+        -webkit-print-color-adjust: exact !important;
+        letter-spacing: 0.05em;
+    }
+
+    .print-department-header-day {
+        writing-mode: horizontal-tb !important;
+        text-orientation: mixed !important;
+        width: 100% !important;
+        min-height: 0 !important;
+        padding: 0.6em 0.4em !important;
+        font-size: 2.2em !important;
+    }
+
+    .print-dept-summary {
+        font-weight: 700 !important;
+        font-size: 1.15em !important;
+        color: black !important;
+        text-align: center !important;
+        background: #e8e8e8 !important;
+        padding: 0.4em 0.5em !important;
+        border-top: 2px solid #666 !important;
+    }
+
+    /* Daily print specific adjustments */
+    .daily-print .print-dept-summary {
+        font-size: 2em !important;
+    }
+
+    .print-page.daily-print th,
+    .print-page.daily-print td {
+        padding: 0.3em;
+    }
+
+    .print-page.daily-print .print-grid-cell {
+        min-height: 4em;
+    }
+
+    .print-page.daily-print .print-task-card {
+        min-height: 4em;
+        font-size: 1.1em;
+        padding: 0.3em;
+    }
+
+    .print-page.daily-print .print-task-title {
+        font-size: 1.2em;
+        padding: 0.2em;
+    }
+
+    .print-page.daily-print .print-task-description {
+        font-size: 1.27em;
+        margin-bottom: 0.3em;
+    }
+
+    .print-page.daily-print .print-task-details {
+        font-size: 1.17em;
+        padding-top: 0.2em;
+    }
+
+    /* Simplified page break rules */
+    .print-page:not(:last-child) {
+        page-break-after: always !important;
+        break-after: page !important;
+    }
+
+    /* Optimized department pages for large task counts */
+    .print-page-optimized {
+        width: 100% !important;
+        height: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        box-sizing: border-box !important;
+        background: white !important;
+        page-break-after: auto !important;
+        page-break-inside: avoid !important;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: flex-start !important;
+        align-items: center !important;
+    }
+
+    /* Enhanced scaling for departments with many tasks */
+    .print-page-optimized .print-table {
+        width: 100% !important;
+        max-width: 100% !important;
+        font-size: 6pt !important;
+        border-collapse: collapse !important;
+        table-layout: fixed !important;
+        margin: 0 !important;
+    }
+
+    .print-page-optimized .print-table th,
+    .print-page-optimized .print-table td {
+        border: 1px solid #666 !important;
+        padding: 0.1em !important;
+        text-align: center !important;
+        vertical-align: top !important;
+        font-size: 6pt !important;
+        font-weight: 500 !important;
+        width: auto !important;
+    }
+
+    .print-page-optimized .print-task-card {
+        font-size: 6pt !important;
+        padding: 0.05em !important;
+        margin: 0.02em 0 !important;
+        border: 1px solid #ccc !important;
+        border-radius: 0.05em !important;
+        box-shadow: none !important;
+        background: white !important;
+    }
+
+    .print-page-optimized .print-task-title {
+        font-size: 7pt !important;
+        padding: 0.1em 0.2em !important;
+        margin-bottom: 0.05em !important;
+        line-height: 1.1 !important;
+    }
+
+    .print-page-optimized .print-project-description {
+        font-size: 6.5pt !important;
+        font-weight: 600 !important;
+        color: #444 !important;
+        text-align: center !important;
+        margin-bottom: 0.05em !important;
+        line-height: 1.1 !important;
+    }
+
+    .print-page-optimized .print-task-description {
+        font-size: 6pt !important;
+        font-weight: 600 !important;
+        margin-bottom: 0.05em !important;
+        color: #222 !important;
+        text-align: center !important;
+        line-height: 1.1 !important;
+    }
+
+    .print-page-optimized .print-task-details {
+        font-size: 5.5pt !important;
+        font-weight: 600 !important;
+        color: #444 !important;
+        text-align: center !important;
+        margin-top: 0.05em !important;
+        padding-top: 0.05em !important;
+        border-top: 1px solid #ddd !important;
+    }
+
+    .print-page-optimized .print-department-header {
+        font-size: 8pt !important;
+        padding: 0.2em 0.1em !important;
+        margin: 0 !important;
+        border: 1px solid #666 !important;
+        writing-mode: vertical-rl !important;
+        text-orientation: mixed !important;
+        width: 1.8em !important;
+        min-height: 6em !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        letter-spacing: 0.02em !important;
+    }
+
+    .print-page-optimized .print-department-header-day {
+        writing-mode: horizontal-tb !important;
+        text-orientation: mixed !important;
+        width: 100% !important;
+        min-height: 0 !important;
+        padding: 0.3em 0.2em !important;
+        font-size: 8pt !important;
+    }
+
+    .print-page-optimized .print-dept-summary {
+        font-size: 6pt !important;
+        font-weight: 700 !important;
+        color: black !important;
+        margin: 0.05em 0 0 0 !important;
+        padding: 0.1em 0.2em !important;
+        text-align: center !important;
+        border: 1px solid #666 !important;
+        background: #f9f9f9 !important;
+    }
+}

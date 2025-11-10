@@ -1,0 +1,32 @@
+═══════════════════════════════════════════════════════════
+           CLAUDE API TOGGLE - QUICK REFERENCE
+═══════════════════════════════════════════════════════════
+
+SWITCH TO API KEY (use your Anthropic API):
+    .\toggle-claude.ps1 api
+    .\toggle-claude.bat api
+    ./toggle-claude.sh api
+
+SWITCH TO SUBSCRIPTION (use Claude Code subscription):
+    .\toggle-claude.ps1 subscription
+    .\toggle-claude.bat subscription
+    ./toggle-claude.sh subscription
+
+CHECK CURRENT STATUS:
+    .\toggle-claude.ps1 status
+    .\toggle-claude.bat status
+    ./toggle-claude.sh status
+
+SHOW HELP:
+    .\toggle-claude.ps1 help
+    .\toggle-claude.bat help
+    ./toggle-claude.sh help
+
+═══════════════════════════════════════════════════════════
+
+FIRST TIME SETUP:
+1. Copy-Item api-key.txt.template api-key.txt
+2. Edit api-key.txt and paste your Anthropic API key
+3. Run: .\toggle-claude.ps1 api
+
+═══════════════════════════════════════════════════════════

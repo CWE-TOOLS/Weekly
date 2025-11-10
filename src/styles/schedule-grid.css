@@ -1,0 +1,118 @@
+/* Schedule Grid and Project Schedule Styles */
+
+.project-schedule-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  background-color: var(--background-secondary);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--border-primary);
+  padding: 1rem;
+}
+
+.project-dept-section {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  margin-bottom: 1.5rem;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--border-radius-md);
+  overflow: hidden;
+}
+
+.project-dept-header {
+  font-weight: 600;
+  font-size: 1rem;
+  padding: 1rem;
+  color: var(--text-primary);
+  text-align: center;
+  border-right: 2px solid var(--border-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: transparent;
+  color: #fff;
+  position: sticky;
+  left: 0;
+  z-index: 5;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  box-shadow: var(--shadow-sm);
+}
+
+.project-cards-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  flex: 1;
+  min-height: 200px;
+  align-items: flex-start;
+}
+
+.project-task-card {
+  background: var(--background-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--border-radius-md);
+  padding: 1rem;
+  min-width: 250px;
+  max-width: 300px;
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.project-task-card.department-special {
+  background-color: var(--color-special) !important;
+  color: var(--color-special-text) !important;
+}
+
+.project-task-card.department-special-events {
+  background-color: #EF4444;
+  color: #FFFFFF;
+}
+
+.project-task-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md);
+}
+
+.project-task-card .task-title {
+  font-size: 0.85rem;
+}
+
+.project-task-card .task-description {
+  font-size: 1rem;
+}
+
+.project-task-card .project-description {
+  font-size: 0.7rem;
+  font-weight: 400;
+  font-style: italic;
+  margin-bottom: 0.25rem;
+  opacity: 0.75;
+}
+
+.project-task-card .task-details {
+  font-size: 0.75rem;
+}
+
+/* Success Notification */
+.project-success-notification {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(34, 197, 94, 0.9);
+  color: white;
+  padding: 0.75rem 1.5rem;
+  border-radius: var(--border-radius-md);
+  box-shadow: var(--shadow-md);
+  font-size: 0.875rem;
+  font-weight: 600;
+  z-index: 1010;
+  display: none;
+}

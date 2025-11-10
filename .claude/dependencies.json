@@ -1,0 +1,371 @@
+{
+  "components/department-filter.js": [
+    "config/department-config.js",
+    "core/event-bus.js",
+    "core/state.js",
+    "core/storage.js",
+    "utils/logger.js"
+  ],
+  "components/modals/add-task-modal.js": [
+    "config/timing-constants.js",
+    "core/event-bus.js",
+    "services/data-service.js",
+    "services/supabase-service.js",
+    "utils/logger.js",
+    "utils/ui-utils.js"
+  ],
+  "components/modals/password-modal.js": [
+    "config/constants.js",
+    "config/timing-constants.js",
+    "core/event-bus.js",
+    "core/state.js",
+    "core/storage.js",
+    "utils/logger.js"
+  ],
+  "components/modals/print-config-manager.js": [
+    "config/department-config.js",
+    "core/state.js",
+    "utils/date-utils.js",
+    "utils/logger.js",
+    "utils/ui-utils.js"
+  ],
+  "components/modals/print-modal.js": [
+    "components/modals/print-config-manager.js",
+    "core/event-bus.js",
+    "core/state.js",
+    "utils/logger.js"
+  ],
+  "components/modals/project-modal-fields.js": [
+    "config/visual-constants.js",
+    "utils/date-utils.js",
+    "utils/ui-utils.js"
+  ],
+  "components/modals/project-modal.js": [
+    "components/modals/password-modal.js",
+    "components/modals/project-modal-fields.js",
+    "config/department-config.js",
+    "config/timing-constants.js",
+    "core/event-bus.js",
+    "core/state.js",
+    "services/sheets-service.js",
+    "utils/date-utils.js",
+    "utils/logger.js",
+    "utils/project-modal-validation.js"
+  ],
+  "components/modals/reload-modal.js": [
+    "utils/logger.js"
+  ],
+  "components/schedule-grid.js": [
+    "components/week-renderer.js",
+    "config/department-config.js",
+    "config/timing-constants.js",
+    "core/event-bus.js",
+    "core/state.js",
+    "core/storage.js",
+    "utils/date-utils.js",
+    "utils/grid-layout-manager.js",
+    "utils/logger.js",
+    "utils/smart-renderer.js",
+    "utils/ui-utils.js"
+  ],
+  "components/search-bar.js": [
+    "core/event-bus.js",
+    "core/state.js",
+    "utils/logger.js"
+  ],
+  "components/task-card.js": [
+    "core/state.js"
+  ],
+  "components/week-navigation.js": [
+    "components/schedule-grid.js",
+    "config/timing-constants.js",
+    "core/event-bus.js",
+    "core/state.js",
+    "core/storage.js",
+    "utils/date-utils.js",
+    "utils/logger.js"
+  ],
+  "components/week-renderer.js": [
+    "components/task-card.js",
+    "config/department-config.js",
+    "config/layout-constants.js",
+    "core/state.js",
+    "utils/date-utils.js",
+    "utils/department-utils.js",
+    "utils/logger.js",
+    "utils/schedule-utils.js"
+  ],
+  "config/api-config.js": [],
+  "config/business-constants.js": [],
+  "config/constants.js": [],
+  "config/department-config.js": [],
+  "config/layout-constants.js": [],
+  "config/rendering-constants.js": [],
+  "config/timing-constants.js": [],
+  "config/visual-constants.js": [],
+  "core/app-controller.js": [
+    "components/department-filter.js",
+    "config/api-config.js",
+    "config/timing-constants.js",
+    "core/error-handler.js",
+    "core/event-bus.js",
+    "core/global-listeners.js",
+    "core/initialization-orchestrator.js",
+    "core/keyboard-shortcuts.js",
+    "core/loading-manager.js",
+    "core/modal-loader.js",
+    "core/performance-monitor.js",
+    "core/renderer.js",
+    "core/state.js",
+    "core/storage.js",
+    "features/editing/add-card-indicators.js",
+    "features/versioning/version-checker.js",
+    "services/auth-service.js",
+    "services/data-service.js",
+    "services/sheets-service.js",
+    "services/supabase-service.js",
+    "utils/date-utils.js",
+    "utils/logger.js",
+    "utils/ui-utils.js"
+  ],
+  "core/button-handlers.js": [
+    "core/error-handler.js",
+    "core/modal-loader.js",
+    "core/state.js",
+    "core/task-card-editor.js",
+    "services/data-service.js",
+    "services/supabase-service.js",
+    "utils/logger.js",
+    "utils/ui-utils.js"
+  ],
+  "core/component-events.js": [
+    "core/event-bus.js",
+    "core/refresh-queue.js",
+    "core/renderer.js",
+    "utils/logger.js"
+  ],
+  "core/error-handler.js": [
+    "config/timing-constants.js",
+    "utils/logger.js"
+  ],
+  "core/event-bus.js": [
+    "utils/logger.js"
+  ],
+  "core/global-listeners.js": [
+    "config/timing-constants.js",
+    "core/error-handler.js",
+    "core/event-bus.js",
+    "utils/logger.js"
+  ],
+  "core/initialization-orchestrator.js": [
+    "components/department-filter.js",
+    "components/search-bar.js",
+    "components/week-navigation.js",
+    "core/button-handlers.js",
+    "core/component-events.js",
+    "core/error-handler.js",
+    "core/event-bus.js",
+    "core/loading-manager.js",
+    "core/offline-manager.js",
+    "core/performance-monitor.js",
+    "core/state.js",
+    "core/storage.js",
+    "features/editing/add-card-indicators.js",
+    "features/editing/delete-task-handler.js",
+    "services/data-service.js",
+    "services/supabase-service.js",
+    "utils/logger.js"
+  ],
+  "core/keyboard-shortcuts.js": [
+    "config/timing-constants.js",
+    "core/error-handler.js",
+    "services/data-service.js",
+    "utils/logger.js"
+  ],
+  "core/loading-manager.js": [
+    "config/timing-constants.js",
+    "utils/logger.js"
+  ],
+  "core/modal-loader.js": [
+    "components/modals/add-task-modal.js",
+    "components/modals/password-modal.js",
+    "components/modals/print-modal.js",
+    "components/modals/project-modal.js",
+    "config/timing-constants.js",
+    "features/context-menu/context-menu.js",
+    "features/drag-drop/drag-drop-manager.js",
+    "utils/lazy-loader.js",
+    "utils/logger.js"
+  ],
+  "core/offline-manager.js": [
+    "core/error-handler.js",
+    "core/event-bus.js",
+    "utils/logger.js"
+  ],
+  "core/performance-monitor.js": [
+    "config/timing-constants.js",
+    "utils/logger.js"
+  ],
+  "core/refresh-queue.js": [
+    "utils/logger.js"
+  ],
+  "core/renderer.js": [
+    "components/week-renderer.js",
+    "config/timing-constants.js",
+    "core/event-bus.js",
+    "core/state.js",
+    "core/storage.js",
+    "utils/date-utils.js",
+    "utils/grid-layout-manager.js",
+    "utils/logger.js",
+    "utils/ui-utils.js"
+  ],
+  "core/state.js": [
+    "config/layout-constants.js",
+    "core/event-bus.js",
+    "utils/logger.js"
+  ],
+  "core/storage.js": [
+    "utils/logger.js"
+  ],
+  "core/task-card-editor.js": [
+    "core/error-handler.js",
+    "core/refresh-queue.js",
+    "core/state.js",
+    "services/sheets-service.js",
+    "services/supabase-service.js",
+    "utils/logger.js",
+    "utils/ui-utils.js"
+  ],
+  "features/context-menu/context-menu.js": [
+    "core/state.js",
+    "utils/logger.js"
+  ],
+  "features/drag-drop/drag-drop-manager.js": [
+    "components/department-filter.js",
+    "config/timing-constants.js",
+    "config/visual-constants.js",
+    "core/renderer.js",
+    "core/state.js",
+    "services/data-service.js",
+    "services/supabase-service.js",
+    "utils/logger.js",
+    "utils/ui-utils.js"
+  ],
+  "features/editing/add-card-indicators.js": [
+    "components/modals/add-task-modal.js",
+    "core/event-bus.js",
+    "core/state.js",
+    "utils/logger.js"
+  ],
+  "features/editing/delete-task-handler.js": [
+    "services/data-service.js",
+    "services/supabase-service.js",
+    "utils/logger.js",
+    "utils/ui-utils.js"
+  ],
+  "features/print/print-debug.js": [
+    "config/layout-constants.js",
+    "utils/logger.js"
+  ],
+  "features/print/print-layout.js": [
+    "config/business-constants.js",
+    "config/layout-constants.js"
+  ],
+  "features/print/print-renderer.js": [
+    "config/business-constants.js",
+    "config/layout-constants.js",
+    "config/timing-constants.js",
+    "features/print/print-layout.js",
+    "utils/date-utils.js",
+    "utils/department-utils.js",
+    "utils/logger.js",
+    "utils/schedule-utils.js"
+  ],
+  "features/print/print-utils.js": [
+    "config/layout-constants.js",
+    "config/timing-constants.js",
+    "features/print/print-renderer.js",
+    "utils/logger.js",
+    "utils/schedule-utils.js"
+  ],
+  "features/schedule/schedule-renderer.js": [
+    "components/week-renderer.js",
+    "config/layout-constants.js",
+    "config/timing-constants.js",
+    "utils/date-utils.js"
+  ],
+  "features/versioning/version-checker.js": [
+    "components/modals/reload-modal.js",
+    "core/storage.js",
+    "services/supabase-service.js",
+    "utils/logger.js"
+  ],
+  "main.js": [
+    "core/app-controller.js",
+    "core/error-handler.js",
+    "utils/logger.js"
+  ],
+  "renderers/card-renderer.js": [
+    "config/rendering-constants.js",
+    "core/state.js",
+    "utils/ui-utils.js"
+  ],
+  "services/auth-service.js": [
+    "config/api-config.js",
+    "config/timing-constants.js",
+    "utils/logger.js"
+  ],
+  "services/data-service.js": [
+    "core/state.js",
+    "services/sheets-service.js",
+    "services/supabase-service.js",
+    "utils/date-utils.js",
+    "utils/logger.js",
+    "utils/ui-utils.js"
+  ],
+  "services/sheets-service.js": [
+    "config/api-config.js",
+    "services/auth-service.js",
+    "utils/logger.js",
+    "utils/ui-utils.js"
+  ],
+  "services/supabase-service.js": [
+    "config/api-config.js",
+    "config/layout-constants.js",
+    "config/timing-constants.js",
+    "utils/logger.js",
+    "utils/ui-utils.js"
+  ],
+  "utils/date-utils.js": [
+    "config/timing-constants.js"
+  ],
+  "utils/department-utils.js": [
+    "config/department-config.js",
+    "utils/date-utils.js"
+  ],
+  "utils/grid-layout-manager.js": [],
+  "utils/lazy-loader.js": [
+    "utils/logger.js"
+  ],
+  "utils/logger.js": [],
+  "utils/project-modal-validation.js": [
+    "config/layout-constants.js"
+  ],
+  "utils/schedule-utils.js": [
+    "utils/date-utils.js",
+    "utils/logger.js",
+    "utils/security-utils.js"
+  ],
+  "utils/security-utils.js": [],
+  "utils/smart-renderer.js": [
+    "components/task-card.js",
+    "core/refresh-queue.js",
+    "utils/logger.js"
+  ],
+  "utils/ui-utils.js": [
+    "config/layout-constants.js",
+    "config/timing-constants.js",
+    "utils/logger.js"
+  ]
+}
