@@ -1319,11 +1319,18 @@ function parseDate(e){if(!e)return null;const t=e.split("/");if(3===t.length){co
         }
 
         function getWeekMonth(monday) {
+            // Validate input date
+            if (!monday || !(monday instanceof Date) || isNaN(monday.getTime())) {
+                console.warn('Invalid date passed to getWeekMonth:', monday);
+                return new Date().getMonth(); // Return current month as fallback
+            }
+
             const daysInEachMonth = {};
             for (let i = 0; i < 5; i++) { // Mon to Fri
                 const date = new Date(monday);
                 date.setDate(monday.getDate() + i);
                 const month = date.getMonth();
+                if (isNaN(month)) continue; // Skip invalid months
                 daysInEachMonth[month] = (daysInEachMonth[month] || 0) + 1;
             }
             let maxDays = 0;
@@ -1338,15 +1345,46 @@ function parseDate(e){if(!e)return null;const t=e.split("/");if(3===t.length){co
         }
 
         function getWeekOfMonth(monday, month) {
+            // Validate input date
+            if (!monday || !(monday instanceof Date) || isNaN(monday.getTime())) {
+                console.warn('Invalid date passed to getWeekOfMonth:', monday);
+                return 1; // Return week 1 as fallback
+            }
+
+            // Validate month
+            if (month === undefined || month === null || isNaN(month) || month < 0 || month > 11) {
+                console.warn('Invalid month passed to getWeekOfMonth:', month);
+                return 1; // Return week 1 as fallback
+            }
+
             const year = monday.getFullYear();
+            if (isNaN(year)) {
+                console.warn('Invalid year from monday date:', monday);
+                return 1;
+            }
+
             let startOfWeek1 = getMonday(new Date(year, month, 1));
             // Find the first Monday whose week has majority days in the month
-            while (getWeekMonth(startOfWeek1) !== month) {
+            let iterations = 0;
+            while (getWeekMonth(startOfWeek1) !== month && iterations < 10) {
                 startOfWeek1 = new Date(startOfWeek1.getTime() + 7 * 24 * 60 * 60 * 1000);
+                iterations++;
             }
+
+            if (iterations >= 10) {
+                console.warn('Too many iterations in getWeekOfMonth, returning 1');
+                return 1;
+            }
+
             const diffMs = monday - startOfWeek1;
             const diffDays = diffMs / (1000 * 60 * 60 * 24);
             const weekNum = 1 + Math.floor(diffDays / 7);
+
+            if (isNaN(weekNum)) {
+                console.warn('Calculated weekNum is NaN, returning 1');
+                return 1;
+            }
+
             return Math.max(1, weekNum);
         }
 
