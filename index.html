@@ -1305,6 +1305,11 @@
 function parseDate(e){if(!e)return null;const t=e.split("/");if(3===t.length){const[e,r,n]=t.map(Number),a=new Date(n,e-1,r);return isNaN(a)?null:a}const o=e.split("-");if(3===o.length){const[a,i,s]=o.map(Number),c=new Date(a,i-1,s);return isNaN(c)?null:c}return isNaN(new Date(e))?null:new Date(e)}
 
         function getLocalDateString(date) {
+            // Validate date is valid before using it
+            if (!date || isNaN(date.getTime())) {
+                console.warn('Invalid date passed to getLocalDateString:', date);
+                return null;
+            }
             const year = date.getFullYear();
             const month = (date.getMonth() + 1).toString().padStart(2, '0');
             const day = date.getDate().toString().padStart(2, '0');
@@ -1319,6 +1324,11 @@ function parseDate(e){if(!e)return null;const t=e.split("/");if(3===t.length){co
         }
 
         function getWeekMonth(monday) {
+            // Validate date
+            if (!monday || isNaN(monday.getTime())) {
+                console.warn('Invalid date passed to getWeekMonth:', monday);
+                return NaN;
+            }
             const daysInEachMonth = {};
             for (let i = 0; i < 5; i++) { // Mon to Fri
                 const date = new Date(monday);
@@ -1338,6 +1348,11 @@ function parseDate(e){if(!e)return null;const t=e.split("/");if(3===t.length){co
         }
 
         function getWeekOfMonth(monday, month) {
+            // Validate date and month
+            if (!monday || isNaN(monday.getTime()) || isNaN(month)) {
+                console.warn('Invalid date or month passed to getWeekOfMonth:', monday, month);
+                return NaN;
+            }
             const year = monday.getFullYear();
             let startOfWeek1 = getMonday(new Date(year, month, 1));
             // Find the first Monday whose week has majority days in the month
@@ -1666,6 +1681,11 @@ function getMonday(e){e=new Date(e);const t=e.getDay()||7;return 1!==t&&e.setHou
                 }
                 const monday = getMonday(taskDate);
                 const mondayString = getLocalDateString(monday);
+                // Skip tasks with invalid dates that can't be converted to a valid Monday
+                if (!mondayString) {
+                    console.warn('Skipping task with invalid date:', task);
+                    return;
+                }
                 if (!tasksByWeek[mondayString]) {
                     tasksByWeek[mondayString] = [];
                 }
@@ -1821,10 +1841,20 @@ function getMonday(e){e=new Date(e);const t=e.getDay()||7;return 1!==t&&e.setHou
         }
 
         function updateWeekDisplayHeader(date) {
-            if (!date) return;
+            if (!date || isNaN(date.getTime())) {
+                console.warn('Invalid date passed to updateWeekDisplayHeader:', date);
+                return;
+            }
             const monday = getMonday(date);
             const month = getWeekMonth(monday);
             const weekNum = getWeekOfMonth(monday, month);
+
+            // Don't display if we got invalid values
+            if (isNaN(month) || isNaN(weekNum)) {
+                console.warn('Unable to calculate week for date:', date);
+                return;
+            }
+
             const weekStart = new Date(monday);
             const weekEnd = new Date(monday);
             weekEnd.setDate(monday.getDate() + 5);
@@ -3006,6 +3036,12 @@ const d=localStorage.getItem('editingUnlocked')==='true';if(task){const e=task.d
             const weekSelect = document.getElementById('print-week-select');
             weekSelect.innerHTML = '';
             allWeekStartDates.forEach((date, index) => {
+                // Validate that date is valid before trying to format it
+                if (!date || isNaN(date.getTime())) {
+                    console.warn('Skipping invalid date in populatePrintOptions:', date);
+                    return;
+                }
+
                 const option = document.createElement('option');
                 option.value = index.toString();
                 const weekStart = new Date(date);
@@ -3014,6 +3050,13 @@ const d=localStorage.getItem('editingUnlocked')==='true';if(task){const e=task.d
                 const monday = getMonday(date);
                 const month = getWeekMonth(monday);
                 const weekNum = getWeekOfMonth(monday, month);
+
+                // Additional validation to ensure we don't display NaN values
+                if (isNaN(month) || isNaN(weekNum)) {
+                    console.warn('Invalid month or week number for date:', date);
+                    return;
+                }
+
                 const monthName = new Date(monday.getFullYear(), month, 1).toLocaleDateString('en-US', { month: 'short' });
                 option.textContent = `${monthName} Week ${weekNum}: ${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
                 if (index === currentViewedWeekIndex) option.selected = true;
