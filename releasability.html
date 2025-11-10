@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Releasability Board - Weekly Schedule</title>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+
+    <!-- Base Stylesheets -->
+    <link rel="stylesheet" href="src/styles/variables.css">
+    <link rel="stylesheet" href="src/styles/base.css">
+
+    <!-- Releasability-Specific Stylesheet (includes all needed styles) -->
+    <link rel="stylesheet" href="src/styles/releasability.css">
+</head>
+<body>
+    <div id="releasability-app">
+        <!-- Status Legend -->
+        <div class="status-legend">
+            <div class="legend-left">
+                <span class="legend-title">Status:</span>
+                <div class="legend-item">
+                    <span class="status-indicator status-complete"></span>
+                    <span class="legend-label">Complete</span>
+                </div>
+                <div class="legend-item">
+                    <span class="status-indicator status-in-progress"></span>
+                    <span class="legend-label">In Progress</span>
+                </div>
+                <div class="legend-item">
+                    <span class="status-indicator status-incomplete"></span>
+                    <span class="legend-label">Incomplete</span>
+                </div>
+            </div>
+            <button id="add-week-btn" class="add-week-btn">+ Add Week</button>
+        </div>
+
+        <!-- Main Grid Container -->
+        <div class="grid-wrapper">
+            <div id="releasability-grid-container" class="grid-container">
+                <!-- Grid will be dynamically rendered here -->
+                <div class="loading-state">
+                    <div class="spinner"></div>
+                    <p>Loading releasability data...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Application Script -->
+    <script type="module" src="src/pages/releasability/releasability-page.js"></script>
+</body>
+</html>

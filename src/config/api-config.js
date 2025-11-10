@@ -17,6 +17,7 @@ export const SUPABASE = {
     ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5ycmt4bG92aHhnd3dnem9paGl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NTEzMzAsImV4cCI6MjA3NjIyNzMzMH0.mwLAySKxtQHHl7ihT0MboMpZnzQJbw-QjCCgi3CCrT4',
     SERVICE_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5ycmt4bG92aHhnd3dnem9paGl1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MDY1MTMzMCwiZXhwIjoyMDc2MjI3MzMwfQ.Ni2pK3PZxU3WxJcSJvOkJf-ti9Wx4WenHUd2rxhBfAk',
     TASKS_TABLE: 'weekly_tasks',
+    RELEASABILITY_TABLE: 'releasability_tracking',
     CDN_URL: 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2'
 };
 
