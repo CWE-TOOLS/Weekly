@@ -15,6 +15,8 @@ import {
   addProject,
   removeProject,
   updateProjectWeek,
+  updateProjectStatus,
+  getNextStatus,
   setSearchQuery,
   setDepartmentFilters,
   setLoading,
@@ -23,7 +25,8 @@ import {
 import {
   TRACKING_ITEMS,
   PROJECT_SOURCE,
-  VALIDATION
+  VALIDATION,
+  STATUS_DISPLAY
 } from '../../config/releasability-config.js';
 import { renderReleasabilityGrid, getUniqueDepartments } from './releasability-grid.js';
 import { getMonday } from '../../utils/date-utils.js';
@@ -355,7 +358,7 @@ function setupGridEventDelegation(grid) {
 }
 
 /**
- * Handle status cell click (placeholder for STEP 6)
+ * Handle status cell click - cycle through statuses
  * @param {HTMLElement} cell - The clicked status cell
  */
 function handleStatusCellClick(cell) {
@@ -363,10 +366,56 @@ function handleStatusCellClick(cell) {
   const trackingItem = cell.dataset.trackingItem;
   const currentStatus = cell.dataset.status;
 
-  console.log('📌 Status cell clicked:', { projectId, trackingItem, currentStatus });
-  console.log('⏳ Status cycling will be implemented in STEP 6');
+  // Get next status in the cycle
+  const nextStatus = getNextStatus(currentStatus);
 
-  // TODO: Implement status cycling in STEP 6
+  // Update state
+  const updatedProject = updateProjectStatus(projectId, trackingItem, nextStatus);
+
+  if (updatedProject) {
+    // Update cell visual immediately (optimistic update)
+    updateCellVisual(cell, nextStatus);
+
+    console.log(`✅ Status updated: ${trackingItem} → ${STATUS_DISPLAY[nextStatus].label}`);
+
+    // TODO: Save to Supabase in STEP 9
+  }
+}
+
+/**
+ * Update a cell's visual appearance for a new status
+ * @param {HTMLElement} cell - The status cell element
+ * @param {string} newStatus - The new status value
+ */
+function updateCellVisual(cell, newStatus) {
+  const statusConfig = STATUS_DISPLAY[newStatus];
+
+  // Remove old status class
+  cell.classList.remove('status-incomplete', 'status-in-progress', 'status-complete');
+
+  // Add new status class
+  cell.classList.add(`status-${newStatus}`);
+
+  // Update data attribute
+  cell.dataset.status = newStatus;
+
+  // Update icon
+  const icon = cell.querySelector('.status-icon');
+  if (icon) {
+    icon.textContent = statusConfig.icon;
+  }
+
+  // Update tooltip
+  const project = getAllProjects().find(p => p.id === cell.dataset.projectId);
+  if (project) {
+    cell.title = `${project.project} - ${cell.dataset.trackingItem}: ${statusConfig.label}`;
+  }
+
+  // Add visual feedback (flash animation)
+  cell.classList.add('status-updated');
+  setTimeout(() => {
+    cell.classList.remove('status-updated');
+  }, 300);
 }
 
 /**
