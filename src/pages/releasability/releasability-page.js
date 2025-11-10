@@ -14,6 +14,7 @@ import {
   getFilteredProjects,
   addProject,
   removeProject,
+  updateProjectWeek,
   setSearchQuery,
   setDepartmentFilters,
   setLoading,
@@ -24,6 +25,8 @@ import {
   PROJECT_SOURCE,
   VALIDATION
 } from '../../config/releasability-config.js';
+import { renderReleasabilityGrid, getUniqueDepartments } from './releasability-grid.js';
+import { getMonday } from '../../utils/date-utils.js';
 
 // ============================================================================
 // INITIALIZATION
@@ -273,8 +276,9 @@ async function handleAddProjectSubmit(e) {
   }
 
   try {
-    // Convert selected date to Monday (will use date-utils in later steps)
-    const weekMonday = getMonday(new Date(projectWeek));
+    // Convert selected date to Monday
+    const mondayDate = getMonday(new Date(projectWeek));
+    const weekMonday = mondayDate.toISOString().split('T')[0];
 
     // Add project to state
     const newProject = addProject({
@@ -316,20 +320,114 @@ function renderGrid() {
   // Hide empty state
   hideEmptyState();
 
-  // TODO: In STEP 4, this will render the actual grid
-  // For now, show a placeholder
-  container.innerHTML = `
-    <div style="padding: 2rem; text-align: center; color: var(--text-secondary);">
-      <h2>Grid Rendering - Coming in STEP 4</h2>
-      <p>Found ${projects.length} project(s) to display</p>
-      <p style="font-size: 0.875rem; margin-top: 1rem;">
-        The grid renderer will be implemented in the next step.<br>
-        For now, the page structure and state management are working!
-      </p>
-    </div>
-  `;
+  // Clear container
+  container.innerHTML = '';
 
-  console.log('📊 Rendered placeholder grid with', projects.length, 'projects');
+  // Render the grid
+  const grid = renderReleasabilityGrid(projects);
+  container.appendChild(grid);
+
+  // Set up grid event delegation
+  setupGridEventDelegation(grid);
+
+  console.log('📊 Rendered grid with', projects.length, 'projects');
+}
+
+/**
+ * Set up event delegation for grid interactions
+ * @param {HTMLElement} grid - The grid container element
+ */
+function setupGridEventDelegation(grid) {
+  grid.addEventListener('click', (e) => {
+    const target = e.target.closest('.status-cell, .project-control-btn');
+    if (!target) return;
+
+    // Handle status cell clicks (will implement in STEP 6)
+    if (target.classList.contains('status-cell')) {
+      handleStatusCellClick(target);
+    }
+
+    // Handle project control button clicks
+    if (target.classList.contains('project-control-btn')) {
+      handleProjectControlClick(target);
+    }
+  });
+}
+
+/**
+ * Handle status cell click (placeholder for STEP 6)
+ * @param {HTMLElement} cell - The clicked status cell
+ */
+function handleStatusCellClick(cell) {
+  const projectId = cell.dataset.projectId;
+  const trackingItem = cell.dataset.trackingItem;
+  const currentStatus = cell.dataset.status;
+
+  console.log('📌 Status cell clicked:', { projectId, trackingItem, currentStatus });
+  console.log('⏳ Status cycling will be implemented in STEP 6');
+
+  // TODO: Implement status cycling in STEP 6
+}
+
+/**
+ * Handle project control button click
+ * @param {HTMLElement} button - The clicked control button
+ */
+function handleProjectControlClick(button) {
+  const action = button.dataset.action;
+  const projectId = button.dataset.projectId;
+
+  switch (action) {
+    case 'move-prev':
+      handleMoveProjectWeek(projectId, -1);
+      break;
+    case 'move-next':
+      handleMoveProjectWeek(projectId, 1);
+      break;
+    case 'delete':
+      handleDeleteProject(projectId);
+      break;
+  }
+}
+
+/**
+ * Move a project to a different week
+ * @param {string} projectId - The project ID
+ * @param {number} weekOffset - Number of weeks to move (+1 or -1)
+ */
+function handleMoveProjectWeek(projectId, weekOffset) {
+  const project = getAllProjects().find(p => p.id === projectId);
+  if (!project) return;
+
+  // Calculate new week Monday
+  const currentMonday = new Date(project.weekMonday);
+  const newMonday = new Date(currentMonday);
+  newMonday.setDate(newMonday.getDate() + (weekOffset * 7));
+
+  const newMondayStr = newMonday.toISOString().split('T')[0];
+
+  // Update project week
+  updateProjectWeek(projectId, newMondayStr);
+
+  const direction = weekOffset > 0 ? 'next' : 'previous';
+  console.log(`📅 Moved "${project.project}" to ${direction} week`);
+  showNotification(`Moved "${project.project}" to ${direction} week`);
+}
+
+/**
+ * Delete a project
+ * @param {string} projectId - The project ID
+ */
+function handleDeleteProject(projectId) {
+  const project = getAllProjects().find(p => p.id === projectId);
+  if (!project) return;
+
+  const confirmed = confirm(`Are you sure you want to delete "${project.project}"?`);
+  if (!confirmed) return;
+
+  removeProject(projectId);
+  console.log(`🗑️ Deleted project: "${project.project}"`);
+  showNotification(`Deleted "${project.project}"`);
 }
 
 // ============================================================================
@@ -375,25 +473,6 @@ function showNotification(message) {
 function showError(message) {
   console.error('❌ Error:', message);
   alert(message);
-}
-
-// ============================================================================
-// UTILITY FUNCTIONS
-// ============================================================================
-
-/**
- * Get Monday date for a given date
- * TODO: Will import from date-utils.js in later steps
- * @param {Date} date - Input date
- * @returns {string} Monday date in YYYY-MM-DD format
- */
-function getMonday(date) {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
-  const monday = new Date(d.setDate(diff));
-
-  return monday.toISOString().split('T')[0];
 }
 
 // ============================================================================
