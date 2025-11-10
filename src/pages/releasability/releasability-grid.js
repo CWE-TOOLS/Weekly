@@ -116,15 +116,6 @@ function createWeekHeader(weekMonday) {
   const month = getWeekMonth(monday);
   const weekNum = getWeekOfMonth(monday, month);
 
-  // Debug logging
-  console.log(`📅 Week Header Debug:`, {
-    weekMonday,
-    mondayDate: monday.toDateString(),
-    assignedMonth: month,
-    weekNum,
-    actualMonth: monday.getMonth()
-  });
-
   // Format week label (e.g., "Week 2: Nov 10-15")
   const weekLabel = formatWeekLabel(monday, month, weekNum);
 
