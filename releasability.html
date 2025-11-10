@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Releasability Board - Weekly Schedule</title>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+
+    <!-- Base Stylesheets -->
+    <link rel="stylesheet" href="src/styles/variables.css">
+    <link rel="stylesheet" href="src/styles/base.css">
+
+    <!-- Releasability-Specific Stylesheet (includes all needed styles) -->
+    <link rel="stylesheet" href="src/styles/releasability.css">
+</head>
+<body>
+    <div id="releasability-app">
+        <!-- Header Section -->
+        <header class="releasability-header">
+            <div class="header-title">
+                <h1>Releasability Board</h1>
+                <div class="header-subtitle">
+                    Project Release Tracking & Status Management
+                </div>
+            </div>
+
+            <div class="header-controls">
+                <!-- Week Navigation -->
+                <div class="week-navigation">
+                    <button id="prev-week-btn" class="nav-button" title="Previous Week">
+                        <span class="button-icon">←</span>
+                        <span class="button-text">Previous</span>
+                    </button>
+
+                    <button id="current-week-btn" class="nav-button primary" title="Jump to Current Week">
+                        <span class="button-text">Current Week</span>
+                    </button>
+
+                    <button id="next-week-btn" class="nav-button" title="Next Week">
+                        <span class="button-text">Next</span>
+                        <span class="button-icon">→</span>
+                    </button>
+                </div>
+
+                <!-- Actions -->
+                <div class="header-actions">
+                    <button id="add-project-btn" class="action-button primary">
+                        <span class="button-icon">+</span>
+                        <span class="button-text">Add Project</span>
+                    </button>
+
+                    <button id="refresh-btn" class="action-button" title="Refresh Data">
+                        <span class="button-icon">⟳</span>
+                    </button>
+
+                    <button id="print-btn" class="action-button" title="Print Board">
+                        <span class="button-icon">🖨</span>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Filters & Search Section -->
+        <div class="filters-section">
+            <div class="search-container">
+                <input
+                    type="text"
+                    id="project-search"
+                    class="search-input"
+                    placeholder="Search projects..."
+                    autocomplete="off"
+                >
+                <span class="search-icon">🔍</span>
+            </div>
+
+            <div class="department-filters">
+                <label class="filter-label">Filter by Department:</label>
+                <div id="department-filter-buttons" class="filter-buttons">
+                    <!-- Department filter buttons will be dynamically inserted here -->
+                </div>
+            </div>
+
+            <div class="filter-actions">
+                <button id="clear-filters-btn" class="filter-action-btn">
+                    Clear Filters
+                </button>
+            </div>
+        </div>
+
+        <!-- Status Legend -->
+        <div class="status-legend">
+            <span class="legend-title">Status:</span>
+            <div class="legend-item">
+                <span class="status-indicator status-complete"></span>
+                <span class="legend-label">Complete</span>
+            </div>
+            <div class="legend-item">
+                <span class="status-indicator status-in-progress"></span>
+                <span class="legend-label">In Progress</span>
+            </div>
+            <div class="legend-item">
+                <span class="status-indicator status-incomplete"></span>
+                <span class="legend-label">Incomplete</span>
+            </div>
+        </div>
+
+        <!-- Main Grid Container -->
+        <div class="grid-wrapper">
+            <div id="releasability-grid-container" class="grid-container">
+                <!-- Grid will be dynamically rendered here -->
+                <div class="loading-state">
+                    <div class="spinner"></div>
+                    <p>Loading releasability data...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Empty State (shown when no projects) -->
+        <div id="empty-state" class="empty-state" style="display: none;">
+            <div class="empty-state-icon">📋</div>
+            <h2>No Projects Found</h2>
+            <p>Add a project to get started tracking release readiness.</p>
+            <button class="action-button primary" onclick="document.getElementById('add-project-btn').click()">
+                <span class="button-icon">+</span>
+                <span class="button-text">Add Your First Project</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Modal for Adding Projects -->
+    <div id="add-project-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Add Manual Project</h2>
+                <button class="modal-close" id="close-modal-btn">&times;</button>
+            </div>
+
+            <div class="modal-body">
+                <form id="add-project-form">
+                    <div class="form-group">
+                        <label for="project-name">
+                            Project Name <span class="required">*</span>
+                        </label>
+                        <input
+                            type="text"
+                            id="project-name"
+                            name="project-name"
+                            required
+                            placeholder="Enter project name"
+                            minlength="2"
+                            maxlength="100"
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="project-week">
+                            Week <span class="required">*</span>
+                        </label>
+                        <input
+                            type="date"
+                            id="project-week"
+                            name="project-week"
+                            required
+                        >
+                        <small class="form-help">Select any date in the target week (will auto-adjust to Monday)</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="project-department">Department (Optional)</label>
+                        <select id="project-department" name="project-department">
+                            <option value="">-- Select Department --</option>
+                            <!-- Department options will be dynamically inserted -->
+                        </select>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="button" class="button secondary" id="cancel-add-btn">
+                            Cancel
+                        </button>
+                        <button type="submit" class="button primary">
+                            <span class="button-icon">+</span>
+                            Add Project
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Application Script -->
+    <script type="module" src="src/pages/releasability/releasability-page.js"></script>
+</body>
+</html>

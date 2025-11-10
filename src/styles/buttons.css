@@ -1,0 +1,295 @@
+/* Button Styles */
+
+/* Icon Buttons */
+.icon-btn {
+  padding: 0.625rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+}
+
+.icon-btn svg {
+  width: 2rem;
+  height: 2rem;
+}
+
+/* Task Card Buttons */
+.task-edit-btn {
+  position: absolute;
+  bottom: 0.5rem;
+  right: 0.5rem;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--border-radius-md);
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease-in-out;
+  z-index: 10;
+}
+
+.task-card:hover .task-edit-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.task-card .task-edit-btn:hover {
+  background: var(--background-secondary);
+  transform: scale(1.05);
+}
+
+.task-plan-btn {
+  position: absolute;
+  bottom: 0.5rem;
+  right: 3.5rem;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--border-radius-md);
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease-in-out;
+  z-index: 10;
+}
+
+.task-card:hover .task-plan-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.task-plan-btn:hover {
+  background: var(--background-secondary);
+  transform: scale(1.05);
+}
+
+.task-delete-btn {
+  position: absolute;
+  bottom: 0.5rem;
+  right: 7rem;
+  background: rgba(239, 68, 68, 0.9);
+  border: 1px solid #dc2626;
+  border-radius: var(--border-radius-md);
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: white;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease-in-out;
+  z-index: 10;
+}
+
+.task-card:hover .task-delete-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.task-delete-btn:hover {
+  background: #dc2626;
+  transform: scale(1.05);
+}
+
+/* Edit Controls */
+.edit-controls {
+  position: absolute;
+  bottom: 0.5rem;
+  right: 0.5rem;
+  display: flex;
+  gap: 0.25rem;
+  z-index: 10;
+}
+
+.edit-confirm-btn,
+.edit-cancel-btn {
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--border-radius-md);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+}
+
+.edit-confirm-btn {
+  background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+  color: white;
+}
+
+.edit-confirm-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.edit-cancel-btn {
+  background: var(--border-primary);
+  color: var(--text-primary);
+}
+
+.edit-cancel-btn:hover {
+  background: var(--border-secondary);
+}
+
+/* Inline Edit Actions */
+.edit-actions {
+  position: absolute;
+  bottom: 0.5rem;
+  right: 0.5rem;
+  display: flex;
+  gap: 0.5rem;
+  z-index: 10;
+}
+
+.edit-save-btn,
+.edit-cancel-btn {
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--border-radius-md);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+}
+
+.edit-save-btn {
+  background: rgba(79, 70, 229, 0.95);
+  color: white;
+  border-color: var(--accent-primary);
+}
+
+.edit-save-btn:hover {
+  background: var(--accent-primary);
+  transform: scale(1.05);
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.2);
+}
+
+.edit-cancel-btn {
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--text-primary);
+}
+
+.edit-cancel-btn:hover {
+  background: var(--background-secondary);
+  transform: scale(1.05);
+}
+
+/* Form Buttons */
+.btn-primary,
+.btn-secondary {
+  padding: 0.625rem 1.5rem;
+  border-radius: var(--border-radius-md);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+}
+
+.btn-primary {
+  background: var(--accent-primary);
+  color: white;
+}
+
+.btn-primary:hover {
+  background: var(--accent-primary-dark, #5b48e8);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+.btn-secondary {
+  background: var(--background-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-primary);
+}
+
+.btn-secondary:hover {
+  background: var(--background-primary);
+  border-color: var(--text-secondary);
+}
+
+/* Editing Button */
+.editing-btn {
+  background-color: var(--accent-primary);
+  color: white;
+}
+
+.editing-btn:hover {
+  background-color: var(--accent-primary-hover);
+}
+
+/* ===================================
+   Floating Action Button (FAB)
+   =================================== */
+
+.fab-btn {
+  display: none !important; /* Hidden - users click empty cells to add tasks */
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent-primary) 0%, #7c3aed 100%);
+  color: white;
+  border: none;
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 1000;
+  padding: 0;
+}
+
+.fab-btn svg {
+  width: 28px;
+  height: 28px;
+  stroke-width: 2.5;
+}
+
+.fab-btn:hover {
+  transform: translateY(-4px) scale(1.05);
+  box-shadow: 0 12px 24px rgba(79, 70, 229, 0.4);
+  background: linear-gradient(135deg, #5b48e8 0%, #6d28d9 100%);
+}
+
+.fab-btn:active {
+  transform: translateY(-2px) scale(1);
+}
+
+.fab-btn:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.3), var(--shadow-md);
+}
+
+/* Ripple effect on click */
+.fab-btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  transform: scale(0);
+  opacity: 0;
+  transition: transform 0.5s, opacity 0.5s;
+}
+
+.fab-btn:active::after {
+  transform: scale(1.5);
+  opacity: 0;
+}

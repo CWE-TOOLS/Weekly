@@ -1,0 +1,41 @@
+/* Context Menu Styles */
+
+.context-menu {
+  position: fixed;
+  background: var(--background-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-md);
+  z-index: 10000;
+  min-width: 180px;
+  display: none;
+  overflow: hidden;
+}
+
+.context-menu-item {
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.context-menu-item:hover {
+  background-color: var(--accent-primary);
+  color: white;
+}
+
+.menu-text {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.menu-icon {
+  font-size: 1.2rem;
+  opacity: 0.8;
+}
