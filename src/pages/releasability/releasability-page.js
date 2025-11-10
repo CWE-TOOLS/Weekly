@@ -7,8 +7,9 @@
  * @module pages/releasability/releasability-page
  */
 
-import { on, RELEASABILITY_EVENTS } from './releasability-state.js';
+import { on } from '../../core/event-bus.js';
 import {
+  RELEASABILITY_EVENTS,
   getAllProjects,
   getFilteredProjects,
   addProject,
