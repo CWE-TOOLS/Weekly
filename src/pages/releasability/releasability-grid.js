@@ -7,7 +7,7 @@
  * @module pages/releasability/releasability-grid
  */
 
-import { getMonday } from '../../utils/date-utils.js';
+import { getMonday, getWeekMonth, getWeekOfMonth } from '../../utils/date-utils.js';
 import { TRACKING_ITEMS, STATUS, STATUS_DISPLAY } from '../../config/releasability-config.js';
 
 // ============================================================================
@@ -111,11 +111,12 @@ function createWeekSection(weekMonday, projects) {
 function createWeekHeader(weekMonday) {
   const monday = new Date(weekMonday);
 
-  // Calculate week number within the month (simpler logic)
-  const weekNum = getSimpleWeekOfMonth(monday);
+  // Use the same logic as the main app
+  const month = getWeekMonth(monday);
+  const weekNum = getWeekOfMonth(monday, month);
 
   // Format week label (e.g., "Week 2: Nov 10-15")
-  const weekLabel = formatWeekLabel(monday, weekNum);
+  const weekLabel = formatWeekLabel(monday, month, weekNum);
 
   const header = document.createElement('div');
   header.className = 'week-header-cell';
@@ -315,43 +316,17 @@ function getWeekRange(projectsByWeek) {
 // ============================================================================
 
 /**
- * Get simple week number within month
- * @param {Date} monday - Monday date
- * @returns {number} Week number (1-5)
- */
-function getSimpleWeekOfMonth(monday) {
-  // Get the first day of the month
-  const firstDayOfMonth = new Date(monday.getFullYear(), monday.getMonth(), 1);
-
-  // Find the first Monday of the month (or the Monday before the 1st)
-  const firstMonday = getMonday(firstDayOfMonth);
-
-  // If the first Monday is in the previous month, get the next Monday
-  let weekOneMonday = firstMonday;
-  if (firstMonday.getMonth() !== monday.getMonth()) {
-    weekOneMonday = new Date(firstMonday);
-    weekOneMonday.setDate(firstMonday.getDate() + 7);
-  }
-
-  // Calculate week number based on how many weeks since week 1
-  const diffMs = monday - weekOneMonday;
-  const diffDays = diffMs / (1000 * 60 * 60 * 24);
-  const weekNum = 1 + Math.floor(diffDays / 7);
-
-  return Math.max(1, weekNum);
-}
-
-/**
  * Format week label (e.g., "Week 2: Nov 10-15")
  * @param {Date} monday - Monday date
+ * @param {number} month - Month index (0-11) that this week belongs to
  * @param {number} weekNum - Week number within month
  * @returns {string} Formatted week label
  */
-function formatWeekLabel(monday, weekNum) {
+function formatWeekLabel(monday, month, weekNum) {
   // Month name abbreviation
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const monthName = monthNames[monday.getMonth()];
+  const monthName = monthNames[month];
 
   // Get Saturday (end of week)
   const saturday = new Date(monday);
