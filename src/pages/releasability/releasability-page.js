@@ -20,7 +20,9 @@ import {
   setSearchQuery,
   setDepartmentFilters,
   setLoading,
-  getStateSnapshot
+  getStateSnapshot,
+  setProjects,
+  getWeeksWithProjects
 } from './releasability-state.js';
 import {
   TRACKING_ITEMS,
@@ -30,6 +32,11 @@ import {
 } from '../../config/releasability-config.js';
 import { renderReleasabilityGrid, getUniqueDepartments } from './releasability-grid.js';
 import { getMonday } from '../../utils/date-utils.js';
+import {
+  loadAllReleasabilityData,
+  saveTrackingStatus,
+  deleteTrackingStatus
+} from '../../services/releasability-data-service.js';
 
 // ============================================================================
 // INITIALIZATION
@@ -73,16 +80,22 @@ async function init() {
  * Load initial data from services
  */
 async function loadInitialData() {
-  // TODO: In STEP 5, this will:
-  // 1. Fetch projects from Google Sheets
-  // 2. Detect project start dates
-  // 3. Load tracking statuses from Supabase
-  // 4. Merge data into state
+  console.log('🔄 Loading releasability data from Google Sheets and Supabase...');
 
-  // For now, just simulate loading
-  await new Promise(resolve => setTimeout(resolve, 500));
+  try {
+    // Load all data (Google Sheets projects + Supabase tracking statuses)
+    const projects = await loadAllReleasabilityData();
 
-  console.log('ℹ️ Initial data load complete (no data sources connected yet)');
+    // Set projects in state
+    setProjects(projects);
+
+    console.log(`✅ Loaded ${projects.length} projects successfully`);
+
+  } catch (error) {
+    console.error('❌ Error loading releasability data:', error);
+    // Don't throw - allow app to start with empty state
+    // User can still add manual projects
+  }
 }
 
 // ============================================================================
@@ -157,20 +170,100 @@ function setupStateHandlers() {
 
 function handlePrevWeek() {
   console.log('⬅️ Previous week clicked');
-  // TODO: Implement week navigation in later steps
-  showNotification('Previous week navigation - Coming soon!');
+  const weeks = getWeeksWithProjects().sort();
+
+  if (weeks.length === 0) {
+    showNotification('No weeks to navigate');
+    return;
+  }
+
+  // Find first visible week in viewport
+  const visibleWeek = findVisibleWeek();
+
+  if (!visibleWeek) {
+    // Scroll to first week
+    scrollToWeek(weeks[0]);
+    return;
+  }
+
+  // Find previous week
+  const currentIndex = weeks.indexOf(visibleWeek);
+  const prevWeek = currentIndex > 0 ? weeks[currentIndex - 1] : weeks[0];
+
+  scrollToWeek(prevWeek);
 }
 
 function handleNextWeek() {
   console.log('➡️ Next week clicked');
-  // TODO: Implement week navigation in later steps
-  showNotification('Next week navigation - Coming soon!');
+  const weeks = getWeeksWithProjects().sort();
+
+  if (weeks.length === 0) {
+    showNotification('No weeks to navigate');
+    return;
+  }
+
+  // Find first visible week in viewport
+  const visibleWeek = findVisibleWeek();
+
+  if (!visibleWeek) {
+    // Scroll to first week
+    scrollToWeek(weeks[0]);
+    return;
+  }
+
+  // Find next week
+  const currentIndex = weeks.indexOf(visibleWeek);
+  const nextWeek = currentIndex < weeks.length - 1 ? weeks[currentIndex + 1] : weeks[weeks.length - 1];
+
+  scrollToWeek(nextWeek);
 }
 
 function handleCurrentWeek() {
   console.log('📅 Current week clicked');
-  // TODO: Implement jump to current week in later steps
-  showNotification('Jump to current week - Coming soon!');
+  const today = new Date();
+  const currentMonday = getMonday(today);
+  const currentWeekStr = currentMonday.toISOString().split('T')[0];
+
+  // Scroll to current week
+  scrollToWeek(currentWeekStr);
+}
+
+/**
+ * Find the first visible week header in the viewport
+ * @returns {string|null} Week Monday string or null
+ */
+function findVisibleWeek() {
+  const weekHeaders = document.querySelectorAll('.week-header-cell');
+  const viewportTop = window.scrollY;
+  const viewportBottom = viewportTop + window.innerHeight;
+
+  for (const header of weekHeaders) {
+    const rect = header.getBoundingClientRect();
+    const elementTop = rect.top + window.scrollY;
+
+    // Check if header is in viewport
+    if (elementTop >= viewportTop && elementTop <= viewportBottom) {
+      return header.dataset.weekMonday;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Scroll to a specific week
+ * @param {string} weekMonday - Week Monday date string
+ */
+function scrollToWeek(weekMonday) {
+  const weekHeader = document.querySelector(`.week-header-cell[data-week-monday="${weekMonday}"]`);
+
+  if (weekHeader) {
+    weekHeader.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    console.log(`📍 Scrolled to week: ${weekMonday}`);
+  } else {
+    console.log(`⚠️ Week ${weekMonday} not found in grid`);
+    showNotification(`Week ${weekMonday} not found`);
+  }
 }
 
 // ============================================================================
@@ -240,11 +333,37 @@ function openAddProjectModal() {
       dateInput.value = today;
     }
 
+    // Populate department dropdown
+    populateDepartmentDropdown();
+
     // Focus on project name input
     setTimeout(() => {
       document.getElementById('project-name')?.focus();
     }, 100);
   }
+}
+
+/**
+ * Populate the department dropdown in the add project modal
+ */
+function populateDepartmentDropdown() {
+  const select = document.getElementById('project-department');
+  if (!select) return;
+
+  // Get unique departments
+  const allProjects = getAllProjects();
+  const departments = getUniqueDepartments(allProjects).filter(d => d); // Filter out empty
+
+  // Clear existing options except the first one
+  select.innerHTML = '<option value="">-- Select Department --</option>';
+
+  // Add department options
+  departments.forEach(dept => {
+    const option = document.createElement('option');
+    option.value = dept;
+    option.textContent = dept;
+    select.appendChild(option);
+  });
 }
 
 function closeAddProjectModal() {
@@ -293,7 +412,14 @@ async function handleAddProjectSubmit(e) {
 
     console.log('✅ Project added:', newProject);
 
-    // TODO: Save to Supabase in later steps
+    // Save to Supabase
+    try {
+      await saveTrackingStatus(newProject);
+      console.log('💾 Project saved to Supabase');
+    } catch (saveError) {
+      console.error('❌ Failed to save project to Supabase:', saveError);
+      // Don't prevent project from being added to UI
+    }
 
     closeAddProjectModal();
     showNotification(`Project "${projectName}" added successfully!`);
@@ -333,6 +459,9 @@ function renderGrid() {
   // Set up grid event delegation
   setupGridEventDelegation(grid);
 
+  // Update department filters
+  updateDepartmentFilters();
+
   console.log('📊 Rendered grid with', projects.length, 'projects');
 }
 
@@ -361,7 +490,7 @@ function setupGridEventDelegation(grid) {
  * Handle status cell click - cycle through statuses
  * @param {HTMLElement} cell - The clicked status cell
  */
-function handleStatusCellClick(cell) {
+async function handleStatusCellClick(cell) {
   const projectId = cell.dataset.projectId;
   const trackingItem = cell.dataset.trackingItem;
   const currentStatus = cell.dataset.status;
@@ -378,7 +507,14 @@ function handleStatusCellClick(cell) {
 
     console.log(`✅ Status updated: ${trackingItem} → ${STATUS_DISPLAY[nextStatus].label}`);
 
-    // TODO: Save to Supabase in STEP 9
+    // Save to Supabase
+    try {
+      await saveTrackingStatus(updatedProject);
+      console.log('💾 Status saved to Supabase');
+    } catch (error) {
+      console.error('❌ Failed to save status to Supabase:', error);
+      showError('Failed to save status change. Please try again.');
+    }
   }
 }
 
@@ -444,9 +580,11 @@ function handleProjectControlClick(button) {
  * @param {string} projectId - The project ID
  * @param {number} weekOffset - Number of weeks to move (+1 or -1)
  */
-function handleMoveProjectWeek(projectId, weekOffset) {
+async function handleMoveProjectWeek(projectId, weekOffset) {
   const project = getAllProjects().find(p => p.id === projectId);
   if (!project) return;
+
+  const oldWeekMonday = project.weekMonday;
 
   // Calculate new week Monday
   const currentMonday = new Date(project.weekMonday);
@@ -456,27 +594,113 @@ function handleMoveProjectWeek(projectId, weekOffset) {
   const newMondayStr = newMonday.toISOString().split('T')[0];
 
   // Update project week
-  updateProjectWeek(projectId, newMondayStr);
+  const updatedProject = updateProjectWeek(projectId, newMondayStr);
 
-  const direction = weekOffset > 0 ? 'next' : 'previous';
-  console.log(`📅 Moved "${project.project}" to ${direction} week`);
-  showNotification(`Moved "${project.project}" to ${direction} week`);
+  if (updatedProject) {
+    // Delete old tracking record and create new one
+    try {
+      await deleteTrackingStatus(project.project, oldWeekMonday);
+      await saveTrackingStatus(updatedProject);
+      console.log('💾 Project week updated in Supabase');
+    } catch (error) {
+      console.error('❌ Failed to update project week in Supabase:', error);
+    }
+
+    const direction = weekOffset > 0 ? 'next' : 'previous';
+    console.log(`📅 Moved "${project.project}" to ${direction} week`);
+    showNotification(`Moved "${project.project}" to ${direction} week`);
+  }
 }
 
 /**
  * Delete a project
  * @param {string} projectId - The project ID
  */
-function handleDeleteProject(projectId) {
+async function handleDeleteProject(projectId) {
   const project = getAllProjects().find(p => p.id === projectId);
   if (!project) return;
 
   const confirmed = confirm(`Are you sure you want to delete "${project.project}"?`);
   if (!confirmed) return;
 
+  // Delete from Supabase first
+  try {
+    await deleteTrackingStatus(project.project, project.weekMonday);
+    console.log('💾 Project deleted from Supabase');
+  } catch (error) {
+    console.error('❌ Failed to delete from Supabase:', error);
+    // Continue with local deletion anyway
+  }
+
+  // Remove from state
   removeProject(projectId);
   console.log(`🗑️ Deleted project: "${project.project}"`);
   showNotification(`Deleted "${project.project}"`);
+}
+
+// ============================================================================
+// FILTERING
+// ============================================================================
+
+/**
+ * Update department filter buttons based on available departments
+ */
+function updateDepartmentFilters() {
+  const allProjects = getAllProjects();
+  const departments = getUniqueDepartments(allProjects);
+  const filterContainer = document.getElementById('department-filter-buttons');
+
+  if (!filterContainer) return;
+
+  // Clear existing buttons
+  filterContainer.innerHTML = '';
+
+  // Add "All" button
+  const allBtn = document.createElement('button');
+  allBtn.className = 'filter-button active';
+  allBtn.textContent = 'All';
+  allBtn.dataset.department = '';
+  allBtn.addEventListener('click', () => handleDepartmentFilterClick(''));
+  filterContainer.appendChild(allBtn);
+
+  // Add department buttons
+  departments.forEach(dept => {
+    if (!dept) return; // Skip empty departments
+
+    const btn = document.createElement('button');
+    btn.className = 'filter-button';
+    btn.textContent = dept;
+    btn.dataset.department = dept;
+    btn.addEventListener('click', () => handleDepartmentFilterClick(dept));
+    filterContainer.appendChild(btn);
+  });
+
+  console.log(`📊 Created ${departments.length} department filter buttons`);
+}
+
+/**
+ * Handle department filter button click
+ * @param {string} department - Department name or empty string for "All"
+ */
+function handleDepartmentFilterClick(department) {
+  console.log(`🔍 Department filter clicked: "${department || 'All'}"`);
+
+  // Update active button state
+  const buttons = document.querySelectorAll('.filter-button');
+  buttons.forEach(btn => {
+    if (btn.dataset.department === department) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  });
+
+  // Update filter state
+  if (department) {
+    setDepartmentFilters([department]);
+  } else {
+    setDepartmentFilters([]);
+  }
 }
 
 // ============================================================================

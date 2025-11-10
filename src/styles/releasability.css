@@ -221,6 +221,28 @@
   flex-wrap: wrap;
 }
 
+.filter-button {
+  padding: 0.5rem 1rem;
+  background-color: transparent;
+  border: 1px solid var(--border-secondary);
+  border-radius: var(--border-radius-md);
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  transition: all 0.2s;
+}
+
+.filter-button:hover {
+  background-color: var(--background-primary);
+  border-color: var(--border-primary);
+}
+
+.filter-button.active {
+  background-color: var(--color-primary);
+  color: white;
+  border-color: var(--color-primary);
+}
+
 .filter-action-btn {
   padding: 0.5rem 1rem;
   background-color: transparent;
