@@ -106,8 +106,16 @@ export function getWeekOfMonth(monday, month) {
     const year = monday.getFullYear();
     let startOfWeek1 = getMonday(new Date(year, month, 1));
     // Find the first Monday whose week has majority days in the month
-    while (getWeekMonth(startOfWeek1) !== month) {
+    // Safety limit: max 10 iterations to prevent infinite loop
+    let iterations = 0;
+    const maxIterations = 10;
+    while (getWeekMonth(startOfWeek1) !== month && iterations < maxIterations) {
         startOfWeek1 = new Date(startOfWeek1.getTime() + TIME_CONSTANTS.DAYS_IN_WEEK_MS);
+        iterations++;
+    }
+    // If we couldn't find the right week, just use the first Monday of the month
+    if (iterations >= maxIterations) {
+        startOfWeek1 = getMonday(new Date(year, month, 1));
     }
     const diffMs = monday - startOfWeek1;
     const diffDays = diffMs / TIME_CONSTANTS.MILLISECONDS_PER_DAY;
