@@ -21,7 +21,7 @@
   --status-complete-text: #FFFFFF;
 
   /* Grid Dimensions */
-  --grid-project-column-width: 200px;
+  --grid-project-column-width: 250px;
   --grid-tracking-column-width: 100px;
   --grid-cell-gap: 1px;
   --grid-row-height: 40px;
@@ -422,6 +422,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0; /* Allow flex item to shrink */
 }
 
 .project-controls {
@@ -429,6 +430,7 @@
   gap: 0.25rem;
   opacity: 0;
   transition: opacity 0.2s;
+  flex-shrink: 0; /* Prevent controls from shrinking */
 }
 
 .project-name-cell:hover .project-controls {
@@ -437,16 +439,29 @@
 
 .project-control-btn {
   padding: 0.25rem 0.5rem;
-  background-color: var(--background-primary);
-  border: 1px solid var(--border-secondary);
-  border-radius: 3px;
+  min-width: 24px;
+  background-color: var(--accent-primary);
+  color: white;
+  border: 1px solid var(--accent-primary);
+  border-radius: 4px;
   cursor: pointer;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1;
   transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .project-control-btn:hover {
-  background-color: var(--border-primary);
+  background-color: var(--accent-primary-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.project-control-btn:active {
+  transform: translateY(0);
 }
 
 /* Status Cell */
