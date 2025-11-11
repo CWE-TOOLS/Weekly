@@ -56,6 +56,8 @@ html {
   min-height: 100vh;
   max-width: 100vw;
   overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 /* ============================================================================
@@ -347,6 +349,29 @@ html {
   color: var(--text-primary);
 }
 
+.legend-right {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.hide-completed-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.hide-completed-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--accent-primary);
+}
+
 .add-week-btn {
   padding: 0.5rem 1rem;
   background-color: var(--accent-primary);
@@ -372,9 +397,13 @@ html {
 
 .grid-wrapper {
   background-color: var(--background-primary);
-  padding: 1rem 1.5rem;
+  padding: 0;
   width: 100%;
   overflow-x: hidden;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .grid-container {
@@ -382,14 +411,28 @@ html {
   background-color: var(--background-secondary);
   border: 1px solid var(--border-primary);
   border-radius: var(--border-radius-md);
-  overflow: hidden;
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: auto;
 }
 
 /* ============================================================================
    RELEASABILITY GRID
    ============================================================================ */
 
-.releasability-grid {
+/* Grid wrapper with separate header and body */
+.grid-with-header {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Shared grid column definition */
+.releasability-grid-header,
+.releasability-grid-body {
   display: grid;
   grid-template-columns:
     250px
@@ -397,15 +440,27 @@ html {
     repeat(20, minmax(50px, 1fr));
   gap: var(--grid-cell-gap);
   background-color: var(--border-primary);
-  position: relative;
-  width: 100%;
+  width: fit-content;
+  min-width: 100%;
 }
 
-/* Header Row */
-.grid-header-row {
-  display: contents;
+/* Sticky header grid */
+.releasability-grid-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
+/* Scrollable body grid */
+.releasability-grid-body {
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Header cells - no longer need position: sticky */
 .header-cell {
   background-color: var(--background-secondary);
   padding: 1rem 0.75rem;
@@ -417,9 +472,6 @@ html {
   align-items: center;
   justify-content: center;
   text-align: center;
-  position: sticky;
-  top: 0;
-  z-index: 10;
   min-height: var(--grid-header-height);
 }
 
@@ -427,12 +479,17 @@ html {
   justify-content: flex-start;
   position: sticky;
   left: 0;
-  z-index: 11;
+  z-index: 25;
+  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05);
 }
 
 .header-cell.start-date-header {
   justify-content: center;
   font-size: 0.875rem;
+  position: sticky;
+  left: 250px;
+  z-index: 24;
+  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05);
 }
 
 .tracking-item-header {
@@ -456,7 +513,7 @@ html {
   grid-column: 1 / -1;
   position: sticky;
   left: 0;
-  z-index: 5;
+  z-index: 10;
   display: flex;
   align-items: center;
   gap: 1rem;
@@ -533,6 +590,11 @@ html {
   transform: translateY(0);
 }
 
+.week-delete-btn:hover {
+  background-color: rgba(220, 38, 38, 0.8);
+  border-color: rgba(220, 38, 38, 1);
+}
+
 /* Project Row */
 .project-row {
   display: contents;
@@ -547,11 +609,12 @@ html {
   border-bottom: 1px solid var(--border-primary);
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.4rem;
   position: sticky;
   left: 0;
-  z-index: 5;
+  z-index: 15;
   min-height: var(--grid-row-height);
+  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05);
 }
 
 .project-name-cell:hover {
@@ -570,15 +633,53 @@ html {
 
 .project-name {
   flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  word-break: break-word;
   min-width: 0; /* Allow flex item to shrink */
+  line-height: 1.3;
+}
+
+/* Drag handle */
+.drag-handle {
+  color: var(--text-secondary);
+  cursor: grab;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0 0.25rem;
+  opacity: 0;
+  transition: opacity 0.2s;
+  flex-shrink: 0;
+}
+
+.project-name-cell:hover .drag-handle {
+  opacity: 1;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+/* Dragging state */
+.project-name-cell.dragging {
+  opacity: 0.5;
+  cursor: grabbing;
+}
+
+/* Drop zone states */
+.drop-zone {
+  transition: background-color 0.2s, border-color 0.2s;
+}
+
+.drop-zone.drag-over {
+  background-color: rgba(59, 130, 246, 0.1) !important;
+  border: 2px dashed var(--accent-primary) !important;
+  box-shadow: inset 0 0 0 2px var(--accent-primary);
 }
 
 .project-controls {
   display: flex;
-  gap: 0.25rem;
+  gap: 0.15rem;
   opacity: 0;
   transition: opacity 0.2s;
   flex-shrink: 0; /* Prevent controls from shrinking */
@@ -599,6 +700,10 @@ html {
   justify-content: center;
   text-align: center;
   min-height: var(--grid-row-height);
+  position: sticky;
+  left: 250px;
+  z-index: 14;
+  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05);
 }
 
 .start-date-cell:hover {
@@ -606,14 +711,14 @@ html {
 }
 
 .project-control-btn {
-  padding: 0.25rem 0.5rem;
-  min-width: 24px;
+  padding: 0.125rem 0.25rem;
+  min-width: 18px;
   background-color: var(--accent-primary);
   color: white;
   border: 1px solid var(--accent-primary);
-  border-radius: 4px;
+  border-radius: 3px;
   cursor: pointer;
-  font-size: 0.875rem;
+  font-size: 0.7rem;
   font-weight: 600;
   line-height: 1;
   transition: all 0.2s;
@@ -630,6 +735,40 @@ html {
 
 .project-control-btn:active {
   transform: translateY(0);
+}
+
+/* Copy/Paste buttons */
+.project-control-btn.copy-btn {
+  background-color: var(--status-in-progress);
+  border-color: var(--status-in-progress);
+}
+
+.project-control-btn.copy-btn:hover {
+  background-color: rgba(59, 130, 246, 0.9);
+  border-color: rgba(59, 130, 246, 0.9);
+}
+
+.project-control-btn.paste-btn {
+  background-color: var(--status-complete);
+  border-color: var(--status-complete);
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.project-control-btn.paste-btn.has-copied-status {
+  opacity: 1;
+  cursor: pointer;
+}
+
+.project-control-btn.paste-btn:hover:not(.has-copied-status) {
+  background-color: var(--status-complete);
+  transform: none;
+  box-shadow: none;
+}
+
+.project-control-btn.paste-btn.has-copied-status:hover {
+  background-color: rgba(34, 197, 94, 0.9);
+  border-color: rgba(34, 197, 94, 0.9);
 }
 
 /* Status Cell */

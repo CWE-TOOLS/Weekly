@@ -186,6 +186,7 @@ export async function loadTrackingStatuses() {
         source: record.source,
         department: record.department,
         weekMonday: record.week_monday,
+        manualWeekId: record.manual_week_id || null,
         project: record.project
       });
     });
@@ -233,6 +234,7 @@ export async function saveTrackingStatus(project) {
       .upsert({
         project: project.project,
         week_monday: project.weekMonday,
+        manual_week_id: project.manualWeekId || null,
         tracking_status: project.trackingStatus,
         department: project.department,
         source: project.source,
@@ -342,6 +344,7 @@ export async function loadAllReleasabilityData() {
         actualStartDate: project.actualStartDate,
         department: project.department,
         source: project.source,
+        manualWeekId: saved && saved.manualWeekId ? saved.manualWeekId : null,
         trackingStatus: saved ? saved.trackingStatus : { ...DEFAULT_TRACKING_STATUS },
         createdAt: new Date().toISOString(),
         updatedAt: saved ? saved.updatedAt : new Date().toISOString()
@@ -366,6 +369,7 @@ export async function loadAllReleasabilityData() {
           actualStartDate: record.weekMonday, // Manual projects use weekMonday as start date
           department: record.department,
           source: record.source,
+          manualWeekId: record.manualWeekId || null,
           trackingStatus: record.trackingStatus || { ...DEFAULT_TRACKING_STATUS },
           createdAt: new Date().toISOString(),
           updatedAt: record.updatedAt || new Date().toISOString()
@@ -387,9 +391,11 @@ export async function loadAllReleasabilityData() {
 /**
  * Load manual weeks from Supabase
  *
- * Fetches all manually added week dividers.
+ * Fetches all manually added week dividers with custom names.
  *
- * @returns {Promise<Array<string>>} Array of Monday date strings (YYYY-MM-DD)
+ * @returns {Promise<Array<Object>>} Array of manual week objects with id, name, and position
+ * @example
+ * // Returns: [{id: '1', name: 'Future Projects', position: 0}, ...]
  */
 export async function loadManualWeeks() {
   logger.info('📅 Loading manual weeks from Supabase...');
@@ -405,14 +411,20 @@ export async function loadManualWeeks() {
     // Fetch all manual weeks
     const { data, error } = await client
       .from(MANUAL_WEEKS_TABLE)
-      .select('week_monday')
-      .order('week_monday', { ascending: true });
+      .select('id, custom_name, position, created_at')
+      .order('position', { ascending: true });
 
     if (error) {
       throw error;
     }
 
-    const weeks = data.map(record => record.week_monday);
+    const weeks = data.map(record => ({
+      id: record.id,
+      name: record.custom_name,
+      position: record.position,
+      createdAt: record.created_at
+    }));
+
     logger.info(`  → Loaded ${weeks.length} manual weeks`);
     return weeks;
 
@@ -426,11 +438,12 @@ export async function loadManualWeeks() {
 /**
  * Save a manual week to Supabase
  *
- * @param {string} weekMonday - Monday date in YYYY-MM-DD format
- * @returns {Promise<boolean>} True if save successful
+ * @param {string} customName - Custom name for the week divider
+ * @param {number} position - Position in the list (for ordering)
+ * @returns {Promise<Object>} The created manual week object with id
  */
-export async function saveManualWeek(weekMonday) {
-  logger.debug(`📅 Saving manual week: ${weekMonday}`);
+export async function saveManualWeek(customName, position) {
+  logger.debug(`📅 Saving manual week: "${customName}" at position ${position}`);
 
   try {
     // Ensure Supabase is initialized
@@ -440,22 +453,28 @@ export async function saveManualWeek(weekMonday) {
 
     const client = getSupabaseClient();
 
-    // Insert manual week (ignore if already exists)
-    const { error } = await client
+    // Insert manual week
+    const { data, error } = await client
       .from(MANUAL_WEEKS_TABLE)
-      .upsert({
-        week_monday: weekMonday,
+      .insert({
+        custom_name: customName,
+        position: position,
         created_at: new Date().toISOString()
-      }, {
-        onConflict: 'week_monday'
-      });
+      })
+      .select()
+      .single();
 
     if (error) {
       throw error;
     }
 
-    logger.debug(`  → Manual week saved successfully`);
-    return true;
+    logger.debug(`  → Manual week saved successfully with ID: ${data.id}`);
+    return {
+      id: data.id,
+      name: data.custom_name,
+      position: data.position,
+      createdAt: data.created_at
+    };
 
   } catch (error) {
     logger.error(`❌ Failed to save manual week:`, error);
@@ -466,11 +485,11 @@ export async function saveManualWeek(weekMonday) {
 /**
  * Delete a manual week from Supabase
  *
- * @param {string} weekMonday - Monday date in YYYY-MM-DD format
+ * @param {string} weekId - ID of the manual week to delete
  * @returns {Promise<boolean>} True if deletion successful
  */
-export async function deleteManualWeek(weekMonday) {
-  logger.debug(`🗑️ Deleting manual week: ${weekMonday}`);
+export async function deleteManualWeek(weekId) {
+  logger.debug(`🗑️ Deleting manual week: ${weekId}`);
 
   try {
     // Ensure Supabase is initialized
@@ -484,7 +503,7 @@ export async function deleteManualWeek(weekMonday) {
     const { error } = await client
       .from(MANUAL_WEEKS_TABLE)
       .delete()
-      .eq('week_monday', weekMonday);
+      .eq('id', weekId);
 
     if (error) {
       throw error;
@@ -495,6 +514,48 @@ export async function deleteManualWeek(weekMonday) {
 
   } catch (error) {
     logger.error(`❌ Failed to delete manual week:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Update manual week positions in Supabase
+ *
+ * @param {Array<{id: string, position: number}>} updates - Array of week IDs with new positions
+ * @returns {Promise<boolean>} True if update successful
+ */
+export async function updateManualWeekPositions(updates) {
+  logger.debug(`📅 Updating ${updates.length} manual week positions...`);
+
+  try {
+    // Ensure Supabase is initialized
+    if (!getSupabaseClient()) {
+      await initializeSupabase();
+    }
+
+    const client = getSupabaseClient();
+
+    // Update each week's position
+    const promises = updates.map(({ id, position }) =>
+      client
+        .from(MANUAL_WEEKS_TABLE)
+        .update({ position })
+        .eq('id', id)
+    );
+
+    const results = await Promise.all(promises);
+
+    // Check for errors
+    const errors = results.filter(r => r.error);
+    if (errors.length > 0) {
+      throw new Error(`Failed to update ${errors.length} positions`);
+    }
+
+    logger.debug(`  → Manual week positions updated successfully`);
+    return true;
+
+  } catch (error) {
+    logger.error(`❌ Failed to update manual week positions:`, error);
     throw error;
   }
 }

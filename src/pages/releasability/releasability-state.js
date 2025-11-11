@@ -48,6 +48,13 @@ let _departmentFilters = [];
 let _searchQuery = '';
 
 /**
+ * Hide completed projects flag
+ * @type {boolean}
+ * @private
+ */
+let _hideCompleted = false;
+
+/**
  * Loading state indicator
  * @type {boolean}
  * @private
@@ -169,6 +176,11 @@ export function getFilteredProjects() {
     );
   }
 
+  // Apply hide completed filter
+  if (_hideCompleted) {
+    filtered = filtered.filter(p => !isProjectFullyComplete(p));
+  }
+
   return filtered;
 }
 
@@ -198,6 +210,14 @@ export function getDepartmentFilters() {
  */
 export function getSearchQuery() {
   return _searchQuery;
+}
+
+/**
+ * Get hideCompleted flag
+ * @returns {boolean} True if completed projects should be hidden
+ */
+export function getHideCompleted() {
+  return _hideCompleted;
 }
 
 /**
@@ -237,8 +257,10 @@ export function addProject(project, silent = false) {
     id: project.id || generateProjectId(),
     project: project.project,
     weekMonday: project.weekMonday,
+    actualStartDate: project.actualStartDate || project.weekMonday,
     department: project.department || null,
     source: project.source || PROJECT_SOURCE.MANUAL,
+    manualWeekId: project.manualWeekId || null,
     trackingStatus: project.trackingStatus || { ...DEFAULT_TRACKING_STATUS },
     createdAt: project.createdAt || new Date().toISOString(),
     updatedAt: project.updatedAt || new Date().toISOString()
@@ -401,7 +423,8 @@ export function setDepartmentFilters(departments, silent = false) {
   if (!silent) {
     emit(RELEASABILITY_EVENTS.FILTERS_CHANGED, {
       departments: _departmentFilters,
-      searchQuery: _searchQuery
+      searchQuery: _searchQuery,
+      hideCompleted: _hideCompleted
     });
   }
 }
@@ -417,7 +440,25 @@ export function setSearchQuery(query, silent = false) {
   if (!silent) {
     emit(RELEASABILITY_EVENTS.FILTERS_CHANGED, {
       departments: _departmentFilters,
-      searchQuery: _searchQuery
+      searchQuery: _searchQuery,
+      hideCompleted: _hideCompleted
+    });
+  }
+}
+
+/**
+ * Set hideCompleted flag
+ * @param {boolean} value - True to hide completed projects
+ * @param {boolean} silent - If true, don't emit events
+ */
+export function setHideCompleted(value, silent = false) {
+  _hideCompleted = value;
+
+  if (!silent) {
+    emit(RELEASABILITY_EVENTS.FILTERS_CHANGED, {
+      departments: _departmentFilters,
+      searchQuery: _searchQuery,
+      hideCompleted: _hideCompleted
     });
   }
 }
@@ -493,6 +534,22 @@ export function getProjectCompletion(projectId) {
 }
 
 /**
+ * Check if a project is fully complete (all tracking items are complete)
+ * @param {Object} project - The project object
+ * @returns {boolean} True if all tracking items are complete
+ */
+export function isProjectFullyComplete(project) {
+  if (!project || !project.trackingStatus) {
+    return false;
+  }
+
+  const statuses = Object.values(project.trackingStatus);
+
+  // Project is fully complete only if ALL tracking items are 'complete'
+  return statuses.length > 0 && statuses.every(s => s === STATUS.COMPLETE);
+}
+
+/**
  * Clear all state (useful for testing/reset)
  * @param {boolean} silent - If true, don't emit events
  */
@@ -501,6 +558,7 @@ export function clearState(silent = false) {
   _currentViewWeek = null;
   _departmentFilters = [];
   _searchQuery = '';
+  _hideCompleted = false;
   _isLoading = false;
 
   if (!silent) {
@@ -518,6 +576,7 @@ export function getStateSnapshot() {
     currentViewWeek: _currentViewWeek,
     departmentFilters: [..._departmentFilters],
     searchQuery: _searchQuery,
+    hideCompleted: _hideCompleted,
     isLoading: _isLoading,
     projectCount: _projects.length,
     weeksWithProjects: getWeeksWithProjects()

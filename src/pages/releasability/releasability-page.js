@@ -19,6 +19,8 @@ import {
   getNextStatus,
   setSearchQuery,
   setDepartmentFilters,
+  setHideCompleted,
+  getHideCompleted,
   setLoading,
   getStateSnapshot,
   setProjects,
@@ -38,7 +40,8 @@ import {
   deleteTrackingStatus,
   loadManualWeeks,
   saveManualWeek,
-  deleteManualWeek
+  deleteManualWeek,
+  updateManualWeekPositions
 } from '../../services/releasability-data-service.js';
 
 // ============================================================================
@@ -46,6 +49,7 @@ import {
 // ============================================================================
 
 let manualWeeks = []; // Store manual weeks globally
+let copiedTrackingStatus = null; // Store copied tracking status for paste operation
 
 // ============================================================================
 // INITIALIZATION
@@ -67,6 +71,9 @@ async function init() {
   setLoading(true);
 
   try {
+    // Load hideCompleted preference from localStorage
+    loadHideCompletedPreference();
+
     // TODO: Load data from services (will implement in later steps)
     // For now, show empty state or test data
     await loadInitialData();
@@ -135,6 +142,12 @@ function setupEventListeners() {
   const addWeekBtn = document.getElementById('add-week-btn');
   if (addWeekBtn) {
     addWeekBtn.addEventListener('click', handleAddWeekClick);
+  }
+
+  // Hide completed toggle
+  const hideCompletedToggle = document.getElementById('hide-completed-toggle');
+  if (hideCompletedToggle) {
+    hideCompletedToggle.addEventListener('change', handleHideCompletedToggle);
   }
 
   // Search input - REMOVED (UI element deleted)
@@ -505,6 +518,9 @@ function renderGrid() {
   // Update department filters
   updateDepartmentFilters();
 
+  // Update paste buttons visibility
+  updatePasteButtonsVisibility();
+
   console.log('📊 Rendered grid with', projects.length, 'projects');
 }
 
@@ -537,6 +553,154 @@ function setupGridEventDelegation(grid) {
       handleWeekControlClick(target);
     }
   });
+
+  // Set up drag and drop for manual projects
+  setupDragAndDrop(grid);
+}
+
+/**
+ * Set up drag and drop for manual projects
+ * @param {HTMLElement} grid - The grid container element
+ */
+function setupDragAndDrop(grid) {
+  let draggedProjectId = null;
+  let draggedProjectData = null;
+
+  // Handle dragstart on project name cells
+  grid.addEventListener('dragstart', (e) => {
+    const projectCell = e.target.closest('.project-name-cell[draggable="true"]');
+    if (!projectCell) return;
+
+    draggedProjectId = projectCell.dataset.projectId;
+    const project = getAllProjects().find(p => p.id === draggedProjectId);
+
+    if (project) {
+      draggedProjectData = {
+        id: project.id,
+        name: project.project,
+        weekMonday: project.weekMonday,
+        manualWeekId: project.manualWeekId
+      };
+
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', draggedProjectId);
+      projectCell.classList.add('dragging');
+
+      console.log('🔄 Started dragging project:', draggedProjectData.name);
+    }
+  });
+
+  // Handle dragend
+  grid.addEventListener('dragend', (e) => {
+    const projectCell = e.target.closest('.project-name-cell[draggable="true"]');
+    if (projectCell) {
+      projectCell.classList.remove('dragging');
+    }
+
+    // Remove drag-over class from all drop zones
+    document.querySelectorAll('.drop-zone').forEach(zone => {
+      zone.classList.remove('drag-over');
+    });
+
+    draggedProjectId = null;
+    draggedProjectData = null;
+  });
+
+  // Handle dragover on drop zones (week headers)
+  grid.addEventListener('dragover', (e) => {
+    const dropZone = e.target.closest('.drop-zone');
+    if (!dropZone || !draggedProjectId) return;
+
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    dropZone.classList.add('drag-over');
+  });
+
+  // Handle dragleave on drop zones
+  grid.addEventListener('dragleave', (e) => {
+    const dropZone = e.target.closest('.drop-zone');
+    if (!dropZone) return;
+
+    dropZone.classList.remove('drag-over');
+  });
+
+  // Handle drop on drop zones
+  grid.addEventListener('drop', (e) => {
+    e.preventDefault();
+
+    const dropZone = e.target.closest('.drop-zone');
+    if (!dropZone || !draggedProjectId || !draggedProjectData) return;
+
+    dropZone.classList.remove('drag-over');
+
+    const targetWeekMonday = dropZone.dataset.dropWeekMonday;
+    const targetWeekId = dropZone.dataset.dropWeekId;
+
+    console.log('📍 Dropped project on week:', { targetWeekMonday, targetWeekId });
+
+    // Handle the project move
+    handleProjectDrop(draggedProjectId, draggedProjectData, targetWeekMonday, targetWeekId);
+  });
+}
+
+/**
+ * Handle project drop on a week
+ * @param {string} projectId - Project ID
+ * @param {Object} projectData - Project data
+ * @param {string} targetWeekMonday - Target week Monday (for date-based weeks)
+ * @param {string} targetWeekId - Target week ID (for manual weeks)
+ */
+async function handleProjectDrop(projectId, projectData, targetWeekMonday, targetWeekId) {
+  // Check if dropping on the same week
+  const isSameWeek = (targetWeekId && targetWeekId === projectData.manualWeekId) ||
+                     (!targetWeekId && targetWeekMonday === projectData.weekMonday && !projectData.manualWeekId);
+
+  if (isSameWeek) {
+    console.log('ℹ️ Project already in this week');
+    return;
+  }
+
+  const project = getAllProjects().find(p => p.id === projectId);
+  if (!project) return;
+
+  const oldWeekMonday = project.weekMonday;
+  const oldManualWeekId = project.manualWeekId;
+
+  try {
+    // Delete old tracking record
+    await deleteTrackingStatus(project.project, oldWeekMonday);
+
+    // Update project with new week
+    if (targetWeekId) {
+      // Moving to a manual week
+      project.manualWeekId = targetWeekId;
+      // Keep a weekMonday for database storage (use current week if needed)
+      if (!targetWeekMonday) {
+        const today = new Date();
+        const currentMonday = getMonday(today);
+        project.weekMonday = currentMonday.toISOString().split('T')[0];
+      } else {
+        project.weekMonday = targetWeekMonday;
+      }
+    } else {
+      // Moving to a date-based week
+      project.weekMonday = targetWeekMonday;
+      project.manualWeekId = null;
+    }
+
+    // Save updated project
+    await saveTrackingStatus(project);
+
+    console.log(`✅ Moved "${project.project}" to new week`);
+    showNotification(`Moved "${project.project}" to new week`);
+
+    // Re-render grid
+    renderGrid();
+
+  } catch (error) {
+    console.error('❌ Failed to move project:', error);
+    showError('Failed to move project. Please try again.');
+  }
 }
 
 /**
@@ -619,6 +783,12 @@ function handleProjectControlClick(button) {
   const projectId = button.dataset.projectId;
 
   switch (action) {
+    case 'copy-status':
+      handleCopyStatus(projectId);
+      break;
+    case 'paste-status':
+      handlePasteStatus(projectId);
+      break;
     case 'move-prev':
       handleMoveProjectWeek(projectId, -1);
       break;
@@ -636,7 +806,15 @@ function handleProjectControlClick(button) {
  * @param {HTMLElement} button - The clicked add button
  */
 async function handleWeekAddProjectClick(button) {
+  // Handle both manual weeks (weekId) and date-based weeks (weekMonday)
   const weekMonday = button.dataset.weekMonday;
+  const weekId = button.dataset.weekId;
+
+  console.log('🔍 Add Project Button Clicked - Button datasets:', {
+    weekMonday: weekMonday,
+    weekId: weekId,
+    allDatasets: button.dataset
+  });
 
   // Prompt for project name
   const projectName = prompt('Enter project name:');
@@ -647,17 +825,42 @@ async function handleWeekAddProjectClick(button) {
   // Prompt for department (optional)
   const department = prompt('Enter department (optional):') || null;
 
+  // For manual weeks, we still need a weekMonday for database storage
+  // Use current week's Monday as the base date
+  let effectiveWeekMonday = weekMonday;
+  if (!effectiveWeekMonday && weekId) {
+    // If adding to a manual week, use current week's Monday
+    const today = new Date();
+    console.log('🔍 Today:', today);
+    const currentMonday = getMonday(today);
+    console.log('🔍 Current Monday:', currentMonday);
+    effectiveWeekMonday = currentMonday.toISOString().split('T')[0];
+    console.log(`🔍 Generated weekMonday for manual week: ${effectiveWeekMonday}`);
+  }
+
+  if (!effectiveWeekMonday) {
+    console.error('❌ ERROR: effectiveWeekMonday is still null/undefined!');
+    alert('Error: Could not determine week. Please refresh and try again.');
+    return;
+  }
+
+  console.log(`🔍 Creating project with weekMonday: ${effectiveWeekMonday}, manualWeekId: ${weekId}`);
+
   // Create new manual project
   const newProject = {
     project: projectName.trim(),
-    weekMonday: weekMonday,
-    actualStartDate: weekMonday, // For manual entries, use the week Monday
+    weekMonday: effectiveWeekMonday, // Always provide a valid weekMonday for database
+    manualWeekId: weekId || null, // Use weekId for manual weeks (for display grouping)
+    actualStartDate: effectiveWeekMonday, // Use the effective week Monday as start date
     department: department ? department.trim() : null,
     source: PROJECT_SOURCE.MANUAL
   };
 
+  console.log(`🔍 New project object:`, newProject);
+
   // Add project to state
   const addedProject = addProject(newProject);
+  console.log(`🔍 Added project returned:`, addedProject);
 
   if (addedProject) {
     // Save to Supabase
@@ -736,37 +939,164 @@ async function handleDeleteProject(projectId) {
 }
 
 /**
- * Handle add week button click
+ * Copy tracking status from a project
+ * @param {string} projectId - The project ID to copy from
  */
-async function handleAddWeekClick() {
-  // Prompt for date
-  const dateInput = prompt('Enter a date for the new week (YYYY-MM-DD):');
-  if (!dateInput || !dateInput.trim()) {
-    return; // User cancelled
-  }
-
-  // Parse the date and get Monday of that week
-  const date = new Date(dateInput);
-  if (isNaN(date.getTime())) {
-    showError('Invalid date format. Please use YYYY-MM-DD.');
+function handleCopyStatus(projectId) {
+  const project = getAllProjects().find(p => p.id === projectId);
+  if (!project) {
+    showError('Project not found');
     return;
   }
 
-  const monday = getMonday(date);
-  const mondayStr = monday.toISOString().split('T')[0];
+  // Copy the tracking status (deep clone)
+  copiedTrackingStatus = JSON.parse(JSON.stringify(project.trackingStatus));
 
-  // Check if week already exists
-  if (manualWeeks.includes(mondayStr)) {
-    showNotification(`Week of ${mondayStr} already exists`);
+  console.log(`📋 Copied tracking status from "${project.project}"`);
+  showNotification(`Copied status from "${project.project}"`);
+
+  // Update UI to show paste buttons are now available
+  updatePasteButtonsVisibility();
+}
+
+/**
+ * Paste tracking status to a project
+ * @param {string} projectId - The project ID to paste to
+ */
+async function handlePasteStatus(projectId) {
+  if (!copiedTrackingStatus) {
+    showNotification('No status copied yet. Copy a status first.');
     return;
   }
+
+  const project = getAllProjects().find(p => p.id === projectId);
+  if (!project) {
+    showError('Project not found');
+    return;
+  }
+
+  // Confirm paste action
+  const confirmed = confirm(`Paste copied status to "${project.project}"?`);
+  if (!confirmed) return;
+
+  // Update each tracking item status
+  for (const [trackingItem, status] of Object.entries(copiedTrackingStatus)) {
+    updateProjectStatus(projectId, trackingItem, status);
+  }
+
+  console.log(`📋 Pasted tracking status to "${project.project}"`);
+  showNotification(`Pasted status to "${project.project}"`);
 
   // Save to Supabase
   try {
-    await saveManualWeek(mondayStr);
-    manualWeeks.push(mondayStr);
-    console.log(`📅 Added manual week: ${mondayStr}`);
-    showNotification(`Added week of ${mondayStr}`);
+    const updatedProject = getAllProjects().find(p => p.id === projectId);
+    if (updatedProject) {
+      await saveTrackingStatus(updatedProject);
+      console.log('💾 Pasted status saved to Supabase');
+    }
+  } catch (error) {
+    console.error('❌ Failed to save pasted status to Supabase:', error);
+    showError('Failed to save pasted status. Please try again.');
+  }
+
+  // Re-render grid to show updated statuses
+  renderGrid();
+}
+
+/**
+ * Update visibility of paste buttons based on whether status is copied
+ */
+function updatePasteButtonsVisibility() {
+  const pasteButtons = document.querySelectorAll('.paste-btn');
+  pasteButtons.forEach(btn => {
+    if (copiedTrackingStatus) {
+      btn.classList.add('has-copied-status');
+    } else {
+      btn.classList.remove('has-copied-status');
+    }
+  });
+}
+
+/**
+ * Handle hide completed toggle change
+ * @param {Event} e - Change event
+ */
+function handleHideCompletedToggle(e) {
+  const checked = e.target.checked;
+  console.log('👁️ Hide completed toggle:', checked);
+
+  // Update state
+  setHideCompleted(checked);
+
+  // Save preference to localStorage
+  saveHideCompletedPreference(checked);
+
+  showNotification(checked ? 'Hiding completed projects' : 'Showing all projects');
+}
+
+/**
+ * Load hideCompleted preference from localStorage
+ */
+function loadHideCompletedPreference() {
+  try {
+    const saved = localStorage.getItem('releasability-hide-completed');
+    const hideCompleted = saved === 'true';
+
+    // Update state
+    setHideCompleted(hideCompleted, true); // silent = true to avoid event
+
+    // Update checkbox UI
+    const toggle = document.getElementById('hide-completed-toggle');
+    if (toggle) {
+      toggle.checked = hideCompleted;
+    }
+
+    console.log('📥 Loaded hideCompleted preference:', hideCompleted);
+  } catch (error) {
+    console.error('Error loading hideCompleted preference:', error);
+  }
+}
+
+/**
+ * Save hideCompleted preference to localStorage
+ * @param {boolean} value - The hideCompleted value
+ */
+function saveHideCompletedPreference(value) {
+  try {
+    localStorage.setItem('releasability-hide-completed', value.toString());
+    console.log('💾 Saved hideCompleted preference:', value);
+  } catch (error) {
+    console.error('Error saving hideCompleted preference:', error);
+  }
+}
+
+/**
+ * Handle add week button click
+ */
+async function handleAddWeekClick() {
+  // Prompt for custom week name
+  const weekName = prompt('Enter a custom name for the new week:');
+  if (!weekName || !weekName.trim()) {
+    return; // User cancelled
+  }
+
+  // Check if name already exists
+  if (manualWeeks.some(week => week.name === weekName.trim())) {
+    showNotification(`Week named "${weekName.trim()}" already exists`);
+    return;
+  }
+
+  // Calculate new position (append to end of entire grid)
+  // Get the full merged list of all weeks (date-based + manual) in display order
+  const fullWeekList = getFullWeekList();
+  const newPosition = fullWeekList.length; // Position after all existing weeks
+
+  // Save to Supabase
+  try {
+    const savedWeek = await saveManualWeek(weekName.trim(), newPosition);
+    manualWeeks.push(savedWeek);
+    console.log(`📅 Added manual week: "${weekName.trim()}" at position ${newPosition}`);
+    showNotification(`Added week "${weekName.trim()}"`);
 
     // Re-render grid to show new week
     renderGrid();
@@ -782,130 +1112,275 @@ async function handleAddWeekClick() {
  */
 function handleWeekControlClick(button) {
   const action = button.dataset.action;
-  const weekMonday = button.dataset.weekMonday;
+  const weekId = button.dataset.weekId;
 
   switch (action) {
     case 'move-week-up':
-      handleMoveWeekUp(weekMonday);
+      handleMoveWeekUp(weekId);
       break;
     case 'move-week-down':
-      handleMoveWeekDown(weekMonday);
+      handleMoveWeekDown(weekId);
+      break;
+    case 'delete-week':
+      handleDeleteManualWeek(weekId);
       break;
   }
 }
 
 /**
- * Move a week up (swap dates with previous week)
- * @param {string} weekMonday - The week Monday date
+ * Get the full list of weeks as they appear in the grid (merged date-based and manual weeks)
+ * This replicates the logic from getWeekRange in releasability-grid.js
+ * @returns {Array<Object>} Array of week objects with { type: 'date'|'manual', value: string|Object, displayIndex: number }
  */
-async function handleMoveWeekUp(weekMonday) {
-  const projects = getFilteredProjects();
+function getFullWeekList() {
+  const projects = getAllProjects();
+
+  // Group projects by week
   const projectsByWeek = {};
-  projects.forEach(p => {
-    if (!projectsByWeek[p.weekMonday]) projectsByWeek[p.weekMonday] = [];
-    projectsByWeek[p.weekMonday].push(p);
+  projects.forEach(project => {
+    const weekKey = project.manualWeekId || project.weekMonday;
+    if (!projectsByWeek[weekKey]) {
+      projectsByWeek[weekKey] = [];
+    }
+    projectsByWeek[weekKey].push(project);
   });
 
-  // Get all weeks (with manual weeks)
-  const allWeeks = [...new Set([...Object.keys(projectsByWeek), ...manualWeeks])].sort();
+  // Get date-based weeks
+  const today = new Date();
+  const currentMonday = getMonday(today);
+  const previousMonday = new Date(currentMonday);
+  previousMonday.setDate(previousMonday.getDate() - 7);
+  const previousMondayStr = previousMonday.toISOString().split('T')[0];
 
-  const currentIndex = allWeeks.indexOf(weekMonday);
+  // Get all weeks with projects (excluding manual week IDs)
+  const manualWeekObjects = manualWeeks.filter(w => typeof w === 'object');
+  const projectWeeks = Object.keys(projectsByWeek);
+
+  const dateWeeks = new Set([
+    previousMondayStr,
+    ...projectWeeks.filter(w => !manualWeekObjects.some(mw => mw.id === w))
+  ]);
+
+  // Filter and sort date weeks
+  const sortedDateWeeks = Array.from(dateWeeks)
+    .sort()
+    .filter(weekStr => weekStr >= previousMondayStr);
+
+  // Merge date weeks and manual weeks based on position
+  const result = [];
+  let dateWeekIndex = 0;
+
+  // Sort manual weeks by position
+  const sortedManualWeeks = [...manualWeekObjects].sort((a, b) => a.position - b.position);
+
+  // Merge based on position
+  sortedManualWeeks.forEach(manualWeek => {
+    // Add all date weeks before this manual week's position
+    while (dateWeekIndex < manualWeek.position && dateWeekIndex < sortedDateWeeks.length) {
+      result.push({
+        type: 'date',
+        value: sortedDateWeeks[dateWeekIndex],
+        displayIndex: result.length
+      });
+      dateWeekIndex++;
+    }
+    // Add the manual week
+    result.push({
+      type: 'manual',
+      value: manualWeek,
+      displayIndex: result.length
+    });
+  });
+
+  // Add remaining date weeks after all manual weeks
+  while (dateWeekIndex < sortedDateWeeks.length) {
+    result.push({
+      type: 'date',
+      value: sortedDateWeeks[dateWeekIndex],
+      displayIndex: result.length
+    });
+    dateWeekIndex++;
+  }
+
+  return result;
+}
+
+/**
+ * Move a manual week up (swap position with previous week in the grid)
+ * @param {string} weekId - The manual week ID
+ */
+async function handleMoveWeekUp(weekId) {
+  // Get the full merged week list as displayed in the grid
+  const fullWeekList = getFullWeekList();
+
+  // Find the current manual week in the full list
+  const currentIndex = fullWeekList.findIndex(w =>
+    w.type === 'manual' && w.value.id === weekId
+  );
+
   if (currentIndex <= 0) {
     showNotification('Already at the top');
     return;
   }
 
-  const prevWeek = allWeeks[currentIndex - 1];
+  const currentWeek = fullWeekList[currentIndex].value;
+  const prevWeek = fullWeekList[currentIndex - 1];
 
-  // Swap the weeks by updating all projects and manual week entries
-  await swapWeeks(weekMonday, prevWeek);
+  if (prevWeek.type === 'manual') {
+    // Swapping with another manual week - swap positions
+    const prevManualWeek = prevWeek.value;
+    const tempPosition = currentWeek.position;
+    currentWeek.position = prevManualWeek.position;
+    prevManualWeek.position = tempPosition;
 
-  showNotification(`Moved week earlier`);
-  renderGrid();
+    try {
+      await updateManualWeekPositions([
+        { id: currentWeek.id, position: currentWeek.position },
+        { id: prevManualWeek.id, position: prevManualWeek.position }
+      ]);
+
+      // Update the original manualWeeks array
+      const currentWeekInOriginal = manualWeeks.find(w => w.id === currentWeek.id);
+      const prevWeekInOriginal = manualWeeks.find(w => w.id === prevManualWeek.id);
+      if (currentWeekInOriginal) currentWeekInOriginal.position = currentWeek.position;
+      if (prevWeekInOriginal) prevWeekInOriginal.position = prevManualWeek.position;
+
+      console.log(`📅 Moved week "${currentWeek.name}" up (swapped with manual week)`);
+      showNotification(`Moved week "${currentWeek.name}" up`);
+      renderGrid();
+    } catch (error) {
+      console.error('❌ Failed to move week up:', error);
+      showError('Failed to move week. Please try again.');
+    }
+  } else {
+    // Moving up past a date-based week - decrease position by 1
+    currentWeek.position = Math.max(0, currentWeek.position - 1);
+
+    try {
+      await updateManualWeekPositions([
+        { id: currentWeek.id, position: currentWeek.position }
+      ]);
+
+      // Update the original manualWeeks array
+      const currentWeekInOriginal = manualWeeks.find(w => w.id === currentWeek.id);
+      if (currentWeekInOriginal) currentWeekInOriginal.position = currentWeek.position;
+
+      console.log(`📅 Moved week "${currentWeek.name}" up (past date-based week)`);
+      showNotification(`Moved week "${currentWeek.name}" up`);
+      renderGrid();
+    } catch (error) {
+      console.error('❌ Failed to move week up:', error);
+      showError('Failed to move week. Please try again.');
+    }
+  }
 }
 
 /**
- * Move a week down (swap dates with next week)
- * @param {string} weekMonday - The week Monday date
+ * Move a manual week down (swap position with next week in the grid)
+ * @param {string} weekId - The manual week ID
  */
-async function handleMoveWeekDown(weekMonday) {
-  const projects = getFilteredProjects();
-  const projectsByWeek = {};
-  projects.forEach(p => {
-    if (!projectsByWeek[p.weekMonday]) projectsByWeek[p.weekMonday] = [];
-    projectsByWeek[p.weekMonday].push(p);
-  });
+async function handleMoveWeekDown(weekId) {
+  // Get the full merged week list as displayed in the grid
+  const fullWeekList = getFullWeekList();
 
-  // Get all weeks (with manual weeks)
-  const allWeeks = [...new Set([...Object.keys(projectsByWeek), ...manualWeeks])].sort();
+  // Find the current manual week in the full list
+  const currentIndex = fullWeekList.findIndex(w =>
+    w.type === 'manual' && w.value.id === weekId
+  );
 
-  const currentIndex = allWeeks.indexOf(weekMonday);
-  if (currentIndex >= allWeeks.length - 1) {
+  if (currentIndex >= fullWeekList.length - 1) {
     showNotification('Already at the bottom');
     return;
   }
 
-  const nextWeek = allWeeks[currentIndex + 1];
+  const currentWeek = fullWeekList[currentIndex].value;
+  const nextWeek = fullWeekList[currentIndex + 1];
 
-  // Swap the weeks by updating all projects and manual week entries
-  await swapWeeks(weekMonday, nextWeek);
+  if (nextWeek.type === 'manual') {
+    // Swapping with another manual week - swap positions
+    const nextManualWeek = nextWeek.value;
+    const tempPosition = currentWeek.position;
+    currentWeek.position = nextManualWeek.position;
+    nextManualWeek.position = tempPosition;
 
-  showNotification(`Moved week later`);
-  renderGrid();
+    try {
+      await updateManualWeekPositions([
+        { id: currentWeek.id, position: currentWeek.position },
+        { id: nextManualWeek.id, position: nextManualWeek.position }
+      ]);
+
+      // Update the original manualWeeks array
+      const currentWeekInOriginal = manualWeeks.find(w => w.id === currentWeek.id);
+      const nextWeekInOriginal = manualWeeks.find(w => w.id === nextManualWeek.id);
+      if (currentWeekInOriginal) currentWeekInOriginal.position = currentWeek.position;
+      if (nextWeekInOriginal) nextWeekInOriginal.position = nextManualWeek.position;
+
+      console.log(`📅 Moved week "${currentWeek.name}" down (swapped with manual week)`);
+      showNotification(`Moved week "${currentWeek.name}" down`);
+      renderGrid();
+    } catch (error) {
+      console.error('❌ Failed to move week down:', error);
+      showError('Failed to move week. Please try again.');
+    }
+  } else {
+    // Moving down past a date-based week - increase position by 1
+    currentWeek.position = currentWeek.position + 1;
+
+    try {
+      await updateManualWeekPositions([
+        { id: currentWeek.id, position: currentWeek.position }
+      ]);
+
+      // Update the original manualWeeks array
+      const currentWeekInOriginal = manualWeeks.find(w => w.id === currentWeek.id);
+      if (currentWeekInOriginal) currentWeekInOriginal.position = currentWeek.position;
+
+      console.log(`📅 Moved week "${currentWeek.name}" down (past date-based week)`);
+      showNotification(`Moved week "${currentWeek.name}" down`);
+      renderGrid();
+    } catch (error) {
+      console.error('❌ Failed to move week down:', error);
+      showError('Failed to move week. Please try again.');
+    }
+  }
 }
 
 /**
- * Swap two weeks by updating all projects in both weeks
- * @param {string} week1 - First week Monday
- * @param {string} week2 - Second week Monday
+ * Delete a manual week
+ * @param {string} weekId - The manual week ID
  */
-async function swapWeeks(week1, week2) {
-  const allProjects = getAllProjects();
+async function handleDeleteManualWeek(weekId) {
+  // Find the week to get its name for the confirmation message
+  const week = manualWeeks.find(w => w.id === weekId);
+  if (!week) {
+    showError('Week not found');
+    return;
+  }
 
-  // Find projects in both weeks
-  const week1Projects = allProjects.filter(p => p.weekMonday === week1);
-  const week2Projects = allProjects.filter(p => p.weekMonday === week2);
+  // Confirm deletion
+  const confirmed = confirm(`Are you sure you want to delete the week "${week.name}"?`);
+  if (!confirmed) return;
 
   try {
-    // Update all projects in week1 to week2
-    for (const project of week1Projects) {
-      await deleteTrackingStatus(project.project, week1);
-      const updated = updateProjectWeek(project.id, week2);
-      if (updated) {
-        await saveTrackingStatus(updated);
-      }
+    // Delete from Supabase
+    await deleteManualWeek(weekId);
+    console.log(`🗑️ Deleted manual week: "${week.name}"`);
+
+    // Remove from local array
+    const index = manualWeeks.findIndex(w => w.id === weekId);
+    if (index !== -1) {
+      manualWeeks.splice(index, 1);
     }
 
-    // Update all projects in week2 to week1
-    for (const project of week2Projects) {
-      await deleteTrackingStatus(project.project, week2);
-      const updated = updateProjectWeek(project.id, week1);
-      if (updated) {
-        await saveTrackingStatus(updated);
-      }
-    }
+    // Re-render grid
+    renderGrid();
 
-    // Swap manual week entries if they exist
-    const week1IsManual = manualWeeks.includes(week1);
-    const week2IsManual = manualWeeks.includes(week2);
+    // Show success notification
+    showNotification(`Deleted week "${week.name}"`);
 
-    if (week1IsManual && !week2IsManual) {
-      await deleteManualWeek(week1);
-      await saveManualWeek(week2);
-      manualWeeks = manualWeeks.filter(w => w !== week1);
-      manualWeeks.push(week2);
-    } else if (week2IsManual && !week1IsManual) {
-      await deleteManualWeek(week2);
-      await saveManualWeek(week1);
-      manualWeeks = manualWeeks.filter(w => w !== week2);
-      manualWeeks.push(week1);
-    }
-    // If both are manual, they stay as manual weeks
-
-    console.log(`📅 Swapped weeks: ${week1} <-> ${week2}`);
   } catch (error) {
-    console.error('❌ Failed to swap weeks:', error);
-    showError('Failed to move week. Please try again.');
+    console.error('❌ Failed to delete manual week:', error);
+    showError('Failed to delete week. Please try again.');
   }
 }
 

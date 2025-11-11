@@ -25,8 +25,8 @@ SHOW HELP:
 ═══════════════════════════════════════════════════════════
 
 FIRST TIME SETUP:
-1. Copy-Item api-key.txt.template api-key.txt
+1. Copy-Item api-key.txt.template api-key.txtwhen 
 2. Edit api-key.txt and paste your Anthropic API key
 3. Run: .\toggle-claude.ps1 api
 
-═══════════════════════════════════════════════════════════
+═══════════════════════════════════════════════════════════ 

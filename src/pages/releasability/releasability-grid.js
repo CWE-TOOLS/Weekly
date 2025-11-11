@@ -17,7 +17,7 @@ import { TRACKING_ITEMS, STATUS, STATUS_DISPLAY } from '../../config/releasabili
 /**
  * Render the complete releasability grid
  * @param {Array<Object>} projects - Array of project objects
- * @param {Array<string>} manualWeeks - Array of manually added week dates
+ * @param {Array<Object|string>} manualWeeks - Array of manual week objects {id, name, position} or date strings
  * @returns {HTMLElement} The rendered grid container
  */
 export function renderReleasabilityGrid(projects, manualWeeks = []) {
@@ -31,25 +31,34 @@ export function renderReleasabilityGrid(projects, manualWeeks = []) {
   // Get week range (1 past week + all future weeks with projects + manual weeks)
   const weeks = getWeekRange(projectsByWeek, manualWeeks);
 
-  // Create grid container
-  const grid = document.createElement('div');
-  grid.className = 'releasability-grid';
+  // Create wrapper container for header + body
+  const wrapper = document.createElement('div');
+  wrapper.className = 'grid-with-header';
 
-  // Grid columns are defined in CSS to auto-fit screen width
-  // 250px project column + 20 flexible tracking columns
-
-  // Create header row
+  // Create header grid (sticky at top)
+  const headerGrid = document.createElement('div');
+  headerGrid.className = 'releasability-grid-header';
   const headerRow = createHeaderRow();
-  headerRow.forEach(cell => grid.appendChild(cell));
+  headerRow.forEach(cell => headerGrid.appendChild(cell));
 
-  // Create week sections
-  weeks.forEach(weekMonday => {
-    const weekProjects = projectsByWeek[weekMonday] || [];
-    const weekSection = createWeekSection(weekMonday, weekProjects);
-    weekSection.forEach(element => grid.appendChild(element));
+  // Create body grid (scrollable content)
+  const bodyGrid = document.createElement('div');
+  bodyGrid.className = 'releasability-grid-body';
+
+  // Create week sections for body
+  weeks.forEach(week => {
+    // Handle both date-based weeks (strings) and manual weeks (objects)
+    const weekKey = typeof week === 'string' ? week : week.id;
+    const weekProjects = projectsByWeek[weekKey] || [];
+    const weekSection = createWeekSection(week, weekProjects);
+    weekSection.forEach(element => bodyGrid.appendChild(element));
   });
 
-  return grid;
+  // Assemble the complete grid
+  wrapper.appendChild(headerGrid);
+  wrapper.appendChild(bodyGrid);
+
+  return wrapper;
 }
 
 // ============================================================================
@@ -89,15 +98,15 @@ function createHeaderRow() {
 
 /**
  * Create a week section with header and project rows
- * @param {string} weekMonday - Monday date in YYYY-MM-DD format
+ * @param {string|Object} week - Monday date in YYYY-MM-DD format OR manual week object {id, name, position}
  * @param {Array<Object>} projects - Projects for this week
  * @returns {Array<HTMLElement>} Array of elements for this week section
  */
-function createWeekSection(weekMonday, projects) {
+function createWeekSection(week, projects) {
   const elements = [];
 
   // Week header (spans all columns)
-  const weekHeader = createWeekHeader(weekMonday);
+  const weekHeader = createWeekHeader(week);
   elements.push(weekHeader);
 
   // Project rows for this week
@@ -111,33 +120,53 @@ function createWeekSection(weekMonday, projects) {
 
 /**
  * Create week header cell
- * @param {string} weekMonday - Monday date in YYYY-MM-DD format
+ * @param {string|Object} week - Monday date in YYYY-MM-DD format OR manual week object {id, name, position}
  * @returns {HTMLElement} Week header element
  */
-function createWeekHeader(weekMonday) {
-  // Parse date in local timezone (not UTC)
-  const monday = parseLocalDate(weekMonday);
+function createWeekHeader(week) {
+  const isManualWeek = typeof week === 'object';
+  const weekId = isManualWeek ? week.id : week;
+  const weekMonday = isManualWeek ? null : week;
 
-  // Handle invalid dates gracefully
-  if (!monday) {
-    console.warn('createWeekHeader: Invalid date, skipping week header for:', weekMonday);
-    const header = document.createElement('div');
-    header.className = 'week-header-cell error';
-    header.textContent = `Invalid date: ${weekMonday}`;
-    header.dataset.weekMonday = weekMonday;
-    return header;
+  let weekLabel;
+
+  if (isManualWeek) {
+    // Manual week: use the custom name
+    weekLabel = week.name;
+  } else {
+    // Date-based week: calculate week label
+    const monday = parseLocalDate(weekMonday);
+
+    // Handle invalid dates gracefully
+    if (!monday) {
+      console.warn('createWeekHeader: Invalid date, skipping week header for:', weekMonday);
+      const header = document.createElement('div');
+      header.className = 'week-header-cell error';
+      header.textContent = `Invalid date: ${weekMonday}`;
+      header.dataset.weekMonday = weekMonday;
+      return header;
+    }
+
+    // Use the same logic as the main app
+    const month = getWeekMonth(monday);
+    const weekNum = getWeekOfMonth(monday, month);
+
+    // Format week label (e.g., "Week 2: Nov 10-15")
+    weekLabel = formatWeekLabel(monday, month, weekNum);
   }
 
-  // Use the same logic as the main app
-  const month = getWeekMonth(monday);
-  const weekNum = getWeekOfMonth(monday, month);
-
-  // Format week label (e.g., "Week 2: Nov 10-15")
-  const weekLabel = formatWeekLabel(monday, month, weekNum);
-
   const header = document.createElement('div');
-  header.className = 'week-header-cell';
-  header.dataset.weekMonday = weekMonday;
+  header.className = 'week-header-cell drop-zone';
+
+  // Set appropriate data attributes based on week type
+  if (isManualWeek) {
+    header.dataset.weekId = week.id;
+    header.dataset.dropWeekId = week.id;
+    header.classList.add('manual-week');
+  } else {
+    header.dataset.weekMonday = weekMonday;
+    header.dataset.dropWeekMonday = weekMonday;
+  }
 
   // Week label text
   const labelSpan = document.createElement('span');
@@ -151,32 +180,49 @@ function createWeekHeader(weekMonday) {
   addProjectBtn.innerHTML = '+ Add Project';
   addProjectBtn.title = 'Add manual project to this week';
   addProjectBtn.dataset.action = 'add-project';
-  addProjectBtn.dataset.weekMonday = weekMonday;
+
+  // Set appropriate identifier for add project button
+  if (isManualWeek) {
+    addProjectBtn.dataset.weekId = week.id;
+  } else {
+    addProjectBtn.dataset.weekMonday = weekMonday;
+  }
   header.appendChild(addProjectBtn);
 
-  // Week controls container
-  const controls = document.createElement('div');
-  controls.className = 'week-controls';
+  // Week controls container (only for manual weeks - date-based weeks maintain chronological order)
+  if (isManualWeek) {
+    const controls = document.createElement('div');
+    controls.className = 'week-controls';
 
-  // Move up button
-  const moveUpBtn = document.createElement('button');
-  moveUpBtn.className = 'week-control-btn';
-  moveUpBtn.innerHTML = '&#9650;'; // ▲
-  moveUpBtn.title = 'Move week earlier (swap with previous week)';
-  moveUpBtn.dataset.action = 'move-week-up';
-  moveUpBtn.dataset.weekMonday = weekMonday;
-  controls.appendChild(moveUpBtn);
+    // Move up button
+    const moveUpBtn = document.createElement('button');
+    moveUpBtn.className = 'week-control-btn';
+    moveUpBtn.innerHTML = '&#9650;'; // ▲
+    moveUpBtn.title = 'Move week earlier (swap with previous week)';
+    moveUpBtn.dataset.action = 'move-week-up';
+    moveUpBtn.dataset.weekId = week.id;
+    controls.appendChild(moveUpBtn);
 
-  // Move down button
-  const moveDownBtn = document.createElement('button');
-  moveDownBtn.className = 'week-control-btn';
-  moveDownBtn.innerHTML = '&#9660;'; // ▼
-  moveDownBtn.title = 'Move week later (swap with next week)';
-  moveDownBtn.dataset.action = 'move-week-down';
-  moveDownBtn.dataset.weekMonday = weekMonday;
-  controls.appendChild(moveDownBtn);
+    // Move down button
+    const moveDownBtn = document.createElement('button');
+    moveDownBtn.className = 'week-control-btn';
+    moveDownBtn.innerHTML = '&#9660;'; // ▼
+    moveDownBtn.title = 'Move week later (swap with next week)';
+    moveDownBtn.dataset.action = 'move-week-down';
+    moveDownBtn.dataset.weekId = week.id;
+    controls.appendChild(moveDownBtn);
 
-  header.appendChild(controls);
+    // Delete button
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'week-control-btn week-delete-btn';
+    deleteBtn.innerHTML = '&#10005;'; // ✕
+    deleteBtn.title = 'Delete this week';
+    deleteBtn.dataset.action = 'delete-week';
+    deleteBtn.dataset.weekId = week.id;
+    controls.appendChild(deleteBtn);
+
+    header.appendChild(controls);
+  }
 
   return header;
 }
@@ -219,6 +265,20 @@ function createProjectNameCell(project) {
   // Add 'manual' class if this is a manually added project
   if (project.source === 'manual') {
     cell.classList.add('manual');
+    // Make manual projects draggable
+    cell.draggable = true;
+    cell.dataset.projectName = project.project;
+    cell.dataset.weekMonday = project.weekMonday;
+    cell.dataset.manualWeekId = project.manualWeekId || '';
+  }
+
+  // Drag icon for manual projects
+  if (project.source === 'manual') {
+    const dragIcon = document.createElement('span');
+    dragIcon.className = 'drag-handle';
+    dragIcon.innerHTML = '&#8942;&#8942;'; // ⋮⋮ (vertical dots)
+    dragIcon.title = 'Drag to move to another week';
+    cell.appendChild(dragIcon);
   }
 
   // Project name
@@ -228,11 +288,9 @@ function createProjectNameCell(project) {
   nameSpan.title = project.project; // Tooltip with full name
   cell.appendChild(nameSpan);
 
-  // Project controls (week navigation, delete)
-  if (project.source === 'manual') {
-    const controls = createProjectControls(project);
-    cell.appendChild(controls);
-  }
+  // Project controls (copy/paste for all projects, delete for manual only)
+  const controls = createProjectControls(project);
+  cell.appendChild(controls);
 
   return cell;
 }
@@ -269,7 +327,7 @@ function createStartDateCell(project) {
 }
 
 /**
- * Create project control buttons (move week, delete)
+ * Create project control buttons (copy/paste for all, delete for manual)
  * @param {Object} project - Project object
  * @returns {HTMLElement} Controls container
  */
@@ -277,32 +335,35 @@ function createProjectControls(project) {
   const controls = document.createElement('div');
   controls.className = 'project-controls';
 
-  // Move to previous week button
-  const prevBtn = document.createElement('button');
-  prevBtn.className = 'project-control-btn';
-  prevBtn.innerHTML = '&#9650;'; // ▲ Up-pointing triangle
-  prevBtn.title = 'Move to previous week';
-  prevBtn.dataset.action = 'move-prev';
-  prevBtn.dataset.projectId = project.id;
-  controls.appendChild(prevBtn);
+  // Copy status button (all projects)
+  const copyBtn = document.createElement('button');
+  copyBtn.className = 'project-control-btn copy-btn';
+  copyBtn.innerHTML = '&#128203;'; // 📋 Clipboard
+  copyBtn.title = 'Copy tracking status';
+  copyBtn.dataset.action = 'copy-status';
+  copyBtn.dataset.projectId = project.id;
+  controls.appendChild(copyBtn);
 
-  // Move to next week button
-  const nextBtn = document.createElement('button');
-  nextBtn.className = 'project-control-btn';
-  nextBtn.innerHTML = '&#9660;'; // ▼ Down-pointing triangle
-  nextBtn.title = 'Move to next week';
-  nextBtn.dataset.action = 'move-next';
-  nextBtn.dataset.projectId = project.id;
-  controls.appendChild(nextBtn);
+  // Paste status button (all projects)
+  const pasteBtn = document.createElement('button');
+  pasteBtn.className = 'project-control-btn paste-btn';
+  pasteBtn.innerHTML = '&#128203;&#10004;'; // 📋✔ Clipboard with checkmark
+  pasteBtn.title = 'Paste tracking status';
+  pasteBtn.dataset.action = 'paste-status';
+  pasteBtn.dataset.projectId = project.id;
+  controls.appendChild(pasteBtn);
 
-  // Delete button
-  const deleteBtn = document.createElement('button');
-  deleteBtn.className = 'project-control-btn';
-  deleteBtn.innerHTML = '&#10005;'; // ✕ Heavy multiplication X
-  deleteBtn.title = 'Delete project';
-  deleteBtn.dataset.action = 'delete';
-  deleteBtn.dataset.projectId = project.id;
-  controls.appendChild(deleteBtn);
+  // Manual project controls (delete only - drag to move)
+  if (project.source === 'manual') {
+    // Delete button
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'project-control-btn';
+    deleteBtn.innerHTML = '&#10005;'; // ✕ Heavy multiplication X
+    deleteBtn.title = 'Delete project';
+    deleteBtn.dataset.action = 'delete';
+    deleteBtn.dataset.projectId = project.id;
+    controls.appendChild(deleteBtn);
+  }
 
   return controls;
 }
@@ -355,27 +416,28 @@ function createEmptyGrid() {
 // ============================================================================
 
 /**
- * Group projects by their week (Monday date)
+ * Group projects by their week (Monday date or manual week ID)
  * @param {Array<Object>} projects - Array of project objects
- * @returns {Object} Map of weekMonday -> array of projects
+ * @returns {Object} Map of weekMonday/weekId -> array of projects
  */
 function groupProjectsByWeek(projects) {
   const grouped = {};
 
   projects.forEach(project => {
-    const weekMonday = project.weekMonday;
-    if (!grouped[weekMonday]) {
-      grouped[weekMonday] = [];
+    // Use manualWeekId if assigned to a manual week, otherwise use weekMonday
+    const weekKey = project.manualWeekId || project.weekMonday;
+    if (!grouped[weekKey]) {
+      grouped[weekKey] = [];
     }
-    grouped[weekMonday].push(project);
+    grouped[weekKey].push(project);
   });
 
   // Sort projects within each week by actual start date (earliest first)
   Object.keys(grouped).forEach(week => {
     grouped[week].sort((a, b) => {
-      const dateA = a.actualStartDate || a.weekMonday;
-      const dateB = b.actualStartDate || b.weekMonday;
-      // Sort by date first
+      const dateA = a.actualStartDate || a.weekMonday || '';
+      const dateB = b.actualStartDate || b.weekMonday || '';
+      // Sort by date first (if both are date strings)
       const dateCompare = dateA.localeCompare(dateB);
       // If dates are the same, sort alphabetically by project name
       if (dateCompare === 0) {
@@ -391,8 +453,8 @@ function groupProjectsByWeek(projects) {
 /**
  * Get the range of weeks to display (1 past week + all future weeks + manual weeks)
  * @param {Object} projectsByWeek - Map of weekMonday -> projects
- * @param {Array<string>} manualWeeks - Array of manually added week dates
- * @returns {Array<string>} Sorted array of Monday date strings
+ * @param {Array<Object|string>} manualWeeks - Array of manual week objects {id, name, position} or date strings
+ * @returns {Array<string|Object>} Mixed array of date strings and manual week objects, sorted by position/date
  */
 function getWeekRange(projectsByWeek, manualWeeks = []) {
   const today = new Date();
@@ -403,20 +465,50 @@ function getWeekRange(projectsByWeek, manualWeeks = []) {
   previousMonday.setDate(previousMonday.getDate() - 7);
   const previousMondayStr = formatDateToYYYYMMDD(previousMonday);
 
-  // Get all weeks with projects
+  // Get all weeks with projects (these are date strings or manual week IDs)
   const projectWeeks = Object.keys(projectsByWeek);
 
-  // Include previous week, project weeks, and manual weeks
-  const allWeeks = new Set([previousMondayStr, ...projectWeeks, ...manualWeeks]);
+  // Separate manual weeks (objects) from date-based weeks (strings)
+  const manualWeekObjects = manualWeeks.filter(w => typeof w === 'object');
+  const manualWeekDateStrings = manualWeeks.filter(w => typeof w === 'string');
 
-  // Convert to array, sort chronologically, and filter to include:
-  // - Previous week
-  // - Current week and all future weeks
-  const sortedWeeks = Array.from(allWeeks)
+  // Include previous week, project weeks (excluding manual week IDs), and manual week date strings
+  const dateWeeks = new Set([
+    previousMondayStr,
+    ...projectWeeks.filter(w => !manualWeekObjects.some(mw => mw.id === w)),
+    ...manualWeekDateStrings
+  ]);
+
+  // Convert date weeks to array and filter to include previous week and future
+  const sortedDateWeeks = Array.from(dateWeeks)
     .sort()
     .filter(weekStr => weekStr >= previousMondayStr);
 
-  return sortedWeeks;
+  // Create a combined list with manual weeks inserted at their positions
+  const result = [];
+  let dateWeekIndex = 0;
+
+  // Sort manual weeks by position
+  const sortedManualWeeks = [...manualWeekObjects].sort((a, b) => a.position - b.position);
+
+  // Merge date weeks and manual weeks based on position
+  sortedManualWeeks.forEach(manualWeek => {
+    // Add all date weeks before this manual week's position
+    while (dateWeekIndex < manualWeek.position && dateWeekIndex < sortedDateWeeks.length) {
+      result.push(sortedDateWeeks[dateWeekIndex]);
+      dateWeekIndex++;
+    }
+    // Add the manual week
+    result.push(manualWeek);
+  });
+
+  // Add remaining date weeks after all manual weeks
+  while (dateWeekIndex < sortedDateWeeks.length) {
+    result.push(sortedDateWeeks[dateWeekIndex]);
+    dateWeekIndex++;
+  }
+
+  return result;
 }
 
 // ============================================================================
