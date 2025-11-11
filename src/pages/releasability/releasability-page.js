@@ -190,6 +190,14 @@ function setupStateHandlers() {
     renderGrid();
   });
 
+  // Re-render when status updated (if hide completed is active)
+  on(RELEASABILITY_EVENTS.STATUS_UPDATED, () => {
+    if (getHideCompleted()) {
+      console.log('📢 Status updated with hide completed active, re-rendering grid');
+      renderGrid();
+    }
+  });
+
   // Handle loading state changes
   on(RELEASABILITY_EVENTS.LOADING_CHANGED, ({ isLoading }) => {
     updateLoadingState(isLoading);

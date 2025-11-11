@@ -12,7 +12,8 @@ import { emit, on, EVENTS } from '../../core/event-bus.js';
 import {
   STATUS,
   DEFAULT_TRACKING_STATUS,
-  PROJECT_SOURCE
+  PROJECT_SOURCE,
+  TRACKING_ITEMS
 } from '../../config/releasability-config.js';
 
 // ============================================================================
@@ -540,13 +541,29 @@ export function getProjectCompletion(projectId) {
  */
 export function isProjectFullyComplete(project) {
   if (!project || !project.trackingStatus) {
+    console.log(`❌ Project "${project?.project}" - No trackingStatus`);
     return false;
   }
 
-  const statuses = Object.values(project.trackingStatus);
+  // Only check the CURRENT tracking items from config, not all stored keys
+  const incompleteItems = TRACKING_ITEMS.filter(item => {
+    const status = project.trackingStatus[item];
+    return !status || status !== STATUS.COMPLETE;
+  });
 
-  // Project is fully complete only if ALL tracking items are 'complete'
-  return statuses.length > 0 && statuses.every(s => s === STATUS.COMPLETE);
+  const isComplete = incompleteItems.length === 0;
+
+  // Debug: Log incomplete projects
+  if (!isComplete) {
+    const details = incompleteItems.map(item => {
+      const status = project.trackingStatus[item] || 'missing';
+      return `${item}: ${status}`;
+    });
+    console.log(`⚠️ Project "${project.project}" not fully complete:`, details);
+  }
+
+  // Project is fully complete only if ALL current tracking items are 'complete'
+  return isComplete;
 }
 
 /**
