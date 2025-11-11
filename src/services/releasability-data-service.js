@@ -72,10 +72,11 @@ export async function loadProjectsFromSheets() {
           // Get Monday of the week containing this date
           const monday = getMonday(parsedDate);
 
-          // Return both actual date and Monday
+          // Return both actual date and Monday, and keep reference to the task
           return {
             actualDate: getLocalDateString(parsedDate),
-            mondayDate: getLocalDateString(monday)
+            mondayDate: getLocalDateString(monday),
+            task: task
           };
         })
         .filter(info => info !== null); // Remove invalid dates
@@ -93,19 +94,48 @@ export async function loadProjectsFromSheets() {
       const sortedByMonday = [...dateInfo].sort((a, b) => a.mondayDate.localeCompare(b.mondayDate));
       const earliestWeek = sortedByMonday[0].mondayDate;
 
-      // Get most common department for this project
-      const department = getMostCommonDepartment(projectTasks);
-
-      projects.push({
-        project: projectName,
-        weekMonday: earliestWeek,
-        actualStartDate: earliestActualDate,
-        department: department,
-        source: PROJECT_SOURCE.SHEETS
+      // Get department from the earliest "Mill" or "Form Out" task
+      // Filter for only Mill/Form Out tasks, then find the earliest one
+      const relevantDeptTasks = sortedByActual.filter(info => {
+        const dept = info.task.department;
+        return dept === 'Mill' || dept === 'Form Out';
       });
+
+      let department;
+      if (relevantDeptTasks.length > 0) {
+        // Use the earliest Mill or Form Out task
+        department = relevantDeptTasks[0].task.department;
+      } else {
+        // Fallback: use the earliest task's department (even if not Mill/Form Out)
+        department = sortedByActual[0].task.department;
+      }
+
+      // Debug logging for department assignment
+      if (projectTasks.length > 1) {
+        logger.info(`  → Project "${projectName}" has ${projectTasks.length} tasks:`);
+        sortedByActual.forEach((info, idx) => {
+          const isRelevant = info.task.department === 'Mill' || info.task.department === 'Form Out';
+          const isSelected = info.task.department === department && (relevantDeptTasks.length === 0 ? idx === 0 : relevantDeptTasks[0] === info);
+          logger.info(`     ${isSelected ? '✓' : ' '} ${info.actualDate} - ${info.task.department || 'NO DEPT'}${isRelevant ? ' (Mill/FormOut)' : ''}`);
+        });
+        logger.info(`     Selected department: ${department || 'NONE'}`);
+      }
+
+      // Only include projects with Mill or Form Out department
+      if (department === 'Mill' || department === 'Form Out') {
+        projects.push({
+          project: projectName,
+          weekMonday: earliestWeek,
+          actualStartDate: earliestActualDate,
+          department: department,
+          source: PROJECT_SOURCE.SHEETS
+        });
+      } else {
+        logger.info(`  → Skipping project "${projectName}": Department "${department}" is not Mill or Form Out`);
+      }
     }
 
-    logger.info(`  → Created ${projects.length} releasability board projects`);
+    logger.info(`  → Created ${projects.length} releasability board projects (filtered for Mill/Form Out only)`);
     return projects;
 
   } catch (error) {
@@ -391,6 +421,11 @@ export async function loadAllReleasabilityData() {
 
       // Generate unique ID
       const id = `project_${project.project}_${project.weekMonday}`.replace(/\s+/g, '_');
+
+      // Debug logging for department tracking
+      if (saved && saved.department && saved.department !== project.department) {
+        logger.info(`  📝 Department update for "${project.project}": ${saved.department} → ${project.department}`);
+      }
 
       return {
         id,
