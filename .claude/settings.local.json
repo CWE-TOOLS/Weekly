@@ -43,7 +43,12 @@
       "Bash(npx http-server -p 8000)",
       "Bash(npx http-server -p 8000 -c-1)",
       "Bash(netstat:*)",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "Bash(npm install:*)",
+      "Bash(npm run screenshot:*)",
+      "Bash(git mv:*)",
+      "SlashCommand(/screenshot)",
+      "Bash(npx http-server:*)"
     ],
     "deny": [],
     "ask": []

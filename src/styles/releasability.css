@@ -31,6 +31,28 @@
   --header-height: 80px;
   --filters-height: 60px;
   --legend-height: 40px;
+
+  /* Tracking Item Header Colors */
+  --tracking-0-color: #00ffff;   /* Shop Folder Built */
+  --tracking-1-color: #00ffff;   /* Sample Approval */
+  --tracking-2-color: #00ffff;   /* Color Log */
+  --tracking-3-color: #00ffff;   /* Optimize Hours */
+  --tracking-4-color: #00ffff;   /* Approved SDs */
+  --tracking-5-color: #00ffff;   /* Begin Tracking */
+  --tracking-6-color: #00ffff;   /* Work Order */
+  --tracking-7-color: #00ffff;   /* Classroom #1 */
+  --tracking-8-color: #00ff00;   /* Final Tracking */
+  --tracking-9-color: #00ff00;   /* Batching Sheets */
+  --tracking-10-color: #00ff00;  /* QA Template Changes */
+  --tracking-11-color: #00ff00;  /* Rebar/Drilling Layout */
+  --tracking-12-color: #00ff00;  /* Casting Layout */
+  --tracking-13-color: #ffff00;  /* Final Optimizer HRS */
+  --tracking-14-color: #ffff00;  /* Classroom #2 */
+  --tracking-15-color: #4a86e8;  /* Inflow Sales Ticket */
+  --tracking-16-color: #4a86e8;  /* 3D Drawings/Parts List */
+  --tracking-17-color: #4a86e8;  /* Classroom #3 */
+  --tracking-18-color: #4a86e8;  /* Toolpath Program */
+  --tracking-19-color: #4a86e8;  /* Staging */
 }
 
 /* ============================================================================
@@ -39,23 +61,22 @@
 
 /* Override base.css body styles to enable scrolling */
 body {
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
-  height: auto !important;
+  overflow: hidden !important;
+  height: 100vh !important;
   width: 100vw !important;
   transform: none !important;
 }
 
 html {
-  height: auto !important;
-  overflow-x: hidden !important;
+  height: 100vh !important;
+  overflow: hidden !important;
 }
 
 #releasability-app {
   background-color: var(--background-primary);
-  min-height: 100vh;
+  height: 100vh;
   max-width: 100vw;
-  overflow-x: hidden;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
 }
@@ -426,8 +447,8 @@ html {
   display: flex;
   flex-direction: column;
   width: 100%;
-  height: 100%;
-  overflow: hidden;
+  min-height: min-content;
+  /* Removed height: 100% and overflow to allow content to flow and sticky to work */
 }
 
 /* Shared grid column definition */
@@ -436,10 +457,10 @@ html {
   display: grid;
   grid-template-columns:
     250px
-    100px
+    70px
     repeat(20, minmax(50px, 1fr));
   gap: var(--grid-cell-gap);
-  background-color: var(--border-primary);
+  background-color: black;
   width: fit-content;
   min-width: 100%;
 }
@@ -450,12 +471,12 @@ html {
   top: 0;
   z-index: 100;
   flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  background-color: var(--background-secondary);
 }
 
 /* Scrollable body grid */
 .releasability-grid-body {
-  overflow: auto;
+  /* Removed overflow: auto - parent grid-container handles scrolling */
   flex: 1;
   min-height: 0;
 }
@@ -467,7 +488,6 @@ html {
   font-weight: 600;
   font-size: 0.875rem;
   color: var(--text-primary);
-  border-bottom: 2px solid var(--border-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -480,7 +500,6 @@ html {
   position: sticky;
   left: 0;
   z-index: 25;
-  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05);
 }
 
 .header-cell.start-date-header {
@@ -489,7 +508,6 @@ html {
   position: sticky;
   left: 250px;
   z-index: 24;
-  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05);
 }
 
 .tracking-item-header {
@@ -497,7 +515,33 @@ html {
   transform: rotate(180deg);
   white-space: nowrap;
   padding: 0.75rem 0.5rem;
+  font-weight: 500;
+  font-size: 0.8rem;
+  color: rgba(0, 0, 0, 0.8);
+  border-right: 1px solid rgba(0, 0, 0, 0.1);
 }
+
+/* Individual tracking item header colors */
+.tracking-item-header[data-tracking-index="0"] { background-color: var(--tracking-0-color); }   /* Shop Folder Built */
+.tracking-item-header[data-tracking-index="1"] { background-color: var(--tracking-1-color); }   /* Sample Approval */
+.tracking-item-header[data-tracking-index="2"] { background-color: var(--tracking-2-color); }   /* Color Log */
+.tracking-item-header[data-tracking-index="3"] { background-color: var(--tracking-3-color); }   /* Optimize Hours */
+.tracking-item-header[data-tracking-index="4"] { background-color: var(--tracking-4-color); }   /* Approved SDs */
+.tracking-item-header[data-tracking-index="5"] { background-color: var(--tracking-5-color); }   /* Begin Tracking */
+.tracking-item-header[data-tracking-index="6"] { background-color: var(--tracking-6-color); }   /* Work Order */
+.tracking-item-header[data-tracking-index="7"] { background-color: var(--tracking-7-color); }   /* Classroom #1 */
+.tracking-item-header[data-tracking-index="8"] { background-color: var(--tracking-8-color); }   /* Final Tracking */
+.tracking-item-header[data-tracking-index="9"] { background-color: var(--tracking-9-color); }   /* Batching Sheets */
+.tracking-item-header[data-tracking-index="10"] { background-color: var(--tracking-10-color); } /* QA Template Changes */
+.tracking-item-header[data-tracking-index="11"] { background-color: var(--tracking-11-color); } /* Rebar/Drilling Layout */
+.tracking-item-header[data-tracking-index="12"] { background-color: var(--tracking-12-color); } /* Casting Layout */
+.tracking-item-header[data-tracking-index="13"] { background-color: var(--tracking-13-color); } /* Final Optimizer HRS */
+.tracking-item-header[data-tracking-index="14"] { background-color: var(--tracking-14-color); } /* Classroom #2 */
+.tracking-item-header[data-tracking-index="15"] { background-color: var(--tracking-15-color); } /* Inflow Sales Ticket */
+.tracking-item-header[data-tracking-index="16"] { background-color: var(--tracking-16-color); } /* 3D Drawings/Parts List */
+.tracking-item-header[data-tracking-index="17"] { background-color: var(--tracking-17-color); } /* Classroom #3 */
+.tracking-item-header[data-tracking-index="18"] { background-color: var(--tracking-18-color); } /* Toolpath Program */
+.tracking-item-header[data-tracking-index="19"] { background-color: var(--tracking-19-color); } /* Staging */
 
 /* Week Section */
 .week-section {
@@ -505,11 +549,11 @@ html {
 }
 
 .week-header-cell {
-  background-color: var(--accent-primary);
-  color: white;
-  padding: 0.75rem 1.5rem;
-  font-weight: 700;
-  font-size: 0.9rem;
+  background-color: #fef3c7;
+  color: #1a1a1a;
+  padding: 0.5rem 1.5rem;
+  font-weight: 600;
+  font-size: 0.875rem;
   grid-column: 1 / -1;
   position: sticky;
   left: 0;
@@ -517,6 +561,8 @@ html {
   display: flex;
   align-items: center;
   gap: 1rem;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 .week-header-label {
@@ -525,9 +571,9 @@ html {
 
 .week-add-btn {
   padding: 0.35rem 0.75rem;
-  background-color: rgba(255, 255, 255, 0.2);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  background-color: rgba(0, 0, 0, 0.05);
+  color: black;
+  border: 1px solid rgba(0, 0, 0, 0.2);
   border-radius: 4px;
   cursor: pointer;
   font-size: 0.8rem;
@@ -546,8 +592,8 @@ html {
 }
 
 .week-add-btn:hover {
-  background-color: rgba(255, 255, 255, 0.3);
-  border-color: rgba(255, 255, 255, 0.6);
+  background-color: rgba(0, 0, 0, 0.1);
+  border-color: rgba(0, 0, 0, 0.3);
   transform: translateY(-1px);
 }
 
@@ -566,9 +612,9 @@ html {
 .week-control-btn {
   padding: 0.25rem 0.5rem;
   min-width: 28px;
-  background-color: rgba(255, 255, 255, 0.2);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  background-color: rgba(0, 0, 0, 0.05);
+  color: black;
+  border: 1px solid rgba(0, 0, 0, 0.2);
   border-radius: 4px;
   cursor: pointer;
   font-size: 0.875rem;
@@ -581,8 +627,8 @@ html {
 }
 
 .week-control-btn:hover {
-  background-color: rgba(255, 255, 255, 0.3);
-  border-color: rgba(255, 255, 255, 0.6);
+  background-color: rgba(0, 0, 0, 0.1);
+  border-color: rgba(0, 0, 0, 0.3);
   transform: translateY(-1px);
 }
 
@@ -606,7 +652,6 @@ html {
   font-weight: 500;
   font-size: 0.875rem;
   color: var(--text-primary);
-  border-bottom: 1px solid var(--border-primary);
   display: flex;
   align-items: center;
   gap: 0.4rem;
@@ -614,7 +659,6 @@ html {
   left: 0;
   z-index: 15;
   min-height: var(--grid-row-height);
-  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05);
 }
 
 .project-name-cell:hover {
@@ -694,7 +738,6 @@ html {
   padding: 0.4rem 0.5rem;
   font-size: 0.8rem;
   color: var(--text-secondary);
-  border-bottom: 1px solid var(--border-primary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -703,7 +746,6 @@ html {
   position: sticky;
   left: 250px;
   z-index: 14;
-  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05);
 }
 
 .start-date-cell:hover {
@@ -774,7 +816,6 @@ html {
 /* Status Cell */
 .status-cell {
   background-color: var(--background-secondary);
-  border-bottom: 1px solid var(--border-primary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -785,10 +826,7 @@ html {
 }
 
 .status-cell:hover {
-  opacity: 0.9;
-  transform: scale(1.05);
-  z-index: 2;
-  box-shadow: var(--shadow-md);
+  opacity: 0.85;
 }
 
 .status-cell.status-complete {
