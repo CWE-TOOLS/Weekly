@@ -85,11 +85,12 @@ function createHeaderRow() {
   cells.push(startDateHeader);
 
   // Tracking item headers (one for each tracking item)
-  TRACKING_ITEMS.forEach(item => {
+  TRACKING_ITEMS.forEach((item, index) => {
     const headerCell = document.createElement('div');
     headerCell.className = 'header-cell tracking-item-header';
     headerCell.textContent = item;
     headerCell.title = item; // Tooltip with full name
+    headerCell.dataset.trackingIndex = index; // Add index for individual targeting
     cells.push(headerCell);
   });
 
@@ -310,14 +311,11 @@ function createStartDateCell(project) {
   // Parse and format the start date
   const startDate = parseLocalDate(startDateStr);
   if (startDate) {
-    // Format as "Day MMM DD" (e.g., "Wed Jan 13")
+    // Format as "Day DD" (e.g., "Wed 13")
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const dayName = dayNames[startDate.getDay()];
-    const monthName = monthNames[startDate.getMonth()];
     const day = startDate.getDate();
-    cell.textContent = `${dayName} ${monthName} ${day}`;
+    cell.textContent = `${dayName} ${day}`;
     cell.title = startDateStr; // Tooltip with full date
   } else {
     cell.textContent = startDateStr;

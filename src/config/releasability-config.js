@@ -64,22 +64,22 @@ export const TRACKING_ITEMS = [
   'Sample Approval',
   'Color Log',
   'Optimize Hours',
-  'Approved SB2',
-  'Batch Tracking',
+  'Approved SDs',
+  'Begin Tracking',
   'Work Order',
   'Classroom #1',
   'Final Tracking',
   'Batching Sheets',
-  'Release to Buildrite Level',
-  'Release or Decline',
-  'Creating Report',
-  'Final Optimizer RRS',
+  'QA Template Changes',
+  'Rebar/Drilling Layout',
+  'Casting Layout',
+  'Final Optimizer HRS',
   'Classroom #2',
-  'Tailor Sales Ticket',
-  '3D Drawings Parts List',
+  'Inflow Sales Ticket',
+  '3D Drawings/Parts List',
   'Classroom #3',
   'Toolpath Program',
-  'Mill 3D Staging'
+  'Staging'
 ];
 
 /**

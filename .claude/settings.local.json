@@ -48,7 +48,9 @@
       "Bash(npm run screenshot:*)",
       "Bash(git mv:*)",
       "SlashCommand(/screenshot)",
-      "Bash(npx http-server:*)"
+      "Bash(npx http-server:*)",
+      "WebFetch(domain:cwe-tools.github.io)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ],
     "deny": [],
     "ask": []

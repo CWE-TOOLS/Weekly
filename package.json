@@ -1,5 +1,14 @@
 {
+  "scripts": {
+    "start": "live-server releasabiltyboarddev/releasability.html --port=3000",
+    "dev": "live-server releasabiltyboarddev/releasability.html --port=3000",
+    "screenshot": "node tools/screenshot-releasability.js"
+  },
   "dependencies": {
-    "madge": "^8.0.0"
+    "madge": "^8.0.0",
+    "puppeteer": "^24.29.1"
+  },
+  "devDependencies": {
+    "live-server": "^1.2.2"
   }
 }
