@@ -110,17 +110,6 @@ export async function loadProjectsFromSheets() {
         department = sortedByActual[0].task.department;
       }
 
-      // Debug logging for department assignment
-      if (projectTasks.length > 1) {
-        logger.info(`  → Project "${projectName}" has ${projectTasks.length} tasks:`);
-        sortedByActual.forEach((info, idx) => {
-          const isRelevant = info.task.department === 'Mill' || info.task.department === 'Form Out';
-          const isSelected = info.task.department === department && (relevantDeptTasks.length === 0 ? idx === 0 : relevantDeptTasks[0] === info);
-          logger.info(`     ${isSelected ? '✓' : ' '} ${info.actualDate} - ${info.task.department || 'NO DEPT'}${isRelevant ? ' (Mill/FormOut)' : ''}`);
-        });
-        logger.info(`     Selected department: ${department || 'NONE'}`);
-      }
-
       // Only include projects with Mill or Form Out department
       if (department === 'Mill' || department === 'Form Out') {
         projects.push({
@@ -130,9 +119,8 @@ export async function loadProjectsFromSheets() {
           department: department,
           source: PROJECT_SOURCE.SHEETS
         });
-      } else {
-        logger.info(`  → Skipping project "${projectName}": Department "${department}" is not Mill or Form Out`);
       }
+      // Projects not in Mill/Form Out are silently skipped
     }
 
     logger.info(`  → Created ${projects.length} releasability board projects (filtered for Mill/Form Out only)`);
@@ -422,11 +410,6 @@ export async function loadAllReleasabilityData() {
       // Generate unique ID
       const id = `project_${project.project}_${project.weekMonday}`.replace(/\s+/g, '_');
 
-      // Debug logging for department tracking
-      if (saved && saved.department && saved.department !== project.department) {
-        logger.info(`  📝 Department update for "${project.project}": ${saved.department} → ${project.department}`);
-      }
-
       return {
         id,
         project: project.project,
@@ -469,8 +452,6 @@ export async function loadAllReleasabilityData() {
           createdAt: new Date().toISOString(),
           updatedAt: record.updatedAt || new Date().toISOString()
         });
-
-        logger.info(`  → Added manual project: "${record.project}" (${record.weekMonday})`);
       }
     });
 
@@ -482,7 +463,6 @@ export async function loadAllReleasabilityData() {
         const [projectName, weekMonday] = oldKey.split('|');
         try {
           await deleteTrackingStatus(projectName, weekMonday);
-          logger.info(`  ✓ Deleted old record: "${projectName}" (${weekMonday})`);
         } catch (error) {
           logger.error(`  ✗ Failed to delete old record: "${projectName}" (${weekMonday})`, error);
         }
