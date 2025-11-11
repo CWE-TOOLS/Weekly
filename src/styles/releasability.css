@@ -569,6 +569,29 @@ html {
   flex: 0 0 auto;
 }
 
+.week-collapse-btn {
+  padding: 0.25rem 0.5rem;
+  background-color: transparent;
+  color: #1a1a1a;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.75rem;
+  line-height: 1;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.week-collapse-btn:hover {
+  background-color: rgba(0, 0, 0, 0.1);
+  border-color: rgba(0, 0, 0, 0.3);
+}
+
 .week-add-btn {
   padding: 0.35rem 0.75rem;
   background-color: rgba(0, 0, 0, 0.05);
@@ -641,6 +664,18 @@ html {
   border-color: rgba(220, 38, 38, 1);
 }
 
+/* Week collapse/expand */
+.week-collapsed {
+  display: none !important;
+}
+
+.week-header-cell.collapsed .week-header-label::after {
+  content: ' (collapsed)';
+  font-weight: normal;
+  opacity: 0.6;
+  font-size: 0.75rem;
+}
+
 /* Project Row */
 .project-row {
   display: contents;
@@ -666,13 +701,13 @@ html {
 }
 
 .project-name-cell.manual {
-  background-color: #FEF3C7;
+  background-color: white;
   border: 2px dotted #F59E0B;
   border-right: none;
 }
 
 .project-name-cell.manual:hover {
-  background-color: #FDE68A;
+  background-color: rgba(255, 251, 235, 0.95);
 }
 
 .project-name {

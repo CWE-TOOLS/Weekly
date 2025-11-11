@@ -56,6 +56,13 @@ let _searchQuery = '';
 let _hideCompleted = false;
 
 /**
+ * Collapsed weeks (Set of week identifiers)
+ * @type {Set<string>}
+ * @private
+ */
+let _collapsedWeeks = new Set();
+
+/**
  * Loading state indicator
  * @type {boolean}
  * @private
@@ -95,7 +102,10 @@ export const RELEASABILITY_EVENTS = {
   FILTERS_CHANGED: 'releasability:filters-changed',
 
   /** Fired when loading state changes */
-  LOADING_CHANGED: 'releasability:loading-changed'
+  LOADING_CHANGED: 'releasability:loading-changed',
+
+  /** Fired when a week is collapsed/expanded */
+  WEEK_COLLAPSED_CHANGED: 'releasability:week-collapsed-changed'
 };
 
 // ============================================================================
@@ -227,6 +237,23 @@ export function getHideCompleted() {
  */
 export function isLoading() {
   return _isLoading;
+}
+
+/**
+ * Get collapsed weeks
+ * @returns {Set<string>} Set of collapsed week identifiers
+ */
+export function getCollapsedWeeks() {
+  return new Set(_collapsedWeeks);
+}
+
+/**
+ * Check if a week is collapsed
+ * @param {string} weekIdentifier - Week Monday date or manual week ID
+ * @returns {boolean} True if the week is collapsed
+ */
+export function isWeekCollapsed(weekIdentifier) {
+  return _collapsedWeeks.has(weekIdentifier);
 }
 
 // ============================================================================
@@ -567,6 +594,85 @@ export function isProjectFullyComplete(project) {
 }
 
 /**
+ * Toggle a week's collapsed state
+ * @param {string} weekIdentifier - Week Monday date or manual week ID
+ * @param {boolean} silent - If true, don't emit events
+ */
+export function toggleWeekCollapsed(weekIdentifier, silent = false) {
+  if (_collapsedWeeks.has(weekIdentifier)) {
+    _collapsedWeeks.delete(weekIdentifier);
+  } else {
+    _collapsedWeeks.add(weekIdentifier);
+  }
+
+  // Save to localStorage
+  saveCollapsedWeeksPreference();
+
+  if (!silent) {
+    emit(RELEASABILITY_EVENTS.WEEK_COLLAPSED_CHANGED, {
+      weekIdentifier,
+      isCollapsed: _collapsedWeeks.has(weekIdentifier)
+    });
+  }
+}
+
+/**
+ * Set a week's collapsed state
+ * @param {string} weekIdentifier - Week Monday date or manual week ID
+ * @param {boolean} collapsed - True to collapse, false to expand
+ * @param {boolean} silent - If true, don't emit events
+ */
+export function setWeekCollapsed(weekIdentifier, collapsed, silent = false) {
+  const wasCollapsed = _collapsedWeeks.has(weekIdentifier);
+
+  if (collapsed) {
+    _collapsedWeeks.add(weekIdentifier);
+  } else {
+    _collapsedWeeks.delete(weekIdentifier);
+  }
+
+  // Only save and emit if state actually changed
+  if (wasCollapsed !== collapsed) {
+    saveCollapsedWeeksPreference();
+
+    if (!silent) {
+      emit(RELEASABILITY_EVENTS.WEEK_COLLAPSED_CHANGED, {
+        weekIdentifier,
+        isCollapsed: collapsed
+      });
+    }
+  }
+}
+
+/**
+ * Save collapsed weeks preference to localStorage
+ */
+function saveCollapsedWeeksPreference() {
+  try {
+    const weeksArray = Array.from(_collapsedWeeks);
+    localStorage.setItem('releasability-collapsed-weeks', JSON.stringify(weeksArray));
+  } catch (error) {
+    console.error('Error saving collapsed weeks preference:', error);
+  }
+}
+
+/**
+ * Load collapsed weeks preference from localStorage
+ */
+export function loadCollapsedWeeksPreference() {
+  try {
+    const saved = localStorage.getItem('releasability-collapsed-weeks');
+    if (saved) {
+      const weeksArray = JSON.parse(saved);
+      _collapsedWeeks = new Set(weeksArray);
+    }
+  } catch (error) {
+    console.error('Error loading collapsed weeks preference:', error);
+    _collapsedWeeks = new Set();
+  }
+}
+
+/**
  * Clear all state (useful for testing/reset)
  * @param {boolean} silent - If true, don't emit events
  */
@@ -576,6 +682,7 @@ export function clearState(silent = false) {
   _departmentFilters = [];
   _searchQuery = '';
   _hideCompleted = false;
+  _collapsedWeeks = new Set();
   _isLoading = false;
 
   if (!silent) {

@@ -11,6 +11,7 @@
     <!-- Base Stylesheets -->
     <link rel="stylesheet" href="src/styles/variables.css">
     <link rel="stylesheet" href="src/styles/base.css">
+    <link rel="stylesheet" href="src/styles/buttons.css">
 
     <!-- Releasability-Specific Stylesheet (includes all needed styles) -->
     <link rel="stylesheet" href="src/styles/releasability.css?v=20251111-2">
@@ -40,6 +41,14 @@
                     Hide Completed Projects
                 </label>
                 <button id="add-week-btn" class="add-week-btn">+ Add Week</button>
+                <button id="fullscreen-btn" class="icon-btn" aria-label="Toggle Fullscreen" style="margin-left: 10px;">
+                    <svg id="fullscreen-icon-expand" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+                    </svg>
+                    <svg id="fullscreen-icon-compress" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+                        <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 0 2-2h3M3 16h3a2 2 0 0 0 2-2v-3"/>
+                    </svg>
+                </button>
             </div>
         </div>
 

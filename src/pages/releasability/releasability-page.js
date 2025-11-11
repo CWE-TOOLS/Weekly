@@ -24,7 +24,9 @@ import {
   setLoading,
   getStateSnapshot,
   setProjects,
-  getWeeksWithProjects
+  getWeeksWithProjects,
+  toggleWeekCollapsed,
+  loadCollapsedWeeksPreference
 } from './releasability-state.js';
 import {
   TRACKING_ITEMS,
@@ -71,8 +73,9 @@ async function init() {
   setLoading(true);
 
   try {
-    // Load hideCompleted preference from localStorage
+    // Load preferences from localStorage
     loadHideCompletedPreference();
+    loadCollapsedWeeksPreference();
 
     // TODO: Load data from services (will implement in later steps)
     // For now, show empty state or test data
@@ -143,6 +146,30 @@ function setupEventListeners() {
   if (addWeekBtn) {
     addWeekBtn.addEventListener('click', handleAddWeekClick);
   }
+
+  // Fullscreen button
+  const fullscreenBtn = document.getElementById('fullscreen-btn');
+  if (fullscreenBtn) {
+    fullscreenBtn.addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen();
+      } else {
+        document.exitFullscreen();
+      }
+    });
+  }
+
+  // Fullscreen change handler to toggle icons
+  document.addEventListener('fullscreenchange', () => {
+    const isFullscreen = !!document.fullscreenElement;
+    const expandIcon = document.getElementById('fullscreen-icon-expand');
+    const compressIcon = document.getElementById('fullscreen-icon-compress');
+
+    if (expandIcon && compressIcon) {
+      expandIcon.style.display = isFullscreen ? 'none' : 'block';
+      compressIcon.style.display = isFullscreen ? 'block' : 'none';
+    }
+  });
 
   // Hide completed toggle
   const hideCompletedToggle = document.getElementById('hide-completed-toggle');
@@ -538,7 +565,7 @@ function renderGrid() {
  */
 function setupGridEventDelegation(grid) {
   grid.addEventListener('click', (e) => {
-    const target = e.target.closest('.status-cell, .project-control-btn, .week-add-btn, .week-control-btn');
+    const target = e.target.closest('.status-cell, .project-control-btn, .week-add-btn, .week-control-btn, .week-collapse-btn');
     if (!target) return;
 
     // Handle status cell clicks (will implement in STEP 6)
@@ -556,8 +583,8 @@ function setupGridEventDelegation(grid) {
       handleWeekAddProjectClick(target);
     }
 
-    // Handle week control button clicks
-    if (target.classList.contains('week-control-btn')) {
+    // Handle week control button clicks (includes collapse button)
+    if (target.classList.contains('week-control-btn') || target.classList.contains('week-collapse-btn')) {
       handleWeekControlClick(target);
     }
   });
@@ -830,9 +857,6 @@ async function handleWeekAddProjectClick(button) {
     return; // User cancelled or entered empty name
   }
 
-  // Prompt for department (optional)
-  const department = prompt('Enter department (optional):') || null;
-
   // For manual weeks, we still need a weekMonday for database storage
   // Use current week's Monday as the base date
   let effectiveWeekMonday = weekMonday;
@@ -860,7 +884,7 @@ async function handleWeekAddProjectClick(button) {
     weekMonday: effectiveWeekMonday, // Always provide a valid weekMonday for database
     manualWeekId: weekId || null, // Use weekId for manual weeks (for display grouping)
     actualStartDate: effectiveWeekMonday, // Use the effective week Monday as start date
-    department: department ? department.trim() : null,
+    department: null,
     source: PROJECT_SOURCE.MANUAL
   };
 
@@ -1121,6 +1145,7 @@ async function handleAddWeekClick() {
 function handleWeekControlClick(button) {
   const action = button.dataset.action;
   const weekId = button.dataset.weekId;
+  const weekMonday = button.dataset.weekMonday;
 
   switch (action) {
     case 'move-week-up':
@@ -1131,6 +1156,9 @@ function handleWeekControlClick(button) {
       break;
     case 'delete-week':
       handleDeleteManualWeek(weekId);
+      break;
+    case 'toggle-week-collapse':
+      handleToggleWeekCollapse(weekId || weekMonday);
       break;
   }
 }
@@ -1390,6 +1418,16 @@ async function handleDeleteManualWeek(weekId) {
     console.error('❌ Failed to delete manual week:', error);
     showError('Failed to delete week. Please try again.');
   }
+}
+
+/**
+ * Handle toggle week collapse/expand
+ * @param {string} weekIdentifier - Week Monday date or manual week ID
+ */
+function handleToggleWeekCollapse(weekIdentifier) {
+  console.log('🔄 Toggling week collapse:', weekIdentifier);
+  toggleWeekCollapsed(weekIdentifier);
+  renderGrid();
 }
 
 // ============================================================================

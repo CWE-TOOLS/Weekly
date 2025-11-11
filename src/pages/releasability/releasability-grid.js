@@ -9,6 +9,7 @@
 
 import { getMonday, getWeekMonth, getWeekOfMonth } from '../../utils/date-utils.js';
 import { TRACKING_ITEMS, STATUS, STATUS_DISPLAY } from '../../config/releasability-config.js';
+import { isWeekCollapsed } from './releasability-state.js';
 
 // ============================================================================
 // MAIN RENDERING FUNCTION
@@ -105,15 +106,38 @@ function createHeaderRow() {
  */
 function createWeekSection(week, projects) {
   const elements = [];
+  const isManualWeek = typeof week === 'object';
+  const weekIdentifier = isManualWeek ? week.id : week;
+  const collapsed = isWeekCollapsed(weekIdentifier);
 
   // Week header (spans all columns)
   const weekHeader = createWeekHeader(week);
+
+  // Add collapsed class to header if needed
+  if (collapsed) {
+    weekHeader.classList.add('collapsed');
+  }
+
   elements.push(weekHeader);
 
   // Project rows for this week
   projects.forEach(project => {
     const projectRow = createProjectRow(project);
-    projectRow.forEach(cell => elements.push(cell));
+    projectRow.forEach(cell => {
+      // Add data attribute to mark which week this cell belongs to
+      if (isManualWeek) {
+        cell.dataset.weekId = week.id;
+      } else {
+        cell.dataset.weekMonday = week;
+      }
+
+      // Add collapsed class to hide cells when week is collapsed
+      if (collapsed) {
+        cell.classList.add('week-collapsed');
+      }
+
+      elements.push(cell);
+    });
   });
 
   return elements;
@@ -168,6 +192,24 @@ function createWeekHeader(week) {
     header.dataset.weekMonday = weekMonday;
     header.dataset.dropWeekMonday = weekMonday;
   }
+
+  // Collapse/expand button (before the label)
+  const weekIdentifier = isManualWeek ? week.id : weekMonday;
+  const collapsed = isWeekCollapsed(weekIdentifier);
+
+  const collapseBtn = document.createElement('button');
+  collapseBtn.className = 'week-collapse-btn';
+  collapseBtn.innerHTML = collapsed ? '▶' : '▼'; // Right arrow when collapsed, down arrow when expanded
+  collapseBtn.title = collapsed ? 'Expand week' : 'Collapse week';
+  collapseBtn.dataset.action = 'toggle-week-collapse';
+
+  if (isManualWeek) {
+    collapseBtn.dataset.weekId = week.id;
+  } else {
+    collapseBtn.dataset.weekMonday = weekMonday;
+  }
+
+  header.appendChild(collapseBtn);
 
   // Week label text
   const labelSpan = document.createElement('span');
@@ -304,6 +346,13 @@ function createProjectNameCell(project) {
 function createStartDateCell(project) {
   const cell = document.createElement('div');
   cell.className = 'start-date-cell';
+
+  // Show "--" for manual projects (not from database)
+  if (project.source === 'manual') {
+    cell.textContent = '--';
+    cell.title = 'Manual project (no start date)';
+    return cell;
+  }
 
   // Use actualStartDate if available, otherwise fall back to weekMonday
   const startDateStr = project.actualStartDate || project.weekMonday;
