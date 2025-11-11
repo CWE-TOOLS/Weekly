@@ -39,7 +39,7 @@ export const STATUS_DISPLAY = {
   [STATUS.IN_PROGRESS]: {
     color: '#F59E0B',      // Yellow/Orange
     textColor: '#FFFFFF',   // White
-    icon: '○',              // Circle
+    icon: '/',              // Forward slash
     label: 'In Progress'
   },
   [STATUS.COMPLETE]: {

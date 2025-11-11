@@ -10,6 +10,7 @@
 import { getMonday, getWeekMonth, getWeekOfMonth } from '../../utils/date-utils.js';
 import { TRACKING_ITEMS, STATUS, STATUS_DISPLAY } from '../../config/releasability-config.js';
 import { isWeekCollapsed } from './releasability-state.js';
+import { hasCopiedStatus, handleCopyStatus, handlePasteStatus, handleDeleteProject } from './releasability-page.js';
 
 // ============================================================================
 // MAIN RENDERING FUNCTION
@@ -382,35 +383,116 @@ function createProjectControls(project) {
   const controls = document.createElement('div');
   controls.className = 'project-controls';
 
-  // Copy status button (all projects)
-  const copyBtn = document.createElement('button');
-  copyBtn.className = 'project-control-btn copy-btn';
-  copyBtn.innerHTML = '&#128203;'; // 📋 Clipboard
-  copyBtn.title = 'Copy tracking status';
-  copyBtn.dataset.action = 'copy-status';
-  copyBtn.dataset.projectId = project.id;
-  controls.appendChild(copyBtn);
+  // Create "..." menu button
+  const menuBtn = document.createElement('button');
+  menuBtn.className = 'project-menu-btn';
+  menuBtn.innerHTML = '&middot;&middot;&middot;'; // ... (horizontal ellipsis using middle dots)
+  menuBtn.title = 'Project actions';
+  menuBtn.dataset.projectId = project.id;
 
-  // Paste status button (all projects)
-  const pasteBtn = document.createElement('button');
-  pasteBtn.className = 'project-control-btn paste-btn';
-  pasteBtn.innerHTML = '&#128203;&#10004;'; // 📋✔ Clipboard with checkmark
-  pasteBtn.title = 'Paste tracking status';
-  pasteBtn.dataset.action = 'paste-status';
-  pasteBtn.dataset.projectId = project.id;
-  controls.appendChild(pasteBtn);
+  // Create dropdown menu
+  const dropdown = document.createElement('div');
+  dropdown.className = 'project-menu-dropdown';
 
-  // Manual project controls (delete only - drag to move)
-  if (project.source === 'manual') {
-    // Delete button
-    const deleteBtn = document.createElement('button');
-    deleteBtn.className = 'project-control-btn';
-    deleteBtn.innerHTML = '&#10005;'; // ✕ Heavy multiplication X
-    deleteBtn.title = 'Delete project';
-    deleteBtn.dataset.action = 'delete';
-    deleteBtn.dataset.projectId = project.id;
-    controls.appendChild(deleteBtn);
+  // Copy action
+  const copyItem = document.createElement('button');
+  copyItem.className = 'project-menu-item';
+  copyItem.textContent = 'Copy Status';
+  copyItem.dataset.action = 'copy-status';
+  copyItem.dataset.projectId = project.id;
+  dropdown.appendChild(copyItem);
+
+  // Paste action
+  const pasteItem = document.createElement('button');
+  pasteItem.className = 'project-menu-item paste-item';
+  pasteItem.textContent = 'Paste Status';
+  pasteItem.dataset.action = 'paste-status';
+  pasteItem.dataset.projectId = project.id;
+
+  // Check if there's already copied status and enable paste item
+  if (hasCopiedStatus()) {
+    pasteItem.classList.add('has-copied-status');
   }
+
+  dropdown.appendChild(pasteItem);
+
+  // Delete action (manual projects only)
+  if (project.source === 'manual') {
+    const deleteItem = document.createElement('button');
+    deleteItem.className = 'project-menu-item delete-item';
+    deleteItem.textContent = 'Delete Project';
+    deleteItem.dataset.action = 'delete';
+    deleteItem.dataset.projectId = project.id;
+    dropdown.appendChild(deleteItem);
+  }
+
+  // Toggle dropdown on menu button click
+  menuBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+
+    // Close all other dropdowns first
+    document.querySelectorAll('.project-menu-dropdown.show').forEach(menu => {
+      if (menu !== dropdown) {
+        menu.classList.remove('show');
+      }
+    });
+
+    // Toggle dropdown visibility
+    const isVisible = dropdown.classList.contains('show');
+
+    if (!isVisible) {
+      // Position the dropdown relative to the button (since it's now fixed position)
+      const rect = menuBtn.getBoundingClientRect();
+      dropdown.style.top = `${rect.bottom + 4}px`; // 4px gap
+      dropdown.style.left = `${rect.right - 150}px`; // Align right edge (150px is min-width)
+    }
+
+    dropdown.classList.toggle('show');
+  });
+
+  // Handle menu item clicks
+  dropdown.addEventListener('click', async (e) => {
+    const menuItem = e.target.closest('.project-menu-item');
+    if (menuItem) {
+      e.stopPropagation();
+      dropdown.classList.remove('show');
+
+      // Call the action handler directly
+      const action = menuItem.dataset.action;
+      const projectId = menuItem.dataset.projectId;
+
+      // Call the appropriate handler function
+      switch (action) {
+        case 'copy-status':
+          handleCopyStatus(projectId);
+          break;
+        case 'paste-status':
+          await handlePasteStatus(projectId);
+          break;
+        case 'delete':
+          await handleDeleteProject(projectId);
+          break;
+      }
+    }
+  });
+
+  controls.appendChild(menuBtn);
+
+  // Append dropdown to body instead of controls to avoid z-index stacking issues
+  document.body.appendChild(dropdown);
+
+  // Clean up dropdown when controls are removed
+  const observer = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      mutation.removedNodes.forEach((node) => {
+        if (node === controls || node.contains(controls)) {
+          dropdown.remove();
+          observer.disconnect();
+        }
+      });
+    });
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
 
   return controls;
 }

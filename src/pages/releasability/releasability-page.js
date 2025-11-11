@@ -53,6 +53,14 @@ import {
 let manualWeeks = []; // Store manual weeks globally
 let copiedTrackingStatus = null; // Store copied tracking status for paste operation
 
+/**
+ * Get whether there is a copied tracking status
+ * @returns {boolean} True if there is copied status
+ */
+export function hasCopiedStatus() {
+  return copiedTrackingStatus !== null;
+}
+
 // ============================================================================
 // INITIALIZATION
 // ============================================================================
@@ -197,6 +205,16 @@ function setupEventListeners() {
   //     closeAddProjectModal();
   //   }
   // });
+
+  // Global click handler to close dropdown menus when clicking outside
+  document.addEventListener('click', (e) => {
+    // Check if click is outside a menu button or dropdown
+    if (!e.target.closest('.project-menu-btn') && !e.target.closest('.project-menu-dropdown')) {
+      document.querySelectorAll('.project-menu-dropdown.show').forEach(menu => {
+        menu.classList.remove('show');
+      });
+    }
+  });
 
   console.log('✅ Event listeners set up (UI simplified - buttons removed)');
 }
@@ -948,7 +966,7 @@ async function handleMoveProjectWeek(projectId, weekOffset) {
  * Delete a project
  * @param {string} projectId - The project ID
  */
-async function handleDeleteProject(projectId) {
+export async function handleDeleteProject(projectId) {
   const project = getAllProjects().find(p => p.id === projectId);
   if (!project) return;
 
@@ -974,7 +992,7 @@ async function handleDeleteProject(projectId) {
  * Copy tracking status from a project
  * @param {string} projectId - The project ID to copy from
  */
-function handleCopyStatus(projectId) {
+export function handleCopyStatus(projectId) {
   const project = getAllProjects().find(p => p.id === projectId);
   if (!project) {
     showError('Project not found');
@@ -995,7 +1013,7 @@ function handleCopyStatus(projectId) {
  * Paste tracking status to a project
  * @param {string} projectId - The project ID to paste to
  */
-async function handlePasteStatus(projectId) {
+export async function handlePasteStatus(projectId) {
   if (!copiedTrackingStatus) {
     showNotification('No status copied yet. Copy a status first.');
     return;
@@ -1039,8 +1057,9 @@ async function handlePasteStatus(projectId) {
  * Update visibility of paste buttons based on whether status is copied
  */
 function updatePasteButtonsVisibility() {
-  const pasteButtons = document.querySelectorAll('.paste-btn');
-  pasteButtons.forEach(btn => {
+  // Support both old button style and new menu items
+  const pasteElements = document.querySelectorAll('.paste-btn, .paste-item');
+  pasteElements.forEach(btn => {
     if (copiedTrackingStatus) {
       btn.classList.add('has-copied-status');
     } else {
