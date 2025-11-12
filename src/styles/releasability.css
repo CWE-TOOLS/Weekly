@@ -32,27 +32,27 @@
   --filters-height: 60px;
   --legend-height: 40px;
 
-  /* Tracking Item Header Colors */
-  --tracking-0-color: #00ffff;   /* Shop Folder Built */
-  --tracking-1-color: #00ffff;   /* Sample Approval */
-  --tracking-2-color: #00ffff;   /* Color Log */
-  --tracking-3-color: #00ffff;   /* Optimize Hours */
-  --tracking-4-color: #00ffff;   /* Approved SDs */
-  --tracking-5-color: #00ffff;   /* Begin Tracking */
-  --tracking-6-color: #00ffff;   /* Work Order */
-  --tracking-7-color: #00ffff;   /* Classroom #1 */
-  --tracking-8-color: #00ff00;   /* Final Tracking */
-  --tracking-9-color: #00ff00;   /* Batching Sheets */
-  --tracking-10-color: #00ff00;  /* QA Template Changes */
-  --tracking-11-color: #00ff00;  /* Rebar/Drilling Layout */
-  --tracking-12-color: #00ff00;  /* Casting Layout */
-  --tracking-13-color: #ffff00;  /* Final Optimizer HRS */
-  --tracking-14-color: #ffff00;  /* Classroom #2 */
-  --tracking-15-color: #4a86e8;  /* Inflow Sales Ticket */
-  --tracking-16-color: #4a86e8;  /* 3D Drawings/Parts List */
-  --tracking-17-color: #4a86e8;  /* Classroom #3 */
-  --tracking-18-color: #4a86e8;  /* Toolpath Program */
-  --tracking-19-color: #4a86e8;  /* Staging */
+  /* Tracking Item Header Colors - Softer, more refined palette */
+  --tracking-0-color: #a3e6e6;   /* Shop Folder Built - Softer cyan */
+  --tracking-1-color: #a3e6e6;   /* Sample Approval */
+  --tracking-2-color: #a3e6e6;   /* Color Log */
+  --tracking-3-color: #a3e6e6;   /* Optimize Hours */
+  --tracking-4-color: #a3e6e6;   /* Approved SDs */
+  --tracking-5-color: #a3e6e6;   /* Begin Tracking */
+  --tracking-6-color: #a3e6e6;   /* Work Order */
+  --tracking-7-color: #a3e6e6;   /* Classroom #1 */
+  --tracking-8-color: #a3e6a3;   /* Final Tracking - Softer green */
+  --tracking-9-color: #a3e6a3;   /* Batching Sheets */
+  --tracking-10-color: #a3e6a3;  /* QA Template Changes */
+  --tracking-11-color: #a3e6a3;  /* Rebar/Drilling Layout */
+  --tracking-12-color: #a3e6a3;  /* Casting Layout */
+  --tracking-13-color: #f5f5a3;  /* Final Optimizer HRS - Softer yellow */
+  --tracking-14-color: #f5f5a3;  /* Classroom #2 */
+  --tracking-15-color: #a3c2f0;  /* Inflow Sales Ticket - Softer blue */
+  --tracking-16-color: #a3c2f0;  /* 3D Drawings/Parts List */
+  --tracking-17-color: #a3c2f0;  /* Classroom #3 */
+  --tracking-18-color: #a3c2f0;  /* Toolpath Program */
+  --tracking-19-color: #a3c2f0;  /* Staging */
 }
 
 /* ============================================================================
@@ -93,14 +93,15 @@ html {
   justify-content: space-between;
   align-items: center;
   flex-shrink: 0;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 2px 4px 0 rgb(0 0 0 / 0.06);
 }
 
 .header-title h1 {
   margin: 0;
   font-size: 1.75rem;
   color: var(--text-primary);
-  font-weight: 700;
+  font-weight: 800;
+  letter-spacing: -0.02em;
 }
 
 .header-subtitle {
@@ -130,7 +131,7 @@ html {
   border: 1px solid var(--border-secondary);
   border-radius: var(--border-radius-md);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.15s ease-in-out;
   font-size: 0.875rem;
   color: var(--text-primary);
 }
@@ -138,6 +139,7 @@ html {
 .nav-button:hover {
   background-color: var(--border-primary);
   border-color: var(--border-secondary);
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
 }
 
 .nav-button.primary {
@@ -169,7 +171,7 @@ html {
   border: 1px solid var(--border-secondary);
   border-radius: var(--border-radius-md);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.15s ease-in-out;
   font-size: 0.875rem;
   color: var(--text-primary);
 }
@@ -177,7 +179,7 @@ html {
 .action-button:hover {
   background-color: var(--border-primary);
   transform: translateY(-1px);
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 2px 6px 0 rgb(0 0 0 / 0.08);
 }
 
 .action-button.primary {
@@ -220,12 +222,14 @@ html {
   border-radius: var(--border-radius-md);
   font-size: 0.875rem;
   background-color: var(--background-primary);
+  transition: all 0.15s ease-in-out;
 }
 
 .search-input:focus {
   outline: none;
   border-color: var(--accent-primary);
   box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+  background-color: white;
 }
 
 .search-icon {
@@ -265,12 +269,13 @@ html {
   cursor: pointer;
   font-size: 0.875rem;
   color: var(--text-secondary);
-  transition: all 0.2s;
+  transition: all 0.15s ease-in-out;
 }
 
 .filter-button:hover {
   background-color: var(--background-primary);
   border-color: var(--border-primary);
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.06);
 }
 
 .filter-button.active {
@@ -307,6 +312,7 @@ html {
   justify-content: space-between;
   align-items: center;
   flex-shrink: 0;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.03);
 }
 
 .legend-left {
@@ -317,8 +323,9 @@ html {
 
 .legend-title {
   font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--text-secondary);
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.01em;
 }
 
 .legend-item {
@@ -402,14 +409,14 @@ html {
   cursor: pointer;
   font-size: 0.875rem;
   font-weight: 600;
-  transition: all 0.2s;
+  transition: all 0.15s ease-in-out;
   white-space: nowrap;
 }
 
 .add-week-btn:hover {
   background-color: var(--accent-primary-hover);
   transform: translateY(-1px);
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 3px 8px 0 rgb(0 0 0 / 0.12);
 }
 
 /* ============================================================================
@@ -436,6 +443,7 @@ html {
   min-height: 0;
   position: relative;
   overflow: auto;
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05);
 }
 
 /* ============================================================================
@@ -485,7 +493,7 @@ html {
 .header-cell {
   background-color: var(--background-secondary);
   padding: 1rem 0.75rem;
-  font-weight: 600;
+  font-weight: 700;
   font-size: 0.875rem;
   color: var(--text-primary);
   display: flex;
@@ -493,6 +501,7 @@ html {
   justify-content: center;
   text-align: center;
   min-height: var(--grid-header-height);
+  letter-spacing: 0.01em;
 }
 
 .header-cell.project-header {
@@ -500,6 +509,8 @@ html {
   position: sticky;
   left: 0;
   z-index: 25;
+  background-color: #f5f5f5;
+  box-shadow: 2px 0 4px 0 rgb(0 0 0 / 0.04);
 }
 
 .header-cell.start-date-header {
@@ -508,6 +519,8 @@ html {
   position: sticky;
   left: 250px;
   z-index: 24;
+  background-color: #f5f5f5;
+  box-shadow: 2px 0 4px 0 rgb(0 0 0 / 0.04);
 }
 
 .tracking-item-header {
@@ -515,10 +528,11 @@ html {
   transform: rotate(180deg);
   white-space: nowrap;
   padding: 0.75rem 0.5rem;
-  font-weight: 500;
+  font-weight: 600;
   font-size: 0.8rem;
-  color: rgba(0, 0, 0, 0.8);
-  border-right: 1px solid rgba(0, 0, 0, 0.1);
+  color: rgba(0, 0, 0, 0.85);
+  border-right: 1px solid rgba(0, 0, 0, 0.12);
+  letter-spacing: 0.01em;
 }
 
 /* Individual tracking item header colors */
@@ -552,7 +566,7 @@ html {
   background-color: #fef3c7;
   color: #1a1a1a;
   padding: 0.5rem 1.5rem;
-  font-weight: 600;
+  font-weight: 700;
   font-size: 0.875rem;
   grid-column: 1 / -1;
   position: sticky;
@@ -561,8 +575,10 @@ html {
   display: flex;
   align-items: center;
   gap: 1rem;
-  border-top: 1px solid rgba(0, 0, 0, 0.1);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  border-top: 1px solid rgba(0, 0, 0, 0.12);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.04);
+  letter-spacing: 0.01em;
 }
 
 .week-header-label {
@@ -578,7 +594,7 @@ html {
   cursor: pointer;
   font-size: 0.75rem;
   line-height: 1;
-  transition: all 0.2s;
+  transition: all 0.15s ease-in-out;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -588,8 +604,9 @@ html {
 }
 
 .week-collapse-btn:hover {
-  background-color: rgba(0, 0, 0, 0.1);
+  background-color: rgba(0, 0, 0, 0.08);
   border-color: rgba(0, 0, 0, 0.3);
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.08);
 }
 
 .week-add-btn {
@@ -601,7 +618,7 @@ html {
   cursor: pointer;
   font-size: 0.8rem;
   font-weight: 600;
-  transition: all 0.2s;
+  transition: all 0.15s ease-in-out;
   opacity: 0;
   display: flex;
   align-items: center;
@@ -615,9 +632,10 @@ html {
 }
 
 .week-add-btn:hover {
-  background-color: rgba(0, 0, 0, 0.1);
+  background-color: rgba(0, 0, 0, 0.08);
   border-color: rgba(0, 0, 0, 0.3);
   transform: translateY(-1px);
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.08);
 }
 
 .week-controls {
@@ -643,16 +661,17 @@ html {
   font-size: 0.875rem;
   font-weight: 600;
   line-height: 1;
-  transition: all 0.2s;
+  transition: all 0.15s ease-in-out;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .week-control-btn:hover {
-  background-color: rgba(0, 0, 0, 0.1);
+  background-color: rgba(0, 0, 0, 0.08);
   border-color: rgba(0, 0, 0, 0.3);
   transform: translateY(-1px);
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.08);
 }
 
 .week-control-btn:active {
@@ -682,7 +701,7 @@ html {
 }
 
 .project-name-cell {
-  background-color: var(--background-secondary);
+  background-color: #f5f5f5;
   padding: 0.4rem 0.75rem;
   font-weight: 500;
   font-size: 0.875rem;
@@ -694,20 +713,24 @@ html {
   left: 0;
   z-index: 15;
   min-height: var(--grid-row-height);
+  box-shadow: 2px 0 4px 0 rgb(0 0 0 / 0.04);
 }
 
 .project-name-cell:hover {
-  background-color: var(--background-primary);
+  background-color: #ececec;
+  transition: background-color 0.15s ease-in-out;
 }
 
 .project-name-cell.manual {
-  background-color: white;
-  border: 2px dotted #F59E0B;
-  border-right: none;
+  background: white;
+  border-left: 5px solid #E8A845;
+  box-shadow: 0 2px 6px 0 rgba(0, 0, 0, 0.08);
+  position: relative;
 }
 
 .project-name-cell.manual:hover {
-  background-color: rgba(255, 251, 235, 0.95);
+  background: rgba(255, 251, 235, 0.95);
+  box-shadow: 0 3px 8px 0 rgba(0, 0, 0, 0.12);
 }
 
 .project-name {
@@ -770,7 +793,7 @@ html {
 }
 
 .start-date-cell {
-  background-color: var(--background-secondary);
+  background-color: #f5f5f5;
   padding: 0.4rem 0.5rem;
   font-size: 0.8rem;
   color: var(--text-secondary);
@@ -782,10 +805,12 @@ html {
   position: sticky;
   left: 250px;
   z-index: 14;
+  box-shadow: 2px 0 4px 0 rgb(0 0 0 / 0.04);
 }
 
 .start-date-cell:hover {
-  background-color: var(--background-primary);
+  background-color: #ececec;
+  transition: background-color 0.15s ease-in-out;
 }
 
 /* Project Menu Button (three dots) */
@@ -800,7 +825,7 @@ html {
   font-size: 0.9rem;
   font-weight: 700;
   line-height: 1;
-  transition: all 0.2s;
+  transition: all 0.15s ease-in-out;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -810,7 +835,7 @@ html {
 .project-menu-btn:hover {
   background-color: var(--accent-primary-hover);
   transform: translateY(-1px);
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 2px 4px 0 rgb(0 0 0 / 0.15);
 }
 
 .project-menu-btn:active {
@@ -824,8 +849,8 @@ html {
   margin-top: 0.25rem;
   background-color: var(--background-primary);
   border: 1px solid var(--border-primary);
-  border-radius: 4px;
-  box-shadow: var(--shadow-md);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px 0 rgb(0 0 0 / 0.12), 0 2px 4px 0 rgb(0 0 0 / 0.08);
   min-width: 150px;
   z-index: 9999; /* Very high z-index to ensure it's on top */
   overflow: hidden;
@@ -848,11 +873,11 @@ html {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  transition: background-color 0.15s;
+  transition: background-color 0.12s ease-in-out;
 }
 
 .project-menu-item:hover {
-  background-color: var(--background-secondary);
+  background-color: #f3f4f6;
 }
 
 .project-menu-item .menu-icon {
@@ -907,13 +932,15 @@ html {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.15s ease-in-out;
   min-height: var(--grid-row-height);
   position: relative;
 }
 
 .status-cell:hover {
   opacity: 0.85;
+  transform: scale(1.02);
+  box-shadow: 0 2px 4px 0 rgb(0 0 0 / 0.12);
 }
 
 .status-cell.status-complete {
@@ -1025,8 +1052,8 @@ html {
 
 .modal-content {
   background-color: var(--background-secondary);
-  border-radius: var(--border-radius-lg);
-  box-shadow: var(--shadow-md);
+  border-radius: 12px;
+  box-shadow: 0 10px 25px 0 rgb(0 0 0 / 0.15), 0 5px 10px 0 rgb(0 0 0 / 0.1);
   max-width: 500px;
   width: 90%;
   max-height: 90vh;
@@ -1045,6 +1072,8 @@ html {
   margin: 0;
   font-size: 1.5rem;
   color: var(--text-primary);
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 .modal-close {
@@ -1060,12 +1089,13 @@ html {
   align-items: center;
   justify-content: center;
   border-radius: var(--border-radius-md);
-  transition: all 0.2s;
+  transition: all 0.15s ease-in-out;
 }
 
 .modal-close:hover {
-  background-color: var(--background-primary);
+  background-color: #f3f4f6;
   color: var(--text-primary);
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.06);
 }
 
 .modal-body {
@@ -1097,6 +1127,7 @@ html {
   border-radius: var(--border-radius-md);
   font-size: 0.875rem;
   background-color: var(--background-primary);
+  transition: all 0.15s ease-in-out;
 }
 
 .form-group input:focus,
@@ -1104,6 +1135,7 @@ html {
   outline: none;
   border-color: var(--accent-primary);
   box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+  background-color: white;
 }
 
 .form-help {
@@ -1124,9 +1156,9 @@ html {
   padding: 0.5rem 1.5rem;
   border-radius: var(--border-radius-md);
   font-size: 0.875rem;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.15s ease-in-out;
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -1140,6 +1172,8 @@ html {
 
 .button.primary:hover {
   background-color: var(--accent-primary-hover);
+  box-shadow: 0 2px 6px 0 rgb(0 0 0 / 0.12);
+  transform: translateY(-1px);
 }
 
 .button.secondary {
@@ -1149,7 +1183,8 @@ html {
 }
 
 .button.secondary:hover {
-  background-color: var(--background-primary);
+  background-color: #f3f4f6;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.06);
 }
 
 /* ============================================================================
