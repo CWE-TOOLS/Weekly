@@ -11,7 +11,7 @@
 
 import { fetchTasks } from './sheets-service.js';
 import { loadFromCacheOrFetch } from './sheets-cache-service.js';
-import { initializeSupabase, getSupabaseClient } from './supabase-service.js';
+import { initializeSupabase, getSupabaseClient, sendRefreshSignal } from './supabase-service.js';
 import { logger } from '../utils/logger.js';
 import { parseDate, getMonday, getLocalDateString } from '../utils/date-utils.js';
 import { DEFAULT_TRACKING_STATUS, PROJECT_SOURCE } from '../config/releasability-config.js';
@@ -249,6 +249,14 @@ export async function saveTrackingStatus(project) {
     }
 
     logger.debug(`  → Tracking status saved successfully`);
+
+    // Send refresh signal to all other clients for silent sync
+    await sendRefreshSignal({
+      action: 'releasability_status_updated',
+      project: project.project,
+      weekMonday: project.weekMonday
+    });
+
     return true;
 
   } catch (error) {
@@ -292,6 +300,14 @@ export async function deleteTrackingStatus(projectName, weekMonday) {
     }
 
     logger.debug(`  → Tracking status deleted successfully`);
+
+    // Send refresh signal to all other clients for silent sync
+    await sendRefreshSignal({
+      action: 'releasability_project_deleted',
+      project: projectName,
+      weekMonday: weekMonday
+    });
+
     return true;
 
   } catch (error) {
@@ -470,6 +486,14 @@ export async function saveManualWeek(customName, position) {
     }
 
     logger.debug(`  → Manual week saved successfully with ID: ${data.id}`);
+
+    // Send refresh signal to all other clients for silent sync
+    await sendRefreshSignal({
+      action: 'manual_week_created',
+      weekId: data.id,
+      customName: customName
+    });
+
     return {
       id: data.id,
       name: data.custom_name,
@@ -511,6 +535,13 @@ export async function deleteManualWeek(weekId) {
     }
 
     logger.debug(`  → Manual week deleted successfully`);
+
+    // Send refresh signal to all other clients for silent sync
+    await sendRefreshSignal({
+      action: 'manual_week_deleted',
+      weekId: weekId
+    });
+
     return true;
 
   } catch (error) {
@@ -553,6 +584,13 @@ export async function updateManualWeekPositions(updates) {
     }
 
     logger.debug(`  → Manual week positions updated successfully`);
+
+    // Send refresh signal to all other clients for silent sync
+    await sendRefreshSignal({
+      action: 'manual_week_positions_updated',
+      updateCount: updates.length
+    });
+
     return true;
 
   } catch (error) {
