@@ -1,16 +1,16 @@
 -- =====================================================
--- Google Sheets Cache Table Setup
+-- Google Sheets Cache Table Setup (SAFE VERSION)
 -- =====================================================
 -- This table caches Google Sheets data to reduce API calls
 -- and eliminate throttling issues. Uses leader election
 -- to ensure only one client fetches from Google Sheets.
 -- =====================================================
-
--- Drop existing table if migrating
-DROP TABLE IF EXISTS sheets_cache;
+-- NOTE: This version will fail if table already exists
+-- Use sheets-cache-setup.sql if you need to recreate
+-- =====================================================
 
 -- Main cache table (single-row cache for all Google Sheets tasks)
-CREATE TABLE sheets_cache (
+CREATE TABLE IF NOT EXISTS sheets_cache (
     id TEXT PRIMARY KEY DEFAULT 'primary',
 
     -- Cached data from Google Sheets
@@ -44,10 +44,10 @@ VALUES ('primary', '[]'::jsonb, NOW())
 ON CONFLICT (id) DO NOTHING;
 
 -- Index for faster version checks (optimistic locking)
-CREATE INDEX idx_sheets_cache_version ON sheets_cache(version);
+CREATE INDEX IF NOT EXISTS idx_sheets_cache_version ON sheets_cache(version);
 
 -- Index for monitoring stale locks
-CREATE INDEX idx_sheets_cache_updating ON sheets_cache(is_updating, update_started_at);
+CREATE INDEX IF NOT EXISTS idx_sheets_cache_updating ON sheets_cache(is_updating, update_started_at);
 
 -- =====================================================
 -- Row Level Security (RLS) Policies
@@ -57,12 +57,14 @@ CREATE INDEX idx_sheets_cache_updating ON sheets_cache(is_updating, update_start
 ALTER TABLE sheets_cache ENABLE ROW LEVEL SECURITY;
 
 -- Allow all read operations (cache is public data)
+DROP POLICY IF EXISTS "Allow read access to sheets_cache" ON sheets_cache;
 CREATE POLICY "Allow read access to sheets_cache"
     ON sheets_cache
     FOR SELECT
     USING (true);
 
 -- Allow all update operations (any client can update cache)
+DROP POLICY IF EXISTS "Allow update access to sheets_cache" ON sheets_cache;
 CREATE POLICY "Allow update access to sheets_cache"
     ON sheets_cache
     FOR UPDATE
@@ -70,6 +72,7 @@ CREATE POLICY "Allow update access to sheets_cache"
     WITH CHECK (true);
 
 -- Allow all insert operations (for initial setup)
+DROP POLICY IF EXISTS "Allow insert access to sheets_cache" ON sheets_cache;
 CREATE POLICY "Allow insert access to sheets_cache"
     ON sheets_cache
     FOR INSERT
