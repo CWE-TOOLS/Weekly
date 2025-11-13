@@ -45,6 +45,11 @@ import {
   deleteManualWeek,
   updateManualWeekPositions
 } from '../../services/releasability-data-service.js';
+import {
+  setupCacheSubscription,
+  removeCacheSubscription
+} from '../../services/sheets-cache-service.js';
+import { registerRefreshHandler } from '../../services/supabase-service.js';
 
 // ============================================================================
 // GLOBAL STATE
@@ -76,6 +81,12 @@ async function init() {
 
   // Set up state change handlers
   setupStateHandlers();
+
+  // Set up cache subscription for real-time updates
+  setupCacheSubscription(handleCacheUpdate);
+
+  // Register refresh handler for silent sync when other clients make changes
+  registerRefreshHandler(handleSilentRefresh);
 
   // Show initial loading state
   setLoading(true);
@@ -128,6 +139,50 @@ async function loadInitialData() {
     console.error('❌ Error loading releasability data:', error);
     // Don't throw - allow app to start with empty state
     // User can still add manual projects
+  }
+}
+
+/**
+ * Handle cache update broadcast from another client
+ * This is called when the Google Sheets cache is refreshed by any client
+ */
+async function handleCacheUpdate(payload) {
+  console.log('📡 Cache update received, refreshing data silently...', payload);
+
+  try {
+    // Reload data without showing loading spinner
+    await loadInitialData();
+
+    // Re-render grid with fresh data
+    renderGrid();
+
+    console.log('✅ Data refreshed from cache update');
+
+  } catch (error) {
+    console.error('❌ Error refreshing data after cache update:', error);
+    // Silently fail - don't disrupt user experience
+  }
+}
+
+/**
+ * Handle refresh signal from another client
+ * This is called when another client updates releasability data (status changes, etc.)
+ */
+async function handleSilentRefresh(payload) {
+  console.log('📡 Refresh signal received from another client, syncing data...', payload);
+
+  try {
+    // Reload data without showing loading spinner
+    await loadInitialData();
+
+    // Re-render grid with fresh data
+    renderGrid();
+
+    console.log('✅ Data synced from refresh signal');
+
+  } catch (error) {
+    console.error('❌ Error syncing data after refresh signal:', error);
+    // Silently fail - don't disrupt user experience
   }
 }
 

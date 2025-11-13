@@ -13,6 +13,8 @@ import { logger } from '../utils/logger.js';
 // Supabase client and channel state
 let supabaseClient = null;
 let refreshChannel = null;
+let initializationPromise = null; // Guard against concurrent initialization
+let customRefreshHandler = null; // Custom refresh handler for different pages
 const tasksTable = SUPABASE.TASKS_TABLE;
 
 /**
@@ -29,42 +31,44 @@ const tasksTable = SUPABASE.TASKS_TABLE;
  * // Returns singleton Supabase client instance
  */
 export async function initializeSupabase() {
-    console.log('[Startup] Starting initializeSupabase');
-    console.time('[Startup] initializeSupabase');
-
+    // Return existing client if already initialized
     if (supabaseClient) {
-        console.timeEnd('[Startup] initializeSupabase');
         return supabaseClient;
     }
 
-    // Load Supabase library if not already loaded
-    if (!window.supabase) {
-        console.log('[Startup] Starting Supabase CDN loading');
-        console.time('[Startup] Supabase CDN loading');
-        await new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = SUPABASE.CDN_URL;
-            script.onload = resolve;
-            script.onerror = reject;
-            document.head.appendChild(script);
-        });
-        console.timeEnd('[Startup] Supabase CDN loading');
+    // Return existing initialization promise if already in progress
+    if (initializationPromise) {
+        return initializationPromise;
     }
 
-    console.log('[Startup] Starting Supabase client creation');
-    console.time('[Startup] Supabase client creation');
-    supabaseClient = window.supabase.createClient(SUPABASE.URL, SUPABASE.ANON_KEY);
-    console.timeEnd('[Startup] Supabase client creation');
+    // Create new initialization promise
+    initializationPromise = (async () => {
+        try {
+            // Load Supabase library if not already loaded
+            if (!window.supabase) {
+                await new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = SUPABASE.CDN_URL;
+                    script.onload = resolve;
+                    script.onerror = reject;
+                    document.head.appendChild(script);
+                });
+            }
 
-    // Subscribe to refresh signals
-    console.log('[Startup] Starting refresh subscription setup');
-    console.time('[Startup] Refresh subscription setup');
-    setupRefreshSubscription();
-    console.timeEnd('[Startup] Refresh subscription setup');
+            supabaseClient = window.supabase.createClient(SUPABASE.URL, SUPABASE.ANON_KEY);
 
-    logger.info('✅ Supabase initialized');
-    console.timeEnd('[Startup] initializeSupabase');
-    return supabaseClient;
+            // Subscribe to refresh signals
+            setupRefreshSubscription();
+
+            logger.info('✅ Supabase initialized');
+            return supabaseClient;
+        } finally {
+            // Clear the initialization promise so future calls can check supabaseClient directly
+            initializationPromise = null;
+        }
+    })();
+
+    return initializationPromise;
 }
 
 /**
@@ -107,6 +111,16 @@ function setupRefreshSubscription() {
 }
 
 /**
+ * Register a custom refresh handler for the current page
+ * This allows different pages (weekly schedule, releasability board) to handle refreshes differently
+ * @param {Function} handler - Async function to call when refresh signal received
+ */
+export function registerRefreshHandler(handler) {
+    customRefreshHandler = handler;
+    logger.debug('✅ Custom refresh handler registered');
+}
+
+/**
  * Handle refresh signal by reloading data from all sources
  * @param {Object} payload - Refresh signal payload
  */
@@ -116,6 +130,19 @@ function handleRefreshSignal(payload) {
     // No visual indicator - silent refresh per user preference
     // Smart rendering will handle updates without disruption
 
+    // Use custom handler if registered (e.g., releasability board)
+    if (customRefreshHandler) {
+        customRefreshHandler(payload)
+            .then(() => {
+                logger.debug('✅ Data refreshed from all sources (silent)');
+            })
+            .catch(error => {
+                logger.error('❌ Failed to refresh data:', error);
+            });
+        return;
+    }
+
+    // Fallback to weekly schedule page handler
     // Reload data using fetchAllTasks from data-service
     // This will fetch from both Google Sheets and Supabase, merge, and update state
     // Use silent=true to hide loading spinner, suppressEvents=false to emit events for UI refresh
@@ -128,7 +155,7 @@ function handleRefreshSignal(payload) {
                 logger.error('❌ Failed to refresh data:', error);
             });
     } else {
-        logger.warn('⚠️ dataService.fetchAllTasks not available on window');
+        logger.warn('⚠️ No refresh handler available (dataService.fetchAllTasks not on window)');
     }
 }
 
