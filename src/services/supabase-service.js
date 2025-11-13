@@ -13,6 +13,7 @@ import { logger } from '../utils/logger.js';
 // Supabase client and channel state
 let supabaseClient = null;
 let refreshChannel = null;
+let initializationPromise = null; // Guard against concurrent initialization
 const tasksTable = SUPABASE.TASKS_TABLE;
 
 /**
@@ -29,28 +30,44 @@ const tasksTable = SUPABASE.TASKS_TABLE;
  * // Returns singleton Supabase client instance
  */
 export async function initializeSupabase() {
+    // Return existing client if already initialized
     if (supabaseClient) {
         return supabaseClient;
     }
 
-    // Load Supabase library if not already loaded
-    if (!window.supabase) {
-        await new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = SUPABASE.CDN_URL;
-            script.onload = resolve;
-            script.onerror = reject;
-            document.head.appendChild(script);
-        });
+    // Return existing initialization promise if already in progress
+    if (initializationPromise) {
+        return initializationPromise;
     }
 
-    supabaseClient = window.supabase.createClient(SUPABASE.URL, SUPABASE.ANON_KEY);
+    // Create new initialization promise
+    initializationPromise = (async () => {
+        try {
+            // Load Supabase library if not already loaded
+            if (!window.supabase) {
+                await new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = SUPABASE.CDN_URL;
+                    script.onload = resolve;
+                    script.onerror = reject;
+                    document.head.appendChild(script);
+                });
+            }
 
-    // Subscribe to refresh signals
-    setupRefreshSubscription();
+            supabaseClient = window.supabase.createClient(SUPABASE.URL, SUPABASE.ANON_KEY);
 
-    logger.info('✅ Supabase initialized');
-    return supabaseClient;
+            // Subscribe to refresh signals
+            setupRefreshSubscription();
+
+            logger.info('✅ Supabase initialized');
+            return supabaseClient;
+        } finally {
+            // Clear the initialization promise so future calls can check supabaseClient directly
+            initializationPromise = null;
+        }
+    })();
+
+    return initializationPromise;
 }
 
 /**

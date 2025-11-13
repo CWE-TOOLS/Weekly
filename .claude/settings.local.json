@@ -51,7 +51,11 @@
       "Bash(npx http-server:*)",
       "WebFetch(domain:cwe-tools.github.io)",
       "WebFetch(domain:raw.githubusercontent.com)",
-      "Bash(git restore:*)"
+      "Bash(git restore:*)",
+      "Bash(git reset:*)",
+      "Bash(npx live-server --port=8000 --no-browser)",
+      "Bash(git merge-base:*)",
+      "Bash(git merge:*)"
     ],
     "deny": [],
     "ask": []

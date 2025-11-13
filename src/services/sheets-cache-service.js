@@ -307,7 +307,7 @@ async function broadcastCacheUpdate(info = {}) {
  */
 async function fetchAndUpdateCache() {
     const startTime = performance.now();
-    logger.debug(`[Cache] Fetching fresh data from Google Sheets... (client: ${clientId})`);
+    logger.info(`[Cache] 🔄 Fetching fresh data from Google Sheets API... (leader: ${clientId.substring(0, 12)}...)`);
 
     try {
         // Fetch from Google Sheets API
@@ -328,7 +328,7 @@ async function fetchAndUpdateCache() {
         await broadcastCacheUpdate({ tasksCount: tasksData.length });
 
         const duration = (performance.now() - startTime).toFixed(0);
-        logger.info(`[Cache] Cache refresh successful in ${duration}ms`);
+        logger.info(`[Cache] ✅ Fetched ${tasksData.length} tasks from Google Sheets API in ${duration}ms`);
 
         return tasksData;
 
@@ -473,12 +473,13 @@ export async function loadFromCacheOrFetch(forceRefresh = false) {
         // Check if cache is fresh and force refresh not requested
         if (!forceRefresh && cache && isCacheFresh(cache)) {
             const duration = (performance.now() - startTime).toFixed(0);
-            logger.debug(`[Cache] Using fresh cache (${duration}ms, ${cache.tasks_data.length} tasks)`);
+            const cacheAge = Math.round((Date.now() - new Date(cache.last_updated).getTime()) / 1000);
+            logger.info(`[Cache] ✅ Cache hit - loaded ${cache.tasks_data.length} tasks in ${duration}ms (cache age: ${cacheAge}s)`);
             return cache.tasks_data;
         }
 
         // Cache is stale or doesn't exist - try to update
-        logger.debug('[Cache] Cache is stale or missing, attempting to refresh...');
+        logger.info('[Cache] ⚠️ Cache miss - cache is stale or missing, attempting refresh...');
 
         // Try to acquire update lock (with retries)
         let lockAcquired = false;
@@ -501,8 +502,6 @@ export async function loadFromCacheOrFetch(forceRefresh = false) {
             const freshData = await fetchAndUpdateCache();
 
             if (freshData) {
-                const duration = (performance.now() - startTime).toFixed(0);
-                logger.info(`[Cache] Cache refresh successful in ${duration}ms`);
                 return freshData;
             }
 

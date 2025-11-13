@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Cache Status Check</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 10px 5px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        pre {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>Sheets Cache Status</h1>
+    <button onclick="checkCache()">Check Cache Status</button>
+    <button onclick="clearCache()">Clear Cache (Test)</button>
+    <pre id="output">Click "Check Cache Status" to view cache info...</pre>
+
+    <script type="module">
+        import { getCacheStats, clearCache as clearCacheFn } from './src/services/sheets-cache-service.js';
+
+        window.checkCache = async () => {
+            const output = document.getElementById('output');
+            output.textContent = 'Loading...';
+
+            try {
+                const stats = await getCacheStats();
+                output.textContent = JSON.stringify(stats, null, 2);
+            } catch (err) {
+                output.textContent = 'Error: ' + err.message;
+                console.error(err);
+            }
+        };
+
+        window.clearCache = async () => {
+            if (confirm('Clear cache for testing?')) {
+                const output = document.getElementById('output');
+                output.textContent = 'Clearing cache...';
+                try {
+                    await clearCacheFn();
+                    await checkCache();
+                } catch (err) {
+                    output.textContent = 'Error: ' + err.message;
+                    console.error(err);
+                }
+            }
+        };
+
+        // Auto-check on load
+        checkCache();
+    </script>
+</body>
+</html>

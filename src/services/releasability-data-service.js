@@ -38,7 +38,7 @@ export async function loadProjectsFromSheets() {
   try {
     // Fetch all tasks from Google Sheets (via cache when possible)
     const tasks = await loadFromCacheOrFetch();
-    logger.info(`  → Fetched ${tasks.length} tasks from Google Sheets`);
+    logger.info(`  → Loaded ${tasks.length} tasks`);
 
     // Group tasks by project name
     const projectGroups = {};
@@ -66,7 +66,7 @@ export async function loadProjectsFromSheets() {
           // Parse the date string
           const parsedDate = parseDate(task.date);
           if (!parsedDate) {
-            logger.warn(`  → Skipping invalid date format for project "${projectName}": ${task.date}`);
+            logger.debug(`  → Skipping invalid date format for project "${projectName}": ${task.date}`);
             return null;
           }
 
