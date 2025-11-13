@@ -165,7 +165,7 @@ function createWeekHeader(week) {
 
     // Handle invalid dates gracefully
     if (!monday) {
-      console.warn('createWeekHeader: Invalid date, skipping week header for:', weekMonday);
+      // Silently skip invalid dates (e.g., UUIDs from manual weeks)
       const header = document.createElement('div');
       header.className = 'week-header-cell error';
       header.textContent = `Invalid date: ${weekMonday}`;
@@ -654,7 +654,6 @@ function getWeekRange(projectsByWeek, manualWeeks = []) {
 function formatWeekLabel(monday, month, weekNum) {
   // Defensive check for null/invalid dates
   if (!monday || !(monday instanceof Date) || isNaN(monday.getTime())) {
-    console.warn('formatWeekLabel: Invalid date provided');
     return 'Invalid Week';
   }
 
@@ -692,22 +691,19 @@ function formatWeekLabel(monday, month, weekNum) {
  */
 function parseLocalDate(dateStr) {
   if (!dateStr || typeof dateStr !== 'string') {
-    console.warn('parseLocalDate: Invalid date string provided');
     return null;
   }
   const parts = dateStr.split('-');
   if (parts.length !== 3) {
-    console.warn('parseLocalDate: Date string not in expected format (YYYY-MM-DD):', dateStr);
+    // Silently return null for invalid date formats (e.g., UUIDs)
     return null;
   }
   const [year, month, day] = parts.map(Number);
   if (isNaN(year) || isNaN(month) || isNaN(day)) {
-    console.warn('parseLocalDate: Invalid date components:', { year, month, day });
     return null;
   }
   const date = new Date(year, month - 1, day);
   if (isNaN(date.getTime())) {
-    console.warn('parseLocalDate: Created invalid date from:', dateStr);
     return null;
   }
   return date;
