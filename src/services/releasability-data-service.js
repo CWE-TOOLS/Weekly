@@ -376,7 +376,7 @@ export async function loadAllReleasabilityData() {
           updatedAt: record.updatedAt || new Date().toISOString()
         });
 
-        logger.info(`  → Added manual project: "${record.project}" (${record.weekMonday})`);
+        logger.debug(`  → Added manual project: "${record.project}" (${record.weekMonday})`);
       }
     });
 
