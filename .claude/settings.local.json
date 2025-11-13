@@ -50,7 +50,8 @@
       "SlashCommand(/screenshot)",
       "Bash(npx http-server:*)",
       "WebFetch(domain:cwe-tools.github.io)",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(git restore:*)"
     ],
     "deny": [],
     "ask": []

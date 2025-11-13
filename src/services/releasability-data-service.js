@@ -10,6 +10,7 @@
  */
 
 import { fetchTasks } from './sheets-service.js';
+import { loadFromCacheOrFetch } from './sheets-cache-service.js';
 import { initializeSupabase, getSupabaseClient } from './supabase-service.js';
 import { logger } from '../utils/logger.js';
 import { parseDate, getMonday, getLocalDateString } from '../utils/date-utils.js';
@@ -35,8 +36,8 @@ export async function loadProjectsFromSheets() {
   logger.info('📊 Loading projects from Google Sheets...');
 
   try {
-    // Fetch all tasks from Google Sheets
-    const tasks = await fetchTasks();
+    // Fetch all tasks from Google Sheets (via cache when possible)
+    const tasks = await loadFromCacheOrFetch();
     logger.info(`  → Fetched ${tasks.length} tasks from Google Sheets`);
 
     // Group tasks by project name

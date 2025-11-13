@@ -45,6 +45,10 @@ import {
   deleteManualWeek,
   updateManualWeekPositions
 } from '../../services/releasability-data-service.js';
+import {
+  setupCacheSubscription,
+  removeCacheSubscription
+} from '../../services/sheets-cache-service.js';
 
 // ============================================================================
 // GLOBAL STATE
@@ -76,6 +80,9 @@ async function init() {
 
   // Set up state change handlers
   setupStateHandlers();
+
+  // Set up cache subscription for real-time updates
+  setupCacheSubscription(handleCacheUpdate);
 
   // Show initial loading state
   setLoading(true);
@@ -128,6 +135,28 @@ async function loadInitialData() {
     console.error('❌ Error loading releasability data:', error);
     // Don't throw - allow app to start with empty state
     // User can still add manual projects
+  }
+}
+
+/**
+ * Handle cache update broadcast from another client
+ * This is called when the Google Sheets cache is refreshed by any client
+ */
+async function handleCacheUpdate(payload) {
+  console.log('📡 Cache update received, refreshing data silently...', payload);
+
+  try {
+    // Reload data without showing loading spinner
+    await loadInitialData();
+
+    // Re-render grid with fresh data
+    renderGrid();
+
+    console.log('✅ Data refreshed from cache update');
+
+  } catch (error) {
+    console.error('❌ Error refreshing data after cache update:', error);
+    // Silently fail - don't disrupt user experience
   }
 }
 
