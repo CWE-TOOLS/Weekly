@@ -143,6 +143,16 @@ function handleRefreshSignal(payload) {
     }
 
     // Fallback to weekly schedule page handler
+    // Only refresh weekly schedule for non-releasability actions
+    const action = payload?.payload?.info?.action;
+    const isReleasabilityAction = action === 'releasability_status_updated' ||
+                                   action === 'releasability_project_deleted';
+
+    if (isReleasabilityAction) {
+        logger.debug('⏭️ Ignoring releasability action in weekly schedule:', action);
+        return;
+    }
+
     // Reload data using fetchAllTasks from data-service
     // This will fetch from both Google Sheets and Supabase, merge, and update state
     // Use silent=true to hide loading spinner, suppressEvents=false to emit events for UI refresh
