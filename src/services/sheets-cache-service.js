@@ -192,6 +192,13 @@ async function updateCache(tasksData) {
 
         const supabase = getSupabaseClient();
 
+        // First, get current stats
+        const { data: currentCache } = await supabase
+            .from('sheets_cache')
+            .select('total_fetches')
+            .eq('id', 'primary')
+            .single();
+
         const { error } = await supabase
             .from('sheets_cache')
             .update({
@@ -201,7 +208,7 @@ async function updateCache(tasksData) {
                 last_error: null,
                 last_error_at: null,
                 consecutive_errors: 0,
-                total_fetches: supabase.literal('total_fetches + 1')
+                total_fetches: (currentCache?.total_fetches || 0) + 1
             })
             .eq('id', 'primary');
 
@@ -233,13 +240,20 @@ async function recordCacheError(error) {
 
         const supabase = getSupabaseClient();
 
+        // First, get current error counts
+        const { data: currentCache } = await supabase
+            .from('sheets_cache')
+            .select('consecutive_errors, total_errors')
+            .eq('id', 'primary')
+            .single();
+
         await supabase
             .from('sheets_cache')
             .update({
                 last_error: error.message || String(error),
                 last_error_at: new Date().toISOString(),
-                consecutive_errors: supabase.literal('consecutive_errors + 1'),
-                total_errors: supabase.literal('total_errors + 1')
+                consecutive_errors: (currentCache?.consecutive_errors || 0) + 1,
+                total_errors: (currentCache?.total_errors || 0) + 1
             })
             .eq('id', 'primary');
 
