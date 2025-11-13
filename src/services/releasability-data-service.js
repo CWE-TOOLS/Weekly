@@ -73,10 +73,11 @@ export async function loadProjectsFromSheets() {
           // Get Monday of the week containing this date
           const monday = getMonday(parsedDate);
 
-          // Return both actual date and Monday
+          // Return both actual date and Monday, and keep reference to the task
           return {
             actualDate: getLocalDateString(parsedDate),
-            mondayDate: getLocalDateString(monday)
+            mondayDate: getLocalDateString(monday),
+            task: task
           };
         })
         .filter(info => info !== null); // Remove invalid dates
@@ -94,19 +95,36 @@ export async function loadProjectsFromSheets() {
       const sortedByMonday = [...dateInfo].sort((a, b) => a.mondayDate.localeCompare(b.mondayDate));
       const earliestWeek = sortedByMonday[0].mondayDate;
 
-      // Get most common department for this project
-      const department = getMostCommonDepartment(projectTasks);
-
-      projects.push({
-        project: projectName,
-        weekMonday: earliestWeek,
-        actualStartDate: earliestActualDate,
-        department: department,
-        source: PROJECT_SOURCE.SHEETS
+      // Get department from the earliest "Mill" or "Form Out" task
+      // Filter for only Mill/Form Out tasks, then find the earliest one
+      const relevantDeptTasks = sortedByActual.filter(info => {
+        const dept = info.task.department;
+        return dept === 'Mill' || dept === 'Form Out';
       });
+
+      let department;
+      if (relevantDeptTasks.length > 0) {
+        // Use the earliest Mill or Form Out task
+        department = relevantDeptTasks[0].task.department;
+      } else {
+        // Fallback: use the earliest task's department (even if not Mill/Form Out)
+        department = sortedByActual[0].task.department;
+      }
+
+      // Only include projects with Mill or Form Out department
+      if (department === 'Mill' || department === 'Form Out') {
+        projects.push({
+          project: projectName,
+          weekMonday: earliestWeek,
+          actualStartDate: earliestActualDate,
+          department: department,
+          source: PROJECT_SOURCE.SHEETS
+        });
+      }
+      // Projects not in Mill/Form Out are silently skipped
     }
 
-    logger.info(`  → Created ${projects.length} releasability board projects`);
+    logger.info(`  → Created ${projects.length} releasability board projects (filtered for Mill/Form Out only)`);
     return projects;
 
   } catch (error) {
@@ -317,6 +335,40 @@ export async function deleteTrackingStatus(projectName, weekMonday) {
 }
 
 /**
+ * Find existing project records by name (ignoring week)
+ *
+ * Searches for any existing Supabase records matching a project name,
+ * regardless of the week. Only finds SHEETS source projects, not MANUAL.
+ * Returns sorted by updatedAt (most recent first).
+ *
+ * @param {string} projectName - The project name to search for
+ * @param {Map<string, Object>} trackingStatuses - Map of all tracking statuses
+ * @returns {Array<Object>} Array of matching records with their keys, sorted by updatedAt
+ */
+function findProjectByName(projectName, trackingStatuses) {
+  const matches = [];
+
+  trackingStatuses.forEach((record, key) => {
+    // Only match SHEETS projects (not MANUAL ones)
+    if (record.project === projectName && record.source === PROJECT_SOURCE.SHEETS) {
+      matches.push({
+        key,
+        record
+      });
+    }
+  });
+
+  // Sort by updatedAt, most recent first
+  matches.sort((a, b) => {
+    const dateA = new Date(a.record.updatedAt);
+    const dateB = new Date(b.record.updatedAt);
+    return dateB - dateA; // Descending order
+  });
+
+  return matches;
+}
+
+/**
  * Load all releasability data
  *
  * Combines data from Google Sheets and Supabase to create the complete
@@ -341,13 +393,34 @@ export async function loadAllReleasabilityData() {
     // Track which Supabase records we've used
     const usedSupabaseKeys = new Set();
 
+    // Track old records that need to be deleted after migration
+    const migratedKeys = new Set();
+
     // Merge tracking statuses into Sheets projects
     const projects = sheetsProjects.map(project => {
       const key = `${project.project}|${project.weekMonday}`;
-      const saved = trackingStatuses.get(key);
 
-      // Mark this Supabase record as used
-      if (saved) {
+      // First, try exact match lookup
+      let saved = trackingStatuses.get(key);
+
+      // If no exact match, check if project exists with a different week (date change migration)
+      if (!saved) {
+        const oldRecords = findProjectByName(project.project, trackingStatuses);
+
+        if (oldRecords.length > 0) {
+          // Use the most recent record's tracking status
+          const mostRecent = oldRecords[0];
+          saved = mostRecent.record;
+
+          // Track the old key for deletion
+          migratedKeys.add(mostRecent.key);
+
+          // Log the date change detection
+          logger.info(`  🔄 Date change detected for "${project.project}": ${mostRecent.record.weekMonday} → ${project.weekMonday}`);
+          logger.info(`     Migrating tracking status: ${JSON.stringify(saved.trackingStatus)}`);
+        }
+      } else {
+        // Exact match found - mark as used
         usedSupabaseKeys.add(key);
       }
 
@@ -364,7 +437,7 @@ export async function loadAllReleasabilityData() {
         manualWeekId: saved && saved.manualWeekId ? saved.manualWeekId : null,
         trackingStatus: saved ? saved.trackingStatus : { ...DEFAULT_TRACKING_STATUS },
         createdAt: new Date().toISOString(),
-        updatedAt: saved ? saved.updatedAt : new Date().toISOString()
+        updatedAt: new Date().toISOString() // Update timestamp when migrating
       };
     });
 
@@ -372,6 +445,11 @@ export async function loadAllReleasabilityData() {
     trackingStatuses.forEach((record, key) => {
       // Skip if this record was already used for a Sheets project
       if (usedSupabaseKeys.has(key)) {
+        return;
+      }
+
+      // Skip if this record was migrated (will be deleted)
+      if (migratedKeys.has(key)) {
         return;
       }
 
@@ -391,10 +469,22 @@ export async function loadAllReleasabilityData() {
           createdAt: new Date().toISOString(),
           updatedAt: record.updatedAt || new Date().toISOString()
         });
-
-        logger.debug(`  → Added manual project: "${record.project}" (${record.weekMonday})`);
       }
     });
+
+    // Delete old week records that were migrated
+    if (migratedKeys.size > 0) {
+      logger.info(`🗑️ Deleting ${migratedKeys.size} old week records after migration...`);
+
+      for (const oldKey of migratedKeys) {
+        const [projectName, weekMonday] = oldKey.split('|');
+        try {
+          await deleteTrackingStatus(projectName, weekMonday);
+        } catch (error) {
+          logger.error(`  ✗ Failed to delete old record: "${projectName}" (${weekMonday})`, error);
+        }
+      }
+    }
 
     logger.info(`✅ Loaded ${projects.length} projects with tracking statuses`);
     return projects;

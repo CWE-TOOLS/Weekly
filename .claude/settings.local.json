@@ -55,7 +55,9 @@
       "Bash(git reset:*)",
       "Bash(npx live-server --port=8000 --no-browser)",
       "Bash(git merge-base:*)",
-      "Bash(git merge:*)"
+      "Bash(git merge:*)",
+      "Bash(git fetch:*)",
+      "Bash(git diff:*)"
     ],
     "deny": [],
     "ask": []

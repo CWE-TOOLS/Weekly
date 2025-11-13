@@ -74,8 +74,6 @@ export function hasCopiedStatus() {
  * Initialize the releasability board page
  */
 async function init() {
-  console.log('🚀 Initializing Releasability Board...');
-
   // Set up event listeners
   setupEventListeners();
 
@@ -103,9 +101,6 @@ async function init() {
     // Initial render
     renderGrid();
 
-    console.log('✅ Releasability Board initialized successfully');
-    console.log('State snapshot:', getStateSnapshot());
-
   } catch (error) {
     console.error('❌ Error initializing releasability board:', error);
     showError('Failed to load releasability data. Please refresh the page.');
@@ -118,8 +113,6 @@ async function init() {
  * Load initial data from services
  */
 async function loadInitialData() {
-  console.log('🔄 Loading releasability data from Google Sheets and Supabase...');
-
   try {
     // Load all data in parallel (projects + manual weeks)
     const [projects, weeks] = await Promise.all([
@@ -132,8 +125,6 @@ async function loadInitialData() {
 
     // Store manual weeks
     manualWeeks = weeks;
-
-    console.log(`✅ Loaded ${projects.length} projects and ${weeks.length} manual weeks successfully`);
 
   } catch (error) {
     console.error('❌ Error loading releasability data:', error);
@@ -270,8 +261,6 @@ function setupEventListeners() {
       });
     }
   });
-
-  console.log('✅ Event listeners set up (UI simplified - buttons removed)');
 }
 
 /**
@@ -280,20 +269,17 @@ function setupEventListeners() {
 function setupStateHandlers() {
   // Re-render when projects change
   on(RELEASABILITY_EVENTS.PROJECTS_CHANGED, () => {
-    console.log('📢 Projects changed, re-rendering grid');
     renderGrid();
   });
 
   // Re-render when filters change
   on(RELEASABILITY_EVENTS.FILTERS_CHANGED, () => {
-    console.log('📢 Filters changed, re-rendering grid');
     renderGrid();
   });
 
   // Re-render when status updated (if hide completed is active)
   on(RELEASABILITY_EVENTS.STATUS_UPDATED, () => {
     if (getHideCompleted()) {
-      console.log('📢 Status updated with hide completed active, re-rendering grid');
       renderGrid();
     }
   });
@@ -302,8 +288,6 @@ function setupStateHandlers() {
   on(RELEASABILITY_EVENTS.LOADING_CHANGED, ({ isLoading }) => {
     updateLoadingState(isLoading);
   });
-
-  console.log('✅ State handlers set up');
 }
 
 // ============================================================================
@@ -311,7 +295,6 @@ function setupStateHandlers() {
 // ============================================================================
 
 function handlePrevWeek() {
-  console.log('⬅️ Previous week clicked');
   const weeks = getWeeksWithProjects().sort();
 
   if (weeks.length === 0) {
@@ -336,7 +319,6 @@ function handlePrevWeek() {
 }
 
 function handleNextWeek() {
-  console.log('➡️ Next week clicked');
   const weeks = getWeeksWithProjects().sort();
 
   if (weeks.length === 0) {
@@ -361,7 +343,6 @@ function handleNextWeek() {
 }
 
 function handleCurrentWeek() {
-  console.log('📅 Current week clicked');
   const today = new Date();
   const currentMonday = getMonday(today);
   const currentWeekStr = currentMonday.toISOString().split('T')[0];
@@ -401,9 +382,7 @@ function scrollToWeek(weekMonday) {
 
   if (weekHeader) {
     weekHeader.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    console.log(`📍 Scrolled to week: ${weekMonday}`);
   } else {
-    console.log(`⚠️ Week ${weekMonday} not found in grid`);
     showNotification(`Week ${weekMonday} not found`);
   }
 }
@@ -413,12 +392,10 @@ function scrollToWeek(weekMonday) {
 // ============================================================================
 
 function handleAddProjectClick() {
-  console.log('➕ Add project clicked');
   openAddProjectModal();
 }
 
 function handleRefresh() {
-  console.log('🔄 Refresh clicked');
   setLoading(true);
   loadInitialData()
     .then(() => {
@@ -435,18 +412,15 @@ function handleRefresh() {
 }
 
 function handlePrint() {
-  console.log('🖨 Print clicked');
   window.print();
 }
 
 function handleSearchInput(e) {
   const query = e.target.value;
-  console.log('🔍 Search query:', query);
   setSearchQuery(query);
 }
 
 function handleClearFilters() {
-  console.log('🧹 Clear filters clicked');
   setSearchQuery('');
   setDepartmentFilters([]);
 
@@ -552,12 +526,9 @@ async function handleAddProjectSubmit(e) {
       source: PROJECT_SOURCE.MANUAL
     });
 
-    console.log('✅ Project added:', newProject);
-
     // Save to Supabase
     try {
       await saveTrackingStatus(newProject);
-      console.log('💾 Project saved to Supabase');
     } catch (saveError) {
       console.error('❌ Failed to save project to Supabase:', saveError);
       // Don't prevent project from being added to UI
@@ -628,8 +599,6 @@ function renderGrid() {
 
   // Update paste buttons visibility
   updatePasteButtonsVisibility();
-
-  console.log('📊 Rendered grid with', projects.length, 'projects');
 }
 
 /**
@@ -693,8 +662,6 @@ function setupDragAndDrop(grid) {
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', draggedProjectId);
       projectCell.classList.add('dragging');
-
-      console.log('🔄 Started dragging project:', draggedProjectData.name);
     }
   });
 
@@ -744,8 +711,6 @@ function setupDragAndDrop(grid) {
     const targetWeekMonday = dropZone.dataset.dropWeekMonday;
     const targetWeekId = dropZone.dataset.dropWeekId;
 
-    console.log('📍 Dropped project on week:', { targetWeekMonday, targetWeekId });
-
     // Handle the project move
     handleProjectDrop(draggedProjectId, draggedProjectData, targetWeekMonday, targetWeekId);
   });
@@ -764,7 +729,6 @@ async function handleProjectDrop(projectId, projectData, targetWeekMonday, targe
                      (!targetWeekId && targetWeekMonday === projectData.weekMonday && !projectData.manualWeekId);
 
   if (isSameWeek) {
-    console.log('ℹ️ Project already in this week');
     return;
   }
 
@@ -799,7 +763,6 @@ async function handleProjectDrop(projectId, projectData, targetWeekMonday, targe
     // Save updated project
     await saveTrackingStatus(project);
 
-    console.log(`✅ Moved "${project.project}" to new week`);
     showNotification(`Moved "${project.project}" to new week`);
 
     // Re-render grid
@@ -830,12 +793,9 @@ async function handleStatusCellClick(cell) {
     // Update cell visual immediately (optimistic update)
     updateCellVisual(cell, nextStatus);
 
-    console.log(`✅ Status updated: ${trackingItem} → ${STATUS_DISPLAY[nextStatus].label}`);
-
     // Save to Supabase
     try {
       await saveTrackingStatus(updatedProject);
-      console.log('💾 Status saved to Supabase');
     } catch (error) {
       console.error('❌ Failed to save status to Supabase:', error);
       showError('Failed to save status change. Please try again.');
@@ -918,12 +878,6 @@ async function handleWeekAddProjectClick(button) {
   const weekMonday = button.dataset.weekMonday;
   const weekId = button.dataset.weekId;
 
-  console.log('🔍 Add Project Button Clicked - Button datasets:', {
-    weekMonday: weekMonday,
-    weekId: weekId,
-    allDatasets: button.dataset
-  });
-
   // Prompt for project name
   const projectName = prompt('Enter project name:');
   if (!projectName || !projectName.trim()) {
@@ -936,11 +890,8 @@ async function handleWeekAddProjectClick(button) {
   if (!effectiveWeekMonday && weekId) {
     // If adding to a manual week, use current week's Monday
     const today = new Date();
-    console.log('🔍 Today:', today);
     const currentMonday = getMonday(today);
-    console.log('🔍 Current Monday:', currentMonday);
     effectiveWeekMonday = currentMonday.toISOString().split('T')[0];
-    console.log(`🔍 Generated weekMonday for manual week: ${effectiveWeekMonday}`);
   }
 
   if (!effectiveWeekMonday) {
@@ -948,8 +899,6 @@ async function handleWeekAddProjectClick(button) {
     alert('Error: Could not determine week. Please refresh and try again.');
     return;
   }
-
-  console.log(`🔍 Creating project with weekMonday: ${effectiveWeekMonday}, manualWeekId: ${weekId}`);
 
   // Create new manual project
   const newProject = {
@@ -961,17 +910,13 @@ async function handleWeekAddProjectClick(button) {
     source: PROJECT_SOURCE.MANUAL
   };
 
-  console.log(`🔍 New project object:`, newProject);
-
   // Add project to state
   const addedProject = addProject(newProject);
-  console.log(`🔍 Added project returned:`, addedProject);
 
   if (addedProject) {
     // Save to Supabase
     try {
       await saveTrackingStatus(addedProject);
-      console.log('💾 Manual project saved to Supabase');
       showNotification(`Added project "${projectName}"`);
     } catch (error) {
       console.error('❌ Failed to save manual project to Supabase:', error);
@@ -1006,13 +951,11 @@ async function handleMoveProjectWeek(projectId, weekOffset) {
     try {
       await deleteTrackingStatus(project.project, oldWeekMonday);
       await saveTrackingStatus(updatedProject);
-      console.log('💾 Project week updated in Supabase');
     } catch (error) {
       console.error('❌ Failed to update project week in Supabase:', error);
     }
 
     const direction = weekOffset > 0 ? 'next' : 'previous';
-    console.log(`📅 Moved "${project.project}" to ${direction} week`);
     showNotification(`Moved "${project.project}" to ${direction} week`);
   }
 }
@@ -1031,7 +974,6 @@ export async function handleDeleteProject(projectId) {
   // Delete from Supabase first
   try {
     await deleteTrackingStatus(project.project, project.weekMonday);
-    console.log('💾 Project deleted from Supabase');
   } catch (error) {
     console.error('❌ Failed to delete from Supabase:', error);
     // Continue with local deletion anyway
@@ -1039,7 +981,6 @@ export async function handleDeleteProject(projectId) {
 
   // Remove from state
   removeProject(projectId);
-  console.log(`🗑️ Deleted project: "${project.project}"`);
   showNotification(`Deleted "${project.project}"`);
 }
 
@@ -1057,7 +998,6 @@ export function handleCopyStatus(projectId) {
   // Copy the tracking status (deep clone)
   copiedTrackingStatus = JSON.parse(JSON.stringify(project.trackingStatus));
 
-  console.log(`📋 Copied tracking status from "${project.project}"`);
   showNotification(`Copied status from "${project.project}"`);
 
   // Update UI to show paste buttons are now available
@@ -1089,7 +1029,6 @@ export async function handlePasteStatus(projectId) {
     updateProjectStatus(projectId, trackingItem, status);
   }
 
-  console.log(`📋 Pasted tracking status to "${project.project}"`);
   showNotification(`Pasted status to "${project.project}"`);
 
   // Save to Supabase
@@ -1097,7 +1036,6 @@ export async function handlePasteStatus(projectId) {
     const updatedProject = getAllProjects().find(p => p.id === projectId);
     if (updatedProject) {
       await saveTrackingStatus(updatedProject);
-      console.log('💾 Pasted status saved to Supabase');
     }
   } catch (error) {
     console.error('❌ Failed to save pasted status to Supabase:', error);
@@ -1129,7 +1067,6 @@ function updatePasteButtonsVisibility() {
  */
 function handleHideCompletedToggle(e) {
   const checked = e.target.checked;
-  console.log('👁️ Hide completed toggle:', checked);
 
   // Update state
   setHideCompleted(checked);
@@ -1156,8 +1093,6 @@ function loadHideCompletedPreference() {
     if (toggle) {
       toggle.checked = hideCompleted;
     }
-
-    console.log('📥 Loaded hideCompleted preference:', hideCompleted);
   } catch (error) {
     console.error('Error loading hideCompleted preference:', error);
   }
@@ -1170,7 +1105,6 @@ function loadHideCompletedPreference() {
 function saveHideCompletedPreference(value) {
   try {
     localStorage.setItem('releasability-hide-completed', value.toString());
-    console.log('💾 Saved hideCompleted preference:', value);
   } catch (error) {
     console.error('Error saving hideCompleted preference:', error);
   }
@@ -1201,7 +1135,6 @@ async function handleAddWeekClick() {
   try {
     const savedWeek = await saveManualWeek(weekName.trim(), newPosition);
     manualWeeks.push(savedWeek);
-    console.log(`📅 Added manual week: "${weekName.trim()}" at position ${newPosition}`);
     showNotification(`Added week "${weekName.trim()}"`);
 
     // Re-render grid to show new week
@@ -1355,7 +1288,6 @@ async function handleMoveWeekUp(weekId) {
       if (currentWeekInOriginal) currentWeekInOriginal.position = currentWeek.position;
       if (prevWeekInOriginal) prevWeekInOriginal.position = prevManualWeek.position;
 
-      console.log(`📅 Moved week "${currentWeek.name}" up (swapped with manual week)`);
       showNotification(`Moved week "${currentWeek.name}" up`);
       renderGrid();
     } catch (error) {
@@ -1375,7 +1307,6 @@ async function handleMoveWeekUp(weekId) {
       const currentWeekInOriginal = manualWeeks.find(w => w.id === currentWeek.id);
       if (currentWeekInOriginal) currentWeekInOriginal.position = currentWeek.position;
 
-      console.log(`📅 Moved week "${currentWeek.name}" up (past date-based week)`);
       showNotification(`Moved week "${currentWeek.name}" up`);
       renderGrid();
     } catch (error) {
@@ -1425,7 +1356,6 @@ async function handleMoveWeekDown(weekId) {
       if (currentWeekInOriginal) currentWeekInOriginal.position = currentWeek.position;
       if (nextWeekInOriginal) nextWeekInOriginal.position = nextManualWeek.position;
 
-      console.log(`📅 Moved week "${currentWeek.name}" down (swapped with manual week)`);
       showNotification(`Moved week "${currentWeek.name}" down`);
       renderGrid();
     } catch (error) {
@@ -1445,7 +1375,6 @@ async function handleMoveWeekDown(weekId) {
       const currentWeekInOriginal = manualWeeks.find(w => w.id === currentWeek.id);
       if (currentWeekInOriginal) currentWeekInOriginal.position = currentWeek.position;
 
-      console.log(`📅 Moved week "${currentWeek.name}" down (past date-based week)`);
       showNotification(`Moved week "${currentWeek.name}" down`);
       renderGrid();
     } catch (error) {
@@ -1474,7 +1403,6 @@ async function handleDeleteManualWeek(weekId) {
   try {
     // Delete from Supabase
     await deleteManualWeek(weekId);
-    console.log(`🗑️ Deleted manual week: "${week.name}"`);
 
     // Remove from local array
     const index = manualWeeks.findIndex(w => w.id === weekId);
@@ -1499,7 +1427,6 @@ async function handleDeleteManualWeek(weekId) {
  * @param {string} weekIdentifier - Week Monday date or manual week ID
  */
 function handleToggleWeekCollapse(weekIdentifier) {
-  console.log('🔄 Toggling week collapse:', weekIdentifier);
   toggleWeekCollapsed(weekIdentifier);
   renderGrid();
 }
@@ -1540,8 +1467,6 @@ function updateDepartmentFilters() {
     btn.addEventListener('click', () => handleDepartmentFilterClick(dept));
     filterContainer.appendChild(btn);
   });
-
-  console.log(`📊 Created ${departments.length} department filter buttons`);
 }
 
 /**
@@ -1549,8 +1474,6 @@ function updateDepartmentFilters() {
  * @param {string} department - Department name or empty string for "All"
  */
 function handleDepartmentFilterClick(department) {
-  console.log(`🔍 Department filter clicked: "${department || 'All'}"`);
-
   // Update active button state
   const buttons = document.querySelectorAll('.filter-button');
   buttons.forEach(btn => {
@@ -1604,7 +1527,6 @@ function updateLoadingState(isLoading) {
 }
 
 function showNotification(message) {
-  console.log('💬 Notification:', message);
   // TODO: Implement proper notification system in later steps
   // For now, just use console and alert for critical messages
 }
@@ -1632,5 +1554,3 @@ window.__releasabilityDebug = {
   addProject,
   removeProject
 };
-
-console.log('💡 Debug functions available at window.__releasabilityDebug');
