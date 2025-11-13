@@ -14,6 +14,7 @@ import { logger } from '../utils/logger.js';
 let supabaseClient = null;
 let refreshChannel = null;
 let initializationPromise = null; // Guard against concurrent initialization
+let customRefreshHandler = null; // Custom refresh handler for different pages
 const tasksTable = SUPABASE.TASKS_TABLE;
 
 /**
@@ -110,6 +111,16 @@ function setupRefreshSubscription() {
 }
 
 /**
+ * Register a custom refresh handler for the current page
+ * This allows different pages (weekly schedule, releasability board) to handle refreshes differently
+ * @param {Function} handler - Async function to call when refresh signal received
+ */
+export function registerRefreshHandler(handler) {
+    customRefreshHandler = handler;
+    logger.debug('✅ Custom refresh handler registered');
+}
+
+/**
  * Handle refresh signal by reloading data from all sources
  * @param {Object} payload - Refresh signal payload
  */
@@ -119,6 +130,19 @@ function handleRefreshSignal(payload) {
     // No visual indicator - silent refresh per user preference
     // Smart rendering will handle updates without disruption
 
+    // Use custom handler if registered (e.g., releasability board)
+    if (customRefreshHandler) {
+        customRefreshHandler(payload)
+            .then(() => {
+                logger.debug('✅ Data refreshed from all sources (silent)');
+            })
+            .catch(error => {
+                logger.error('❌ Failed to refresh data:', error);
+            });
+        return;
+    }
+
+    // Fallback to weekly schedule page handler
     // Reload data using fetchAllTasks from data-service
     // This will fetch from both Google Sheets and Supabase, merge, and update state
     // Use silent=true to hide loading spinner, suppressEvents=false to emit events for UI refresh
@@ -131,7 +155,7 @@ function handleRefreshSignal(payload) {
                 logger.error('❌ Failed to refresh data:', error);
             });
     } else {
-        logger.warn('⚠️ dataService.fetchAllTasks not available on window');
+        logger.warn('⚠️ No refresh handler available (dataService.fetchAllTasks not on window)');
     }
 }
 

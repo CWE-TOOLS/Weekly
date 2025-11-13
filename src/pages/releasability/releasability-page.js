@@ -49,6 +49,7 @@ import {
   setupCacheSubscription,
   removeCacheSubscription
 } from '../../services/sheets-cache-service.js';
+import { registerRefreshHandler } from '../../services/supabase-service.js';
 
 // ============================================================================
 // GLOBAL STATE
@@ -83,6 +84,9 @@ async function init() {
 
   // Set up cache subscription for real-time updates
   setupCacheSubscription(handleCacheUpdate);
+
+  // Register refresh handler for silent sync when other clients make changes
+  registerRefreshHandler(handleSilentRefresh);
 
   // Show initial loading state
   setLoading(true);
@@ -156,6 +160,28 @@ async function handleCacheUpdate(payload) {
 
   } catch (error) {
     console.error('❌ Error refreshing data after cache update:', error);
+    // Silently fail - don't disrupt user experience
+  }
+}
+
+/**
+ * Handle refresh signal from another client
+ * This is called when another client updates releasability data (status changes, etc.)
+ */
+async function handleSilentRefresh(payload) {
+  console.log('📡 Refresh signal received from another client, syncing data...', payload);
+
+  try {
+    // Reload data without showing loading spinner
+    await loadInitialData();
+
+    // Re-render grid with fresh data
+    renderGrid();
+
+    console.log('✅ Data synced from refresh signal');
+
+  } catch (error) {
+    console.error('❌ Error syncing data after refresh signal:', error);
     // Silently fail - don't disrupt user experience
   }
 }
