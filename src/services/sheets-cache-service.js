@@ -8,7 +8,7 @@
  * @module services/sheets-cache-service
  */
 
-import { getSupabaseClient } from './supabase-service.js';
+import { getSupabaseClient, initializeSupabase } from './supabase-service.js';
 import { fetchTasks } from './sheets-service.js';
 import { logger } from '../utils/logger.js';
 
@@ -87,7 +87,12 @@ async function getCache() {
     const startTime = performance.now();
 
     try {
-        const supabase = await getSupabaseClient();
+        // Ensure Supabase is initialized
+        if (!getSupabaseClient()) {
+            await initializeSupabase();
+        }
+
+        const supabase = getSupabaseClient();
 
         const { data, error } = await supabase
             .from('sheets_cache')
@@ -118,7 +123,12 @@ async function acquireUpdateLock() {
     const startTime = performance.now();
 
     try {
-        const supabase = await getSupabaseClient();
+        // Ensure Supabase is initialized
+        if (!getSupabaseClient()) {
+            await initializeSupabase();
+        }
+
+        const supabase = getSupabaseClient();
 
         const { data, error } = await supabase
             .rpc('acquire_cache_update_lock', { client_identifier: clientId });
@@ -146,7 +156,12 @@ async function acquireUpdateLock() {
  */
 async function releaseUpdateLock() {
     try {
-        const supabase = await getSupabaseClient();
+        // Ensure Supabase is initialized
+        if (!getSupabaseClient()) {
+            await initializeSupabase();
+        }
+
+        const supabase = getSupabaseClient();
 
         const { error } = await supabase
             .rpc('release_cache_update_lock');
@@ -170,7 +185,12 @@ async function updateCache(tasksData) {
     const startTime = performance.now();
 
     try {
-        const supabase = await getSupabaseClient();
+        // Ensure Supabase is initialized
+        if (!getSupabaseClient()) {
+            await initializeSupabase();
+        }
+
+        const supabase = getSupabaseClient();
 
         const { error } = await supabase
             .from('sheets_cache')
@@ -206,7 +226,12 @@ async function updateCache(tasksData) {
  */
 async function recordCacheError(error) {
     try {
-        const supabase = await getSupabaseClient();
+        // Ensure Supabase is initialized
+        if (!getSupabaseClient()) {
+            await initializeSupabase();
+        }
+
+        const supabase = getSupabaseClient();
 
         await supabase
             .from('sheets_cache')
@@ -230,7 +255,12 @@ async function recordCacheError(error) {
  */
 async function broadcastCacheUpdate(info = {}) {
     try {
-        const supabase = await getSupabaseClient();
+        // Ensure Supabase is initialized
+        if (!getSupabaseClient()) {
+            await initializeSupabase();
+        }
+
+        const supabase = getSupabaseClient();
 
         const channel = supabase.channel(CACHE_CONFIG.BROADCAST_CHANNEL);
 
@@ -342,8 +372,20 @@ async function waitForCacheUpdate(timeoutMs = 30000) {
  * Setup real-time subscription for cache updates
  * @param {Function} onUpdate - Callback when cache is updated
  */
-export function setupCacheSubscription(onUpdate) {
-    getSupabaseClient().then(supabase => {
+export async function setupCacheSubscription(onUpdate) {
+    try {
+        // Ensure Supabase is initialized
+        if (!getSupabaseClient()) {
+            await initializeSupabase();
+        }
+
+        const supabase = getSupabaseClient();
+
+        if (!supabase) {
+            logger.warn('[Cache] Supabase client not available, skipping cache subscription');
+            return;
+        }
+
         // Remove existing subscription if any
         if (cacheSubscription) {
             cacheSubscription.unsubscribe();
@@ -366,7 +408,9 @@ export function setupCacheSubscription(onUpdate) {
                     logger.error('[Cache] 📡 Cache subscription error');
                 }
             });
-    });
+    } catch (error) {
+        logger.error('[Cache] Failed to setup cache subscription:', error);
+    }
 }
 
 /**
@@ -506,7 +550,12 @@ export async function forceRefreshCache() {
  */
 export async function getCacheStats() {
     try {
-        const supabase = await getSupabaseClient();
+        // Ensure Supabase is initialized
+        if (!getSupabaseClient()) {
+            await initializeSupabase();
+        }
+
+        const supabase = getSupabaseClient();
 
         const { data, error } = await supabase
             .from('sheets_cache_status')
@@ -532,7 +581,12 @@ export async function getCacheStats() {
  */
 export async function clearCache() {
     try {
-        const supabase = await getSupabaseClient();
+        // Ensure Supabase is initialized
+        if (!getSupabaseClient()) {
+            await initializeSupabase();
+        }
+
+        const supabase = getSupabaseClient();
 
         const { error } = await supabase
             .from('sheets_cache')
