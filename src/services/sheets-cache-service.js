@@ -49,7 +49,7 @@ export function getCacheConfig() {
  */
 export function updateCacheConfig(updates) {
     Object.assign(CACHE_CONFIG, updates);
-    logger.info(`[Cache] Configuration updated:`, updates);
+    logger.debug(`[Cache] Configuration updated:`, updates);
 }
 
 /**
@@ -63,7 +63,7 @@ function isCacheFresh(cache) {
     const cacheAge = Date.now() - new Date(cache.last_updated).getTime();
     const isFresh = cacheAge < CACHE_CONFIG.CACHE_TTL_MS;
 
-    logger.info(`[Cache] Cache age: ${(cacheAge / 1000).toFixed(0)}s, Fresh: ${isFresh}`);
+    logger.debug(`[Cache] Cache age: ${(cacheAge / 1000).toFixed(0)}s, Fresh: ${isFresh}`);
     return isFresh;
 }
 
@@ -107,7 +107,7 @@ async function getCache() {
             return null;
         }
 
-        logger.info(`[Cache] Retrieved cache in ${duration}ms`);
+        logger.debug(`[Cache] Retrieved cache in ${duration}ms`);
         return data;
     } catch (err) {
         logger.error('[Cache] Exception getting cache:', err);
@@ -141,7 +141,11 @@ async function acquireUpdateLock() {
         }
 
         const lockAcquired = data === true;
-        logger.info(`[Cache] Lock acquisition attempt: ${lockAcquired ? 'SUCCESS' : 'FAILED'} (${duration}ms)`);
+        if (lockAcquired) {
+            logger.info(`[Cache] Lock acquired - this client is now the leader (${duration}ms)`);
+        } else {
+            logger.debug(`[Cache] Lock acquisition failed - another client is leader (${duration}ms)`);
+        }
 
         return lockAcquired;
     } catch (err) {
@@ -169,7 +173,7 @@ async function releaseUpdateLock() {
         if (error) {
             logger.error('[Cache] Failed to release lock:', error);
         } else {
-            logger.info('[Cache] Lock released');
+            logger.debug('[Cache] Lock released');
         }
     } catch (err) {
         logger.error('[Cache] Exception releasing lock:', err);
@@ -219,7 +223,7 @@ async function updateCache(tasksData) {
             return false;
         }
 
-        logger.info(`[Cache] ✅ Cache updated successfully in ${duration}ms (${tasksData.length} tasks)`);
+        logger.debug(`[Cache] Cache updated in database in ${duration}ms (${tasksData.length} tasks)`);
         return true;
     } catch (err) {
         logger.error('[Cache] Exception updating cache:', err);
@@ -257,7 +261,7 @@ async function recordCacheError(error) {
             })
             .eq('id', 'primary');
 
-        logger.info('[Cache] Error recorded in cache stats');
+        logger.debug('[Cache] Error recorded in cache stats');
     } catch (err) {
         logger.error('[Cache] Failed to record error:', err);
     }
@@ -289,7 +293,7 @@ async function broadcastCacheUpdate(info = {}) {
             }
         });
 
-        logger.info('[Cache] 📡 Broadcast sent to all clients');
+        logger.debug('[Cache] Broadcast sent to all clients');
     } catch (err) {
         logger.error('[Cache] Failed to broadcast update:', err);
     }
@@ -303,7 +307,7 @@ async function broadcastCacheUpdate(info = {}) {
  */
 async function fetchAndUpdateCache() {
     const startTime = performance.now();
-    logger.info(`[Cache] 🔄 Fetching fresh data from Google Sheets... (client: ${clientId})`);
+    logger.debug(`[Cache] Fetching fresh data from Google Sheets... (client: ${clientId})`);
 
     try {
         // Fetch from Google Sheets API
@@ -324,13 +328,13 @@ async function fetchAndUpdateCache() {
         await broadcastCacheUpdate({ tasksCount: tasksData.length });
 
         const duration = (performance.now() - startTime).toFixed(0);
-        logger.info(`[Cache] ✅ Cache refresh complete in ${duration}ms`);
+        logger.info(`[Cache] Cache refresh successful in ${duration}ms`);
 
         return tasksData;
 
     } catch (err) {
         const duration = (performance.now() - startTime).toFixed(0);
-        logger.error(`[Cache] ❌ Cache refresh failed after ${duration}ms:`, err);
+        logger.error(`[Cache] Cache refresh failed after ${duration}ms:`, err);
 
         await recordCacheError(err);
         return null;
@@ -347,7 +351,7 @@ async function fetchAndUpdateCache() {
  * @returns {Promise<Array|null>} Updated cache data or null if timeout
  */
 async function waitForCacheUpdate(timeoutMs = 30000) {
-    logger.info(`[Cache] ⏳ Waiting for another client to update cache...`);
+    logger.debug(`[Cache] Waiting for another client to update cache...`);
 
     return new Promise((resolve) => {
         const startTime = Date.now();
@@ -371,7 +375,7 @@ async function waitForCacheUpdate(timeoutMs = 30000) {
                 clearTimeout(timeout);
 
                 const duration = (Date.now() - startTime).toFixed(0);
-                logger.info(`[Cache] ✅ Received cache update after ${duration}ms`);
+                logger.debug(`[Cache] Received cache update after ${duration}ms`);
 
                 const cache = await getCache();
                 resolve(cache ? cache.tasks_data : null);
@@ -408,18 +412,18 @@ export async function setupCacheSubscription(onUpdate) {
         cacheSubscription = supabase
             .channel(CACHE_CONFIG.BROADCAST_CHANNEL)
             .on('broadcast', { event: 'cache_updated' }, (payload) => {
-                logger.info('[Cache] 📡 Received cache update broadcast:', payload);
+                logger.debug('[Cache] Received cache update broadcast:', payload);
                 if (onUpdate) {
                     onUpdate(payload);
                 }
             })
             .subscribe((status) => {
                 if (status === 'SUBSCRIBED') {
-                    logger.info('[Cache] 📡 Subscribed to cache updates');
+                    logger.info('[Cache] Subscribed to real-time cache updates');
                 } else if (status === 'CLOSED') {
-                    logger.info('[Cache] 📡 Cache subscription closed');
+                    logger.debug('[Cache] Cache subscription closed');
                 } else if (status === 'CHANNEL_ERROR') {
-                    logger.error('[Cache] 📡 Cache subscription error');
+                    logger.error('[Cache] Cache subscription error');
                 }
             });
     } catch (error) {
@@ -434,7 +438,7 @@ export function removeCacheSubscription() {
     if (cacheSubscription) {
         cacheSubscription.unsubscribe();
         cacheSubscription = null;
-        logger.info('[Cache] 📡 Cache subscription removed');
+        logger.debug('[Cache] Cache subscription removed');
     }
 }
 
@@ -454,11 +458,11 @@ export function removeCacheSubscription() {
  */
 export async function loadFromCacheOrFetch(forceRefresh = false) {
     const startTime = performance.now();
-    logger.info(`[Cache] 🚀 loadFromCacheOrFetch() called (force: ${forceRefresh}, enabled: ${CACHE_CONFIG.ENABLE_CACHE})`);
+    logger.debug(`[Cache] loadFromCacheOrFetch() called (force: ${forceRefresh}, enabled: ${CACHE_CONFIG.ENABLE_CACHE})`);
 
     // If caching is disabled, always fetch directly
     if (!CACHE_CONFIG.ENABLE_CACHE) {
-        logger.info('[Cache] Caching disabled, fetching directly from Google Sheets');
+        logger.debug('[Cache] Caching disabled, fetching directly from Google Sheets');
         return await fetchTasks();
     }
 
@@ -469,12 +473,12 @@ export async function loadFromCacheOrFetch(forceRefresh = false) {
         // Check if cache is fresh and force refresh not requested
         if (!forceRefresh && cache && isCacheFresh(cache)) {
             const duration = (performance.now() - startTime).toFixed(0);
-            logger.info(`[Cache] ✅ Using fresh cache (${duration}ms, ${cache.tasks_data.length} tasks)`);
+            logger.debug(`[Cache] Using fresh cache (${duration}ms, ${cache.tasks_data.length} tasks)`);
             return cache.tasks_data;
         }
 
         // Cache is stale or doesn't exist - try to update
-        logger.info('[Cache] Cache is stale or missing, attempting to refresh...');
+        logger.debug('[Cache] Cache is stale or missing, attempting to refresh...');
 
         // Try to acquire update lock (with retries)
         let lockAcquired = false;
@@ -487,19 +491,18 @@ export async function loadFromCacheOrFetch(forceRefresh = false) {
 
             // Lock not acquired - another client is updating
             if (i < CACHE_CONFIG.MAX_UPDATE_RETRIES - 1) {
-                logger.info(`[Cache] Lock held by another client, retrying in ${CACHE_CONFIG.UPDATE_RETRY_DELAY_MS}ms...`);
+                logger.debug(`[Cache] Lock held by another client, retrying in ${CACHE_CONFIG.UPDATE_RETRY_DELAY_MS}ms...`);
                 await new Promise(resolve => setTimeout(resolve, CACHE_CONFIG.UPDATE_RETRY_DELAY_MS));
             }
         }
 
         if (lockAcquired) {
             // We got the lock - we're the leader, fetch and update
-            logger.info('[Cache] 👑 Lock acquired - this client will update cache');
             const freshData = await fetchAndUpdateCache();
 
             if (freshData) {
                 const duration = (performance.now() - startTime).toFixed(0);
-                logger.info(`[Cache] ✅ Cache refresh complete in ${duration}ms`);
+                logger.info(`[Cache] Cache refresh successful in ${duration}ms`);
                 return freshData;
             }
 
@@ -524,7 +527,7 @@ export async function loadFromCacheOrFetch(forceRefresh = false) {
 
             if (updatedData) {
                 const duration = (performance.now() - startTime).toFixed(0);
-                logger.info(`[Cache] ✅ Received update from other client (${duration}ms)`);
+                logger.debug(`[Cache] Received update from other client (${duration}ms)`);
                 return updatedData;
             }
 
@@ -554,7 +557,7 @@ export async function loadFromCacheOrFetch(forceRefresh = false) {
  * @returns {Promise<Array>} Fresh tasks data
  */
 export async function forceRefreshCache() {
-    logger.info('[Cache] 🔄 Force refresh requested');
+    logger.debug('[Cache] Force refresh requested');
     return await loadFromCacheOrFetch(true);
 }
 
