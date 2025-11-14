@@ -7,7 +7,7 @@
  * @module pages/releasability/releasability-page
  */
 
-import { on } from '../../core/event-bus.js';
+import { on, EVENTS } from '../../core/event-bus.js';
 import {
   RELEASABILITY_EVENTS,
   getAllProjects,
@@ -192,7 +192,7 @@ function setupEventListeners() {
 
   // Action buttons - REMOVED (UI elements deleted)
   // document.getElementById('add-project-btn')?.addEventListener('click', handleAddProjectClick);
-  // document.getElementById('refresh-btn')?.addEventListener('click', handleRefresh);
+  document.getElementById('refresh-btn')?.addEventListener('click', handleRefresh);
   // document.getElementById('print-btn')?.addEventListener('click', handlePrint);
 
   // Add week button
@@ -223,6 +223,11 @@ function setupEventListeners() {
       expandIcon.style.display = isFullscreen ? 'none' : 'block';
       compressIcon.style.display = isFullscreen ? 'block' : 'none';
     }
+  });
+
+  // Tab visibility change - refresh data when tab becomes visible
+  on(EVENTS.PAGE_VISIBLE, () => {
+    handleSilentRefresh();
   });
 
   // Hide completed toggle
