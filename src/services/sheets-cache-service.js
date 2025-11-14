@@ -220,7 +220,7 @@ async function updateCache(tasksData, cacheKey = 'primary') {
                 last_error: null,
                 last_error_at: null,
                 consecutive_errors: 0,
-                total_fetches: (currentCache?.total_fetches || 0) + 1
+                total_fetches: ((currentCache && currentCache.total_fetches) || 0) + 1
             })
             .eq('id', cacheKey);
 
@@ -265,8 +265,8 @@ async function recordCacheError(error, cacheKey = 'primary') {
             .update({
                 last_error: error.message || String(error),
                 last_error_at: new Date().toISOString(),
-                consecutive_errors: (currentCache?.consecutive_errors || 0) + 1,
-                total_errors: (currentCache?.total_errors || 0) + 1
+                consecutive_errors: ((currentCache && currentCache.consecutive_errors) || 0) + 1,
+                total_errors: ((currentCache && currentCache.total_errors) || 0) + 1
             })
             .eq('id', cacheKey);
 
