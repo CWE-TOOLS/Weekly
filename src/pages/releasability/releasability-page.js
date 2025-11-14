@@ -192,7 +192,8 @@ function setupEventListeners() {
 
   // Action buttons - REMOVED (UI elements deleted)
   // document.getElementById('add-project-btn')?.addEventListener('click', handleAddProjectClick);
-  document.getElementById('refresh-btn')?.addEventListener('click', handleRefresh);
+  const refreshBtn = document.getElementById('refresh-btn');
+  if (refreshBtn) refreshBtn.addEventListener('click', handleRefresh);
   // document.getElementById('print-btn')?.addEventListener('click', handlePrint);
 
   // Add week button
@@ -459,7 +460,8 @@ function openAddProjectModal() {
 
     // Focus on project name input
     setTimeout(() => {
-      document.getElementById('project-name')?.focus();
+      const projectNameInput = document.getElementById('project-name');
+      if (projectNameInput) projectNameInput.focus();
     }, 100);
   }
 }
@@ -503,9 +505,12 @@ function closeAddProjectModal() {
 async function handleAddProjectSubmit(e) {
   e.preventDefault();
 
-  const projectName = document.getElementById('project-name')?.value.trim();
-  const projectWeek = document.getElementById('project-week')?.value;
-  const projectDepartment = document.getElementById('project-department')?.value;
+  const projectNameEl = document.getElementById('project-name');
+  const projectWeekEl = document.getElementById('project-week');
+  const projectDepartmentEl = document.getElementById('project-department');
+  const projectName = projectNameEl ? projectNameEl.value.trim() : '';
+  const projectWeek = projectWeekEl ? projectWeekEl.value : '';
+  const projectDepartment = projectDepartmentEl ? projectDepartmentEl.value : '';
 
   // Validate
   if (!projectName || projectName.length < VALIDATION.PROJECT_NAME_MIN_LENGTH) {

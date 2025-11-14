@@ -144,7 +144,7 @@ function handleRefreshSignal(payload) {
 
     // Fallback to weekly schedule page handler
     // Only refresh weekly schedule for non-releasability actions
-    const action = payload?.payload?.info?.action;
+    const action = payload && payload.payload && payload.payload.info && payload.payload.info.action;
     const isReleasabilityAction = action === 'releasability_status_updated' ||
                                    action === 'releasability_project_deleted';
 

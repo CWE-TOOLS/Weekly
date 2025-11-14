@@ -568,7 +568,7 @@ export function getProjectCompletion(projectId) {
  */
 export function isProjectFullyComplete(project) {
   if (!project || !project.trackingStatus) {
-    console.log(`❌ Project "${project?.project}" - No trackingStatus`);
+    console.log(`❌ Project "${project && project.project}" - No trackingStatus`);
     return false;
   }
 
