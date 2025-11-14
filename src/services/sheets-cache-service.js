@@ -9,7 +9,6 @@
  */
 
 import { getSupabaseClient, initializeSupabase } from './supabase-service.js';
-import { fetchTasks } from './sheets-service.js';
 import { logger } from '../utils/logger.js';
 
 // Configuration
@@ -81,9 +80,10 @@ function isCacheTooStale(cache) {
 
 /**
  * Get current cache from Supabase
+ * @param {string} cacheKey - Cache identifier (default: 'primary')
  * @returns {Promise<Object|null>} Cache object or null if not found
  */
-async function getCache() {
+async function getCache(cacheKey = 'primary') {
     const startTime = performance.now();
 
     try {
@@ -97,29 +97,30 @@ async function getCache() {
         const { data, error } = await supabase
             .from('sheets_cache')
             .select('*')
-            .eq('id', 'primary')
+            .eq('id', cacheKey)
             .single();
 
         const duration = (performance.now() - startTime).toFixed(0);
 
         if (error) {
-            logger.error(`[Cache] Failed to get cache (${duration}ms):`, error);
+            logger.error(`[Cache:${cacheKey}] Failed to get cache (${duration}ms):`, error);
             return null;
         }
 
-        logger.debug(`[Cache] Retrieved cache in ${duration}ms`);
+        logger.debug(`[Cache:${cacheKey}] Retrieved cache in ${duration}ms`);
         return data;
     } catch (err) {
-        logger.error('[Cache] Exception getting cache:', err);
+        logger.error(`[Cache:${cacheKey}] Exception getting cache:`, err);
         return null;
     }
 }
 
 /**
  * Attempt to acquire update lock using Supabase function
+ * @param {string} cacheKey - Cache identifier (default: 'primary')
  * @returns {Promise<boolean>} True if lock acquired
  */
-async function acquireUpdateLock() {
+async function acquireUpdateLock(cacheKey = 'primary') {
     const startTime = performance.now();
 
     try {
@@ -131,34 +132,38 @@ async function acquireUpdateLock() {
         const supabase = getSupabaseClient();
 
         const { data, error } = await supabase
-            .rpc('acquire_cache_update_lock', { client_identifier: clientId });
+            .rpc('acquire_cache_update_lock', {
+                client_identifier: clientId,
+                cache_identifier: cacheKey
+            });
 
         const duration = (performance.now() - startTime).toFixed(0);
 
         if (error) {
-            logger.error(`[Cache] Failed to acquire lock (${duration}ms):`, error);
+            logger.error(`[Cache:${cacheKey}] Failed to acquire lock (${duration}ms):`, error);
             return false;
         }
 
         const lockAcquired = data === true;
         if (lockAcquired) {
-            logger.info(`[Cache] Lock acquired - this client is now the leader (${duration}ms)`);
+            logger.info(`[Cache:${cacheKey}] Lock acquired - this client is now the leader (${duration}ms)`);
         } else {
-            logger.debug(`[Cache] Lock acquisition failed - another client is leader (${duration}ms)`);
+            logger.debug(`[Cache:${cacheKey}] Lock acquisition failed - another client is leader (${duration}ms)`);
         }
 
         return lockAcquired;
     } catch (err) {
-        logger.error('[Cache] Exception acquiring lock:', err);
+        logger.error(`[Cache:${cacheKey}] Exception acquiring lock:`, err);
         return false;
     }
 }
 
 /**
  * Release update lock
+ * @param {string} cacheKey - Cache identifier (default: 'primary')
  * @returns {Promise<void>}
  */
-async function releaseUpdateLock() {
+async function releaseUpdateLock(cacheKey = 'primary') {
     try {
         // Ensure Supabase is initialized
         if (!getSupabaseClient()) {
@@ -168,24 +173,27 @@ async function releaseUpdateLock() {
         const supabase = getSupabaseClient();
 
         const { error } = await supabase
-            .rpc('release_cache_update_lock');
+            .rpc('release_cache_update_lock', {
+                cache_identifier: cacheKey
+            });
 
         if (error) {
-            logger.error('[Cache] Failed to release lock:', error);
+            logger.error(`[Cache:${cacheKey}] Failed to release lock:`, error);
         } else {
-            logger.debug('[Cache] Lock released');
+            logger.debug(`[Cache:${cacheKey}] Lock released`);
         }
     } catch (err) {
-        logger.error('[Cache] Exception releasing lock:', err);
+        logger.error(`[Cache:${cacheKey}] Exception releasing lock:`, err);
     }
 }
 
 /**
  * Update cache with fresh Google Sheets data
  * @param {Array} tasksData - Fresh tasks data from Google Sheets
+ * @param {string} cacheKey - Cache identifier (default: 'primary')
  * @returns {Promise<boolean>} True if update successful
  */
-async function updateCache(tasksData) {
+async function updateCache(tasksData, cacheKey = 'primary') {
     const startTime = performance.now();
 
     try {
@@ -200,7 +208,7 @@ async function updateCache(tasksData) {
         const { data: currentCache } = await supabase
             .from('sheets_cache')
             .select('total_fetches')
-            .eq('id', 'primary')
+            .eq('id', cacheKey)
             .single();
 
         const { error } = await supabase
@@ -214,19 +222,19 @@ async function updateCache(tasksData) {
                 consecutive_errors: 0,
                 total_fetches: (currentCache?.total_fetches || 0) + 1
             })
-            .eq('id', 'primary');
+            .eq('id', cacheKey);
 
         const duration = (performance.now() - startTime).toFixed(0);
 
         if (error) {
-            logger.error(`[Cache] Failed to update cache (${duration}ms):`, error);
+            logger.error(`[Cache:${cacheKey}] Failed to update cache (${duration}ms):`, error);
             return false;
         }
 
-        logger.debug(`[Cache] Cache updated in database in ${duration}ms (${tasksData.length} tasks)`);
+        logger.debug(`[Cache:${cacheKey}] Cache updated in database in ${duration}ms (${tasksData.length} items)`);
         return true;
     } catch (err) {
-        logger.error('[Cache] Exception updating cache:', err);
+        logger.error(`[Cache:${cacheKey}] Exception updating cache:`, err);
         return false;
     }
 }
@@ -234,8 +242,9 @@ async function updateCache(tasksData) {
 /**
  * Record cache update error
  * @param {Error} error - Error that occurred
+ * @param {string} cacheKey - Cache identifier (default: 'primary')
  */
-async function recordCacheError(error) {
+async function recordCacheError(error, cacheKey = 'primary') {
     try {
         // Ensure Supabase is initialized
         if (!getSupabaseClient()) {
@@ -248,7 +257,7 @@ async function recordCacheError(error) {
         const { data: currentCache } = await supabase
             .from('sheets_cache')
             .select('consecutive_errors, total_errors')
-            .eq('id', 'primary')
+            .eq('id', cacheKey)
             .single();
 
         await supabase
@@ -259,19 +268,20 @@ async function recordCacheError(error) {
                 consecutive_errors: (currentCache?.consecutive_errors || 0) + 1,
                 total_errors: (currentCache?.total_errors || 0) + 1
             })
-            .eq('id', 'primary');
+            .eq('id', cacheKey);
 
-        logger.debug('[Cache] Error recorded in cache stats');
+        logger.debug(`[Cache:${cacheKey}] Error recorded in cache stats`);
     } catch (err) {
-        logger.error('[Cache] Failed to record error:', err);
+        logger.error(`[Cache:${cacheKey}] Failed to record error:`, err);
     }
 }
 
 /**
  * Broadcast cache update to all clients via real-time channel
  * @param {Object} info - Update information
+ * @param {string} cacheKey - Cache identifier (default: 'primary')
  */
-async function broadcastCacheUpdate(info = {}) {
+async function broadcastCacheUpdate(info = {}, cacheKey = 'primary') {
     try {
         // Ensure Supabase is initialized
         if (!getSupabaseClient()) {
@@ -288,14 +298,15 @@ async function broadcastCacheUpdate(info = {}) {
             payload: {
                 timestamp: new Date().toISOString(),
                 client_id: clientId,
+                cache_key: cacheKey,
                 tasks_count: info.tasksCount || 0,
                 ...info
             }
         });
 
-        logger.debug('[Cache] Broadcast sent to all clients');
+        logger.debug(`[Cache:${cacheKey}] Broadcast sent to all clients`);
     } catch (err) {
-        logger.error('[Cache] Failed to broadcast update:', err);
+        logger.error(`[Cache:${cacheKey}] Failed to broadcast update:`, err);
     }
 }
 
@@ -303,55 +314,58 @@ async function broadcastCacheUpdate(info = {}) {
  * Fetch fresh data from Google Sheets and update cache
  * This function assumes the update lock has already been acquired
  *
- * @returns {Promise<Array|null>} Fresh tasks data or null if failed
+ * @param {Function} fetchFunction - Function to fetch data from Google Sheets
+ * @param {string} cacheKey - Cache identifier (default: 'primary')
+ * @returns {Promise<Array|null>} Fresh data or null if failed
  */
-async function fetchAndUpdateCache() {
+async function fetchAndUpdateCache(fetchFunction, cacheKey = 'primary') {
     const startTime = performance.now();
-    logger.info(`[Cache] 🔄 Fetching fresh data from Google Sheets API... (leader: ${clientId.substring(0, 12)}...)`);
+    logger.info(`[Cache:${cacheKey}] 🔄 Fetching fresh data from Google Sheets API... (leader: ${clientId.substring(0, 12)}...)`);
 
     try {
         // Fetch from Google Sheets API
-        const tasksData = await fetchTasks();
+        const tasksData = await fetchFunction();
 
         if (!tasksData || !Array.isArray(tasksData)) {
-            throw new Error('Invalid tasks data from Google Sheets');
+            throw new Error('Invalid data from Google Sheets');
         }
 
         // Update cache
-        const updateSuccess = await updateCache(tasksData);
+        const updateSuccess = await updateCache(tasksData, cacheKey);
 
         if (!updateSuccess) {
             throw new Error('Failed to update cache in Supabase');
         }
 
         // Broadcast to all clients
-        await broadcastCacheUpdate({ tasksCount: tasksData.length });
+        await broadcastCacheUpdate({ tasksCount: tasksData.length }, cacheKey);
 
         const duration = (performance.now() - startTime).toFixed(0);
-        logger.info(`[Cache] ✅ Fetched ${tasksData.length} tasks from Google Sheets API in ${duration}ms`);
+        logger.info(`[Cache:${cacheKey}] ✅ Fetched ${tasksData.length} items from Google Sheets API in ${duration}ms`);
 
         return tasksData;
 
     } catch (err) {
         const duration = (performance.now() - startTime).toFixed(0);
-        logger.error(`[Cache] Cache refresh failed after ${duration}ms:`, err);
+        logger.error(`[Cache:${cacheKey}] Cache refresh failed after ${duration}ms:`, err);
 
-        await recordCacheError(err);
+        await recordCacheError(err, cacheKey);
         return null;
 
     } finally {
         // Always release lock
-        await releaseUpdateLock();
+        await releaseUpdateLock(cacheKey);
     }
 }
 
 /**
  * Wait for another client to finish updating cache
  * @param {number} timeoutMs - How long to wait (default: 30s)
+ * @param {string} cacheKey - Cache identifier (default: 'primary')
  * @returns {Promise<Array|null>} Updated cache data or null if timeout
  */
-async function waitForCacheUpdate(timeoutMs = 30000) {
-    logger.debug(`[Cache] Waiting for another client to update cache...`);
+async function waitForCacheUpdate(timeoutMs = 30000, cacheKey = 'primary') {
+    logger.debug(`[Cache:${cacheKey}] Waiting for another client to update cache...`);
 
     return new Promise((resolve) => {
         const startTime = Date.now();
@@ -361,8 +375,8 @@ async function waitForCacheUpdate(timeoutMs = 30000) {
         const timeout = setTimeout(() => {
             if (!resolved) {
                 resolved = true;
-                logger.warn('[Cache] ⚠️ Wait timeout - fetching cache anyway');
-                getCache().then(cache => {
+                logger.warn(`[Cache:${cacheKey}] ⚠️ Wait timeout - fetching cache anyway`);
+                getCache(cacheKey).then(cache => {
                     resolve(cache ? cache.tasks_data : null);
                 });
             }
@@ -375,9 +389,9 @@ async function waitForCacheUpdate(timeoutMs = 30000) {
                 clearTimeout(timeout);
 
                 const duration = (Date.now() - startTime).toFixed(0);
-                logger.debug(`[Cache] Received cache update after ${duration}ms`);
+                logger.debug(`[Cache:${cacheKey}] Received cache update after ${duration}ms`);
 
-                const cache = await getCache();
+                const cache = await getCache(cacheKey);
                 resolve(cache ? cache.tasks_data : null);
             }
         };
@@ -454,37 +468,47 @@ export function removeCacheSubscription() {
  * 4. If cache is too stale → force fetch regardless of lock
  *
  * @param {boolean} forceRefresh - Force refresh from Google Sheets
- * @returns {Promise<Array>} Tasks data array
+ * @param {string} cacheKey - Cache identifier (default: 'primary')
+ * @param {Function} fetchFunction - Function to fetch data from Google Sheets (required if caching disabled)
+ * @returns {Promise<Array>} Data array
  */
-export async function loadFromCacheOrFetch(forceRefresh = false) {
+export async function loadFromCacheOrFetch(forceRefresh = false, cacheKey = 'primary', fetchFunction = null) {
     const startTime = performance.now();
-    logger.debug(`[Cache] loadFromCacheOrFetch() called (force: ${forceRefresh}, enabled: ${CACHE_CONFIG.ENABLE_CACHE})`);
+    logger.debug(`[Cache:${cacheKey}] loadFromCacheOrFetch() called (force: ${forceRefresh}, enabled: ${CACHE_CONFIG.ENABLE_CACHE})`);
 
     // If caching is disabled, always fetch directly
     if (!CACHE_CONFIG.ENABLE_CACHE) {
-        logger.debug('[Cache] Caching disabled, fetching directly from Google Sheets');
-        return await fetchTasks();
+        logger.debug(`[Cache:${cacheKey}] Caching disabled, fetching directly from Google Sheets`);
+        if (fetchFunction) {
+            return await fetchFunction();
+        }
+        throw new Error('fetchFunction is required when caching is disabled');
+    }
+
+    // Validate fetchFunction is provided
+    if (!fetchFunction) {
+        throw new Error('fetchFunction parameter is required');
     }
 
     try {
         // Get current cache
-        const cache = await getCache();
+        const cache = await getCache(cacheKey);
 
         // Check if cache is fresh and force refresh not requested
         if (!forceRefresh && cache && isCacheFresh(cache)) {
             const duration = (performance.now() - startTime).toFixed(0);
             const cacheAge = Math.round((Date.now() - new Date(cache.last_updated).getTime()) / 1000);
-            logger.info(`[Cache] ✅ Cache hit - loaded ${cache.tasks_data.length} tasks in ${duration}ms (cache age: ${cacheAge}s)`);
+            logger.info(`[Cache:${cacheKey}] ✅ Cache hit - loaded ${cache.tasks_data.length} items in ${duration}ms (cache age: ${cacheAge}s)`);
             return cache.tasks_data;
         }
 
         // Cache is stale or doesn't exist - try to update
-        logger.info('[Cache] ⚠️ Cache miss - cache is stale or missing, attempting refresh...');
+        logger.info(`[Cache:${cacheKey}] ⚠️ Cache miss - cache is stale or missing, attempting refresh...`);
 
         // Try to acquire update lock (with retries)
         let lockAcquired = false;
         for (let i = 0; i < CACHE_CONFIG.MAX_UPDATE_RETRIES; i++) {
-            lockAcquired = await acquireUpdateLock();
+            lockAcquired = await acquireUpdateLock(cacheKey);
 
             if (lockAcquired) {
                 break;
@@ -492,14 +516,14 @@ export async function loadFromCacheOrFetch(forceRefresh = false) {
 
             // Lock not acquired - another client is updating
             if (i < CACHE_CONFIG.MAX_UPDATE_RETRIES - 1) {
-                logger.debug(`[Cache] Lock held by another client, retrying in ${CACHE_CONFIG.UPDATE_RETRY_DELAY_MS}ms...`);
+                logger.debug(`[Cache:${cacheKey}] Lock held by another client, retrying in ${CACHE_CONFIG.UPDATE_RETRY_DELAY_MS}ms...`);
                 await new Promise(resolve => setTimeout(resolve, CACHE_CONFIG.UPDATE_RETRY_DELAY_MS));
             }
         }
 
         if (lockAcquired) {
             // We got the lock - we're the leader, fetch and update
-            const freshData = await fetchAndUpdateCache();
+            const freshData = await fetchAndUpdateCache(fetchFunction, cacheKey);
 
             if (freshData) {
                 return freshData;
@@ -507,7 +531,7 @@ export async function loadFromCacheOrFetch(forceRefresh = false) {
 
             // Fetch failed - use stale cache if available
             if (cache && cache.tasks_data) {
-                logger.warn('[Cache] ⚠️ Fetch failed, using stale cache');
+                logger.warn(`[Cache:${cacheKey}] ⚠️ Fetch failed, using stale cache`);
                 return cache.tasks_data;
             }
 
@@ -517,37 +541,37 @@ export async function loadFromCacheOrFetch(forceRefresh = false) {
             // Lock not acquired - another client is updating
             // Check if cache is too stale to wait
             if (isCacheTooStale(cache)) {
-                logger.warn('[Cache] ⚠️ Cache too stale, fetching directly');
-                return await fetchTasks();
+                logger.warn(`[Cache:${cacheKey}] ⚠️ Cache too stale, fetching directly`);
+                return await fetchFunction();
             }
 
             // Wait for other client's update
-            const updatedData = await waitForCacheUpdate();
+            const updatedData = await waitForCacheUpdate(30000, cacheKey);
 
             if (updatedData) {
                 const duration = (performance.now() - startTime).toFixed(0);
-                logger.debug(`[Cache] Received update from other client (${duration}ms)`);
+                logger.debug(`[Cache:${cacheKey}] Received update from other client (${duration}ms)`);
                 return updatedData;
             }
 
             // Wait timed out - use stale cache if available
             if (cache && cache.tasks_data) {
-                logger.warn('[Cache] ⚠️ Wait timeout, using stale cache');
+                logger.warn(`[Cache:${cacheKey}] ⚠️ Wait timeout, using stale cache`);
                 return cache.tasks_data;
             }
 
             // Fallback to direct fetch
-            logger.warn('[Cache] ⚠️ No cache available, fetching directly');
-            return await fetchTasks();
+            logger.warn(`[Cache:${cacheKey}] ⚠️ No cache available, fetching directly`);
+            return await fetchFunction();
         }
 
     } catch (err) {
         const duration = (performance.now() - startTime).toFixed(0);
-        logger.error(`[Cache] ❌ loadFromCacheOrFetch failed after ${duration}ms:`, err);
+        logger.error(`[Cache:${cacheKey}] ❌ loadFromCacheOrFetch failed after ${duration}ms:`, err);
 
         // Last resort - try direct fetch
-        logger.warn('[Cache] Falling back to direct Google Sheets fetch');
-        return await fetchTasks();
+        logger.warn(`[Cache:${cacheKey}] Falling back to direct Google Sheets fetch`);
+        return await fetchFunction();
     }
 }
 
@@ -593,9 +617,10 @@ export async function getCacheStats() {
 
 /**
  * Clear cache (for debugging/testing)
+ * @param {string} cacheKey - Cache identifier (default: 'primary')
  * @returns {Promise<boolean>} True if successful
  */
-export async function clearCache() {
+export async function clearCache(cacheKey = 'primary') {
     try {
         // Ensure Supabase is initialized
         if (!getSupabaseClient()) {
@@ -613,17 +638,39 @@ export async function clearCache() {
                 update_lock_client: null,
                 update_started_at: null
             })
-            .eq('id', 'primary');
+            .eq('id', cacheKey);
 
         if (error) {
-            logger.error('[Cache] Failed to clear cache:', error);
+            logger.error(`[Cache:${cacheKey}] Failed to clear cache:`, error);
             return false;
         }
 
-        logger.info('[Cache] ✅ Cache cleared');
+        logger.info(`[Cache:${cacheKey}] ✅ Cache cleared`);
         return true;
     } catch (err) {
-        logger.error('[Cache] Exception clearing cache:', err);
+        logger.error(`[Cache:${cacheKey}] Exception clearing cache:`, err);
         return false;
     }
+}
+
+/**
+ * Load tasks sheet from cache or fetch from Google Sheets
+ * To be used by sheets-service.js fetchTasks()
+ * @param {Function} fetchFunction - Function to fetch tasks from Google Sheets
+ * @param {boolean} forceRefresh - Force refresh from API
+ * @returns {Promise<Array>} Tasks data
+ */
+export async function loadTasksFromCacheOrFetch(fetchFunction, forceRefresh = false) {
+    return await loadFromCacheOrFetch(forceRefresh, 'tasks', fetchFunction);
+}
+
+/**
+ * Load staging sheet from cache or fetch from Google Sheets
+ * To be used by sheets-service.js getStagingData()
+ * @param {Function} fetchFunction - Function to fetch staging data from Google Sheets
+ * @param {boolean} forceRefresh - Force refresh from API
+ * @returns {Promise<Array>} Staging sheet data (2D array)
+ */
+export async function loadStagingFromCacheOrFetch(fetchFunction, forceRefresh = false) {
+    return await loadFromCacheOrFetch(forceRefresh, 'staging', fetchFunction);
 }

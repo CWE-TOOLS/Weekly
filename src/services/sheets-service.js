@@ -7,6 +7,7 @@
 import { getAccessToken } from './auth-service.js';
 import { GOOGLE_SHEETS } from '../config/api-config.js';
 import { normalizeDepartment } from '../utils/ui-utils.js';
+import { loadTasksFromCacheOrFetch, loadStagingFromCacheOrFetch } from './sheets-cache-service.js';
 
 import { logger } from '../utils/logger.js';
 const { API_KEY, SPREADSHEET_ID, SHEET_NAME, STAGING_SHEET_NAME } = GOOGLE_SHEETS;
@@ -49,10 +50,11 @@ export const departmentDayMapping = {
 };
 
 /**
- * Fetch tasks from Google Sheets
+ * Fetch tasks from Google Sheets (with caching)
  *
  * Retrieves all task data from the configured Google Sheet and parses it
- * into structured task objects. Uses read-only API key authentication.
+ * into structured task objects. Uses caching via Supabase when available,
+ * falling back to direct API calls.
  *
  * @returns {Promise<Array<Object>>} Array of task objects with all fields populated
  * @throws {Error} If the API request fails or no data is found
@@ -62,10 +64,24 @@ export const departmentDayMapping = {
  * // Returns: [{id: 'task-1', project: 'A', department: 'Mill', ...}, ...]
  */
 export async function fetchTasks() {
+    return await loadTasksFromCacheOrFetch(fetchTasksDirect);
+}
+
+/**
+ * Fetch tasks directly from Google Sheets API
+ *
+ * Internal function that performs the actual API call to Google Sheets.
+ * Called by fetchTasks() when cache is unavailable or stale.
+ *
+ * @returns {Promise<Array<Object>>} Array of task objects with all fields populated
+ * @throws {Error} If the API request fails or no data is found
+ * @private
+ */
+async function fetchTasksDirect() {
     const fetchStartTime = performance.now();
     const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(SHEET_NAME)}!A1:Z?key=${API_KEY}`;
 
-    logger.info('[Startup] 📋 fetchTasks() called');
+    logger.info('[Startup] 📋 fetchTasksDirect() called');
     logger.info(`[Startup]   → URL: ${url.replace(/key=[^&]+/, 'key=***REDACTED***')}`);
     logger.info(`[Startup]   → Spreadsheet ID: ${SPREADSHEET_ID}`);
     logger.info(`[Startup]   → Sheet Name: ${SHEET_NAME}`);
@@ -159,7 +175,7 @@ export async function fetchTasks() {
     const totalDuration = (parseDataCompleteTime - fetchStartTime).toFixed(0);
     logger.info(`[Startup] ✅ Sheet data parsed in ${parseDataDuration}ms`);
     logger.info(`[Startup]   → Total tasks parsed: ${tasks.length}`);
-    logger.info(`[Startup] ✅ fetchTasks() complete - Total time: ${totalDuration}ms`);
+    logger.info(`[Startup] ✅ fetchTasksDirect() complete - Total time: ${totalDuration}ms`);
 
     return tasks;
 }
@@ -262,10 +278,11 @@ export async function getSheetId(sheetName) {
 }
 
 /**
- * Get staging sheet data
+ * Get staging sheet data (with caching)
  *
  * Fetches all data from the staging sheet for reading or modification.
- * Used to check if project columns exist before saving.
+ * Used to check if project columns exist before saving. Uses caching via
+ * Supabase when available, falling back to direct API calls.
  *
  * @returns {Promise<Array<Array<string>>>} 2D array of staging sheet data
  * @throws {Error} If staging data fetch fails
@@ -275,10 +292,24 @@ export async function getSheetId(sheetName) {
  * // Returns: [['Header1', 'Header2', ...], ['Row1Col1', 'Row1Col2', ...], ...]
  */
 export async function getStagingData() {
+    return await loadStagingFromCacheOrFetch(getStagingDataDirect);
+}
+
+/**
+ * Get staging sheet data directly from Google Sheets API
+ *
+ * Internal function that performs the actual API call to Google Sheets.
+ * Called by getStagingData() when cache is unavailable or stale.
+ *
+ * @returns {Promise<Array<Array<string>>>} 2D array of staging sheet data
+ * @throws {Error} If staging data fetch fails
+ * @private
+ */
+async function getStagingDataDirect() {
     const startTime = performance.now();
     const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(STAGING_SHEET_NAME)}!A1:ZZ?key=${API_KEY}`;
 
-    logger.info('[Startup] 📊 getStagingData() called');
+    logger.info('[Startup] 📊 getStagingDataDirect() called');
     logger.info(`[Startup]   → URL: ${url.replace(/key=[^&]+/, 'key=***REDACTED***')}`);
 
     const response = await fetch(url);
@@ -296,7 +327,7 @@ export async function getStagingData() {
     const values = data.values || [];
 
     const totalTime = (performance.now() - startTime).toFixed(0);
-    logger.info(`[Startup] ✅ getStagingData() complete in ${totalTime}ms - Rows: ${values.length}`);
+    logger.info(`[Startup] ✅ getStagingDataDirect() complete in ${totalTime}ms - Rows: ${values.length}`);
 
     return values;
 }

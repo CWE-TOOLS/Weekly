@@ -340,6 +340,11 @@ async function saveChanges() {
         if (changedTasks.length > 0) {
             try {
                 await saveToStaging(currentProjectName, changedTasks);
+
+                // Invalidate cache so next load fetches fresh data
+                const { clearCache } = await import('../../services/sheets-cache-service.js');
+                await clearCache('primary');
+                logger.info('[Cache] Cache invalidated after project modal save');
             } catch (error) {
                 syncSuccess = false;
                 logger.error('Staging sync failed:', error);
