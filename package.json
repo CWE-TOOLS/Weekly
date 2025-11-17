@@ -6,7 +6,7 @@
   },
   "dependencies": {
     "madge": "^8.0.0",
-    "puppeteer": "^24.29.1"
+    "puppeteer": "^24.30.0"
   },
   "devDependencies": {
     "live-server": "^1.2.2"

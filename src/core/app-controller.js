@@ -39,6 +39,7 @@ import * as authService from '../services/auth-service.js';
 import * as sheetsService from '../services/sheets-service.js';
 import * as supabaseService from '../services/supabase-service.js';
 import * as dataService from '../services/data-service.js';
+import { initializeSupabase } from '../services/supabase-service.js';
 
 // Import UI components
 import { filterTasks } from '../components/department-filter.js';
@@ -89,7 +90,7 @@ import {
 import { enableAddCardIndicators } from '../features/editing/add-card-indicators.js';
 
 import { logger } from '../utils/logger.js';
-import { checkVersion } from '../features/versioning/version-checker.js';
+import { checkVersion, subscribeToVersionChanges } from '../features/versioning/version-checker.js';
 // Application state
 let appState = {
     initialized: false,
@@ -156,9 +157,15 @@ function setupDragDropTrigger() {
  * @returns {Promise<void>}
  */
 export async function initializeApp() {
+    // Initialize Supabase first so version check can access it
+    await initializeSupabase();
+
     // First, check for application updates
     await checkVersion();
-    
+
+    // Subscribe to real-time version changes
+    subscribeToVersionChanges();
+
     console.log('[Startup] Starting initializeApp');
     console.time('[Startup] initializeApp');
     const startTime = performance.now();

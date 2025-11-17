@@ -54,3 +54,36 @@ export async function checkVersion() {
     logger.log('Application is up to date.');
   }
 }
+
+/**
+ * Subscribe to real-time version changes from Supabase.
+ * When the version in the database changes, automatically trigger the version check.
+ */
+export function subscribeToVersionChanges() {
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    logger.warn('Supabase client not available for version subscription.');
+    return null;
+  }
+
+  logger.info('📡 Subscribing to version changes...');
+
+  const subscription = supabase
+    .channel('version-updates')
+    .on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'app_config',
+        filter: 'key=eq.version'
+      },
+      (payload) => {
+        logger.info('🔔 Version update detected:', payload.new.value);
+        checkVersion();
+      }
+    )
+    .subscribe();
+
+  return subscription;
+}

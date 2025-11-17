@@ -1275,7 +1275,7 @@
   padding: 0.875rem 1.5rem;
   font-size: 1rem;
   font-weight: 600;
-  background: linear-gradient(135deg, var(--accent-secondary), var(--accent-secondary-dark));
+  background: linear-gradient(135deg, #10b981, #059669);
   color: white;
   border: none;
   border-radius: var(--border-radius-lg);
@@ -1295,8 +1295,10 @@
 }
 
 .reload-modal #reload-confirm-btn:disabled {
-  background: var(--background-tertiary);
+  background: #6b7280;
+  color: #d1d5db;
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
+  opacity: 0.6;
 }

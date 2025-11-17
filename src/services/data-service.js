@@ -102,7 +102,7 @@ export async function fetchAllTasks(silent = false, suppressEvents = null) {
 
     try {
         // Fetch Google Sheets data and Supabase tasks in parallel for faster loading
-        // Each source has a 15s timeout to prevent infinite hanging
+        // Google Sheets has a 45s timeout, Supabase has 15s timeout to prevent infinite hanging
         logger.info('🚀 Starting parallel data fetch...');
         console.log('[Startup] Starting parallel data fetch (Google Sheets + Supabase)');
         console.time('[Startup] Parallel data fetch');
@@ -114,7 +114,7 @@ export async function fetchAllTasks(silent = false, suppressEvents = null) {
         console.time('[Startup] Supabase manual tasks fetch');
 
         const [sheetsTasks, manualTasks] = await Promise.all([
-            fetchWithTimeout(fetchSheetsTasks(), 15000, 'Google Sheets'),
+            fetchWithTimeout(fetchSheetsTasks(), 45000, 'Google Sheets'),
             fetchWithTimeout(loadManualTasks(), 15000, 'Supabase')
         ]);
 
