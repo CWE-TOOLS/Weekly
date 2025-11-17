@@ -7,7 +7,7 @@
 import { getAccessToken } from './auth-service.js';
 import { GOOGLE_SHEETS } from '../config/api-config.js';
 import { normalizeDepartment } from '../utils/ui-utils.js';
-import { loadTasksFromCacheOrFetch, loadStagingFromCacheOrFetch } from './sheets-cache-service.js';
+import { loadTasksFromCacheOrFetch, loadStagingFromCacheOrFetch, clearCache } from './sheets-cache-service.js';
 
 import { logger } from '../utils/logger.js';
 const { API_KEY, SPREADSHEET_ID, SHEET_NAME, STAGING_SHEET_NAME } = GOOGLE_SHEETS;
@@ -476,6 +476,23 @@ export async function saveToStaging(projectName, changedTasks) {
             const totalTime = (performance.now() - startTime).toFixed(0);
             logger.info(`[Startup] ✅ saveToStaging() complete in ${totalTime}ms`);
             logger.info('Successfully saved to staging sheet');
+
+            // Invalidate cache after successful write
+            try {
+                logger.info('[Startup] 🗑️ Invalidating caches after successful write...');
+                const cacheInvalidateStartTime = performance.now();
+                // Clear both 'tasks' and 'staging' caches since staging sheet was modified
+                await Promise.all([
+                    clearCache('tasks'),
+                    clearCache('staging')
+                ]);
+                const cacheInvalidateTime = (performance.now() - cacheInvalidateStartTime).toFixed(0);
+                logger.info(`[Startup] ✅ Both caches ('tasks' and 'staging') invalidated in ${cacheInvalidateTime}ms`);
+            } catch (cacheError) {
+                // Don't fail the operation if cache clear fails
+                logger.error('[Startup] ⚠️ Cache invalidation failed (non-critical):', cacheError);
+            }
+
             return true;
         }
 

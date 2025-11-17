@@ -119,16 +119,12 @@ export async function saveTaskCardEdit(taskCard) {
             if (task.isManual) {
                 await supabaseService.updateManualTask(task);
             } else {
+                // Save to staging sheet (cache invalidation happens automatically in saveToStaging)
                 const { saveToStaging } = await import('../services/sheets-service.js');
                 await saveToStaging(task.project, [{
                     task: task,
                     newText: newDescription
                 }]);
-
-                // Invalidate cache so next load fetches fresh data
-                const { clearCache } = await import('../services/sheets-cache-service.js');
-                await clearCache('primary');
-                logger.info('[Cache] Cache invalidated after staging update');
             }
 
             // Send refresh signal to other clients
