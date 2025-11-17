@@ -37,7 +37,7 @@ export async function loadProjectsFromSheets() {
 
   try {
     // Fetch all tasks from Google Sheets (via cache when possible)
-    const tasks = await loadFromCacheOrFetch();
+    const tasks = await loadFromCacheOrFetch(false, 'primary', fetchTasks);
     logger.info(`  → Loaded ${tasks.length} tasks`);
 
     // Group tasks by project name
