@@ -641,6 +641,58 @@ export async function deleteManualWeek(weekId) {
 }
 
 /**
+ * Update manual week name in Supabase
+ *
+ * @param {string} weekId - ID of the manual week to update
+ * @param {string} newName - New custom name for the week
+ * @returns {Promise<Object>} The updated manual week object
+ */
+export async function updateManualWeekName(weekId, newName) {
+  logger.debug(`📅 Updating manual week name: ${weekId} to "${newName}"`);
+
+  try {
+    // Ensure Supabase is initialized
+    if (!getSupabaseClient()) {
+      await initializeSupabase();
+    }
+
+    const client = getSupabaseClient();
+
+    // Update the custom_name field
+    const { data, error } = await client
+      .from(MANUAL_WEEKS_TABLE)
+      .update({ custom_name: newName })
+      .eq('id', weekId)
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    logger.debug(`  → Manual week name updated successfully`);
+
+    // Send refresh signal to all other clients for silent sync
+    await sendRefreshSignal({
+      action: 'manual_week_name_updated',
+      weekId: weekId,
+      newName: newName
+    });
+
+    return {
+      id: data.id,
+      name: data.custom_name,
+      position: data.position,
+      createdAt: data.created_at
+    };
+
+  } catch (error) {
+    logger.error(`❌ Failed to update manual week name:`, error);
+    throw error;
+  }
+}
+
+/**
  * Update manual week positions in Supabase
  *
  * @param {Array<{id: string, position: number}>} updates - Array of week IDs with new positions

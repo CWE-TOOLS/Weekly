@@ -256,6 +256,15 @@ function createWeekHeader(week) {
     moveDownBtn.dataset.weekId = week.id;
     controls.appendChild(moveDownBtn);
 
+    // Edit button
+    const editBtn = document.createElement('button');
+    editBtn.className = 'week-control-btn week-edit-btn';
+    editBtn.innerHTML = '&#9998;'; // ✎
+    editBtn.title = 'Edit week name';
+    editBtn.dataset.action = 'edit-week';
+    editBtn.dataset.weekId = week.id;
+    controls.appendChild(editBtn);
+
     // Delete button
     const deleteBtn = document.createElement('button');
     deleteBtn.className = 'week-control-btn week-delete-btn';
