@@ -43,7 +43,8 @@ import {
   loadManualWeeks,
   saveManualWeek,
   deleteManualWeek,
-  updateManualWeekPositions
+  updateManualWeekPositions,
+  updateManualWeekName
 } from '../../services/releasability-data-service.js';
 import {
   setupCacheSubscription,
@@ -74,6 +75,8 @@ export function hasCopiedStatus() {
  * Initialize the releasability board page
  */
 async function init() {
+  console.log('🔍 init() called');
+  console.trace('Init call stack:');
   // Set up event listeners
   setupEventListeners();
 
@@ -184,7 +187,16 @@ async function handleSilentRefresh(payload) {
 /**
  * Set up all DOM event listeners
  */
+let eventListenersInitialized = false;
 function setupEventListeners() {
+  console.log('🔍 setupEventListeners called, initialized:', eventListenersInitialized);
+  // Prevent multiple registrations
+  if (eventListenersInitialized) {
+    console.log('⚠️ setupEventListeners already initialized, returning');
+    return;
+  }
+  eventListenersInitialized = true;
+  console.log('✅ Setting up event listeners');
   // Navigation buttons - REMOVED (UI elements deleted)
   // document.getElementById('prev-week-btn')?.addEventListener('click', handlePrevWeek);
   // document.getElementById('next-week-btn')?.addEventListener('click', handleNextWeek);
@@ -198,8 +210,12 @@ function setupEventListeners() {
 
   // Add week button
   const addWeekBtn = document.getElementById('add-week-btn');
-  if (addWeekBtn) {
+  if (addWeekBtn && !window.__addWeekListenerAdded) {
+    window.__addWeekListenerAdded = true;
     addWeekBtn.addEventListener('click', handleAddWeekClick);
+    console.log('✅ Add Week listener attached');
+  } else if (addWeekBtn) {
+    console.log('⚠️ Add Week listener already attached, skipping');
   }
 
   // Fullscreen button
@@ -1124,6 +1140,8 @@ function saveHideCompletedPreference(value) {
  * Handle add week button click
  */
 async function handleAddWeekClick() {
+  console.log('🔍 handleAddWeekClick called');
+  console.trace('Call stack:');
   // Prompt for custom week name
   const weekName = prompt('Enter a custom name for the new week:');
   if (!weekName || !weekName.trim()) {
@@ -1137,9 +1155,12 @@ async function handleAddWeekClick() {
   }
 
   // Calculate new position (append to end of entire grid)
-  // Get the full merged list of all weeks (date-based + manual) in display order
-  const fullWeekList = getFullWeekList();
-  const newPosition = fullWeekList.length; // Position after all existing weeks
+  // Find the maximum position among existing manual weeks and add 1
+  // This ensures the new week has a unique position at the very end
+  const maxPosition = manualWeeks.length > 0
+    ? Math.max(...manualWeeks.map(w => w.position))
+    : -1;
+  const newPosition = maxPosition + 1;
 
   // Save to Supabase
   try {
@@ -1170,6 +1191,9 @@ function handleWeekControlClick(button) {
       break;
     case 'move-week-down':
       handleMoveWeekDown(weekId);
+      break;
+    case 'edit-week':
+      handleEditWeekName(weekId);
       break;
     case 'delete-week':
       handleDeleteManualWeek(weekId);
@@ -1433,6 +1457,52 @@ async function handleDeleteManualWeek(weekId) {
 }
 
 /**
+ * Edit a manual week name
+ * @param {string} weekId - The manual week ID
+ */
+async function handleEditWeekName(weekId) {
+  // Find the week to get its current name
+  const week = manualWeeks.find(w => w.id === weekId);
+  if (!week) {
+    showError('Week not found');
+    return;
+  }
+
+  // Prompt for new name with current name as default
+  const newName = prompt('Enter new name for this week:', week.name);
+  if (!newName || !newName.trim()) {
+    return; // User cancelled or entered empty name
+  }
+
+  // Validate: check if name already exists (excluding current week)
+  if (manualWeeks.some(w => w.id !== weekId && w.name === newName.trim())) {
+    showNotification(`Week named "${newName.trim()}" already exists`);
+    return;
+  }
+
+  try {
+    // Update in Supabase
+    const updatedWeek = await updateManualWeekName(weekId, newName.trim());
+
+    // Update local array
+    const index = manualWeeks.findIndex(w => w.id === weekId);
+    if (index !== -1) {
+      manualWeeks[index] = updatedWeek;
+    }
+
+    // Re-render grid
+    renderGrid();
+
+    // Show success notification
+    showNotification(`Updated week name to "${newName.trim()}"`);
+
+  } catch (error) {
+    console.error('❌ Failed to update manual week name:', error);
+    showError('Failed to update week name. Please try again.');
+  }
+}
+
+/**
  * Handle toggle week collapse/expand
  * @param {string} weekIdentifier - Week Monday date or manual week ID
  */
@@ -1551,10 +1621,19 @@ function showError(message) {
 // ============================================================================
 
 // Initialize when DOM is ready
+let appInitialized = false;
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', init);
+  document.addEventListener('DOMContentLoaded', () => {
+    if (!appInitialized) {
+      appInitialized = true;
+      init();
+    }
+  });
 } else {
-  init();
+  if (!appInitialized) {
+    appInitialized = true;
+    init();
+  }
 }
 
 // Make some functions available globally for debugging
