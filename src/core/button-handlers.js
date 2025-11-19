@@ -15,6 +15,7 @@ import * as state from './state.js';
 import * as errorHandler from './error-handler.js';
 import * as supabaseService from '../services/supabase-service.js';
 import * as dataService from '../services/data-service.js';
+import { clearCache } from '../services/sheets-cache-service.js';
 import { showLoading, hideError, showSuccessNotification } from '../utils/ui-utils.js';
 import { loadPasswordModal, loadAddTaskModal, loadProjectModal, loadPrintModal } from './modal-loader.js';
 import { makeTaskCardEditable } from './task-card-editor.js';
@@ -33,6 +34,15 @@ export function initializeButtonHandlers() {
         refreshBtn.addEventListener('click', async () => {
             try {
                 showLoading();
+
+                // Invalidate cache to force fresh data fetch
+                logger.info('🗑️ Invalidating caches for manual refresh...');
+                await Promise.all([
+                    clearCache('tasks'),
+                    clearCache('staging')
+                ]);
+                logger.info('✅ Caches invalidated, fetching fresh data...');
+
                 await dataService.fetchAllTasks();
                 hideError();
                 showSuccessNotification('Data refreshed successfully!');
