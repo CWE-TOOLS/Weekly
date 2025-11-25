@@ -665,7 +665,7 @@ export async function saveTaskDescriptions(descriptions) {
         await sendRefreshSignal({
             action: 'task_descriptions_updated',
             count: descriptions.length,
-            project: descriptions[0]?.project
+            project: (descriptions[0] && descriptions[0].project) || undefined
         });
 
         return true;
