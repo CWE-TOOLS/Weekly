@@ -277,6 +277,57 @@ export async function sendRefreshSignal(updateInfo = {}) {
 }
 
 /**
+ * Fetch task descriptions from Supabase
+ *
+ * Fetches all task descriptions from the task_descriptions table and returns them
+ * as a Map keyed by "project|department|day_number" for fast lookup.
+ *
+ * @returns {Promise<Map<string, string>>} Map of task descriptions keyed by composite key
+ *
+ * @example
+ * const descriptions = await fetchTaskDescriptions();
+ * const key = 'Project A|Mill 1|1';
+ * const description = descriptions.get(key);
+ */
+export async function fetchTaskDescriptions() {
+    if (!supabaseClient) {
+        await initializeSupabase();
+    }
+
+    try {
+        logger.debug('📥 Fetching task descriptions from Supabase...');
+
+        const { data, error } = await supabaseClient
+            .from('task_descriptions')
+            .select('project, department, day_number, description');
+
+        if (error) {
+            throw error;
+        }
+
+        // Convert array to Map for fast lookup
+        // Key format: "project|department|day_number"
+        // IMPORTANT: Do NOT trim project names - preserve exact match
+        const descriptionsMap = new Map();
+
+        if (data) {
+            data.forEach(row => {
+                const key = `${row.project}|${row.department}|${row.day_number}`;
+                descriptionsMap.set(key, row.description || '');
+            });
+
+            logger.info(`✅ Loaded ${descriptionsMap.size} task descriptions from Supabase`);
+        }
+
+        return descriptionsMap;
+    } catch (error) {
+        logger.error('❌ Failed to fetch task descriptions from Supabase:', error);
+        // Return empty Map on error - graceful fallback
+        return new Map();
+    }
+}
+
+/**
  * Load manual tasks from Supabase
  *
  * Fetches all manually-created tasks from Supabase, converts them to match
@@ -535,6 +586,92 @@ export async function deleteTaskFromSupabase(taskId) {
         return true;
     } catch (error) {
         logger.error('❌ Failed to delete task from Supabase:', error);
+        throw error;
+    }
+}
+
+/**
+ * Save task descriptions to Supabase
+ *
+ * Upserts task descriptions to the task_descriptions table using batch operations.
+ * Automatically sends refresh signal to other clients after successful save.
+ *
+ * @param {Array<{project: string, department: string, day_number: string, description: string}>} descriptions - Array of task descriptions to save
+ * @returns {Promise<boolean>} True if save successful
+ * @throws {Error} If save fails
+ *
+ * @example
+ * await saveTaskDescriptions([
+ *   {project: 'Project A', department: 'Mill 1', day_number: '1', description: 'Task desc'},
+ *   {project: 'Project A', department: 'Mill 1', day_number: '2', description: 'Another desc'}
+ * ]);
+ */
+export async function saveTaskDescriptions(descriptions) {
+    if (!supabaseClient) {
+        await initializeSupabase();
+    }
+
+    const startTime = performance.now();
+
+    try {
+        logger.info(`📝 Saving ${descriptions.length} task descriptions to Supabase...`);
+
+        // Validate input
+        if (!Array.isArray(descriptions) || descriptions.length === 0) {
+            logger.warn('⚠️ No task descriptions to save');
+            return true;
+        }
+
+        // Transform and validate each description
+        const records = descriptions.map((desc, index) => {
+            // Validate required fields
+            if (!desc.project || !desc.department || !desc.day_number) {
+                logger.error(`❌ Invalid description at index ${index}:`, desc);
+                throw new Error(`Missing required fields in description at index ${index}`);
+            }
+
+            // Handle empty/null descriptions
+            const description = desc.description ?? '';
+
+            logger.debug(`  → [${index}] Project: "${desc.project}", Dept: "${desc.department}", Day: "${desc.day_number}", Desc length: ${description.length}`);
+
+            return {
+                project: desc.project, // IMPORTANT: Do NOT trim - preserve exact project name
+                department: desc.department,
+                day_number: desc.day_number,
+                description: description,
+                updated_at: new Date().toISOString()
+            };
+        });
+
+        // Use upsert to insert/update records
+        // The composite primary key (project, department, day_number) handles deduplication
+        const { data, error } = await supabaseClient
+            .from('task_descriptions')
+            .upsert(records, {
+                onConflict: 'project,department,day_number',
+                returning: 'minimal' // Don't return data to reduce payload size
+            });
+
+        if (error) {
+            logger.error('❌ Supabase upsert error:', error);
+            throw error;
+        }
+
+        const saveTime = (performance.now() - startTime).toFixed(0);
+        logger.info(`✅ Successfully saved ${descriptions.length} task descriptions in ${saveTime}ms`);
+
+        // Send refresh signal to other clients
+        await sendRefreshSignal({
+            action: 'task_descriptions_updated',
+            count: descriptions.length,
+            project: descriptions[0]?.project
+        });
+
+        return true;
+    } catch (error) {
+        const errorTime = (performance.now() - startTime).toFixed(0);
+        logger.error(`❌ Failed to save task descriptions after ${errorTime}ms:`, error);
         throw error;
     }
 }

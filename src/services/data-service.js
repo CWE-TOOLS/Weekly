@@ -27,7 +27,7 @@
  */
 
 import { fetchTasks as fetchSheetsTasks } from './sheets-service.js';
-import { loadManualTasks } from './supabase-service.js';
+import { loadManualTasks, fetchTaskDescriptions } from './supabase-service.js';
 import { parseDate } from '../utils/date-utils.js';
 import { showLoading, hideError, showError } from '../utils/ui-utils.js';
 import { setAllTasks, getAllTasks } from '../core/state.js';
@@ -101,10 +101,10 @@ export async function fetchAllTasks(silent = false, suppressEvents = null) {
     }
 
     try {
-        // Fetch Google Sheets data and Supabase tasks in parallel for faster loading
+        // Fetch Google Sheets data, Supabase manual tasks, and task descriptions in parallel for faster loading
         // Google Sheets has a 45s timeout, Supabase has 15s timeout to prevent infinite hanging
         logger.info('🚀 Starting parallel data fetch...');
-        console.log('[Startup] Starting parallel data fetch (Google Sheets + Supabase)');
+        console.log('[Startup] Starting parallel data fetch (Google Sheets + Supabase manual tasks + Task descriptions)');
         console.time('[Startup] Parallel data fetch');
         const startTime = performance.now();
 
@@ -112,25 +112,35 @@ export async function fetchAllTasks(silent = false, suppressEvents = null) {
         console.time('[Startup] Google Sheets fetch');
         console.log('[Startup] Starting Supabase manual tasks fetch');
         console.time('[Startup] Supabase manual tasks fetch');
+        console.log('[Startup] Starting Supabase task descriptions fetch');
+        console.time('[Startup] Supabase task descriptions fetch');
 
-        const [sheetsTasks, manualTasks] = await Promise.all([
+        const [sheetsTasks, manualTasks, taskDescriptions] = await Promise.all([
             fetchWithTimeout(fetchSheetsTasks(), 45000, 'Google Sheets'),
-            fetchWithTimeout(loadManualTasks(), 15000, 'Supabase')
+            fetchWithTimeout(loadManualTasks(), 15000, 'Supabase'),
+            fetchWithTimeout(fetchTaskDescriptions(), 15000, 'Supabase task descriptions')
         ]);
 
         console.timeEnd('[Startup] Google Sheets fetch');
         console.timeEnd('[Startup] Supabase manual tasks fetch');
+        console.timeEnd('[Startup] Supabase task descriptions fetch');
         console.timeEnd('[Startup] Parallel data fetch');
 
         const fetchTime = (performance.now() - startTime).toFixed(0);
         logger.info(`✅ Parallel data fetch complete in ${fetchTime}ms`);
-        logger.info(`   Sheets: ${sheetsTasks.length} tasks, Supabase: ${manualTasks.length} tasks`);
+        logger.info(`   Sheets: ${sheetsTasks.length} tasks, Supabase: ${manualTasks.length} tasks, Descriptions: ${taskDescriptions.size} entries`);
 
         // Merge tasks, with manual tasks taking precedence for same ID
         console.log('[Startup] Starting task merge');
         console.time('[Startup] Task merge');
         const allTasks = mergeTasks(sheetsTasks, manualTasks);
         console.timeEnd('[Startup] Task merge');
+
+        // Merge task descriptions from Supabase into all tasks
+        console.log('[Startup] Starting description merge');
+        console.time('[Startup] Description merge');
+        mergeTaskDescriptions(allTasks, taskDescriptions);
+        console.timeEnd('[Startup] Description merge');
 
         // Calculate day counts
         console.log('[Startup] Starting day count calculation');
@@ -199,6 +209,68 @@ export async function fetchAllTasks(silent = false, suppressEvents = null) {
 export function mergeTasks(sheetsTasks, manualTasks) {
     const manualTaskIds = new Set(manualTasks.map(t => t.id));
     return [...sheetsTasks.filter(t => !manualTaskIds.has(t.id)), ...manualTasks];
+}
+
+/**
+ * Merge task descriptions from Supabase into task objects
+ *
+ * Updates tasks with descriptions from the task_descriptions table by matching
+ * project, department, and day_number. Manual tasks already have descriptions
+ * and are skipped.
+ *
+ * IMPORTANT: Preserves exact project names (no trimming) when matching.
+ *
+ * @param {Array<Object>} tasks - Array of task objects to update (modified in-place)
+ * @param {Map<string, string>} descriptionsMap - Map of descriptions keyed by "project|department|day_number"
+ * @modifies {Array<Object>} tasks - Adds description property to each task
+ *
+ * @example
+ * const tasks = [{project: 'Project A', department: 'Mill 1', dayNumber: '1'}];
+ * const descriptions = new Map([['Project A|Mill 1|1', 'Task description']]);
+ * mergeTaskDescriptions(tasks, descriptions);
+ * // tasks[0].description === 'Task description'
+ */
+export function mergeTaskDescriptions(tasks, descriptionsMap) {
+    let matchedCount = 0;
+    let skippedManualCount = 0;
+    let missingCount = 0;
+
+    tasks.forEach(task => {
+        // Skip manual tasks - they already have descriptions from weekly_tasks table
+        if (task.isManual) {
+            skippedManualCount++;
+            return;
+        }
+
+        // Build lookup key: "project|department|day_number"
+        // IMPORTANT: Do NOT trim project name - use exact match
+        const key = `${task.project}|${task.department}|${task.dayNumber}`;
+
+        // Look up description in the Map
+        if (descriptionsMap.has(key)) {
+            task.description = descriptionsMap.get(key);
+            matchedCount++;
+        } else {
+            // No description found - set to empty string (graceful fallback)
+            task.description = task.description || '';
+            missingCount++;
+        }
+    });
+
+    logger.info(`📝 Description merge complete: ${matchedCount} matched, ${skippedManualCount} manual tasks skipped, ${missingCount} not found`);
+
+    // Log sample of missing descriptions for debugging (limit to 5)
+    if (missingCount > 0) {
+        const missingTasks = tasks.filter(t => !t.isManual && !t.description).slice(0, 5);
+        if (missingTasks.length > 0) {
+            logger.debug('Sample tasks with missing descriptions:', missingTasks.map(t => ({
+                project: t.project,
+                department: t.department,
+                dayNumber: t.dayNumber,
+                key: `${t.project}|${t.department}|${t.dayNumber}`
+            })));
+        }
+    }
 }
 
 /**

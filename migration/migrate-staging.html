@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Descriptions Migration - Google Sheets to Supabase</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            max-width: 800px;
+            width: 100%;
+            padding: 40px;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .info-box {
+            background: #f0f4ff;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+
+        .info-box h3 {
+            color: #667eea;
+            margin-bottom: 8px;
+            font-size: 16px;
+        }
+
+        .info-box p {
+            color: #555;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            width: 100%;
+            margin-bottom: 20px;
+        }
+
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        #output {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            max-height: 400px;
+            overflow-y: auto;
+            display: none;
+        }
+
+        #output.visible {
+            display: block;
+        }
+
+        .log-line {
+            margin-bottom: 4px;
+        }
+
+        .log-success {
+            color: #4ec9b0;
+        }
+
+        .log-error {
+            color: #f48771;
+        }
+
+        .log-info {
+            color: #569cd6;
+        }
+
+        .log-warning {
+            color: #dcdcaa;
+        }
+
+        .progress {
+            margin-top: 20px;
+            display: none;
+        }
+
+        .progress.visible {
+            display: block;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .progress-text {
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .stats.visible {
+            display: grid;
+        }
+
+        .stat-box {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 32px;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Task Descriptions Migration</h1>
+        <p class="subtitle">Migrate from Google Sheets "Staging - Project Details" to Supabase</p>
+
+        <div class="info-box">
+            <h3>📋 What This Does</h3>
+            <p>
+                This tool reads all task descriptions from the "Staging - Project Details" Google Sheet
+                and imports them into the Supabase <strong>task_descriptions</strong> table.
+                Project names will be preserved exactly (no trimming).
+            </p>
+        </div>
+
+        <button id="migrateBtn" onclick="runMigration()">
+            Start Migration
+        </button>
+
+        <div id="progress" class="progress">
+            <div class="progress-bar">
+                <div id="progressFill" class="progress-fill"></div>
+            </div>
+            <div id="progressText" class="progress-text">Initializing...</div>
+        </div>
+
+        <div id="stats" class="stats">
+            <div class="stat-box">
+                <div id="statTotal" class="stat-number">0</div>
+                <div class="stat-label">Total Descriptions</div>
+            </div>
+            <div class="stat-box">
+                <div id="statSuccess" class="stat-number">0</div>
+                <div class="stat-label">Successfully Inserted</div>
+            </div>
+            <div class="stat-box">
+                <div id="statErrors" class="stat-number">0</div>
+                <div class="stat-label">Errors</div>
+            </div>
+        </div>
+
+        <div id="output"></div>
+    </div>
+
+    <!-- Load Supabase from CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <script type="module">
+        // Import config from parent directory
+        import { GOOGLE_SHEETS, SUPABASE } from '../src/config/api-config.js';
+        import { departmentDayMapping } from '../src/services/sheets-service.js';
+
+        // Make available globally
+        window.CONFIG = { GOOGLE_SHEETS, SUPABASE, departmentDayMapping };
+    </script>
+
+    <script>
+        // Wait for config to load
+        let configCheckInterval = setInterval(() => {
+            if (window.CONFIG) {
+                clearInterval(configCheckInterval);
+                log('✅ Configuration loaded', 'success');
+            }
+        }, 100);
+
+        // Reverse mapping: row number -> department + day
+        let rowToDepartmentDay = {};
+
+        // Supabase client
+        let supabase = null;
+
+        function log(message, type = 'info') {
+            const output = document.getElementById('output');
+            output.classList.add('visible');
+
+            const line = document.createElement('div');
+            line.className = `log-line log-${type}`;
+            line.textContent = message;
+            output.appendChild(line);
+            output.scrollTop = output.scrollHeight;
+
+            console.log(message);
+        }
+
+        function setProgress(percent, text) {
+            const progressDiv = document.getElementById('progress');
+            const progressFill = document.getElementById('progressFill');
+            const progressText = document.getElementById('progressText');
+
+            progressDiv.classList.add('visible');
+            progressFill.style.width = percent + '%';
+            progressText.textContent = text;
+        }
+
+        function updateStats(total, success, errors) {
+            const statsDiv = document.getElementById('stats');
+            statsDiv.classList.add('visible');
+
+            document.getElementById('statTotal').textContent = total;
+            document.getElementById('statSuccess').textContent = success;
+            document.getElementById('statErrors').textContent = errors;
+        }
+
+        async function fetchStagingData() {
+            const { GOOGLE_SHEETS } = window.CONFIG;
+            const range = `${GOOGLE_SHEETS.STAGING_SHEET_NAME}!A1:ZZ`;
+            const url = `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEETS.SPREADSHEET_ID}/values/${range}?key=${GOOGLE_SHEETS.API_KEY}`;
+
+            log('📥 Fetching staging data from Google Sheets...', 'info');
+            setProgress(10, 'Fetching data from Google Sheets...');
+
+            const response = await fetch(url);
+
+            if (!response.ok) {
+                throw new Error(`Failed to fetch staging data: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            return data.values || [];
+        }
+
+        function parseStagingData(rows) {
+            if (!rows || rows.length === 0) {
+                log('⚠️  No data found in staging sheet', 'warning');
+                return [];
+            }
+
+            setProgress(30, 'Parsing staging data...');
+
+            const descriptions = [];
+            const headerRow = rows[0];
+
+            // Find project columns (starting from column D, index 3)
+            const projectColumns = [];
+            for (let colIndex = 3; colIndex < headerRow.length; colIndex++) {
+                const projectName = headerRow[colIndex];
+                if (projectName && projectName.trim()) {
+                    projectColumns.push({
+                        index: colIndex,
+                        name: projectName  // DO NOT TRIM - preserve exact name
+                    });
+                }
+            }
+
+            log(`📊 Found ${projectColumns.length} project columns`, 'info');
+
+            // Process each row
+            for (let rowIndex = 1; rowIndex < rows.length; rowIndex++) {
+                const row = rows[rowIndex];
+                const rowNumber = rowIndex + 1; // Excel row numbers start at 1
+
+                // Check if this row corresponds to a department/day combination
+                const deptDay = rowToDepartmentDay[rowNumber];
+                if (!deptDay) {
+                    continue; // Skip rows that aren't in the mapping
+                }
+
+                // Parse department and day from "Department DayNumber" format
+                const parts = deptDay.split(' ');
+                const dayNumber = parts[parts.length - 1];
+                const department = parts.slice(0, -1).join(' ');
+
+                // Process each project column
+                for (const project of projectColumns) {
+                    const description = row[project.index];
+
+                    // Only add if description exists and is not empty
+                    if (description && description.trim()) {
+                        descriptions.push({
+                            project: project.name,  // Exact project name, no trimming
+                            department: department,
+                            day_number: dayNumber,
+                            description: description.trim()  // Trim description content only
+                        });
+                    }
+                }
+            }
+
+            log(`✅ Parsed ${descriptions.length} task descriptions`, 'success');
+
+            // Deduplicate: Keep only the last occurrence of each unique (project, department, day_number)
+            const uniqueMap = new Map();
+            for (const desc of descriptions) {
+                const key = `${desc.project}|${desc.department}|${desc.day_number}`;
+                uniqueMap.set(key, desc);
+            }
+
+            const uniqueDescriptions = Array.from(uniqueMap.values());
+            const duplicatesRemoved = descriptions.length - uniqueDescriptions.length;
+
+            if (duplicatesRemoved > 0) {
+                log(`⚠️  Removed ${duplicatesRemoved} duplicate entries`, 'warning');
+            }
+            log(`📊 Final unique descriptions: ${uniqueDescriptions.length}`, 'info');
+
+            return uniqueDescriptions;
+        }
+
+        async function insertDescriptions(descriptions) {
+            if (descriptions.length === 0) {
+                log('⚠️  No descriptions to insert', 'warning');
+                return { success: 0, errors: 0 };
+            }
+
+            log(`📤 Inserting ${descriptions.length} descriptions into Supabase...`, 'info');
+            setProgress(50, 'Inserting descriptions into Supabase...');
+
+            // Batch insert with upsert (in case of duplicates)
+            const BATCH_SIZE = 100;
+            let successCount = 0;
+            let errorCount = 0;
+            const totalBatches = Math.ceil(descriptions.length / BATCH_SIZE);
+
+            for (let i = 0; i < descriptions.length; i += BATCH_SIZE) {
+                const batch = descriptions.slice(i, i + BATCH_SIZE);
+                const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
+
+                const { data, error } = await supabase
+                    .from('task_descriptions')
+                    .upsert(batch, {
+                        onConflict: 'project,department,day_number'
+                    });
+
+                if (error) {
+                    log(`❌ Error inserting batch ${batchNumber}/${totalBatches}: ${error.message}`, 'error');
+                    errorCount += batch.length;
+                } else {
+                    successCount += batch.length;
+                    log(`✅ Inserted batch ${batchNumber}/${totalBatches} (${batch.length} records)`, 'success');
+                }
+
+                // Update progress
+                const progress = 50 + (batchNumber / totalBatches * 40);
+                setProgress(progress, `Inserting batch ${batchNumber}/${totalBatches}...`);
+                updateStats(descriptions.length, successCount, errorCount);
+            }
+
+            return { success: successCount, errors: errorCount };
+        }
+
+        async function runMigration() {
+            const btn = document.getElementById('migrateBtn');
+            btn.disabled = true;
+            btn.textContent = 'Migration in Progress...';
+
+            // Clear previous output
+            document.getElementById('output').innerHTML = '';
+
+            try {
+                // Wait for config
+                if (!window.CONFIG) {
+                    log('⏳ Waiting for configuration...', 'info');
+                    await new Promise(resolve => {
+                        const interval = setInterval(() => {
+                            if (window.CONFIG) {
+                                clearInterval(interval);
+                                resolve();
+                            }
+                        }, 100);
+                    });
+                }
+
+                log('🚀 Starting migration from Google Sheets to Supabase...', 'info');
+                log('', 'info');
+
+                // Initialize Supabase
+                const { SUPABASE, departmentDayMapping } = window.CONFIG;
+                supabase = window.supabase.createClient(SUPABASE.URL, SUPABASE.ANON_KEY);
+                log('✅ Supabase client initialized', 'success');
+
+                // Build reverse mapping
+                Object.entries(departmentDayMapping).forEach(([deptDay, rowNum]) => {
+                    rowToDepartmentDay[rowNum] = deptDay;
+                });
+                log(`✅ Department mapping loaded (${Object.keys(rowToDepartmentDay).length} entries)`, 'success');
+                log('', 'info');
+
+                // Step 1: Fetch data from Google Sheets
+                const rows = await fetchStagingData();
+                log('', 'info');
+
+                // Step 2: Parse into task description records
+                const descriptions = parseStagingData(rows);
+                log('', 'info');
+
+                // Step 3: Insert into Supabase
+                const result = await insertDescriptions(descriptions);
+                log('', 'info');
+
+                // Summary
+                setProgress(100, 'Migration complete!');
+                log('📋 Migration Summary:', 'info');
+                log(`   ✅ Successfully inserted: ${result.success}`, 'success');
+                log(`   ❌ Errors: ${result.errors}`, result.errors > 0 ? 'error' : 'success');
+                log(`   📊 Total processed: ${descriptions.length}`, 'info');
+                log('', 'info');
+
+                if (result.errors > 0) {
+                    log('⚠️  Migration completed with errors. Please review the logs above.', 'warning');
+                    btn.textContent = 'Migration Completed (with errors)';
+                    btn.style.background = '#f48771';
+                } else {
+                    log('🎉 Migration completed successfully!', 'success');
+                    btn.textContent = '✅ Migration Completed Successfully!';
+                    btn.style.background = '#4ec9b0';
+                }
+
+            } catch (error) {
+                log('', 'info');
+                log('❌ Migration failed: ' + error.message, 'error');
+                console.error(error);
+                btn.textContent = '❌ Migration Failed';
+                btn.style.background = '#f48771';
+                btn.disabled = false;
+                setProgress(0, 'Migration failed');
+            }
+        }
+
+        // Make runMigration available globally
+        window.runMigration = runMigration;
+    </script>
+</body>
+</html>

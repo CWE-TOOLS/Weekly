@@ -3,7 +3,7 @@ import { showReloadModal } from '../../components/modals/reload-modal.js';
 import { clearAllData } from '../../core/storage.js';
 import { logger } from '../../utils/logger.js';
 
-const CURRENT_APP_VERSION = '1.0.0'; // This will be compared against the database version
+const CURRENT_APP_VERSION = '1.1.0'; // This will be compared against the database version
 
 /**
  * Fetches the latest version from the Supabase database.

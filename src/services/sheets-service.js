@@ -8,6 +8,7 @@ import { getAccessToken } from './auth-service.js';
 import { GOOGLE_SHEETS } from '../config/api-config.js';
 import { normalizeDepartment } from '../utils/ui-utils.js';
 import { loadTasksFromCacheOrFetch, loadStagingFromCacheOrFetch, clearCache } from './sheets-cache-service.js';
+import { saveTaskDescriptions } from './supabase-service.js';
 
 import { logger } from '../utils/logger.js';
 const { API_KEY, SPREADSHEET_ID, SHEET_NAME, STAGING_SHEET_NAME } = GOOGLE_SHEETS;
@@ -333,176 +334,93 @@ async function getStagingDataDirect() {
 }
 
 /**
- * Save changes to staging sheet
+ * Save changes to staging (now saves to Supabase instead of Google Sheets)
  *
- * Updates or creates a project column in the staging sheet and writes task
- * descriptions to the appropriate department/day rows. Uses authenticated
- * batchUpdate API for atomic operations.
+ * Writes task descriptions to Supabase task_descriptions table. This replaces
+ * the previous Google Sheets staging implementation while maintaining the same
+ * function signature for backward compatibility.
  *
- * @param {string} projectName - Project name (becomes column header)
+ * @param {string} projectName - Project name (IMPORTANT: preserved exactly, no trimming)
  * @param {Array<{task: Object, newText: string}>} changedTasks - Array of task updates
  * @returns {Promise<boolean>} True if save successful
- * @throws {Error} If sheet update fails
+ * @throws {Error} If Supabase update fails
  *
  * @example
  * const changes = [
- *   {task: {department: 'Mill', dayNumber: '1'}, newText: 'Updated description'}
+ *   {task: {department: 'Mill 1', dayNumber: '1'}, newText: 'Updated description'}
  * ];
  * await saveToStaging('Project Alpha', changes);
  */
 export async function saveToStaging(projectName, changedTasks) {
     const startTime = performance.now();
 
-    logger.info(`[Startup] 💾 saveToStaging('${projectName}') called`);
-    logger.info(`[Startup]   → Changed tasks count: ${changedTasks.length}`);
+    logger.info(`💾 saveToStaging('${projectName}') called`);
+    logger.info(`  → Changed tasks count: ${changedTasks.length}`);
 
     try {
-        logger.info('[Startup] 🔍 Getting sheet ID...');
-        const sheetIdStartTime = performance.now();
-        const sheetId = await getSheetId(STAGING_SHEET_NAME);
-        const sheetIdTime = (performance.now() - sheetIdStartTime).toFixed(0);
-        logger.info(`[Startup] ✅ Sheet ID retrieved in ${sheetIdTime}ms: ${sheetId}`);
-
-        if (!sheetId) {
-            logger.error('[Startup] ❌ Staging sheet not found');
-            throw new Error('Staging sheet not found');
-        }
-
-        logger.info('[Startup] 📊 Getting staging data...');
-        const stagingDataStartTime = performance.now();
-        const stagingData = await getStagingData();
-        const stagingDataTime = (performance.now() - stagingDataStartTime).toFixed(0);
-        logger.info(`[Startup] ✅ Staging data retrieved in ${stagingDataTime}ms`);
-
-        const headers = stagingData[0] || [];
-        let projectCol = headers.indexOf(projectName);
-
-        logger.info(`[Startup]   → Project column index: ${projectCol}`);
-
-        const requests = [];
-        if (projectCol === -1) {
-            logger.info('[Startup] ➕ Project column not found, will insert new column');
-
-            // Insert column after D (index 3, so startIndex 4)
-            requests.push({
-                "insertDimension": {
-                    "range": {
-                        "sheetId": sheetId,
-                        "dimension": "COLUMNS",
-                        "startIndex": 4,
-                        "endIndex": 5
-                    },
-                    "inheritFromBefore": false
-                }
-            });
-            // Set header in new column E (index 4)
-            requests.push({
-                "updateCells": {
-                    "range": {
-                        "sheetId": sheetId,
-                        "startRowIndex": 0,
-                        "endRowIndex": 1,
-                        "startColumnIndex": 4,
-                        "endColumnIndex": 5
-                    },
-                    "rows": [{
-                        "values": [{
-                            "userEnteredValue": { "stringValue": projectName }
-                        }]
-                    }],
-                    "fields": "userEnteredValue"
-                }
-            });
-            projectCol = 4;
-        }
-
-        // Now update the changed descriptions
-        logger.info('[Startup] 📝 Building update requests...');
-        changedTasks.forEach(({task, newText}) => {
-            const deptDay = task.department + ' ' + task.dayNumber;
-            const rowIndex = departmentDayMapping[deptDay];
-            if (rowIndex !== undefined) {
-                requests.push({
-                    "updateCells": {
-                        "range": {
-                            "sheetId": sheetId,
-                            "startRowIndex": rowIndex - 1,
-                            "endRowIndex": rowIndex,
-                            "startColumnIndex": projectCol,
-                            "endColumnIndex": projectCol + 1
-                        },
-                        "rows": [{
-                            "values": [{
-                                "userEnteredValue": { "stringValue": newText }
-                            }]
-                        }],
-                        "fields": "userEnteredValue"
-                    }
-                });
-            }
-        });
-
-        logger.info(`[Startup]   → Total requests: ${requests.length}`);
-
-        if (requests.length > 0) {
-            logger.info('[Startup] 🎫 Getting access token...');
-            const tokenStartTime = performance.now();
-            const accessToken = await getAccessToken();
-            const tokenTime = (performance.now() - tokenStartTime).toFixed(0);
-            logger.info(`[Startup] ✅ Access token retrieved in ${tokenTime}ms`);
-
-            logger.info('[Startup] 🌐 Sending batchUpdate request...');
-            const updateStartTime = performance.now();
-
-            const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}:batchUpdate`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${accessToken}`
-                },
-                body: JSON.stringify({ requests })
-            });
-
-            const updateTime = (performance.now() - updateStartTime).toFixed(0);
-            logger.info(`[Startup] ✅ BatchUpdate completed in ${updateTime}ms`);
-            logger.info(`[Startup]   → Response status: ${response.status}`);
-
-            if (!response.ok) {
-                const error = await response.text();
-                logger.error(`[Startup] ❌ Update failed: ${error}`);
-                throw new Error('Failed to update sheet: ' + error);
-            }
-
-            const totalTime = (performance.now() - startTime).toFixed(0);
-            logger.info(`[Startup] ✅ saveToStaging() complete in ${totalTime}ms`);
-            logger.info('Successfully saved to staging sheet');
-
-            // Invalidate cache after successful write
-            try {
-                logger.info('[Startup] 🗑️ Invalidating caches after successful write...');
-                const cacheInvalidateStartTime = performance.now();
-                // Clear both 'tasks' and 'staging' caches since staging sheet was modified
-                await Promise.all([
-                    clearCache('tasks'),
-                    clearCache('staging')
-                ]);
-                const cacheInvalidateTime = (performance.now() - cacheInvalidateStartTime).toFixed(0);
-                logger.info(`[Startup] ✅ Both caches ('tasks' and 'staging') invalidated in ${cacheInvalidateTime}ms`);
-            } catch (cacheError) {
-                // Don't fail the operation if cache clear fails
-                logger.error('[Startup] ⚠️ Cache invalidation failed (non-critical):', cacheError);
-            }
-
+        // Validate input
+        if (!changedTasks || changedTasks.length === 0) {
+            logger.info('⚠️ No changed tasks to save');
             return true;
         }
 
+        // Transform changedTasks format to match saveTaskDescriptions() requirements
+        // Input format: [{task: {department, dayNumber, ...}, newText: 'description'}]
+        // Output format: [{project, department, day_number, description}]
+        const descriptions = changedTasks.map(({task, newText}) => {
+            // Validate task has required fields
+            if (!task.department || !task.dayNumber) {
+                logger.warn('⚠️ Skipping task with missing department or dayNumber:', task);
+                return null;
+            }
+
+            return {
+                project: projectName, // IMPORTANT: Do NOT trim - preserve exact project name
+                department: task.department,
+                day_number: task.dayNumber,
+                description: newText ?? '' // Handle null/undefined descriptions
+            };
+        }).filter(desc => desc !== null); // Remove invalid entries
+
+        logger.info(`  → Valid descriptions to save: ${descriptions.length}`);
+
+        if (descriptions.length === 0) {
+            logger.warn('⚠️ No valid descriptions to save after transformation');
+            return true;
+        }
+
+        // Save to Supabase (this also sends refresh signal)
+        logger.info('📤 Saving task descriptions to Supabase...');
+        const saveStartTime = performance.now();
+        await saveTaskDescriptions(descriptions);
+        const saveTime = (performance.now() - saveStartTime).toFixed(0);
+        logger.info(`✅ Task descriptions saved to Supabase in ${saveTime}ms`);
+
+        // Invalidate cache after successful write (consistent with previous implementation)
+        try {
+            logger.info('🗑️ Invalidating caches after successful write...');
+            const cacheInvalidateStartTime = performance.now();
+            // Clear both 'tasks' and 'staging' caches to maintain consistency
+            await Promise.all([
+                clearCache('tasks'),
+                clearCache('staging')
+            ]);
+            const cacheInvalidateTime = (performance.now() - cacheInvalidateStartTime).toFixed(0);
+            logger.info(`✅ Both caches ('tasks' and 'staging') invalidated in ${cacheInvalidateTime}ms`);
+        } catch (cacheError) {
+            // Don't fail the operation if cache clear fails
+            logger.error('⚠️ Cache invalidation failed (non-critical):', cacheError);
+        }
+
         const totalTime = (performance.now() - startTime).toFixed(0);
-        logger.info(`[Startup] ✅ saveToStaging() complete in ${totalTime}ms (no changes needed)`);
+        logger.info(`✅ saveToStaging() complete in ${totalTime}ms`);
+        logger.info('Successfully saved task descriptions to Supabase');
+
         return true;
     } catch (error) {
         const errorTime = (performance.now() - startTime).toFixed(0);
-        logger.error(`[Startup] ❌ saveToStaging() failed after ${errorTime}ms`);
-        logger.error('[Startup] Error saving to staging:', error);
+        logger.error(`❌ saveToStaging() failed after ${errorTime}ms`);
+        logger.error('Error saving task descriptions:', error);
         throw error; // Re-throw to handle in caller
     }
 }
