@@ -378,7 +378,7 @@ export async function saveToStaging(projectName, changedTasks) {
                 project: projectName, // IMPORTANT: Do NOT trim - preserve exact project name
                 department: task.department,
                 day_number: task.dayNumber,
-                description: newText ?? '' // Handle null/undefined descriptions
+                description: (newText != null ? newText : '') // Handle null/undefined descriptions (Chrome 76 compatible)
             };
         }).filter(desc => desc !== null); // Remove invalid entries
 

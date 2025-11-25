@@ -630,8 +630,8 @@ export async function saveTaskDescriptions(descriptions) {
                 throw new Error(`Missing required fields in description at index ${index}`);
             }
 
-            // Handle empty/null descriptions
-            const description = desc.description ?? '';
+            // Handle empty/null descriptions (Chrome 76 compatible)
+            const description = (desc.description != null ? desc.description : '');
 
             logger.debug(`  → [${index}] Project: "${desc.project}", Dept: "${desc.department}", Day: "${desc.day_number}", Desc length: ${description.length}`);
 
