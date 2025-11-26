@@ -209,7 +209,8 @@ export async function loadTrackingStatuses() {
         department: record.department,
         weekMonday: record.week_monday,
         manualWeekId: record.manual_week_id || null,
-        project: normalizedProject  // Store normalized name in the map
+        project: normalizedProject,  // Normalized name for display/comparison
+        originalProject: record.project  // Keep original DB name for deletion
       });
     });
 
@@ -483,11 +484,14 @@ export async function loadAllReleasabilityData() {
       logger.info(`🗑️ Deleting ${migratedKeys.size} old week records after migration...`);
 
       for (const oldKey of migratedKeys) {
-        const [projectName, weekMonday] = oldKey.split('|');
-        try {
-          await deleteTrackingStatus(projectName, weekMonday);
-        } catch (error) {
-          logger.error(`  ✗ Failed to delete old record: "${projectName}" (${weekMonday})`, error);
+        const record = trackingStatuses.get(oldKey);
+        if (record) {
+          try {
+            // Use the original un-normalized project name from the database for deletion
+            await deleteTrackingStatus(record.originalProject, record.weekMonday);
+          } catch (error) {
+            logger.error(`  ✗ Failed to delete old record: "${record.originalProject}" (${record.weekMonday})`, error);
+          }
         }
       }
     }
