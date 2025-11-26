@@ -27,18 +27,19 @@ const MANUAL_WEEKS_TABLE = 'releasability_manual_weeks';
  * Fetches tasks from Google Sheets, groups them by project, and detects
  * the earliest week (start date) for each project.
  *
+ * @param {boolean} forceRefresh - If true, bypass cache and fetch fresh data from Google Sheets
  * @returns {Promise<Array<Object>>} Array of project objects with weekMonday and department
  *
  * @example
  * const projects = await loadProjectsFromSheets();
  * // Returns: [{project: 'Project A', weekMonday: '2025-01-13', department: 'Mill', ...}]
  */
-export async function loadProjectsFromSheets() {
-  logger.info('📊 Loading projects from Google Sheets...');
+export async function loadProjectsFromSheets(forceRefresh = false) {
+  logger.info(`📊 Loading projects from Google Sheets${forceRefresh ? ' (force refresh)' : ''}...`);
 
   try {
     // Fetch all tasks from Google Sheets (via cache when possible)
-    const tasks = await loadFromCacheOrFetch(false, 'primary', fetchTasks);
+    const tasks = await loadFromCacheOrFetch(forceRefresh, 'primary', fetchTasks);
     logger.info(`  → Loaded ${tasks.length} tasks`);
 
     // Group tasks by project name
@@ -88,32 +89,32 @@ export async function loadProjectsFromSheets() {
         continue;
       }
 
-      // Sort by actual date to find earliest
-      const sortedByActual = dateInfo.sort((a, b) => a.actualDate.localeCompare(b.actualDate));
-      const earliestActualDate = sortedByActual[0].actualDate;
-
-      // Sort by Monday date to find earliest week
-      const sortedByMonday = [...dateInfo].sort((a, b) => a.mondayDate.localeCompare(b.mondayDate));
-      const earliestWeek = sortedByMonday[0].mondayDate;
-
-      // Get department from the earliest "Mill" or "Form Out" task
-      // Filter for only Mill/Form Out tasks, then find the earliest one
-      const relevantDeptTasks = sortedByActual.filter(info => {
+      // IMPORTANT: Filter for ONLY Mill/Form Out tasks FIRST
+      // The releasability board only tracks Mill and Form Out work
+      const relevantDeptTasks = dateInfo.filter(info => {
         const dept = info.task.department;
         return dept === 'Mill' || dept === 'Form Out';
       });
 
-      let department;
-      if (relevantDeptTasks.length > 0) {
-        // Use the earliest Mill or Form Out task
-        department = relevantDeptTasks[0].task.department;
-      } else {
-        // Fallback: use the earliest task's department (even if not Mill/Form Out)
-        department = sortedByActual[0].task.department;
+      // Skip project if it has no Mill or Form Out tasks
+      if (relevantDeptTasks.length === 0) {
+        logger.debug(`  → Skipping project "${projectName}": No Mill or Form Out tasks found`);
+        continue;
       }
 
-      // Only include projects with Mill or Form Out department
-      if (department === 'Mill' || department === 'Form Out') {
+      // Sort by actual date to find earliest MILL/FORM OUT task
+      const sortedByActual = relevantDeptTasks.sort((a, b) => a.actualDate.localeCompare(b.actualDate));
+      const earliestActualDate = sortedByActual[0].actualDate;
+
+      // Sort by Monday date to find earliest week from MILL/FORM OUT tasks only
+      const sortedByMonday = [...relevantDeptTasks].sort((a, b) => a.mondayDate.localeCompare(b.mondayDate));
+      const earliestWeek = sortedByMonday[0].mondayDate;
+
+      // Get department from the earliest Mill or Form Out task
+      const department = sortedByActual[0].task.department;
+
+      // Add project to releasability board
+      if (true) { // Always true now since we already filtered for Mill/Form Out
         projects.push({
           project: projectName,
           weekMonday: earliestWeek,
@@ -251,11 +252,14 @@ export async function saveTrackingStatus(project) {
 
     const client = getSupabaseClient();
 
+    // Normalize project name for consistent database storage
+    const normalizedProjectName = normalizeProjectName(project.project);
+
     // Upsert tracking status
     const { data, error } = await client
       .from(RELEASABILITY_TABLE)
       .upsert({
-        project: project.project,
+        project: normalizedProjectName,
         week_monday: project.weekMonday,
         manual_week_id: project.manualWeekId || null,
         tracking_status: project.trackingStatus,
@@ -275,7 +279,7 @@ export async function saveTrackingStatus(project) {
     // Send refresh signal to all other clients for silent sync
     await sendRefreshSignal({
       action: 'releasability_status_updated',
-      project: project.project,
+      project: normalizedProjectName,
       weekMonday: project.weekMonday
     });
 
@@ -300,7 +304,7 @@ export async function saveTrackingStatus(project) {
  * await deleteTrackingStatus('Project A', '2025-01-13');
  */
 export async function deleteTrackingStatus(projectName, weekMonday) {
-  logger.debug(`🗑️ Deleting tracking status for "${projectName}"...`);
+  logger.debug(`🗑️ Deleting tracking status for "${projectName}" (${weekMonday})...`);
 
   try {
     // Ensure Supabase is initialized
@@ -310,12 +314,27 @@ export async function deleteTrackingStatus(projectName, weekMonday) {
 
     const client = getSupabaseClient();
 
-    // Delete tracking status
-    const { error } = await client
+    // Try deleting with normalized name first (for new records)
+    const normalizedProjectName = normalizeProjectName(projectName);
+    let { error, count } = await client
       .from(RELEASABILITY_TABLE)
-      .delete()
-      .eq('project', projectName)
+      .delete({ count: 'exact' })
+      .eq('project', normalizedProjectName)
       .eq('week_monday', weekMonday);
+
+    // If no rows deleted and the name was different after normalization,
+    // try with the original name (for old non-normalized records)
+    if (count === 0 && normalizedProjectName !== projectName) {
+      const result = await client
+        .from(RELEASABILITY_TABLE)
+        .delete({ count: 'exact' })
+        .eq('project', projectName)
+        .eq('week_monday', weekMonday);
+      error = result.error;
+      if (result.count === 0) {
+        logger.warn(`  ⚠️ No records found to delete for "${projectName}" (${weekMonday})`);
+      }
+    }
 
     if (error) {
       throw error;
@@ -381,19 +400,20 @@ function findProjectByName(projectName, trackingStatuses) {
  * Combines data from Google Sheets and Supabase to create the complete
  * releasability board state.
  *
+ * @param {boolean} forceRefresh - If true, bypass cache and fetch fresh data from Google Sheets
  * @returns {Promise<Array<Object>>} Array of project objects with tracking statuses
  *
  * @example
  * const projects = await loadAllReleasabilityData();
  * // Returns complete projects with tracking statuses merged from Supabase
  */
-export async function loadAllReleasabilityData() {
-  logger.info('🔄 Loading all releasability data...');
+export async function loadAllReleasabilityData(forceRefresh = false) {
+  logger.info(`🔄 Loading all releasability data${forceRefresh ? ' (force refresh)' : ''}...`);
 
   try {
     // Load projects from Google Sheets and tracking statuses from Supabase in parallel
     const [sheetsProjects, trackingStatuses] = await Promise.all([
-      loadProjectsFromSheets(),
+      loadProjectsFromSheets(forceRefresh),
       loadTrackingStatuses()
     ]);
 
@@ -425,10 +445,14 @@ export async function loadAllReleasabilityData() {
           // Log the date change detection
           logger.info(`  🔄 Date change detected for "${project.project}": ${mostRecent.record.weekMonday} → ${project.weekMonday}`);
           logger.info(`     Migrating tracking status: ${JSON.stringify(saved.trackingStatus)}`);
+          logger.info(`     Old record key: ${mostRecent.key}, Will delete: ${mostRecent.record.originalProject} (${mostRecent.record.weekMonday})`);
+        } else {
+          logger.debug(`  ℹ️ No existing tracking status found for "${project.project}" (new project or first time in this week)`);
         }
       } else {
         // Exact match found - mark as used
         usedSupabaseKeys.add(key);
+        logger.debug(`  ✓ Exact match found for "${project.project}" (${project.weekMonday})`);
       }
 
       // Generate unique ID
@@ -489,6 +513,7 @@ export async function loadAllReleasabilityData() {
           try {
             // Use the original un-normalized project name from the database for deletion
             await deleteTrackingStatus(record.originalProject, record.weekMonday);
+            logger.debug(`  ✓ Deleted old record: "${record.originalProject}" (${record.weekMonday})`);
           } catch (error) {
             logger.error(`  ✗ Failed to delete old record: "${record.originalProject}" (${record.weekMonday})`, error);
           }

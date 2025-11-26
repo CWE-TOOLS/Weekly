@@ -115,12 +115,13 @@ async function init() {
 
 /**
  * Load initial data from services
+ * @param {boolean} forceRefresh - If true, bypass cache and fetch fresh data from Google Sheets
  */
-async function loadInitialData() {
+async function loadInitialData(forceRefresh = false) {
   try {
     // Load all data in parallel (projects + manual weeks)
     const [projects, weeks] = await Promise.all([
-      loadAllReleasabilityData(),
+      loadAllReleasabilityData(forceRefresh),
       loadManualWeeks()
     ]);
 
@@ -420,7 +421,8 @@ function handleAddProjectClick() {
 
 function handleRefresh() {
   setLoading(true);
-  loadInitialData()
+  // Force refresh to bypass cache and get fresh data from Google Sheets
+  loadInitialData(true)
     .then(() => {
       renderGrid();
       showNotification('Data refreshed successfully!');
