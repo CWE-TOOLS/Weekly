@@ -10,6 +10,7 @@ import { UI_DELAY, NOTIFICATION_DURATION, NETWORK_TIMING } from '../config/timin
 import { POSITION_OFFSET, Z_INDEX, INDICATOR_STYLE } from '../config/layout-constants.js';
 
 import { logger } from '../utils/logger.js';
+import { normalizeProjectName } from '../utils/ui-utils.js';
 // Supabase client and channel state
 let supabaseClient = null;
 let refreshChannel = null;
@@ -299,11 +300,14 @@ export async function fetchTaskDescriptions() {
 
         const { data, error } = await supabaseClient
             .from('task_descriptions')
-            .select('project, department, day_number, description');
+            .select('project, department, day_number, description')
+            .limit(10000); // Increase limit to fetch all descriptions (default is 1000)
 
         if (error) {
             throw error;
         }
+
+        logger.info(`📊 Supabase returned ${data ? data.length : 0} rows (limit was set to 10000)`);
 
         // Convert array to Map for fast lookup
         // Key format: "project|department|day_number"
@@ -312,8 +316,12 @@ export async function fetchTaskDescriptions() {
 
         if (data) {
             data.forEach(row => {
-                const key = `${row.project}|${row.department}|${row.day_number}`;
+                const normalizedProject = normalizeProjectName(row.project);
+                const key = `${normalizedProject}|${row.department}|${row.day_number}`;
                 descriptionsMap.set(key, row.description || '');
+                if (row.project.includes('U of M stair') && row.project.includes('cast #2')) {
+                    logger.info(`📥 Supabase key: "${key}" (normalized from ${row.project.length} to ${normalizedProject.length} chars)`);
+                }
             });
 
             logger.info(`✅ Loaded ${descriptionsMap.size} task descriptions from Supabase`);

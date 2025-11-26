@@ -928,7 +928,7 @@ async function handleWeekAddProjectClick(button) {
 
   // Create new manual project
   const newProject = {
-    project: projectName.trim(),
+    project: projectName,
     weekMonday: effectiveWeekMonday, // Always provide a valid weekMonday for database
     manualWeekId: weekId || null, // Use weekId for manual weeks (for display grouping)
     actualStartDate: effectiveWeekMonday, // Use the effective week Monday as start date

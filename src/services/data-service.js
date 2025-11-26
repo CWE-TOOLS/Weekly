@@ -33,6 +33,7 @@ import { showLoading, hideError, showError } from '../utils/ui-utils.js';
 import { setAllTasks, getAllTasks } from '../core/state.js';
 
 import { logger } from '../utils/logger.js';
+import { normalizeProjectName } from '../utils/ui-utils.js';
 
 /**
  * Race a promise against a timeout
@@ -243,11 +244,16 @@ export function mergeTaskDescriptions(tasks, descriptionsMap) {
         }
 
         // Build lookup key: "project|department|day_number"
-        // IMPORTANT: Do NOT trim project name - use exact match
-        const key = `${task.project}|${task.department}|${task.dayNumber}`;
+        // Normalize project name to match how it's stored and displayed
+        const normalizedProject = normalizeProjectName(task.project);
+        const key = `${normalizedProject}|${task.department}|${task.dayNumber}`;
+        const found = descriptionsMap.has(key);
+        if (task.project.includes('U of M stair') && task.project.includes('cast #2')) {
+            logger.info(`🔍 Task lookup: "${key}" → ${found ? 'FOUND' : 'NOT FOUND'} (normalized from ${task.project.length} to ${normalizedProject.length} chars)`);
+        }
 
         // Look up description in the Map
-        if (descriptionsMap.has(key)) {
+        if (found) {
             task.description = descriptionsMap.get(key);
             matchedCount++;
         } else {

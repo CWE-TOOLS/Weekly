@@ -6,7 +6,7 @@
 
 import { getAccessToken } from './auth-service.js';
 import { GOOGLE_SHEETS } from '../config/api-config.js';
-import { normalizeDepartment } from '../utils/ui-utils.js';
+import { normalizeDepartment, normalizeProjectName } from '../utils/ui-utils.js';
 import { loadTasksFromCacheOrFetch, loadStagingFromCacheOrFetch, clearCache } from './sheets-cache-service.js';
 import { saveTaskDescriptions } from './supabase-service.js';
 
@@ -367,6 +367,9 @@ export async function saveToStaging(projectName, changedTasks) {
         // Transform changedTasks format to match saveTaskDescriptions() requirements
         // Input format: [{task: {department, dayNumber, ...}, newText: 'description'}]
         // Output format: [{project, department, day_number, description}]
+        // Normalize project name for consistent storage
+        const normalizedProjectName = normalizeProjectName(projectName);
+
         const descriptions = changedTasks.map(({task, newText}) => {
             // Validate task has required fields
             if (!task.department || !task.dayNumber) {
@@ -375,7 +378,7 @@ export async function saveToStaging(projectName, changedTasks) {
             }
 
             return {
-                project: projectName, // IMPORTANT: Do NOT trim - preserve exact project name
+                project: normalizedProjectName, // Normalize to match display and lookup behavior
                 department: task.department,
                 day_number: task.dayNumber,
                 description: (newText != null ? newText : '') // Handle null/undefined descriptions (Chrome 76 compatible)

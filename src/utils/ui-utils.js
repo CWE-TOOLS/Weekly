@@ -205,6 +205,26 @@ export function normalizeDepartment(dept) {
 }
 
 /**
+ * Normalize project name for consistent lookup keys
+ *
+ * Collapses multiple consecutive whitespace characters into single spaces and trims.
+ * This matches how browsers display text content (HTML whitespace collapsing).
+ * Essential for matching task descriptions when Google Sheets has inconsistent spacing.
+ *
+ * @param {string} projectName - Project name to normalize
+ * @returns {string} Normalized project name with single spaces
+ *
+ * @example
+ * normalizeProjectName('U of M stair Z               cast #2'); // Returns: 'U of M stair Z cast #2'
+ * normalizeProjectName('Project   Name  ');                     // Returns: 'Project Name'
+ */
+export function normalizeProjectName(projectName) {
+    if (!projectName) return '';
+    // Replace multiple consecutive whitespace with single space, then trim
+    return projectName.replace(/\s+/g, ' ').trim();
+}
+
+/**
  * Normalize department name for CSS class names
  *
  * Converts department names to valid CSS class names by converting to lowercase,

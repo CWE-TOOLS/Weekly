@@ -43,7 +43,7 @@ export async function loadProjectsFromSheets() {
     // Group tasks by project name
     const projectGroups = {};
     tasks.forEach(task => {
-      const projectName = task.project.trim();
+      const projectName = task.project;
       if (!projectName) return; // Skip tasks without project name
 
       if (!projectGroups[projectName]) {
