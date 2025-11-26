@@ -36,6 +36,7 @@ import {
 } from '../../config/releasability-config.js';
 import { renderReleasabilityGrid, getUniqueDepartments } from './releasability-grid.js';
 import { getMonday } from '../../utils/date-utils.js';
+import { normalizeProjectName } from '../../utils/ui-utils.js';
 import {
   loadAllReleasabilityData,
   saveTrackingStatus,
@@ -910,6 +911,9 @@ async function handleWeekAddProjectClick(button) {
     return; // User cancelled or entered empty name
   }
 
+  // Normalize the project name for consistent storage
+  const normalizedProjectName = normalizeProjectName(projectName);
+
   // For manual weeks, we still need a weekMonday for database storage
   // Use current week's Monday as the base date
   let effectiveWeekMonday = weekMonday;
@@ -928,7 +932,7 @@ async function handleWeekAddProjectClick(button) {
 
   // Create new manual project
   const newProject = {
-    project: projectName,
+    project: normalizedProjectName,
     weekMonday: effectiveWeekMonday, // Always provide a valid weekMonday for database
     manualWeekId: weekId || null, // Use weekId for manual weeks (for display grouping)
     actualStartDate: effectiveWeekMonday, // Use the effective week Monday as start date
@@ -943,7 +947,7 @@ async function handleWeekAddProjectClick(button) {
     // Save to Supabase
     try {
       await saveTrackingStatus(addedProject);
-      showNotification(`Added project "${projectName}"`);
+      showNotification(`Added project "${normalizedProjectName}"`);
     } catch (error) {
       console.error('❌ Failed to save manual project to Supabase:', error);
       showError('Failed to save project. Please try again.');

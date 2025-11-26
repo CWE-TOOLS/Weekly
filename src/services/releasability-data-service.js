@@ -15,6 +15,7 @@ import { initializeSupabase, getSupabaseClient, sendRefreshSignal } from './supa
 import { logger } from '../utils/logger.js';
 import { parseDate, getMonday, getLocalDateString } from '../utils/date-utils.js';
 import { DEFAULT_TRACKING_STATUS, PROJECT_SOURCE } from '../config/releasability-config.js';
+import { normalizeProjectName } from '../utils/ui-utils.js';
 
 // Supabase tables for releasability tracking
 const RELEASABILITY_TABLE = 'releasability_tracking';
@@ -43,7 +44,7 @@ export async function loadProjectsFromSheets() {
     // Group tasks by project name
     const projectGroups = {};
     tasks.forEach(task => {
-      const projectName = task.project;
+      const projectName = normalizeProjectName(task.project);
       if (!projectName) return; // Skip tasks without project name
 
       if (!projectGroups[projectName]) {
@@ -198,7 +199,9 @@ export async function loadTrackingStatuses() {
     // Convert to map for easy lookup
     const statusMap = new Map();
     data.forEach(record => {
-      const key = `${record.project}|${record.week_monday}`;
+      // Normalize project name for consistent lookups
+      const normalizedProject = normalizeProjectName(record.project);
+      const key = `${normalizedProject}|${record.week_monday}`;
       statusMap.set(key, {
         trackingStatus: record.tracking_status,
         updatedAt: record.updated_at,
@@ -206,7 +209,7 @@ export async function loadTrackingStatuses() {
         department: record.department,
         weekMonday: record.week_monday,
         manualWeekId: record.manual_week_id || null,
-        project: record.project
+        project: normalizedProject  // Store normalized name in the map
       });
     });
 
@@ -347,10 +350,13 @@ export async function deleteTrackingStatus(projectName, weekMonday) {
  */
 function findProjectByName(projectName, trackingStatuses) {
   const matches = [];
+  // Normalize the search parameter for consistent comparison
+  const normalizedSearchName = normalizeProjectName(projectName);
 
   trackingStatuses.forEach((record, key) => {
     // Only match SHEETS projects (not MANUAL ones)
-    if (record.project === projectName && record.source === PROJECT_SOURCE.SHEETS) {
+    // Note: record.project is already normalized from loadTrackingStatuses
+    if (record.project === normalizedSearchName && record.source === PROJECT_SOURCE.SHEETS) {
       matches.push({
         key,
         record
