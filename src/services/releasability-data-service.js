@@ -22,6 +22,21 @@ const RELEASABILITY_TABLE = 'releasability_tracking';
 const MANUAL_WEEKS_TABLE = 'releasability_manual_weeks';
 
 /**
+ * Generate a consistent project key for lookups and storage
+ *
+ * Creates a normalized key in the format: "normalized-project-name|weekMonday"
+ * This ensures consistent key generation across all operations.
+ *
+ * @param {string} projectName - The project name (will be normalized)
+ * @param {string} weekMonday - The week Monday date string
+ * @returns {string} Normalized key for Map/cache lookups
+ */
+function generateProjectKey(projectName, weekMonday) {
+  const normalized = normalizeProjectName(projectName);
+  return `${normalized}|${weekMonday}`;
+}
+
+/**
  * Load projects from Google Sheets
  *
  * Fetches tasks from Google Sheets, groups them by project, and detects
@@ -35,12 +50,12 @@ const MANUAL_WEEKS_TABLE = 'releasability_manual_weeks';
  * // Returns: [{project: 'Project A', weekMonday: '2025-01-13', department: 'Mill', ...}]
  */
 export async function loadProjectsFromSheets(forceRefresh = false) {
-  logger.info(`📊 Loading projects from Google Sheets${forceRefresh ? ' (force refresh)' : ''}...`);
+  logger.debug(`📊 Loading projects from Google Sheets${forceRefresh ? ' (force refresh)' : ''}...`);
 
   try {
     // Fetch all tasks from Google Sheets (via cache when possible)
     const tasks = await loadFromCacheOrFetch(forceRefresh, 'primary', fetchTasks);
-    logger.info(`  → Loaded ${tasks.length} tasks`);
+    logger.debug(`  → Loaded ${tasks.length} tasks`);
 
     // Group tasks by project name
     const projectGroups = {};
@@ -54,7 +69,7 @@ export async function loadProjectsFromSheets(forceRefresh = false) {
       projectGroups[projectName].push(task);
     });
 
-    logger.info(`  → Found ${Object.keys(projectGroups).length} unique projects`);
+    logger.debug(`  → Found ${Object.keys(projectGroups).length} unique projects`);
 
     // Create project objects with earliest week as start date
     const projects = [];
@@ -126,7 +141,7 @@ export async function loadProjectsFromSheets(forceRefresh = false) {
       // Projects not in Mill/Form Out are silently skipped
     }
 
-    logger.info(`  → Created ${projects.length} releasability board projects (filtered for Mill/Form Out only)`);
+    logger.debug(`  → Created ${projects.length} releasability board projects (filtered for Mill/Form Out only)`);
     return projects;
 
   } catch (error) {
@@ -177,7 +192,7 @@ function getMostCommonDepartment(tasks) {
  * // Returns: Map { 'Project A|2025-01-13' => {trackingStatus: {...}, updatedAt: '...'} }
  */
 export async function loadTrackingStatuses() {
-  logger.info('💾 Loading tracking statuses from Supabase...');
+  logger.debug('💾 Loading tracking statuses from Supabase...');
 
   try {
     // Ensure Supabase is initialized
@@ -202,7 +217,7 @@ export async function loadTrackingStatuses() {
     data.forEach(record => {
       // Normalize project name for consistent lookups
       const normalizedProject = normalizeProjectName(record.project);
-      const key = `${normalizedProject}|${record.week_monday}`;
+      const key = generateProjectKey(record.project, record.week_monday);
       statusMap.set(key, {
         trackingStatus: record.tracking_status,
         updatedAt: record.updated_at,
@@ -215,7 +230,7 @@ export async function loadTrackingStatuses() {
       });
     });
 
-    logger.info(`  → Loaded ${statusMap.size} tracking status records`);
+    logger.debug(`  → Loaded ${statusMap.size} tracking status records`);
     return statusMap;
 
   } catch (error) {
@@ -408,7 +423,7 @@ function findProjectByName(projectName, trackingStatuses) {
  * // Returns complete projects with tracking statuses merged from Supabase
  */
 export async function loadAllReleasabilityData(forceRefresh = false) {
-  logger.info(`🔄 Loading all releasability data${forceRefresh ? ' (force refresh)' : ''}...`);
+  logger.debug(`🔄 Loading all releasability data${forceRefresh ? ' (force refresh)' : ''}...`);
 
   try {
     // Load projects from Google Sheets and tracking statuses from Supabase in parallel
@@ -425,7 +440,7 @@ export async function loadAllReleasabilityData(forceRefresh = false) {
 
     // Merge tracking statuses into Sheets projects
     const projects = sheetsProjects.map(project => {
-      const key = `${project.project}|${project.weekMonday}`;
+      const key = generateProjectKey(project.project, project.weekMonday);
 
       // First, try exact match lookup
       let saved = trackingStatuses.get(key);
@@ -443,16 +458,15 @@ export async function loadAllReleasabilityData(forceRefresh = false) {
           migratedKeys.add(mostRecent.key);
 
           // Log the date change detection
-          logger.info(`  🔄 Date change detected for "${project.project}": ${mostRecent.record.weekMonday} → ${project.weekMonday}`);
-          logger.info(`     Migrating tracking status: ${JSON.stringify(saved.trackingStatus)}`);
-          logger.info(`     Old record key: ${mostRecent.key}, Will delete: ${mostRecent.record.originalProject} (${mostRecent.record.weekMonday})`);
+          logger.debug(`  🔄 Date change detected for "${project.project}": ${mostRecent.record.weekMonday} → ${project.weekMonday}`);
+          logger.debug(`     Migrating tracking status: ${JSON.stringify(saved.trackingStatus)}`);
+          logger.debug(`     Old record key: ${mostRecent.key}, Will delete: ${mostRecent.record.originalProject} (${mostRecent.record.weekMonday})`);
         } else {
           logger.debug(`  ℹ️ No existing tracking status found for "${project.project}" (new project or first time in this week)`);
         }
       } else {
-        // Exact match found - mark as used
+        // Exact match found - mark as used (no logging for each match)
         usedSupabaseKeys.add(key);
-        logger.debug(`  ✓ Exact match found for "${project.project}" (${project.weekMonday})`);
       }
 
       // Generate unique ID
@@ -505,7 +519,7 @@ export async function loadAllReleasabilityData(forceRefresh = false) {
 
     // Delete old week records that were migrated
     if (migratedKeys.size > 0) {
-      logger.info(`🗑️ Deleting ${migratedKeys.size} old week records after migration...`);
+      logger.debug(`🗑️ Deleting ${migratedKeys.size} old week records after migration...`);
 
       for (const oldKey of migratedKeys) {
         const record = trackingStatuses.get(oldKey);
@@ -540,7 +554,7 @@ export async function loadAllReleasabilityData(forceRefresh = false) {
  * // Returns: [{id: '1', name: 'Future Projects', position: 0}, ...]
  */
 export async function loadManualWeeks() {
-  logger.info('📅 Loading manual weeks from Supabase...');
+  logger.debug('📅 Loading manual weeks from Supabase...');
 
   try {
     // Ensure Supabase is initialized
@@ -567,7 +581,7 @@ export async function loadManualWeeks() {
       createdAt: record.created_at
     }));
 
-    logger.info(`  → Loaded ${weeks.length} manual weeks`);
+    logger.debug(`  → Loaded ${weeks.length} manual weeks`);
     return weeks;
 
   } catch (error) {

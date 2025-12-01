@@ -319,9 +319,6 @@ export async function fetchTaskDescriptions() {
                 const normalizedProject = normalizeProjectName(row.project);
                 const key = `${normalizedProject}|${row.department}|${row.day_number}`;
                 descriptionsMap.set(key, row.description || '');
-                if (row.project.includes('U of M stair') && row.project.includes('cast #2')) {
-                    logger.info(`📥 Supabase key: "${key}" (normalized from ${row.project.length} to ${normalizedProject.length} chars)`);
-                }
             });
 
             logger.info(`✅ Loaded ${descriptionsMap.size} task descriptions from Supabase`);

@@ -91,6 +91,7 @@ import { enableAddCardIndicators } from '../features/editing/add-card-indicators
 
 import { logger } from '../utils/logger.js';
 import { checkVersion, subscribeToVersionChanges } from '../features/versioning/version-checker.js';
+import { debug } from '../utils/debug.js';
 // Application state
 let appState = {
     initialized: false,
@@ -166,8 +167,8 @@ export async function initializeApp() {
     // Subscribe to real-time version changes
     subscribeToVersionChanges();
 
-    console.log('[Startup] Starting initializeApp');
-    console.time('[Startup] initializeApp');
+    debug.log('[Startup] Starting initializeApp');
+    debug.time('[Startup] initializeApp');
     const startTime = performance.now();
 
     try {
@@ -175,8 +176,8 @@ export async function initializeApp() {
         logger.info('📦 ES6 Modules: Loaded');
 
         // === Phase 1: Core Systems (Critical) ===
-        console.log('[Startup] Starting Phase 1: Core Systems');
-        console.time('[Startup] Phase 1: Core Systems');
+        debug.log('[Startup] Starting Phase 1: Core Systems');
+        debug.time('[Startup] Phase 1: Core Systems');
         performanceMonitor.mark('app-init-start');
         loadingManager.showLoading('Initializing application...', 'init');
         loadingManager.updateProgress(5, 'Starting core systems...');
@@ -187,63 +188,63 @@ export async function initializeApp() {
         // Expose modal functions globally for backward compatibility
         exposeModalFunctionsGlobally();
 
-        console.timeEnd('[Startup] Phase 1: Core Systems');
+        debug.timeEnd('[Startup] Phase 1: Core Systems');
         loadingManager.updateProgress(10, 'Core systems ready');
 
         // === Phase 2: State Restoration ===
-        console.log('[Startup] Starting Phase 2: State Restoration');
-        console.time('[Startup] Phase 2: State Restoration');
-        logger.info('\n=== Phase 2: State Restoration ===');
+        debug.log('[Startup] Starting Phase 2: State Restoration');
+        debug.time('[Startup] Phase 2: State Restoration');
+        logger.debug('\n=== Phase 2: State Restoration ===');
         performanceMonitor.mark('phase2-start');
         loadingManager.updateProgress(15, 'Restoring state...');
 
         await restoreState();
         performanceMonitor.measure('phase2-state-restoration', 'phase2-start');
-        console.timeEnd('[Startup] Phase 2: State Restoration');
+        debug.timeEnd('[Startup] Phase 2: State Restoration');
         loadingManager.updateProgress(25, 'State restored');
 
         // === Phase 3: Services Initialization ===
-        console.log('[Startup] Starting Phase 3: Services');
-        console.time('[Startup] Phase 3: Services');
-        logger.info('\n=== Phase 3: Services ===');
+        debug.log('[Startup] Starting Phase 3: Services');
+        debug.time('[Startup] Phase 3: Services');
+        logger.debug('\n=== Phase 3: Services ===');
         performanceMonitor.mark('phase3-start');
         loadingManager.updateProgress(30, 'Initializing services...');
 
         await initializeServices();
         appState.servicesReady = true;
         performanceMonitor.measure('phase3-services-init', 'phase3-start');
-        console.timeEnd('[Startup] Phase 3: Services');
+        debug.timeEnd('[Startup] Phase 3: Services');
         loadingManager.updateProgress(45, 'Services initialized');
 
         // === Phase 4: UI Components ===
-        console.log('[Startup] Starting Phase 4: UI Components');
-        console.time('[Startup] Phase 4: UI Components');
-        logger.info('\n=== Phase 4: UI Components ===');
+        debug.log('[Startup] Starting Phase 4: UI Components');
+        debug.time('[Startup] Phase 4: UI Components');
+        logger.debug('\n=== Phase 4: UI Components ===');
         performanceMonitor.mark('phase4-start');
         loadingManager.updateProgress(50, 'Initializing UI components...');
 
         await initializeComponents();
         appState.componentsReady = true;
         performanceMonitor.measure('phase4-components-init', 'phase4-start');
-        console.timeEnd('[Startup] Phase 4: UI Components');
+        debug.timeEnd('[Startup] Phase 4: UI Components');
         loadingManager.updateProgress(70, 'UI components ready');
 
         // === Phase 5: Data Loading ===
-        console.log('[Startup] Starting Phase 5: Data Loading');
-        console.time('[Startup] Phase 5: Data Loading');
-        logger.info('\n=== Phase 5: Data Loading ===');
+        debug.log('[Startup] Starting Phase 5: Data Loading');
+        debug.time('[Startup] Phase 5: Data Loading');
+        logger.debug('\n=== Phase 5: Data Loading ===');
         performanceMonitor.mark('phase5-start');
         loadingManager.updateProgress(75, 'Loading initial data...');
 
         await loadInitialData();
         performanceMonitor.measure('phase5-data-loading', 'phase5-start');
-        console.timeEnd('[Startup] Phase 5: Data Loading');
+        debug.timeEnd('[Startup] Phase 5: Data Loading');
         loadingManager.updateProgress(90, 'Data loaded');
 
         // === Phase 6: Global Listeners & Features ===
-        console.log('[Startup] Starting Phase 6: Global Features');
-        console.time('[Startup] Phase 6: Global Features');
-        logger.info('\n=== Phase 6: Global Features ===');
+        debug.log('[Startup] Starting Phase 6: Global Features');
+        debug.time('[Startup] Phase 6: Global Features');
+        logger.debug('\n=== Phase 6: Global Features ===');
         performanceMonitor.mark('phase6-start');
         loadingManager.updateProgress(95, 'Initializing global features...');
 
@@ -256,7 +257,7 @@ export async function initializeApp() {
         logger.debug('  Lazy load triggers set up');
 
         performanceMonitor.measure('phase6-global-features', 'phase6-start');
-        console.timeEnd('[Startup] Phase 6: Global Features');
+        debug.timeEnd('[Startup] Phase 6: Global Features');
         loadingManager.updateProgress(100, 'Application ready');
 
         // === Initialization Complete ===
@@ -277,9 +278,9 @@ export async function initializeApp() {
         // Preload features on idle (Phase 9)
         preloadFeaturesOnIdle();
 
-        console.timeEnd('[Startup] initializeApp');
+        debug.timeEnd('[Startup] initializeApp');
     } catch (error) {
-        console.timeEnd('[Startup] initializeApp');
+        debug.timeEnd('[Startup] initializeApp');
         logger.error('❌ Application initialization failed:', error);
         appState.errors.push(error);
 
@@ -366,7 +367,7 @@ export function getAppStatus() {
  * Expose necessary functions to window object for legacy code
  */
 export function setupBackwardCompatibility() {
-    logger.info('🔗 Setting up backward compatibility...');
+    logger.debug('🔗 Setting up backward compatibility...');
 
     // Expose configuration
     window.API_KEY = GOOGLE_SHEETS.API_KEY;
@@ -487,5 +488,5 @@ export function setupBackwardCompatibility() {
     // Expose feature functions
     window.enableAddCardIndicators = enableAddCardIndicators;
 
-    logger.info('✅ Backward compatibility setup complete');
+    logger.debug('✅ Backward compatibility setup complete');
 }

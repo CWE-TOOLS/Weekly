@@ -15,6 +15,7 @@ import {
   PROJECT_SOURCE,
   TRACKING_ITEMS
 } from '../../config/releasability-config.js';
+import { debug } from '../../utils/debug.js';
 
 // ============================================================================
 // PRIVATE STATE
@@ -568,7 +569,7 @@ export function getProjectCompletion(projectId) {
  */
 export function isProjectFullyComplete(project) {
   if (!project || !project.trackingStatus) {
-    console.log(`❌ Project "${project && project.project}" - No trackingStatus`);
+    debug.log(`❌ Project "${project && project.project}" - No trackingStatus`);
     return false;
   }
 
@@ -586,7 +587,7 @@ export function isProjectFullyComplete(project) {
       const status = project.trackingStatus[item] || 'missing';
       return `${item}: ${status}`;
     });
-    console.log(`⚠️ Project "${project.project}" not fully complete:`, details);
+    debug.log(`⚠️ Project "${project.project}" not fully complete:`, details);
   }
 
   // Project is fully complete only if ALL current tracking items are 'complete'

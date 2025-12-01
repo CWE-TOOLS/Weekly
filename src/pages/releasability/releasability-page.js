@@ -34,7 +34,7 @@ import {
   VALIDATION,
   STATUS_DISPLAY
 } from '../../config/releasability-config.js';
-import { renderReleasabilityGrid, getUniqueDepartments } from './releasability-grid.js';
+import { renderReleasabilityGrid, getUniqueDepartments, setProjectActions } from './releasability-grid.js';
 import { getMonday } from '../../utils/date-utils.js';
 import { normalizeProjectName } from '../../utils/ui-utils.js';
 import {
@@ -52,6 +52,7 @@ import {
   removeCacheSubscription
 } from '../../services/sheets-cache-service.js';
 import { registerRefreshHandler } from '../../services/supabase-service.js';
+import { debug } from '../../utils/debug.js';
 
 // ============================================================================
 // GLOBAL STATE
@@ -59,6 +60,8 @@ import { registerRefreshHandler } from '../../services/supabase-service.js';
 
 let manualWeeks = []; // Store manual weeks globally
 let copiedTrackingStatus = null; // Store copied tracking status for paste operation
+let cachedProjects = null; // Cache loaded projects to prevent duplicate loads
+let isInitializing = false; // Flag to prevent cache subscription from triggering during init
 
 /**
  * Get whether there is a copied tracking status
@@ -76,8 +79,17 @@ export function hasCopiedStatus() {
  * Initialize the releasability board page
  */
 async function init() {
-  console.log('🔍 init() called');
-  console.trace('Init call stack:');
+  debug.log('🔍 init() called');
+  debug.trace('Init call stack:');
+
+  // Set up project action callbacks for the grid (avoids circular dependency)
+  setProjectActions({
+    hasCopiedStatus,
+    handleCopyStatus,
+    handlePasteStatus,
+    handleDeleteProject
+  });
+
   // Set up event listeners
   setupEventListeners();
 
@@ -119,11 +131,21 @@ async function init() {
  */
 async function loadInitialData(forceRefresh = false) {
   try {
+    // If we have cached data and not forcing refresh, reuse it
+    if (!forceRefresh && cachedProjects !== null) {
+      debug.log('🔄 Reusing cached projects data (skipping duplicate load)');
+      setProjects(cachedProjects);
+      return;
+    }
+
     // Load all data in parallel (projects + manual weeks)
     const [projects, weeks] = await Promise.all([
       loadAllReleasabilityData(forceRefresh),
       loadManualWeeks()
     ]);
+
+    // Cache the loaded projects
+    cachedProjects = projects;
 
     // Set projects in state
     setProjects(projects);
@@ -143,16 +165,19 @@ async function loadInitialData(forceRefresh = false) {
  * This is called when the Google Sheets cache is refreshed by any client
  */
 async function handleCacheUpdate(payload) {
-  console.log('📡 Cache update received, refreshing data silently...', payload);
+  debug.log('📡 Cache update received, refreshing data silently...', payload);
 
   try {
+    // Invalidate local cache to force fresh load
+    cachedProjects = null;
+
     // Reload data without showing loading spinner
     await loadInitialData();
 
     // Re-render grid with fresh data
     renderGrid();
 
-    console.log('✅ Data refreshed from cache update');
+    debug.log('✅ Data refreshed from cache update');
 
   } catch (error) {
     console.error('❌ Error refreshing data after cache update:', error);
@@ -165,16 +190,19 @@ async function handleCacheUpdate(payload) {
  * This is called when another client updates releasability data (status changes, etc.)
  */
 async function handleSilentRefresh(payload) {
-  console.log('📡 Refresh signal received from another client, syncing data...', payload);
+  debug.log('📡 Refresh signal received from another client, syncing data...', payload);
 
   try {
+    // Invalidate local cache to force fresh load
+    cachedProjects = null;
+
     // Reload data without showing loading spinner
     await loadInitialData();
 
     // Re-render grid with fresh data
     renderGrid();
 
-    console.log('✅ Data synced from refresh signal');
+    debug.log('✅ Data synced from refresh signal');
 
   } catch (error) {
     console.error('❌ Error syncing data after refresh signal:', error);
@@ -191,14 +219,14 @@ async function handleSilentRefresh(payload) {
  */
 let eventListenersInitialized = false;
 function setupEventListeners() {
-  console.log('🔍 setupEventListeners called, initialized:', eventListenersInitialized);
+  debug.log('🔍 setupEventListeners called, initialized:', eventListenersInitialized);
   // Prevent multiple registrations
   if (eventListenersInitialized) {
-    console.log('⚠️ setupEventListeners already initialized, returning');
+    debug.log('⚠️ setupEventListeners already initialized, returning');
     return;
   }
   eventListenersInitialized = true;
-  console.log('✅ Setting up event listeners');
+  debug.log('✅ Setting up event listeners');
   // Navigation buttons - REMOVED (UI elements deleted)
   // document.getElementById('prev-week-btn')?.addEventListener('click', handlePrevWeek);
   // document.getElementById('next-week-btn')?.addEventListener('click', handleNextWeek);
@@ -215,9 +243,9 @@ function setupEventListeners() {
   if (addWeekBtn && !window.__addWeekListenerAdded) {
     window.__addWeekListenerAdded = true;
     addWeekBtn.addEventListener('click', handleAddWeekClick);
-    console.log('✅ Add Week listener attached');
+    debug.log('✅ Add Week listener attached');
   } else if (addWeekBtn) {
-    console.log('⚠️ Add Week listener already attached, skipping');
+    debug.log('⚠️ Add Week listener already attached, skipping');
   }
 
   // Fullscreen button
@@ -1146,8 +1174,8 @@ function saveHideCompletedPreference(value) {
  * Handle add week button click
  */
 async function handleAddWeekClick() {
-  console.log('🔍 handleAddWeekClick called');
-  console.trace('Call stack:');
+  debug.log('🔍 handleAddWeekClick called');
+  debug.trace('Call stack:');
   // Prompt for custom week name
   const weekName = prompt('Enter a custom name for the new week:');
   if (!weekName || !weekName.trim()) {
@@ -1628,18 +1656,17 @@ function showError(message) {
 
 // Initialize when DOM is ready
 let appInitialized = false;
+
+function ensureInit() {
+  if (appInitialized) return;
+  appInitialized = true;
+  init();
+}
+
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => {
-    if (!appInitialized) {
-      appInitialized = true;
-      init();
-    }
-  });
+  document.addEventListener('DOMContentLoaded', ensureInit);
 } else {
-  if (!appInitialized) {
-    appInitialized = true;
-    init();
-  }
+  ensureInit();
 }
 
 // Make some functions available globally for debugging

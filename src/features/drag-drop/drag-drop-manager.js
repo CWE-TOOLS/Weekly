@@ -43,6 +43,7 @@ import { DRAG_DROP_TIMING } from '../../config/timing-constants.js';
 import { render } from '../../core/renderer.js';
 import { filterTasks } from '../../components/department-filter.js';
 import { logger } from '../../utils/logger.js';
+import { debug } from '../../utils/debug.js';
 
 // Private state
 let draggedTask = null;
@@ -219,38 +220,44 @@ async function handleDrop(e) {
             originalCard.style.pointerEvents = 'none';
         }
 
-        // Store original values in case we need to revert
+        // Store original values for logging
         const originalDate = task.date;
         const originalWeek = task.week;
 
-        // Update task locally
-        task.date = newDate;
-        task.week = newWeek;
-
-        console.log('=== DRAG-DROP: Task updated locally ===', {
+        debug.log('=== DRAG-DROP: Attempting to move task ===', {
             taskId: task.id,
             oldDate: originalDate,
-            newDate: task.date,
+            newDate: newDate,
             oldWeek: originalWeek,
-            newWeek: task.week
+            newWeek: newWeek
         });
 
-        // Save to Supabase
+        // Create a copy of the task with updated values for Supabase
+        // DO NOT mutate the original task until Supabase confirms success
+        const taskUpdate = {
+            ...task,
+            date: newDate,
+            week: newWeek
+        };
+
+        // Save to Supabase FIRST - only update local state after confirmation
         try {
-            await updateTaskInSupabase(task);
+            await updateTaskInSupabase(taskUpdate);
             logger.debug('Manual task updated successfully via drag-drop', { id: task.id, newDate, newWeek });
-            console.log('=== DRAG-DROP: Supabase update succeeded ===', { taskId: task.id });
+            debug.log('=== DRAG-DROP: Supabase update succeeded ===', { taskId: task.id });
+
+            // NOW update the local task object after Supabase confirms success
+            task.date = newDate;
+            task.week = newWeek;
         } catch (supabaseError) {
             logger.error('Failed to update manual task in Supabase:', supabaseError);
 
-            // Revert the local changes
-            task.date = originalDate;
-            task.week = originalWeek;
+            // No need to revert - we never modified the original task
 
             // Show error to user
             showError('Failed to move task: ' + (supabaseError.message || 'Unknown error'));
 
-            // Re-render to show task in original position
+            // Re-render to show task in original position (unchanged)
             render();
 
             // Restore original card state
@@ -280,18 +287,18 @@ async function handleDrop(e) {
         // Refresh local data
         await fetchAllTasks();
 
-        console.log('=== DRAG-DROP: After fetchAllTasks ===');
+        debug.log('=== DRAG-DROP: After fetchAllTasks ===');
         const allTasks = getAllTasks();
         const movedTask = allTasks.find(t => t.id === task.id);
-        console.log('Moved task in _allTasks:', movedTask ? { id: movedTask.id, date: movedTask.date, week: movedTask.week } : 'NOT FOUND');
+        debug.log('Moved task in _allTasks:', movedTask ? { id: movedTask.id, date: movedTask.date, week: movedTask.week } : 'NOT FOUND');
 
         // Update filtered tasks immediately to avoid race condition
         filterTasks();
 
-        console.log('=== DRAG-DROP: After filterTasks ===');
+        debug.log('=== DRAG-DROP: After filterTasks ===');
         const filtered = getFilteredTasks();
         const filteredMovedTask = filtered.find(t => t.id === task.id);
-        console.log('Moved task in _filteredTasks:', filteredMovedTask ? { id: filteredMovedTask.id, date: filteredMovedTask.date, week: filteredMovedTask.week } : 'NOT FOUND');
+        debug.log('Moved task in _filteredTasks:', filteredMovedTask ? { id: filteredMovedTask.id, date: filteredMovedTask.date, week: filteredMovedTask.week } : 'NOT FOUND');
 
         // Force UI update to ensure the card appears in its new position
         render();
@@ -386,7 +393,7 @@ function cleanup() {
     cleanupDragState();
 
     isInitialized = false;
-    logger.info('Drag and drop cleanup completed');
+    logger.debug('Drag and drop cleanup completed');
 }
 
 /**
@@ -397,11 +404,11 @@ function cleanup() {
 export function initializeDragDrop() {
     // Prevent duplicate initialization
     if (isInitialized) {
-        logger.warn('Drag and drop already initialized, skipping...');
+        logger.debug('Drag and drop already initialized, skipping...');
         return;
     }
 
-    logger.info('Initializing drag and drop...');
+    logger.debug('Initializing drag and drop...');
 
     // Drag event listeners
     document.addEventListener('dragstart', handleDragStart);
@@ -415,7 +422,7 @@ export function initializeDragDrop() {
     document.addEventListener('mouseleave', handleMouseLeave, true);
 
     isInitialized = true;
-    logger.info('Drag and drop initialized');
+    logger.debug('Drag and drop initialized');
 }
 
 /**
@@ -425,7 +432,7 @@ export function initializeDragDrop() {
  * @public
  */
 export function destroyDragDrop() {
-    logger.info('Destroying drag and drop...');
+    logger.debug('Destroying drag and drop...');
     cleanup();
 }
 

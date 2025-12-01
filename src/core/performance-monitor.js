@@ -24,7 +24,7 @@ let clsObserver = null;
  * Sets up Core Web Vitals tracking and custom metrics
  */
 export function initializePerformanceMonitor() {
-  logger.info('📊 Initializing performance monitor...');
+  logger.debug('📊 Initializing performance monitor...');
 
   // Mark app start
   mark('app-start');
@@ -42,12 +42,12 @@ export function initializePerformanceMonitor() {
   // Report periodically in development
   if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
     setTimeout(() => {
-      logger.info('📊 Development Performance Report:');
+      logger.debug('📊 Development Performance Report:');
       reportPerformanceMetrics();
     }, MONITORING.PERF_MONITOR_INTERVAL);
   }
 
-  logger.info('✅ Performance monitor initialized');
+  logger.debug('✅ Performance monitor initialized');
 }
 
 /**
@@ -249,12 +249,12 @@ export function reportPerformanceMetrics() {
   const metrics = getPerformanceMetrics();
 
   console.group('📊 Performance Report');
-  logger.info('🎯 Core Web Vitals:', metrics.vitals);
-  logger.info('⏱️  Custom Measures:', metrics.measures);
-  logger.info('🗺️  Marks:', metrics.marks);
-  logger.info('🌐 Navigation Timing:', metrics.navigation);
-  logger.info('💾 Memory Usage:', metrics.memory);
-  logger.info('📦 Resources:', metrics.resources);
+  logger.debug('🎯 Core Web Vitals:', metrics.vitals);
+  logger.debug('⏱️  Custom Measures:', metrics.measures);
+  logger.debug('🗺️  Marks:', metrics.marks);
+  logger.debug('🌐 Navigation Timing:', metrics.navigation);
+  logger.debug('💾 Memory Usage:', metrics.memory);
+  logger.debug('📦 Resources:', metrics.resources);
   console.groupEnd();
 
   return metrics;
@@ -297,7 +297,7 @@ export function stopPerformanceMonitoring() {
   if (lcpObserver) lcpObserver.disconnect();
   if (fidObserver) fidObserver.disconnect();
   if (clsObserver) clsObserver.disconnect();
-  logger.info('🛑 Performance monitoring stopped');
+  logger.debug('🛑 Performance monitoring stopped');
 }
 
 // Expose utilities for debugging

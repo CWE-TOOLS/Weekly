@@ -6,6 +6,7 @@
 
 import { DEPARTMENT_ORDER, SYNTHETIC_DEPARTMENT_CONFIG } from '../config/department-config.js';
 import { parseDate } from './date-utils.js';
+import { debug } from './debug.js';
 
 /**
  * Groups tasks by department, nesting synthetic departments under their primary department.
@@ -100,7 +101,7 @@ export function groupTasksByDate(tasks, weekDates, departmentName = '') {
 
             // DEBUG for Batch/Layout synthetic departments
             if (departmentName === 'Batch' || departmentName === 'Layout') {
-                console.log(`[${departmentName}] Task:`, t.date, '→ parsed:', (taskDate && taskDate.toDateString()), '→ matches:', matches, '→ expected:', dateString);
+                debug.log(`[${departmentName}] Task:`, t.date, '→ parsed:', (taskDate && taskDate.toDateString()), '→ matches:', matches, '→ expected:', dateString);
             }
 
             return matches;
@@ -108,7 +109,7 @@ export function groupTasksByDate(tasks, weekDates, departmentName = '') {
     });
 
     if (departmentName === 'Batch' || departmentName === 'Layout') {
-        console.log(`[${departmentName}] tasksByDate:`, tasksByDate);
+        debug.log(`[${departmentName}] tasksByDate:`, tasksByDate);
     }
 
     return tasksByDate;

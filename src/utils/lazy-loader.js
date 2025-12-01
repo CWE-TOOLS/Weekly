@@ -28,24 +28,24 @@ const loading = new Map();
 export async function lazyLoad(importer, cacheKey) {
   // Return cached module if available
   if (cache.has(cacheKey)) {
-    logger.info(`📦 Lazy load: Using cached module '${cacheKey}'`);
+    logger.debug(`📦 Lazy load: Using cached module '${cacheKey}'`);
     return cache.get(cacheKey);
   }
 
   // Return in-flight promise if already loading
   if (loading.has(cacheKey)) {
-    logger.info(`⏳ Lazy load: Waiting for in-flight module '${cacheKey}'`);
+    logger.debug(`⏳ Lazy load: Waiting for in-flight module '${cacheKey}'`);
     return loading.get(cacheKey);
   }
 
   // Start loading
-  logger.info(`🔄 Lazy load: Loading module '${cacheKey}'...`);
+  logger.debug(`🔄 Lazy load: Loading module '${cacheKey}'...`);
   const startTime = performance.now();
 
   const loadPromise = importer()
     .then(module => {
       const loadTime = (performance.now() - startTime).toFixed(2);
-      logger.info(`✅ Lazy load: Module '${cacheKey}' loaded in ${loadTime}ms`);
+      logger.debug(`✅ Lazy load: Module '${cacheKey}' loaded in ${loadTime}ms`);
 
       cache.set(cacheKey, module);
       loading.delete(cacheKey);
@@ -72,7 +72,7 @@ export async function lazyLoad(importer, cacheKey) {
  */
 export function preload(importer, cacheKey) {
   if (!cache.has(cacheKey) && !loading.has(cacheKey)) {
-    logger.info(`🔮 Preload: Scheduling module '${cacheKey}'`);
+    logger.debug(`🔮 Preload: Scheduling module '${cacheKey}'`);
     lazyLoad(importer, cacheKey).catch(() => {
       // Silently fail preload - not critical
       logger.warn(`⚠️ Preload: Failed to preload '${cacheKey}' (non-critical)`);
@@ -94,7 +94,7 @@ export function preload(importer, cacheKey) {
 export function preloadOnIdle(modules, timeout = 2000) {
   if ('requestIdleCallback' in window) {
     requestIdleCallback(() => {
-      logger.info(`💤 Preload: Starting idle preload for ${modules.length} modules`);
+      logger.debug(`💤 Preload: Starting idle preload for ${modules.length} modules`);
       modules.forEach(({ importer, key }) => {
         preload(importer, key);
       });
@@ -102,7 +102,7 @@ export function preloadOnIdle(modules, timeout = 2000) {
   } else {
     // Fallback for browsers without requestIdleCallback
     setTimeout(() => {
-      logger.info(`⏱️ Preload: Starting deferred preload for ${modules.length} modules`);
+      logger.debug(`⏱️ Preload: Starting deferred preload for ${modules.length} modules`);
       modules.forEach(({ importer, key }) => {
         preload(importer, key);
       });
@@ -118,7 +118,7 @@ export function clearCache() {
   const cacheSize = cache.size;
   cache.clear();
   loading.clear();
-  logger.info(`🗑️ Lazy load: Cleared cache (${cacheSize} modules)`);
+  logger.debug(`🗑️ Lazy load: Cleared cache (${cacheSize} modules)`);
 }
 
 /**

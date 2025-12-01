@@ -34,6 +34,7 @@ import { setAllTasks, getAllTasks } from '../core/state.js';
 
 import { logger } from '../utils/logger.js';
 import { normalizeProjectName } from '../utils/ui-utils.js';
+import { debug } from '../utils/debug.js';
 
 /**
  * Race a promise against a timeout
@@ -86,8 +87,8 @@ async function fetchWithTimeout(promise, timeoutMs, source) {
  * const tasks = await fetchAllTasks(true, false);
  */
 export async function fetchAllTasks(silent = false, suppressEvents = null) {
-    console.log('[Startup] Starting fetchAllTasks');
-    console.time('[Startup] fetchAllTasks');
+    debug.log('[Startup] Starting fetchAllTasks');
+    debug.time('[Startup] fetchAllTasks');
 
     const modalElement = document.getElementById('project-modal');
     const modalOpen = modalElement && modalElement.classList.contains('show');
@@ -105,16 +106,16 @@ export async function fetchAllTasks(silent = false, suppressEvents = null) {
         // Fetch Google Sheets data, Supabase manual tasks, and task descriptions in parallel for faster loading
         // Google Sheets has a 45s timeout, Supabase has 15s timeout to prevent infinite hanging
         logger.info('🚀 Starting parallel data fetch...');
-        console.log('[Startup] Starting parallel data fetch (Google Sheets + Supabase manual tasks + Task descriptions)');
-        console.time('[Startup] Parallel data fetch');
+        debug.log('[Startup] Starting parallel data fetch (Google Sheets + Supabase manual tasks + Task descriptions)');
+        debug.time('[Startup] Parallel data fetch');
         const startTime = performance.now();
 
-        console.log('[Startup] Starting Google Sheets fetch');
-        console.time('[Startup] Google Sheets fetch');
-        console.log('[Startup] Starting Supabase manual tasks fetch');
-        console.time('[Startup] Supabase manual tasks fetch');
-        console.log('[Startup] Starting Supabase task descriptions fetch');
-        console.time('[Startup] Supabase task descriptions fetch');
+        debug.log('[Startup] Starting Google Sheets fetch');
+        debug.time('[Startup] Google Sheets fetch');
+        debug.log('[Startup] Starting Supabase manual tasks fetch');
+        debug.time('[Startup] Supabase manual tasks fetch');
+        debug.log('[Startup] Starting Supabase task descriptions fetch');
+        debug.time('[Startup] Supabase task descriptions fetch');
 
         const [sheetsTasks, manualTasks, taskDescriptions] = await Promise.all([
             fetchWithTimeout(fetchSheetsTasks(), 45000, 'Google Sheets'),
@@ -122,48 +123,48 @@ export async function fetchAllTasks(silent = false, suppressEvents = null) {
             fetchWithTimeout(fetchTaskDescriptions(), 15000, 'Supabase task descriptions')
         ]);
 
-        console.timeEnd('[Startup] Google Sheets fetch');
-        console.timeEnd('[Startup] Supabase manual tasks fetch');
-        console.timeEnd('[Startup] Supabase task descriptions fetch');
-        console.timeEnd('[Startup] Parallel data fetch');
+        debug.timeEnd('[Startup] Google Sheets fetch');
+        debug.timeEnd('[Startup] Supabase manual tasks fetch');
+        debug.timeEnd('[Startup] Supabase task descriptions fetch');
+        debug.timeEnd('[Startup] Parallel data fetch');
 
         const fetchTime = (performance.now() - startTime).toFixed(0);
         logger.info(`✅ Parallel data fetch complete in ${fetchTime}ms`);
         logger.info(`   Sheets: ${sheetsTasks.length} tasks, Supabase: ${manualTasks.length} tasks, Descriptions: ${taskDescriptions.size} entries`);
 
         // Merge tasks, with manual tasks taking precedence for same ID
-        console.log('[Startup] Starting task merge');
-        console.time('[Startup] Task merge');
+        debug.log('[Startup] Starting task merge');
+        debug.time('[Startup] Task merge');
         const allTasks = mergeTasks(sheetsTasks, manualTasks);
-        console.timeEnd('[Startup] Task merge');
+        debug.timeEnd('[Startup] Task merge');
 
         // Merge task descriptions from Supabase into all tasks
-        console.log('[Startup] Starting description merge');
-        console.time('[Startup] Description merge');
+        debug.log('[Startup] Starting description merge');
+        debug.time('[Startup] Description merge');
         mergeTaskDescriptions(allTasks, taskDescriptions);
-        console.timeEnd('[Startup] Description merge');
+        debug.timeEnd('[Startup] Description merge');
 
         // Calculate day counts
-        console.log('[Startup] Starting day count calculation');
-        console.time('[Startup] Day count calculation');
+        debug.log('[Startup] Starting day count calculation');
+        debug.time('[Startup] Day count calculation');
         calculateProjectDayCounts(allTasks);
-        console.timeEnd('[Startup] Day count calculation');
+        debug.timeEnd('[Startup] Day count calculation');
 
         // Update state with fetched tasks (will emit 'tasks:loaded' event unless suppressed)
-        console.log('[Startup] Starting state update');
-        console.time('[Startup] State update');
+        debug.log('[Startup] Starting state update');
+        debug.time('[Startup] State update');
         setAllTasks(allTasks, shouldSuppressEvents);
-        console.timeEnd('[Startup] State update');
+        debug.timeEnd('[Startup] State update');
 
         if (!shouldBeSilent) {
             showLoading(false);
         }
 
-        console.log('[Startup] Emitting TASKS_LOADED event');
-        console.timeEnd('[Startup] fetchAllTasks');
+        debug.log('[Startup] Emitting TASKS_LOADED event');
+        debug.timeEnd('[Startup] fetchAllTasks');
         return allTasks;
     } catch (error) {
-        console.timeEnd('[Startup] fetchAllTasks');
+        debug.timeEnd('[Startup] fetchAllTasks');
         logger.error('❌ Failed to fetch tasks:', error);
 
         // On timeout or fetch failure, keep existing data
@@ -248,9 +249,6 @@ export function mergeTaskDescriptions(tasks, descriptionsMap) {
         const normalizedProject = normalizeProjectName(task.project);
         const key = `${normalizedProject}|${task.department}|${task.dayNumber}`;
         const found = descriptionsMap.has(key);
-        if (task.project.includes('U of M stair') && task.project.includes('cast #2')) {
-            logger.info(`🔍 Task lookup: "${key}" → ${found ? 'FOUND' : 'NOT FOUND'} (normalized from ${task.project.length} to ${normalizedProject.length} chars)`);
-        }
 
         // Look up description in the Map
         if (found) {

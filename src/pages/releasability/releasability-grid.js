@@ -10,7 +10,23 @@
 import { getMonday, getWeekMonth, getWeekOfMonth } from '../../utils/date-utils.js';
 import { TRACKING_ITEMS, STATUS, STATUS_DISPLAY } from '../../config/releasability-config.js';
 import { isWeekCollapsed } from './releasability-state.js';
-import { hasCopiedStatus, handleCopyStatus, handlePasteStatus, handleDeleteProject } from './releasability-page.js';
+
+// Callbacks for project actions (set by releasability-page.js to avoid circular dependency)
+let projectActions = {
+  hasCopiedStatus: () => false,
+  handleCopyStatus: () => {},
+  handlePasteStatus: async () => {},
+  handleDeleteProject: async () => {}
+};
+
+/**
+ * Set the project action callbacks
+ * Called by releasability-page.js to provide action handlers
+ * @param {Object} actions - Object containing action callback functions
+ */
+export function setProjectActions(actions) {
+  projectActions = { ...projectActions, ...actions };
+}
 
 // ============================================================================
 // MAIN RENDERING FUNCTION
@@ -419,7 +435,7 @@ function createProjectControls(project) {
   pasteItem.dataset.projectId = project.id;
 
   // Check if there's already copied status and enable paste item
-  if (hasCopiedStatus()) {
+  if (projectActions.hasCopiedStatus()) {
     pasteItem.classList.add('has-copied-status');
   }
 
@@ -473,13 +489,13 @@ function createProjectControls(project) {
       // Call the appropriate handler function
       switch (action) {
         case 'copy-status':
-          handleCopyStatus(projectId);
+          projectActions.handleCopyStatus(projectId);
           break;
         case 'paste-status':
-          await handlePasteStatus(projectId);
+          await projectActions.handlePasteStatus(projectId);
           break;
         case 'delete':
-          await handleDeleteProject(projectId);
+          await projectActions.handleDeleteProject(projectId);
           break;
       }
     }

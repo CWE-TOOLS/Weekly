@@ -6,6 +6,9 @@
  *
  * Features:
  * - Multiple log levels (DEBUG, INFO, WARN, ERROR)
+ * - Debug mode integration (uses same flags as debug.js)
+ * - INFO/DEBUG logs suppressed in production unless debug mode enabled
+ * - WARN/ERROR logs always visible
  * - Global enable/disable
  * - Per-level enable/disable
  * - Timestamps
@@ -24,6 +27,12 @@
  *   // Create contextual logger
  *   const moduleLogger = logger.createContext('ModuleName');
  *   moduleLogger.info('Module-specific log');
+ *
+ * Debug Mode:
+ *   To enable INFO and DEBUG logs in production:
+ *   - Add ?debug=true to the URL
+ *   - Set localStorage.setItem('debug', 'true') in console
+ *   - Set window.DEBUG = true in console
  */
 
 // Log levels
@@ -57,12 +66,16 @@ class Logger {
     // Check if running in production
     this.isProduction = this.detectProductionMode();
 
+    // Check if debug mode is enabled
+    this.isDebugMode = this.checkDebugMode();
+
     // Global logging enabled/disabled
-    this.enabled = !this.isProduction;
+    this.enabled = true; // Always enabled, but level filtering applies
 
     // Minimum log level (logs below this level are ignored)
-    // Set to INFO to show detailed startup diagnostics
-    this.minLevel = this.isProduction ? LogLevel.ERROR : LogLevel.INFO;
+    // In production without debug mode: only WARN and ERROR
+    // In production with debug mode OR in dev: all levels (INFO and above)
+    this.minLevel = (this.isProduction && !this.isDebugMode) ? LogLevel.WARN : LogLevel.INFO;
 
     // Individual level controls
     this.levelEnabled = {
@@ -102,6 +115,35 @@ class Logger {
     }
 
     // Default to development
+    return false;
+  }
+
+  /**
+   * Check if debug mode is enabled via multiple sources
+   * Uses the same detection logic as src/utils/debug.js
+   */
+  checkDebugMode() {
+    // Check localStorage
+    if (typeof localStorage !== 'undefined') {
+      if (localStorage.getItem('debug') === 'true') {
+        return true;
+      }
+    }
+
+    // Check URL parameter
+    if (typeof window !== 'undefined' && window.location) {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('debug') === 'true') {
+        return true;
+      }
+    }
+
+    // Check global window variable
+    if (typeof window !== 'undefined' && window.DEBUG === true) {
+      return true;
+    }
+
+    // Default to disabled
     return false;
   }
 
@@ -221,6 +263,8 @@ class Logger {
   createContext(contextName) {
     const contextLogger = new Logger();
     contextLogger.enabled = this.enabled;
+    contextLogger.isProduction = this.isProduction;
+    contextLogger.isDebugMode = this.isDebugMode;
     contextLogger.minLevel = this.minLevel;
     contextLogger.levelEnabled = { ...this.levelEnabled };
     contextLogger.includeTimestamp = this.includeTimestamp;
@@ -277,6 +321,7 @@ class Logger {
     return {
       enabled: this.enabled,
       isProduction: this.isProduction,
+      isDebugMode: this.isDebugMode,
       minLevel: LogLevelNames[this.minLevel],
       levelEnabled: {
         DEBUG: this.levelEnabled[LogLevel.DEBUG],
@@ -295,7 +340,8 @@ class Logger {
    */
   logConfig() {
     const config = this.getConfig();
-    console.log('Logger Configuration:', config);
+    // Use console.info instead of console.log for legitimate logging
+    console.info('Logger Configuration:', config);
   }
 }
 

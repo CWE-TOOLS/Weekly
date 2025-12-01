@@ -14,6 +14,7 @@
 import { logger } from './logger.js';
 import { createTaskCard, createTaskCardPlaceholder } from '../components/task-card.js';
 import { getEditingCardId } from '../core/refresh-queue.js';
+import { debug } from './debug.js';
 
 /**
  * Create a task map for quick lookups
@@ -194,7 +195,7 @@ export function smartUpdateSchedule(container, oldTasks, newTasks) {
         } else if (hasTaskChanged(oldTask, newTask)) {
             // Log what we're comparing for manual tasks
             if (newTask.isManual) {
-                console.log('=== SMART RENDERER: Checking manual task ===', {
+                debug.log('=== SMART RENDERER: Checking manual task ===', {
                     taskId: newTask.id,
                     oldDate: oldTask.date,
                     newDate: newTask.date,
@@ -208,7 +209,7 @@ export function smartUpdateSchedule(container, oldTasks, newTasks) {
 
             // Check if date or week changed - need to move card to new cell
             if (oldTask.date !== newTask.date || oldTask.week !== newTask.week) {
-                console.log('=== SMART RENDERER: Moving card to new date ===', {
+                debug.log('=== SMART RENDERER: Moving card to new date ===', {
                     taskId: newTask.id,
                     oldDate: oldTask.date,
                     newDate: newTask.date
@@ -224,7 +225,7 @@ export function smartUpdateSchedule(container, oldTasks, newTasks) {
                 // Find all cells for this date + department
                 const candidateCells = container.querySelectorAll(`.grid-cell[data-date="${newDateStr}"][data-department="${newDept}"]`);
 
-                console.log('=== SMART RENDERER: Searching for target cell ===', {
+                debug.log('=== SMART RENDERER: Searching for target cell ===', {
                     selector: `.grid-cell[data-date="${newDateStr}"][data-department="${newDept}"]`,
                     candidateCellsFound: candidateCells.length,
                     rowClass: rowClass
@@ -235,7 +236,7 @@ export function smartUpdateSchedule(container, oldTasks, newTasks) {
                     candidateCells.forEach((cell, idx) => {
                         const placeholders = cell.querySelectorAll('.task-card-placeholder');
                         const placeholderClasses = Array.from(placeholders).map(p => Array.from(p.classList).join(' '));
-                        console.log(`  Candidate cell ${idx}:`, {
+                        debug.log(`  Candidate cell ${idx}:`, {
                             date: cell.dataset.date,
                             dept: cell.dataset.department,
                             placeholders: placeholderClasses
