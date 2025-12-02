@@ -61,11 +61,11 @@ export async function render() {
 
             if (stats !== null) {
                 logger.info('✅ Smart update successful:', stats);
-                restoreScroll(); // Restores BOTH scrollTop and scrollLeft
 
-                // Recalculate heights after updates
+                // Recalculate heights BEFORE restoring scroll to prevent jumping
                 requestAnimationFrame(() => {
                     equalizeAllCardHeights();
+                    restoreScroll(); // Restores BOTH scrollTop and scrollLeft AFTER heights are stable
                     requestAnimationFrame(() => {
                         emit(EVENTS.SCHEDULE_RENDERED);
                     });
