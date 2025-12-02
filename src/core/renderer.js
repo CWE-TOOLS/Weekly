@@ -16,6 +16,11 @@ import { equalizeAllCardHeights, setGridWidths, scrollToWeek } from '../utils/gr
 import { showRenderingStatus } from '../utils/ui-utils.js';
 import { RENDER_DELAY } from '../config/timing-constants.js';
 import { emit, EVENTS } from './event-bus.js';
+import {
+    canUseSmartUpdate,
+    smartUpdateSchedule,
+    preserveScrollPosition
+} from '../utils/smart-renderer.js';
 
 let isRendering = false;
 
@@ -43,6 +48,42 @@ export async function render() {
         }
 
         const filteredTasks = state.getFilteredTasks();
+        const previousFilteredTasks = state.getPreviousFilteredTasks();
+
+        // Attempt smart update first to preserve scroll position
+        if (previousFilteredTasks.length > 0 &&
+            canUseSmartUpdate(container, previousFilteredTasks, filteredTasks)) {
+
+            logger.info('🔄 Attempting smart update to preserve scroll position...');
+
+            const restoreScroll = preserveScrollPosition(wrapper);
+            const stats = smartUpdateSchedule(container, previousFilteredTasks, filteredTasks);
+
+            if (stats !== null) {
+                logger.info('✅ Smart update successful:', stats);
+                restoreScroll(); // Restores BOTH scrollTop and scrollLeft
+
+                // Recalculate heights after updates
+                requestAnimationFrame(() => {
+                    equalizeAllCardHeights();
+                    requestAnimationFrame(() => {
+                        emit(EVENTS.SCHEDULE_RENDERED);
+                    });
+                });
+
+                setTimeout(() => {
+                    showRenderingStatus(false);
+                }, RENDER_DELAY.SCHEDULE);
+
+                isRendering = false;
+                return; // Early exit - skip full render
+            }
+
+            logger.warn('⚠️ Smart update not possible, falling back to full render');
+        }
+
+        // FALLBACK: Capture vertical scroll before full render
+        const savedScrollTop = wrapper.scrollTop;
 
         // Clear the container
         container.innerHTML = '';
@@ -174,6 +215,11 @@ export async function render() {
                     : currentViewedWeekIndex;
 
                 scrollToWeek(wrapper, container, weekIndex);
+
+                // RESTORE VERTICAL SCROLL (if we had to do full render)
+                if (typeof savedScrollTop === 'number') {
+                    wrapper.scrollTop = savedScrollTop;
+                }
 
                 const finalWeekIndex = Math.min(weekIndex, allMondays.length - 1);
                 emit(EVENTS.WEEK_CHANGED, { weekIndex: finalWeekIndex, weekDate: allMondays[finalWeekIndex] });

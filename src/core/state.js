@@ -30,6 +30,7 @@ import { logger } from '../utils/logger.js';
 
 let _allTasks = [];
 let _filteredTasks = [];
+let _previousFilteredTasks = [];
 let _currentDate = new Date();
 let _allWeekStartDates = [];
 let _currentProjectName = '';
@@ -85,6 +86,7 @@ export function setAllTasks(tasks, silent = false) {
  * @param {boolean} silent - If true, don't emit event (default: false)
  */
 export function setFilteredTasks(tasks, silent = false) {
+    _previousFilteredTasks = [..._filteredTasks]; // Store before overwriting
     _filteredTasks = tasks;
     if (!silent) {
         emit(EVENTS.TASKS_FILTERED, { tasks, count: tasks.length });
@@ -180,6 +182,14 @@ export function getAllTasks() {
  */
 export function getFilteredTasks() {
     return _filteredTasks;
+}
+
+/**
+ * Get previous filtered tasks
+ * @returns {Array} Array of previous filtered tasks
+ */
+export function getPreviousFilteredTasks() {
+    return _previousFilteredTasks;
 }
 
 /**
@@ -328,6 +338,7 @@ export function getTaskCounts() {
 export function resetState(silent = false) {
     _allTasks = [];
     _filteredTasks = [];
+    _previousFilteredTasks = [];
     _currentDate = new Date();
     _allWeekStartDates = [];
     _currentProjectName = '';
