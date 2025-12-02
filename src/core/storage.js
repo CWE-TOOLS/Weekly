@@ -14,7 +14,6 @@ import { logger } from '../utils/logger.js';
 
 export const STORAGE_KEYS = {
     SELECTED_DEPARTMENTS: 'selectedDepartments',
-    SCHEDULE_SCROLL_POSITION: 'scheduleScrollPosition',
     CURRENT_WEEK_INDEX: 'currentViewedWeekIndex',
     EDITING_UNLOCKED: 'editingUnlocked',
     PRINT_SELECTED_DEPARTMENTS: 'printSelectedDepartments'
@@ -188,35 +187,6 @@ export function saveSelectedDepartments(departments) {
 export function loadSelectedDepartments(defaultValue = []) {
     const departments = loadState(STORAGE_KEYS.SELECTED_DEPARTMENTS, defaultValue);
     return Array.isArray(departments) ? departments : defaultValue;
-}
-
-/**
- * Save schedule scroll position
- * @param {number} position - Scroll position in pixels
- * @returns {boolean} True if successful
- *
- * @example
- * saveScrollPosition(500);
- */
-export function saveScrollPosition(position) {
-    if (typeof position !== 'number' || position < 0) {
-        logger.error('[Storage] saveScrollPosition expects a non-negative number');
-        return false;
-    }
-    return saveState(STORAGE_KEYS.SCHEDULE_SCROLL_POSITION, position);
-}
-
-/**
- * Load schedule scroll position
- * @param {number} defaultValue - Default position (default: 0)
- * @returns {number} Scroll position in pixels
- *
- * @example
- * const position = loadScrollPosition();
- */
-export function loadScrollPosition(defaultValue = 0) {
-    const position = loadState(STORAGE_KEYS.SCHEDULE_SCROLL_POSITION, defaultValue);
-    return typeof position === 'number' ? position : defaultValue;
 }
 
 /**

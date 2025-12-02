@@ -131,7 +131,7 @@ export function renderAllWeeks() {
 
         if (savedWeekIndex && !isNaN(parseInt(savedWeekIndex))) {
             const restoredIndex = parseInt(savedWeekIndex);
-            if (restoredIndex < allWeekStartDates.length) {
+            if (restoredIndex >= 0 && restoredIndex < allWeekStartDates.length) {
                 currentViewedWeekIndex = restoredIndex;
             }
         }
@@ -157,25 +157,10 @@ export function renderAllWeeks() {
             grid.style.width = `${wrapperWidth}px`;
         });
 
-        // Scroll to the target grid
+        // Scroll to the target week using offsetLeft
         if (grids[initialWeekIndex]) {
             const targetScrollLeft = grids[initialWeekIndex].offsetLeft;
-
-            // Try to restore from localStorage first
-            const savedScrollPosition = localStorage.getItem('scheduleScrollPosition');
-            if (savedScrollPosition && !isNaN(parseFloat(savedScrollPosition))) {
-                const savedPosition = parseFloat(savedScrollPosition);
-                // Only use saved position if it's within reasonable bounds
-                if (savedPosition >= 0 && savedPosition <= wrapper.scrollWidth) {
-                    wrapper.scrollLeft = savedPosition;
-                    // Update currentViewedWeekIndex based on restored position
-                    currentViewedWeekIndex = Math.round(savedPosition / wrapper.offsetWidth);
-                } else {
-                    wrapper.scrollLeft = targetScrollLeft;
-                }
-            } else {
-                wrapper.scrollLeft = targetScrollLeft;
-            }
+            wrapper.scrollLeft = targetScrollLeft;
         }
 
         // Update header after scroll position is set

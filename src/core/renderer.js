@@ -9,10 +9,10 @@
 
 import { logger } from '../utils/logger.js';
 import * as state from './state.js';
-import { loadScrollPosition, loadWeekIndex } from './storage.js';
+import { loadWeekIndex } from './storage.js';
 import { renderWeekGrid } from '../components/week-renderer.js';
 import { getMonday, parseDate, getLocalDateString } from '../utils/date-utils.js';
-import { equalizeAllCardHeights, setGridWidths, scrollToWeek, preserveScrollPosition, restoreScrollPosition } from '../utils/grid-layout-manager.js';
+import { equalizeAllCardHeights, setGridWidths, scrollToWeek } from '../utils/grid-layout-manager.js';
 import { showRenderingStatus } from '../utils/ui-utils.js';
 import { RENDER_DELAY } from '../config/timing-constants.js';
 import { emit, EVENTS } from './event-bus.js';
@@ -144,13 +144,10 @@ export async function render() {
         });
         container.appendChild(fragment);
 
-        const previousScrollPosition = wrapper.scrollLeft;
-        const wasScrolled = previousScrollPosition > 0;
-
         let currentViewedWeekIndex = state.getCurrentViewedWeekIndex();
         if (currentViewedWeekIndex === -1 || currentViewedWeekIndex >= allMondays.length) {
             const savedWeekIndex = loadWeekIndex();
-            if (savedWeekIndex !== null && savedWeekIndex < allMondays.length) {
+            if (savedWeekIndex !== null && savedWeekIndex >= 0 && savedWeekIndex < allMondays.length) {
                 currentViewedWeekIndex = savedWeekIndex;
             }
 
@@ -166,37 +163,19 @@ export async function render() {
         state.setCurrentViewedWeekIndex(currentViewedWeekIndex);
 
         requestAnimationFrame(() => {
-            const wrapperWidth = wrapper.clientWidth;
             setGridWidths(container, wrapper);
             equalizeAllCardHeights();
 
             requestAnimationFrame(() => {
-                let finalScrollPosition = null;
+                // Simple restoration: load week index and scroll to that week
+                const savedWeekIndex = loadWeekIndex();
+                const weekIndex = (savedWeekIndex !== null && savedWeekIndex >= 0 && savedWeekIndex < allMondays.length)
+                    ? savedWeekIndex
+                    : currentViewedWeekIndex;
 
-                if (wasScrolled) {
-                    const preserved = preserveScrollPosition(wrapper, previousScrollPosition, wrapperWidth);
-                    if (preserved) {
-                        wrapper.scrollLeft = preserved.scrollLeft;
-                        state.setCurrentViewedWeekIndex(preserved.weekIndex);
-                        finalScrollPosition = preserved.scrollLeft;
-                    }
-                }
+                scrollToWeek(wrapper, container, weekIndex);
 
-                if (finalScrollPosition === null) {
-                    const savedScrollPosition = loadScrollPosition();
-                    const restored = restoreScrollPosition(wrapper, savedScrollPosition, wrapperWidth);
-                    if (restored) {
-                        wrapper.scrollLeft = restored.scrollLeft;
-                        state.setCurrentViewedWeekIndex(restored.weekIndex);
-                        finalScrollPosition = restored.scrollLeft;
-                    }
-                }
-
-                if (finalScrollPosition === null) {
-                    finalScrollPosition = scrollToWeek(wrapper, container, currentViewedWeekIndex);
-                }
-
-                const finalWeekIndex = Math.min(state.getCurrentViewedWeekIndex(), allMondays.length - 1);
+                const finalWeekIndex = Math.min(weekIndex, allMondays.length - 1);
                 emit(EVENTS.WEEK_CHANGED, { weekIndex: finalWeekIndex, weekDate: allMondays[finalWeekIndex] });
 
                 wrapper.style.willChange = 'auto';

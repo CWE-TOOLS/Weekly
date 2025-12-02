@@ -31,7 +31,7 @@ import {
     setCurrentViewedWeekIndex
 } from '../core/state.js';
 import { emit, EVENTS } from '../core/event-bus.js';
-import { loadScrollPosition, saveScrollPosition, loadWeekIndex, saveWeekIndex } from '../core/storage.js';
+import { loadWeekIndex, saveWeekIndex } from '../core/storage.js';
 import { parseDate, getMonday, getLocalDateString } from '../utils/date-utils.js';
 import { showRenderingStatus } from '../utils/ui-utils.js';
 import { DEPARTMENT_ORDER } from '../config/department-config.js';
@@ -40,9 +40,7 @@ import { logger } from '../utils/logger.js';
 import {
     equalizeAllCardHeights as equalizeHeights,
     setGridWidths,
-    scrollToWeek,
-    preserveScrollPosition,
-    restoreScrollPosition
+    scrollToWeek
 } from '../utils/grid-layout-manager.js';
 import { RENDER_DELAY } from '../config/timing-constants.js';
 import {
@@ -86,8 +84,7 @@ export function navigateToWeek(weekIndex) {
     saveWeekIndex(weekIndex);
 
     // Use layout manager to scroll to week
-    const targetScrollLeft = scrollToWeek(wrapper, container, weekIndex);
-    saveScrollPosition(targetScrollLeft);
+    scrollToWeek(wrapper, container, weekIndex);
 
     emit(EVENTS.WEEK_CHANGED, { weekIndex, weekDate: allWeekStartDates[weekIndex] });
 }

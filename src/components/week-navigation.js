@@ -10,7 +10,7 @@ import {
     setCurrentViewedWeekIndex
 } from '../core/state.js';
 import { emit, on, EVENTS } from '../core/event-bus.js';
-import { saveScrollPosition, saveWeekIndex } from '../core/storage.js';
+import { saveWeekIndex } from '../core/storage.js';
 import { getMonday, getWeekMonth, getWeekOfMonth } from '../utils/date-utils.js';
 import { navigateToWeek } from './schedule-grid.js';
 
@@ -93,11 +93,40 @@ function showPreviousWeek() {
 }
 
 /**
+ * Find current week from scroll position using actual grid positions
+ * @param {NodeList} grids - List of grid elements
+ * @returns {number} Index of the current week
+ */
+function findCurrentWeekFromScroll(grids) {
+    const wrapper = document.getElementById('schedule-wrapper');
+    if (!wrapper) return 0;
+
+    const scrollLeft = wrapper.scrollLeft;
+    const scrollCenter = scrollLeft + (wrapper.offsetWidth / 2);
+
+    // Find which grid's center is closest to viewport center
+    let closestIndex = 0;
+    let minDistance = Infinity;
+
+    grids.forEach((grid, index) => {
+        const gridCenter = grid.offsetLeft + (grid.offsetWidth / 2);
+        const distance = Math.abs(scrollCenter - gridCenter);
+        if (distance < minDistance) {
+            minDistance = distance;
+            closestIndex = index;
+        }
+    });
+
+    return closestIndex;
+}
+
+/**
  * Setup scroll listener to detect current week and update header
  */
 function setupScrollListener() {
     const wrapper = document.getElementById('schedule-wrapper');
-    if (!wrapper) return;
+    const container = document.getElementById('schedule-container');
+    if (!wrapper || !container) return;
 
     let scrollTimeout;
 
@@ -107,9 +136,8 @@ function setupScrollListener() {
 
         // Debounce scroll handling
         scrollTimeout = setTimeout(() => {
-            const scrollLeft = wrapper.scrollLeft;
-            const wrapperWidth = wrapper.offsetWidth;
-            const weekIndex = Math.round(scrollLeft / wrapperWidth);
+            const grids = container.querySelectorAll('.schedule-grid');
+            const weekIndex = findCurrentWeekFromScroll(grids);
 
             const allWeekStartDates = getAllWeekStartDates();
             if (weekIndex >= 0 && weekIndex < allWeekStartDates.length) {
@@ -122,9 +150,6 @@ function setupScrollListener() {
                     emit(EVENTS.WEEK_CHANGED, { weekIndex, weekDate: allWeekStartDates[weekIndex] });
                 }
             }
-
-            // Save scroll position
-            saveScrollPosition(scrollLeft);
         }, RENDER_DELAY.WEEK_NAV_UPDATE);
     });
 }
