@@ -43,6 +43,7 @@
 import * as eventBus from './event-bus.js';
 import { showWarningNotification } from './error-handler.js';
 import { DEBOUNCE_DELAY } from '../config/timing-constants.js';
+import { setGridWidths, equalizeAllCardHeights, scrollToWeek } from '../utils/grid-layout-manager.js';
 
 import { logger } from '../utils/logger.js';
 // Store listener references for cleanup
@@ -109,6 +110,36 @@ function addListener(target, type, handler) {
 }
 
 /**
+ * Get the currently visible week based on scroll position
+ * @param {HTMLElement} wrapper - Schedule wrapper element
+ * @param {HTMLElement} container - Schedule container element
+ * @returns {number|null} Index of the currently visible week, or null if no grids found
+ */
+function getCurrentVisibleWeek(wrapper, container) {
+    const grids = container.querySelectorAll('.schedule-grid');
+    if (grids.length === 0) return null;
+
+    const scrollLeft = wrapper.scrollLeft;
+    const wrapperWidth = wrapper.clientWidth;
+    const centerPosition = scrollLeft + (wrapperWidth / 2);
+
+    // Find which grid's center is closest to viewport center
+    let closestWeek = 0;
+    let closestDistance = Infinity;
+
+    grids.forEach((grid, index) => {
+        const gridCenter = grid.offsetLeft + (grid.offsetWidth / 2);
+        const distance = Math.abs(gridCenter - centerPosition);
+        if (distance < closestDistance) {
+            closestDistance = distance;
+            closestWeek = index;
+        }
+    });
+
+    return closestWeek;
+}
+
+/**
  * Handle window resize
  * Debounced to avoid excessive recalculations
  */
@@ -122,16 +153,31 @@ function handleResize() {
             height: window.innerHeight
         });
 
+        // Get container and wrapper elements
+        const container = document.getElementById('schedule-container');
+        const wrapper = document.getElementById('schedule-wrapper');
+
+        if (container && wrapper) {
+            // Store current visible week before recalculating
+            const currentWeek = getCurrentVisibleWeek(wrapper, container);
+
+            // Recalculate grid widths
+            setGridWidths(container, wrapper);
+
+            // Recalculate card heights after width changes
+            equalizeAllCardHeights();
+
+            // Restore scroll position to the same week
+            if (currentWeek !== null) {
+                scrollToWeek(wrapper, container, currentWeek);
+            }
+        }
+
         // Emit resize event for components to respond
         eventBus.emit(eventBus.EVENTS.WINDOW_RESIZED, {
             width: window.innerWidth,
             height: window.innerHeight
         });
-
-        // Recalculate card heights if schedule is rendered
-        if (typeof window.equalizeAllCardHeights === 'function') {
-            window.equalizeAllCardHeights();
-        }
     }, DEBOUNCE_DELAY.RESIZE);
 }
 

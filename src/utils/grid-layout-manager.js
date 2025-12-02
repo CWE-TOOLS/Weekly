@@ -53,6 +53,19 @@ export function equalizeAllCardHeights() {
         });
     });
 
+    // PHASE 0: Clear all existing minHeight values first
+    // This allows rows to return to their natural height at the current width
+    allRowClasses.forEach(rowClass => {
+        const rows = container.querySelectorAll(`.${rowClass}`);
+        rows.forEach(row => {
+            row.style.minHeight = '';  // Clear minHeight
+        });
+    });
+
+    // Force a reflow so the browser recalculates natural heights
+    // This is necessary for offsetHeight to reflect the cleared minHeight
+    container.offsetHeight;
+
     // PHASE 1: Batch all DOM reads first (prevents layout thrashing)
     // Store row references and their max heights for later application
     const rowHeights = new Map();
