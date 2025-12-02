@@ -123,6 +123,7 @@ function handlePasswordSubmit() {
 
         // Update UI buttons
         updateEditingButtons();
+        updateTaskCardButtons();
 
         // Emit editing unlocked event
         emit(EVENTS.EDITING_UNLOCKED);
@@ -138,6 +139,47 @@ function handlePasswordSubmit() {
         alert('Incorrect password. Editing remains locked.');
         passwordInput.focus();
     }
+}
+
+/**
+ * Update task card buttons visibility based on editing state
+ * Adds or removes Plan and Edit buttons from all existing task cards
+ * @private
+ */
+function updateTaskCardButtons() {
+    const isUnlocked = getIsEditingUnlocked();
+    const allCards = document.querySelectorAll('.task-card');
+
+    allCards.forEach(card => {
+        const taskId = card.dataset.taskId;
+        if (!taskId) return; // Skip cards without task IDs
+
+        if (isUnlocked) {
+            // Add Plan button if it doesn't exist
+            if (!card.querySelector('.task-plan-btn')) {
+                const planBtn = document.createElement('button');
+                planBtn.className = 'task-plan-btn';
+                planBtn.dataset.taskId = taskId;
+                planBtn.textContent = 'Plan';
+                card.appendChild(planBtn);
+            }
+
+            // Add Edit button if it doesn't exist
+            if (!card.querySelector('.task-edit-btn')) {
+                const editBtn = document.createElement('button');
+                editBtn.className = 'task-edit-btn';
+                editBtn.dataset.taskId = taskId;
+                editBtn.textContent = 'Edit';
+                card.appendChild(editBtn);
+            }
+        } else {
+            // Remove Plan and Edit buttons if they exist
+            card.querySelector('.task-plan-btn')?.remove();
+            card.querySelector('.task-edit-btn')?.remove();
+        }
+    });
+
+    logger.debug(`Updated task card buttons visibility (unlocked: ${isUnlocked})`);
 }
 
 /**
@@ -182,6 +224,7 @@ export function lockEditing() {
     setIsEditingUnlocked(false);
     saveState('editingUnlocked', false);
     updateEditingButtons();
+    updateTaskCardButtons();
 
     // Disable add card indicators
     if (window.enableAddCardIndicators) {

@@ -85,8 +85,7 @@ function handleContextMenu(e) {
             : null;
 
         if (currentTask) {
-            // Adjust for 80% zoom on body element
-            showContextMenu(e.clientX / 0.8, e.clientY / 0.8);
+            showContextMenu(e.clientX, e.clientY);
         }
         return; // Prevent the hide handler from running
     }
@@ -147,9 +146,8 @@ function handleContextMenuKeyboard(e) {
 
             if (currentTask) {
                 const rect = taskCard.getBoundingClientRect();
-                // Adjust for 80% zoom on body element
-                const x = (rect.left + rect.width / 2) / 0.8;
-                const y = (rect.top + rect.height / 2) / 0.8;
+                const x = rect.left + rect.width / 2;
+                const y = rect.top + rect.height / 2;
                 showContextMenu(x, y);
             }
         }

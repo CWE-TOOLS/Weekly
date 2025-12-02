@@ -17,7 +17,8 @@ import * as supabaseService from '../services/supabase-service.js';
 import * as dataService from '../services/data-service.js';
 import { clearCache } from '../services/sheets-cache-service.js';
 import { showLoading, hideError, showSuccessNotification } from '../utils/ui-utils.js';
-import { loadPasswordModal, loadAddTaskModal, loadProjectModal, loadPrintModal } from './modal-loader.js';
+import { loadAddTaskModal, loadProjectModal, loadPrintModal } from './modal-loader.js';
+import { showPasswordModal, lockEditing } from '../components/modals/password-modal.js';
 import { makeTaskCardEditable } from './task-card-editor.js';
 
 import { logger } from '../utils/logger.js';
@@ -71,17 +72,15 @@ export function initializeButtonHandlers() {
         });
     }
 
-    // Main editing button (lazy loaded)
+    // Main editing button
     const mainEditingBtn = document.getElementById('main-editing-btn');
     if (mainEditingBtn) {
-        mainEditingBtn.addEventListener('click', async () => {
+        mainEditingBtn.addEventListener('click', () => {
             const isUnlocked = state.getIsEditingUnlocked();
             if (isUnlocked) {
-                const module = await loadPasswordModal();
-                module.lockEditing();
+                lockEditing();
             } else {
-                const module = await loadPasswordModal();
-                module.showPasswordModal();
+                showPasswordModal();
             }
         });
     }

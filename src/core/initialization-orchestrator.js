@@ -116,8 +116,13 @@ export async function initializeComponents() {
         initializeSearch();
         logger.debug('  Search bar');
 
-        // Modals are lazy loaded (Phase 9) - will be initialized on first use
-        logger.debug('  Modals: Lazy loaded (will initialize on demand)');
+        // Initialize password modal on startup
+        const { initializePasswordModal } = await import('../components/modals/password-modal.js');
+        initializePasswordModal();
+        logger.debug('  Password modal');
+
+        // Other modals remain lazy loaded
+        logger.debug('  Other modals: Lazy loaded (will initialize on demand)');
 
         // Feature Modules - Lazy loaded
         logger.debug('  Context menu: Lazy loaded (on first right-click)');
