@@ -174,8 +174,10 @@ function updateTaskCardButtons() {
             }
         } else {
             // Remove Plan and Edit buttons if they exist
-            card.querySelector('.task-plan-btn')?.remove();
-            card.querySelector('.task-edit-btn')?.remove();
+            const planBtn = card.querySelector('.task-plan-btn');
+            if (planBtn) planBtn.remove();
+            const editBtn = card.querySelector('.task-edit-btn');
+            if (editBtn) editBtn.remove();
         }
     });
 
