@@ -116,16 +116,20 @@ function createGridCell(task, date, dept, rowClass) {
     const dayCell = document.createElement('div');
     dayCell.className = 'grid-cell';
 
+    // Format date and set data attributes for smart renderer queries
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
+
+    dayCell.dataset.date = dateStr;
+    dayCell.dataset.department = dept;
+
     if (task) {
         const card = createTaskCard(task, rowClass);
         dayCell.appendChild(card);
     } else {
-        const year = date.getFullYear();
-        const month = (date.getMonth() + 1).toString().padStart(2, '0');
-        const day = date.getDate().toString().padStart(2, '0');
-        const dateStr = `${year}-${month}-${day}`;
         const weekStr = getLocalDateString(getMonday(date));
-
         const placeholder = createTaskCardPlaceholder(dept, dateStr, weekStr, rowClass);
         dayCell.appendChild(placeholder);
     }

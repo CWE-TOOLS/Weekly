@@ -219,7 +219,8 @@ export function smartUpdateSchedule(container, oldTasks, newTasks) {
                 const rowClass = Array.from(cardElement.classList).find(c => c.startsWith('dept-row-')) || '';
 
                 // Find the new target cell using correct selector (date + department)
-                const newDateStr = newTask.date ? new Date(newTask.date.split('-').join('/')).toDateString() : '';
+                // Use YYYY-MM-DD format to match DOM data attributes
+                const newDateStr = newTask.date || '';
                 const newDept = newTask.department;
 
                 // Find all cells for this date + department

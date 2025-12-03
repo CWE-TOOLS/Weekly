@@ -34,7 +34,7 @@
  *   - Direct DOM manipulation for speed
  */
 
-import { getAllTasks, getFilteredTasks } from '../../core/state.js';
+import { getAllTasks, getFilteredTasks, setFilteredTasks } from '../../core/state.js';
 import { updateTaskInSupabase, sendRefreshSignal } from '../../services/supabase-service.js';
 import { fetchAllTasks } from '../../services/data-service.js';
 import { showSuccessNotification, showError } from '../../utils/ui-utils.js';
@@ -284,24 +284,18 @@ async function handleDrop(e) {
             // Continue - this is not critical
         }
 
-        // Refresh local data
-        await fetchAllTasks();
+        // Force a full render by clearing previous filtered tasks
+        // This bypasses the buggy smart update that removes cards instead of moving them
+        setFilteredTasks([], true);
+
+        // Refresh local data using the same approach as remote clients
+        // silent=true hides loading spinner, suppressEvents=false emits events to trigger UI refresh
+        await fetchAllTasks(true, false);
 
         debug.log('=== DRAG-DROP: After fetchAllTasks ===');
         const allTasks = getAllTasks();
         const movedTask = allTasks.find(t => t.id === task.id);
         debug.log('Moved task in _allTasks:', movedTask ? { id: movedTask.id, date: movedTask.date, week: movedTask.week } : 'NOT FOUND');
-
-        // Update filtered tasks immediately to avoid race condition
-        filterTasks();
-
-        debug.log('=== DRAG-DROP: After filterTasks ===');
-        const filtered = getFilteredTasks();
-        const filteredMovedTask = filtered.find(t => t.id === task.id);
-        debug.log('Moved task in _filteredTasks:', filteredMovedTask ? { id: filteredMovedTask.id, date: filteredMovedTask.date, week: filteredMovedTask.week } : 'NOT FOUND');
-
-        // Force UI update to ensure the card appears in its new position
-        render();
 
         // Show success message
         showSuccessNotification('Task moved successfully!');

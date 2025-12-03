@@ -78,8 +78,8 @@ export function filterTasks(silent = false) {
         }
     }
 
-    // Update state
-    setFilteredTasks(filtered);
+    // Update state - pass silent flag to prevent TASKS_FILTERED event
+    setFilteredTasks(filtered, silent);
 
     // Update label
     updateMultiSelectLabel();
