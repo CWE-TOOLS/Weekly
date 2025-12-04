@@ -398,11 +398,24 @@ function createFrozenDailySummaryTable(departmentSummaries) {
 
         if (summary.breakdown) {
             // Show breakdown for combined departments (Crating + Load)
-            const crateStr = summary.breakdown.crate > 0 ? `Crating: $${summary.breakdown.crate.toLocaleString()}` : '';
-            const loadStr = summary.breakdown.load > 0 ? `Load: $${summary.breakdown.load.toLocaleString()}` : '';
-            const parts = [crateStr, loadStr].filter(s => s.length > 0);
-            const breakdownStr = parts.join(' + ');
-            revenueCell.innerHTML = `${breakdownStr}<br><strong>= $${summary.targetRevenue.toLocaleString()}</strong>`;
+            // Format: Line 1: Crating: $X
+            //         Line 2: + Load: $Y
+            //         Line 3: = $Total
+            let html = '';
+
+            if (summary.breakdown.crate > 0) {
+                html += `Crating: $${summary.breakdown.crate.toLocaleString()}`;
+            }
+
+            if (summary.breakdown.load > 0) {
+                if (html) html += '<br>';
+                html += `+ Load: $${summary.breakdown.load.toLocaleString()}`;
+            }
+
+            if (html) html += '<br>';
+            html += `<strong>= $${summary.targetRevenue.toLocaleString()}</strong>`;
+
+            revenueCell.innerHTML = html;
         } else {
             revenueCell.textContent = `$${summary.targetRevenue.toLocaleString()}`;
         }
