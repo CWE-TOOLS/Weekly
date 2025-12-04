@@ -323,9 +323,131 @@ function applyPageBreakRules(pages) {
 }
 
 /**
+ * Generate frozen daily report content for next business day
+ */
+function generateFrozenDailyContent(targetDate, allTasks) {
+    const printContainer = document.createElement('div');
+    printContainer.className = 'print-preview-content frozen-daily-report';
+
+    // Create the page
+    const page = document.createElement('div');
+    page.className = 'print-page frozen-daily-page';
+
+    // Add header
+    const header = PrintLayout.createFrozenDailyHeader(targetDate);
+    page.appendChild(header);
+
+    // Filter tasks for target date
+    const targetDateString = targetDate.toDateString();
+    const dayTasks = allTasks.filter(task => {
+        const taskDate = parseDate(task.date);
+        return taskDate && taskDate.toDateString() === targetDateString;
+    });
+
+    // Group tasks by department
+    const { groupTasksByDepartment, sortDepartments } = DepartmentUtils;
+
+    // Generate synthetic tasks for the target date
+    const monday = new Date(targetDate);
+    const day = monday.getDay();
+    const diff = monday.getDate() - day + (day === 0 ? -6 : 1);
+    monday.setDate(diff);
+
+    const batchTasks = generateBatchTasks([targetDate], monday, () => allTasks);
+    const layoutTasks = generateLayoutTasks([targetDate], monday, () => allTasks);
+
+    const tasksByDept = groupTasksByDepartment(dayTasks, batchTasks, layoutTasks);
+    const sortedDepts = sortDepartments(Object.keys(tasksByDept));
+
+    // Calculate revenue for each department
+    const departmentSummaries = [];
+    let crateRevenue = 0;
+    let loadRevenue = 0;
+    let hasCrate = false;
+    let hasLoad = false;
+
+    sortedDepts.forEach(dept => {
+        const deptData = tasksByDept[dept];
+        if (!deptData) return;
+
+        const deptTasks = (deptData.tasks || []).filter(task => {
+            const taskDate = parseDate(task.date);
+            return taskDate && taskDate.toDateString() === targetDateString;
+        });
+
+        const syntheticTasks = (deptData.syntheticTasks || []).filter(task => {
+            const taskDate = parseDate(task.date);
+            return taskDate && taskDate.toDateString() === targetDateString;
+        });
+
+        // Combine regular and synthetic tasks
+        const allDeptTasks = [...deptTasks, ...syntheticTasks];
+
+        if (allDeptTasks.length === 0) return;
+
+        // Calculate total revenue for this department
+        let totalHours = 0;
+        allDeptTasks.forEach(task => {
+            const hours = parseFloat(task.hours || 0);
+            if (!isNaN(hours)) {
+                totalHours += hours;
+            }
+        });
+
+        const targetRevenue = Math.round(totalHours * REVENUE.HOURLY_RATE);
+
+        // Special handling for Crating and Load - combine into one line
+        if (dept === 'Crating') {
+            crateRevenue = targetRevenue;
+            hasCrate = true;
+            return; // Don't add to summaries yet
+        } else if (dept === 'Load') {
+            loadRevenue = targetRevenue;
+            hasLoad = true;
+            return; // Don't add to summaries yet
+        }
+
+        departmentSummaries.push({
+            department: dept,
+            targetRevenue: targetRevenue
+        });
+    });
+
+    // Add combined Crating + Load entry if both exist
+    if (hasCrate || hasLoad) {
+        const combinedTotal = crateRevenue + loadRevenue;
+        departmentSummaries.push({
+            department: 'Crating + Load',
+            targetRevenue: combinedTotal,
+            breakdown: {
+                crate: crateRevenue,
+                load: loadRevenue
+            }
+        });
+    }
+
+    // Create summary table
+    const summaryTable = PrintLayout.createFrozenDailySummaryTable(departmentSummaries);
+    page.appendChild(summaryTable);
+
+    // Add notes section
+    const notesSection = PrintLayout.createFrozenDailyNotesSection();
+    page.appendChild(notesSection);
+
+    printContainer.appendChild(page);
+    return printContainer;
+}
+
+/**
  * Generate complete print content for selected departments with department-per-page scaling
  */
 function generatePrintContent(printType, selectedDepts, weekDates, allTasks) {
+    // Handle frozen daily print type
+    if (printType === 'frozen-daily') {
+        // Use the first date as the target date (should be next business day)
+        const targetDate = weekDates && weekDates.length > 0 ? weekDates[0] : new Date();
+        return generateFrozenDailyContent(targetDate, allTasks);
+    }
     const printContainer = document.createElement('div');
     printContainer.className = 'print-preview-content';
 
@@ -455,6 +577,7 @@ export {
     applyDensityClass,
     applyPageBreakRules,
     generatePrintContent,
+    generateFrozenDailyContent,
     applyPrintScaling,
     executePrint
 };

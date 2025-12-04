@@ -323,6 +323,158 @@ function createDepartmentTable(dept, tasks, dates, printType, isCompact, totalHo
     return table;
 }
 
+// ============================================
+// FROZEN DAILY LAYOUT COMPONENTS
+// ============================================
+
+/**
+ * Create frozen daily report header
+ */
+function createFrozenDailyHeader(date) {
+    const header = document.createElement('div');
+    header.className = 'frozen-daily-header';
+
+    const dateStr = date.toLocaleDateString('en-US', {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric'
+    });
+
+    header.innerHTML = `
+        <h1>FROZEN DAILY - ${dateStr}</h1>
+        <p class="frozen-subtitle">Next Business Day Revenue Targets</p>
+    `;
+
+    return header;
+}
+
+/**
+ * Create frozen daily summary table (one line per department)
+ */
+function createFrozenDailySummaryTable(departmentSummaries) {
+    const table = document.createElement('table');
+    table.className = 'frozen-summary-table';
+
+    // Create header
+    const thead = document.createElement('thead');
+    thead.innerHTML = `
+        <tr>
+            <th class="dept-col">Department</th>
+            <th class="revenue-col">Target Revenue</th>
+            <th class="actual-col">Actual</th>
+            <th class="overtime-col">Overtime</th>
+        </tr>
+    `;
+    table.appendChild(thead);
+
+    // Create body with department rows
+    const tbody = document.createElement('tbody');
+    let grandTotal = 0;
+
+    // Get color mapping
+    const colorMapping = window.PrintUtils.getDepartmentColorMapping();
+
+    departmentSummaries.forEach(summary => {
+        const row = document.createElement('tr');
+        // Use Crating color for combined Crating + Load department
+        let deptClass = window.PrintUtils.normalizeDepartmentClass(summary.department);
+        if (summary.department === 'Crating + Load') {
+            deptClass = window.PrintUtils.normalizeDepartmentClass('Crating');
+        }
+        const colors = colorMapping[deptClass] || { bg: '#666', text: '#FFFFFF' };
+
+        // Create department name cell with color
+        const deptCell = document.createElement('td');
+        deptCell.className = 'dept-name';
+        deptCell.textContent = summary.department;
+        deptCell.style.backgroundColor = colors.bg;
+        deptCell.style.color = colors.text;
+        row.appendChild(deptCell);
+
+        // Create revenue cell with breakdown if applicable
+        const revenueCell = document.createElement('td');
+        revenueCell.className = 'target-revenue';
+
+        if (summary.breakdown) {
+            // Show breakdown for combined departments (Crating + Load)
+            const crateStr = summary.breakdown.crate > 0 ? `Crating: $${summary.breakdown.crate.toLocaleString()}` : '';
+            const loadStr = summary.breakdown.load > 0 ? `Load: $${summary.breakdown.load.toLocaleString()}` : '';
+            const parts = [crateStr, loadStr].filter(s => s.length > 0);
+            const breakdownStr = parts.join(' + ');
+            revenueCell.innerHTML = `${breakdownStr}<br><strong>= $${summary.targetRevenue.toLocaleString()}</strong>`;
+        } else {
+            revenueCell.textContent = `$${summary.targetRevenue.toLocaleString()}`;
+        }
+
+        row.appendChild(revenueCell);
+
+        // Create actual cell
+        const actualCell = document.createElement('td');
+        actualCell.className = 'actual-blank';
+        actualCell.textContent = '____________';
+        row.appendChild(actualCell);
+
+        // Create overtime cell
+        const overtimeCell = document.createElement('td');
+        overtimeCell.className = 'overtime-blank';
+        overtimeCell.textContent = '____________';
+        row.appendChild(overtimeCell);
+
+        tbody.appendChild(row);
+        grandTotal += summary.targetRevenue;
+    });
+
+    table.appendChild(tbody);
+
+    // Create footer with grand total
+    const tfoot = document.createElement('tfoot');
+    tfoot.innerHTML = `
+        <tr class="grand-total-row">
+            <td class="total-label">TOTAL</td>
+            <td class="total-revenue">$${grandTotal.toLocaleString()}</td>
+            <td class="total-actual">____________</td>
+            <td class="total-overtime">____________</td>
+        </tr>
+    `;
+    table.appendChild(tfoot);
+
+    return table;
+}
+
+/**
+ * Create notes section for Wins and Losses
+ */
+function createFrozenDailyNotesSection() {
+    const notesSection = document.createElement('div');
+    notesSection.className = 'frozen-notes-section';
+
+    notesSection.innerHTML = `
+        <div class="frozen-notes-column">
+            <div class="frozen-notes-header">WINS</div>
+            <div class="frozen-notes-lines">
+                <div class="frozen-note-line">_______________________________________________________________________________</div>
+                <div class="frozen-note-line">_______________________________________________________________________________</div>
+                <div class="frozen-note-line">_______________________________________________________________________________</div>
+                <div class="frozen-note-line">_______________________________________________________________________________</div>
+                <div class="frozen-note-line">_______________________________________________________________________________</div>
+            </div>
+        </div>
+        <div class="frozen-notes-column">
+            <div class="frozen-notes-header">LOSSES</div>
+            <div class="frozen-notes-lines">
+                <div class="frozen-note-line">_______________________________________________________________________________</div>
+                <div class="frozen-note-line">_______________________________________________________________________________</div>
+                <div class="frozen-note-line">_______________________________________________________________________________</div>
+                <div class="frozen-note-line">_______________________________________________________________________________</div>
+                <div class="frozen-note-line">_______________________________________________________________________________</div>
+            </div>
+        </div>
+    `;
+
+    return notesSection;
+}
+
 // Export layout components
 export {
     createDepartmentHeader,
@@ -331,5 +483,8 @@ export {
     createTableFooter,
     createPrintTaskCard,
     createTableBody,
-    createDepartmentTable
+    createDepartmentTable,
+    createFrozenDailyHeader,
+    createFrozenDailySummaryTable,
+    createFrozenDailyNotesSection
 };

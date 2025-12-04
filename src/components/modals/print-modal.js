@@ -33,8 +33,11 @@ let cancelButton = null;
 let executeButton = null;
 let weekSelectElement = null;
 let dateSelectElement = null;
+let frozenDailyDateSelectElement = null;
 let weekSectionElement = null;
 let daySectionElement = null;
+let frozenDailySectionElement = null;
+let departmentsSectionElement = null;
 let departmentsGridElement = null;
 let checkAllButton = null;
 let uncheckAllButton = null;
@@ -51,8 +54,11 @@ export function initializePrintModal() {
     executeButton = document.getElementById('print-execute-btn');
     weekSelectElement = document.getElementById('print-week-select');
     dateSelectElement = document.getElementById('print-date-select');
+    frozenDailyDateSelectElement = document.getElementById('frozen-daily-date-select');
     weekSectionElement = document.getElementById('week-select-section');
     daySectionElement = document.getElementById('day-select-section');
+    frozenDailySectionElement = document.getElementById('frozen-daily-select-section');
+    departmentsSectionElement = document.getElementById('departments-section');
     departmentsGridElement = document.querySelector('.departments-grid');
     checkAllButton = document.getElementById('check-all-depts');
     uncheckAllButton = document.getElementById('uncheck-all-depts');
@@ -179,7 +185,7 @@ function populatePrintOptions() {
 }
 
 /**
- * Update print type display (week vs day)
+ * Update print type display (week vs day vs frozen-daily)
  * @private
  */
 function updatePrintTypeDisplay() {
@@ -187,13 +193,32 @@ function updatePrintTypeDisplay() {
     const printType = (checkedRadio && checkedRadio.value) || 'week';
     setCurrentPrintType(printType);
 
-    if (weekSectionElement && daySectionElement) {
+    if (weekSectionElement && daySectionElement && frozenDailySectionElement && departmentsSectionElement) {
         if (printType === 'week') {
             weekSectionElement.style.display = 'block';
             daySectionElement.style.display = 'none';
-        } else {
+            frozenDailySectionElement.style.display = 'none';
+            departmentsSectionElement.style.display = 'block';
+        } else if (printType === 'day') {
             weekSectionElement.style.display = 'none';
             daySectionElement.style.display = 'block';
+            frozenDailySectionElement.style.display = 'none';
+            departmentsSectionElement.style.display = 'block';
+        } else if (printType === 'frozen-daily') {
+            // Frozen daily uses date selector, no department selection
+            weekSectionElement.style.display = 'none';
+            daySectionElement.style.display = 'none';
+            frozenDailySectionElement.style.display = 'block';
+            departmentsSectionElement.style.display = 'none';
+
+            // Set default date to next business day
+            if (frozenDailyDateSelectElement && window.PrintUtils && window.PrintUtils.getNextBusinessDay) {
+                const nextBusinessDay = window.PrintUtils.getNextBusinessDay();
+                const year = nextBusinessDay.getFullYear();
+                const month = String(nextBusinessDay.getMonth() + 1).padStart(2, '0');
+                const day = String(nextBusinessDay.getDate()).padStart(2, '0');
+                frozenDailyDateSelectElement.value = `${year}-${month}-${day}`;
+            }
         }
     }
 }
@@ -204,17 +229,40 @@ function updatePrintTypeDisplay() {
  */
 function handlePrintExecute() {
     const printType = getCurrentPrintType();
-    const selectedDepts = getSelectedDepartments();
 
-    // Validate configuration
-    const validation = validatePrintConfig(printType, selectedDepts, dateSelectElement);
-    if (!validation.valid) {
-        alert(validation.error);
-        return;
+    let printDates;
+    let selectedDepts;
+
+    // Handle frozen-daily separately
+    if (printType === 'frozen-daily') {
+        // Frozen daily doesn't need department selection - includes all departments
+        // Use selected date from frozen-daily date selector
+        if (frozenDailyDateSelectElement && frozenDailyDateSelectElement.value) {
+            const selectedDate = new Date(frozenDailyDateSelectElement.value + 'T00:00:00');
+            printDates = [selectedDate];
+            selectedDepts = []; // Empty means all departments
+
+            logger.info('Frozen daily print: Using selected date', {
+                date: selectedDate.toDateString()
+            });
+        } else {
+            alert('Please select a date for the frozen daily report.');
+            return;
+        }
+    } else {
+        // Normal week/day print - get selected departments
+        selectedDepts = getSelectedDepartments();
+
+        // Validate configuration
+        const validation = validatePrintConfig(printType, selectedDepts, dateSelectElement);
+        if (!validation.valid) {
+            alert(validation.error);
+            return;
+        }
+
+        // Prepare print dates
+        printDates = preparePrintDates(printType, weekSelectElement, dateSelectElement);
     }
-
-    // Prepare print dates
-    const printDates = preparePrintDates(printType, weekSelectElement, dateSelectElement);
 
 // Generate print content using external utilities
     const allTasks = getAllTasks();

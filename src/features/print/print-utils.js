@@ -173,6 +173,25 @@ function normalizeDepartmentClass(dept) {
 }
 
 /**
+ * Get next business day (skip weekends)
+ */
+function getNextBusinessDay() {
+    const today = new Date();
+    let nextDay = new Date(today);
+    nextDay.setDate(today.getDate() + 1);
+
+    // Skip weekends
+    const dayOfWeek = nextDay.getDay();
+    if (dayOfWeek === 0) { // Sunday
+        nextDay.setDate(nextDay.getDate() + 1); // Move to Monday
+    } else if (dayOfWeek === 6) { // Saturday
+        nextDay.setDate(nextDay.getDate() + 2); // Move to Monday
+    }
+
+    return nextDay;
+}
+
+/**
  * Calculate maximum number of tasks for a department across given dates
  */
 function getMaxTasksForDept(dept, tasks, dates, printType) {
@@ -297,6 +316,7 @@ window.PrintUtils = {
     normalizeDepartmentClass,
     parseDate,
     getMaxTasksForDept,
+    getNextBusinessDay,
     generateBatchTasks,  // Re-export from schedule-utils.js
     generateLayoutTasks,  // Re-export from schedule-utils.js
     applyScaling,

@@ -238,6 +238,10 @@
                                     <input type="radio" name="print-type" value="day">
                                     <span class="radio-text">Print Day</span>
                                 </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="print-type" value="frozen-daily">
+                                    <span class="radio-text">Frozen Daily</span>
+                                </label>
                             </div>
                         </div>
 
@@ -253,7 +257,12 @@
                             <input type="date" id="print-date-select" class="date-select">
                         </div>
 
-                        <div class="departments-section">
+                        <div class="date-select-section" id="frozen-daily-select-section" style="display: none;">
+                            <label for="frozen-daily-date-select" class="print-option-label">Select Date:</label>
+                            <input type="date" id="frozen-daily-date-select" class="date-select">
+                        </div>
+
+                        <div class="departments-section" id="departments-section">
                             <label class="print-option-label">Select Departments:</label>
                             <div class="departments-actions">
                                 <button id="check-all-depts" class="dept-action-btn">Check All</button>

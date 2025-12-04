@@ -454,4 +454,241 @@ li:last-child {
         border: 1px solid #666 !important;
         background: #f9f9f9 !important;
     }
+
+    /* ============================================
+       FROZEN DAILY REPORT STYLES
+       ============================================ */
+
+    /* Override page orientation for frozen daily */
+    .frozen-daily-report .print-page {
+        page-break-after: auto;
+        page-break-inside: auto;
+        width: 100%;
+        height: auto;
+        max-width: 10in;
+        margin: 0 auto;
+    }
+
+    /* Header section - scaled up 10% */
+    .frozen-daily-header {
+        text-align: center;
+        border-bottom: 2px solid #000;
+        padding: 0.22em 0;
+        margin-bottom: 0.28em;
+        background: #f5f5f5;
+        border: 2px solid #000;
+        border-bottom: 2px solid #000;
+    }
+
+    .frozen-daily-header h1 {
+        font-size: 15.4pt !important;
+        font-weight: 700 !important;
+        margin: 0 0 0.11em 0 !important;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #000 !important;
+    }
+
+    .frozen-subtitle {
+        font-size: 9.9pt !important;
+        color: #555 !important;
+        margin: 0 !important;
+        font-style: italic;
+        font-weight: 500;
+    }
+
+    /* Summary table - scaled up 10% */
+    .frozen-summary-table {
+        width: 95%;
+        max-width: 9.5in;
+        border-collapse: collapse;
+        margin: 0 auto 0.33em auto;
+        font-size: 8.8pt !important;
+        border: 2px solid #000;
+    }
+
+    .frozen-summary-table thead th {
+        background: #333 !important;
+        color: white !important;
+        font-weight: 700 !important;
+        font-size: 9.9pt !important;
+        text-align: left !important;
+        padding: 0.28em 0.33em !important;
+        border-right: 2px solid #000 !important;
+        border-bottom: 2px solid #000 !important;
+        print-color-adjust: exact !important;
+        -webkit-print-color-adjust: exact !important;
+    }
+
+    .frozen-summary-table thead th:last-child {
+        border-right: none;
+    }
+
+    .frozen-summary-table thead th.dept-col {
+        width: 25%;
+    }
+
+    .frozen-summary-table thead th.revenue-col {
+        width: 20%;
+        text-align: right !important;
+    }
+
+    .frozen-summary-table thead th.actual-col {
+        width: 25%;
+        text-align: center !important;
+    }
+
+    .frozen-summary-table thead th.overtime-col {
+        width: 30%;
+        text-align: center !important;
+    }
+
+    .frozen-summary-table tbody td {
+        padding: 0.22em 0.33em !important;
+        border-right: 1px solid #999 !important;
+        border-bottom: 1px solid #999 !important;
+        font-size: 8.8pt !important;
+    }
+
+    .frozen-summary-table tbody td:last-child {
+        border-right: none;
+    }
+
+    .frozen-summary-table tbody tr:last-child td {
+        border-bottom: none;
+    }
+
+    .frozen-summary-table tbody td.dept-name {
+        font-weight: 600 !important;
+        text-align: left !important;
+        color: white !important;
+        font-size: 9.9pt !important;
+        print-color-adjust: exact !important;
+        -webkit-print-color-adjust: exact !important;
+        border-right: 2px solid #000 !important;
+    }
+
+    .frozen-summary-table tbody td.target-revenue {
+        font-weight: 700 !important;
+        text-align: right !important;
+        font-size: 9.9pt !important;
+        background: white !important;
+        border-right: 2px solid #000 !important;
+    }
+
+    .frozen-summary-table tbody td.actual-blank {
+        text-align: center !important;
+        color: #bbb !important;
+        letter-spacing: -0.03em;
+        background: #fafafa !important;
+        font-size: 8.8pt !important;
+        border-right: 2px solid #000 !important;
+    }
+
+    .frozen-summary-table tbody td.overtime-blank {
+        text-align: center !important;
+        color: #bbb !important;
+        letter-spacing: -0.03em;
+        background: #fafafa !important;
+        font-size: 8.8pt !important;
+    }
+
+    .frozen-summary-table tfoot {
+        border-top: 2px solid #000 !important;
+    }
+
+    .frozen-summary-table tfoot td {
+        background: #e8e8e8 !important;
+        font-weight: 700 !important;
+        font-size: 11pt !important;
+        padding: 0.33em !important;
+        border-right: 2px solid #000 !important;
+        print-color-adjust: exact !important;
+        -webkit-print-color-adjust: exact !important;
+    }
+
+    .frozen-summary-table tfoot td:last-child {
+        border-right: none;
+    }
+
+    .frozen-summary-table tfoot td.total-label {
+        text-align: left !important;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        font-size: 11pt !important;
+    }
+
+    .frozen-summary-table tfoot td.total-revenue {
+        text-align: right !important;
+        font-size: 11pt !important;
+    }
+
+    .frozen-summary-table tfoot td.total-actual {
+        text-align: center !important;
+        color: #666 !important;
+        letter-spacing: -0.03em;
+        background: #fafafa !important;
+    }
+
+    .frozen-summary-table tfoot td.total-overtime {
+        text-align: center !important;
+        color: #666 !important;
+        letter-spacing: -0.03em;
+        background: #fafafa !important;
+    }
+
+    /* Notes section - scaled up 10% */
+    .frozen-notes-section {
+        display: table;
+        width: 95%;
+        max-width: 9.5in;
+        border: 2px solid #000;
+        margin: 0.33em auto 0 auto;
+        table-layout: fixed;
+    }
+
+    .frozen-notes-column {
+        display: table-cell;
+        width: 50%;
+        border-right: 1px solid #000;
+        padding: 0;
+        vertical-align: top;
+    }
+
+    .frozen-notes-column:last-child {
+        border-right: none;
+    }
+
+    .frozen-notes-header {
+        background: #333 !important;
+        color: white !important;
+        font-weight: 700 !important;
+        font-size: 8.8pt !important;
+        text-align: center !important;
+        padding: 0.22em !important;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        border-bottom: 1px solid #000;
+        print-color-adjust: exact !important;
+        -webkit-print-color-adjust: exact !important;
+    }
+
+    .frozen-notes-lines {
+        padding: 0.22em 0.28em;
+        background: white;
+        min-height: 1.32in;
+    }
+
+    .frozen-note-line {
+        font-size: 8.8pt !important;
+        color: #ccc !important;
+        padding: 0.22em 0;
+        border-bottom: 1px solid #ccc;
+        letter-spacing: -0.04em;
+        line-height: 1.4;
+    }
+
+    .frozen-note-line:last-child {
+        border-bottom: 1px solid #ccc;
+    }
 }
