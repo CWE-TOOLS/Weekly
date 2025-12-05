@@ -22,7 +22,7 @@
  *   6. Return grid element with row class metadata
  */
 
-import { getFilteredTasks, getAllTasks } from '../core/state.js';
+import { getFilteredTasks, getAllTasks, injectSyntheticTasks } from '../core/state.js';
 import { parseDate, getMonday, getLocalDateString } from '../utils/date-utils.js';
 import { DEPARTMENT_ORDER } from '../config/department-config.js';
 import { groupTasksByDepartment } from '../utils/department-utils.js';
@@ -224,6 +224,9 @@ export function renderWeekGrid(dateForWeek, maxTasksPerDept) {
     // Generate special department tasks
     const batchTasks = generateBatchTasks(weekDates, monday, getAllTasks);
     const layoutTasks = generateLayoutTasks(weekDates, monday, getAllTasks);
+
+    // Inject synthetic tasks into state for smart renderer
+    injectSyntheticTasks([...batchTasks, ...layoutTasks]);
 
     // Create header row
     grid.innerHTML = createHeaderRow(weekDates);

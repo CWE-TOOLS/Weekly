@@ -21,8 +21,23 @@ import {
     smartUpdateSchedule,
     preserveScrollPosition
 } from '../utils/smart-renderer.js';
+import { clearSyntheticTasks, injectSyntheticTasks, getAllTasks, getAllWeekStartDates } from './state.js';
+import { generateBatchTasks, generateLayoutTasks } from '../utils/schedule-utils.js';
 
 let isRendering = false;
+
+/**
+ * Generate array of dates for a week (Monday through Saturday)
+ * @param {Date} monday - Monday date of the week
+ * @returns {Date[]} Array of 6 dates (Mon-Sat)
+ */
+function createWeekDates(monday) {
+    return Array.from({ length: 6 }).map((_, i) => {
+        const date = new Date(monday);
+        date.setDate(monday.getDate() + i);
+        return date;
+    });
+}
 
 /**
  * Main render function for the entire application.
@@ -47,8 +62,37 @@ export async function render() {
             return;
         }
 
-        const filteredTasks = state.getFilteredTasks();
+        let filteredTasks = state.getFilteredTasks();
         const previousFilteredTasks = state.getPreviousFilteredTasks();
+
+        // CRITICAL: Generate synthetic tasks BEFORE smart update comparison
+        // Problem: previousFilteredTasks has synthetic tasks (from last render)
+        //          but filteredTasks doesn't (not generated yet)
+        // Solution: Generate and inject synthetic tasks into current state
+        //           so both old and new have them for accurate comparison
+        const allWeekStartDates = getAllWeekStartDates();
+        if (allWeekStartDates.length > 0) {
+            const allSyntheticTasks = [];
+
+            // Generate synthetic tasks for ALL weeks in the current view
+            allWeekStartDates.forEach(monday => {
+                const weekDates = createWeekDates(monday);
+                const batchTasks = generateBatchTasks(weekDates, monday, getAllTasks);
+                const layoutTasks = generateLayoutTasks(weekDates, monday, getAllTasks);
+                allSyntheticTasks.push(...batchTasks, ...layoutTasks);
+            });
+
+            // Inject into state BEFORE smart update comparison
+            if (allSyntheticTasks.length > 0) {
+                injectSyntheticTasks(allSyntheticTasks);
+                // Re-fetch filteredTasks after injection to get the updated array
+                filteredTasks = state.getFilteredTasks();
+                logger.debug('Renderer: Injected synthetic tasks before smart update', {
+                    count: allSyntheticTasks.length,
+                    weeks: allWeekStartDates.length
+                });
+            }
+        }
 
         // Attempt smart update first to preserve scroll position
         if (previousFilteredTasks.length > 0 &&
@@ -76,11 +120,15 @@ export async function render() {
                 }, RENDER_DELAY.SCHEDULE);
 
                 isRendering = false;
-                return; // Early exit - skip full render
+                return; // Early exit - skip full render (synthetic tasks preserved)
             }
 
             logger.warn('⚠️ Smart update not possible, falling back to full render');
         }
+
+        // Clear any existing synthetic tasks before doing a FULL render
+        // (This happens after smart update check, so we only clear if doing full render)
+        clearSyntheticTasks();
 
         // FALLBACK: Capture vertical scroll before full render
         const savedScrollTop = wrapper.scrollTop;

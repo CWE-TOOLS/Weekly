@@ -134,7 +134,8 @@ export function generateSpecialDepartmentTasks(weekDates, monday, departmentName
                 dayNumber: '',
                 totalDays: '',
                 dayCounter: '',
-                missingDate: false
+                missingDate: false,
+                isSynthetic: true
             };
 
             specialTasks.push(task);

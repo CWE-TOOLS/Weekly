@@ -249,6 +249,33 @@ export function getIsEditingUnlocked() {
 }
 
 // ============================================================================
+// Synthetic Task Management
+// ============================================================================
+
+/**
+ * Inject synthetic tasks into filtered tasks
+ * These tasks are temporary and won't trigger re-renders
+ * @param {Array} syntheticTasks - Array of synthetic tasks to add
+ */
+export function injectSyntheticTasks(syntheticTasks) {
+    // Add synthetic tasks to both current and previous filtered tasks
+    _filteredTasks = [..._filteredTasks, ...syntheticTasks];
+    _previousFilteredTasks = [..._previousFilteredTasks, ...syntheticTasks];
+    // No event emission - silent operation
+}
+
+/**
+ * Clear all synthetic tasks from filtered tasks
+ * Removes any tasks marked with isSynthetic: true
+ */
+export function clearSyntheticTasks() {
+    // Filter out synthetic tasks from both arrays
+    _filteredTasks = _filteredTasks.filter(task => !task.isSynthetic);
+    _previousFilteredTasks = _previousFilteredTasks.filter(task => !task.isSynthetic);
+    // No event emission - silent operation
+}
+
+// ============================================================================
 // Computed State & Helper Methods
 // ============================================================================
 
