@@ -11,6 +11,7 @@ import { POSITION_OFFSET, Z_INDEX, INDICATOR_STYLE } from '../config/layout-cons
 
 import { logger } from '../utils/logger.js';
 import { normalizeProjectName } from '../utils/ui-utils.js';
+import { isInDegradedMode } from '../utils/browser-compat.js';
 // Supabase client and channel state
 let supabaseClient = null;
 let refreshChannel = null;
@@ -32,6 +33,12 @@ const tasksTable = SUPABASE.TASKS_TABLE;
  * // Returns singleton Supabase client instance
  */
 export async function initializeSupabase() {
+    // Skip Supabase initialization in degraded mode (old browsers)
+    if (isInDegradedMode()) {
+        logger.info('⚠️ Supabase initialization skipped (degraded mode)');
+        return null;
+    }
+
     // Return existing client if already initialized
     if (supabaseClient) {
         return supabaseClient;
@@ -245,6 +252,12 @@ function showNotification(message, type = 'info') {
  * await sendRefreshSignal({action: 'task_updated', taskId: task.id});
  */
 export async function sendRefreshSignal(updateInfo = {}) {
+    // Skip in degraded mode
+    if (isInDegradedMode()) {
+        logger.debug('⚠️ Refresh signals unavailable (degraded mode)');
+        return;
+    }
+
     if (!supabaseClient) {
         logger.warn('⚠️ Supabase not initialized, cannot send refresh signal');
         return;
@@ -291,6 +304,12 @@ export async function sendRefreshSignal(updateInfo = {}) {
  * const description = descriptions.get(key);
  */
 export async function fetchTaskDescriptions() {
+    // Return empty Map in degraded mode
+    if (isInDegradedMode()) {
+        logger.debug('⚠️ Task descriptions unavailable (degraded mode)');
+        return new Map();
+    }
+
     if (!supabaseClient) {
         await initializeSupabase();
     }
@@ -345,6 +364,12 @@ export async function fetchTaskDescriptions() {
  * // Returns: [{id: 'custom-1', project: 'Manual Project', isManual: true, ...}]
  */
 export async function loadManualTasks() {
+    // Return empty array in degraded mode
+    if (isInDegradedMode()) {
+        logger.debug('⚠️ Manual tasks unavailable (degraded mode)');
+        return [];
+    }
+
     if (!supabaseClient) {
         await initializeSupabase();
     }

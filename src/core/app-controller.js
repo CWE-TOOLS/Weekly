@@ -92,6 +92,12 @@ import { enableAddCardIndicators } from '../features/editing/add-card-indicators
 import { logger } from '../utils/logger.js';
 import { checkVersion, subscribeToVersionChanges } from '../features/versioning/version-checker.js';
 import { debug } from '../utils/debug.js';
+import {
+    checkBrowserCompatibility,
+    setDegradedMode,
+    showCompatibilityWarning,
+    disableEditingUI
+} from '../utils/browser-compat.js';
 // Application state
 let appState = {
     initialized: false,
@@ -158,14 +164,30 @@ function setupDragDropTrigger() {
  * @returns {Promise<void>}
  */
 export async function initializeApp() {
-    // Initialize Supabase first so version check can access it
+    // === Phase 0: Browser Compatibility Check (CRITICAL) ===
+    debug.log('[Startup] Phase 0: Browser Compatibility Check');
+    const compatResult = checkBrowserCompatibility();
+
+    if (compatResult.degradedMode) {
+        logger.warn('⚠️ Running in DEGRADED MODE (read-only)');
+        logger.warn(`Browser: ${compatResult.browserName} ${compatResult.browserVersion}`);
+        setDegradedMode(true);
+
+        // Show warning banner immediately
+        showCompatibilityWarning(compatResult.message);
+
+        // Disable editing UI
+        disableEditingUI();
+    }
+
+    // Initialize Supabase (will be skipped if in degraded mode)
     await initializeSupabase();
 
-    // First, check for application updates
-    await checkVersion();
-
-    // Subscribe to real-time version changes
-    subscribeToVersionChanges();
+    // Check for application updates (skip in degraded mode as it needs Supabase)
+    if (!compatResult.degradedMode) {
+        await checkVersion();
+        subscribeToVersionChanges();
+    }
 
     debug.log('[Startup] Starting initializeApp');
     debug.time('[Startup] initializeApp');

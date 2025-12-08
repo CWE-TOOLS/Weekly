@@ -28,12 +28,14 @@ export function initializeErrorHandler() {
 
     // Global error handler
     window.addEventListener('error', (event) => {
-        logger.error('Global error caught:', event.error);
-        handleError(event.error, {
+        // Handle case where event.error might be null (happens in some browsers)
+        const error = event.error || new Error(event.message || 'Unknown error');
+        logger.error('Global error caught:', error);
+        handleError(error, {
             context: 'Global error handler',
-            filename: event.filename,
-            lineno: event.lineno,
-            colno: event.colno
+            filename: event.filename || '',
+            lineno: event.lineno || 0,
+            colno: event.colno || 0
         });
     });
 

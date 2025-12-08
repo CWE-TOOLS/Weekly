@@ -57,7 +57,8 @@
       "Bash(git merge-base:*)",
       "Bash(git merge:*)",
       "Bash(git fetch:*)",
-      "Bash(git diff:*)"
+      "Bash(git diff:*)",
+      "Bash(node -c:*)"
     ],
     "deny": [],
     "ask": []
