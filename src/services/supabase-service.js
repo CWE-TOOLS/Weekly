@@ -12,6 +12,7 @@ import { POSITION_OFFSET, Z_INDEX, INDICATOR_STYLE } from '../config/layout-cons
 import { logger } from '../utils/logger.js';
 import { normalizeProjectName } from '../utils/ui-utils.js';
 import { isInDegradedMode } from '../utils/browser-compat.js';
+import { fetchTaskDescriptionsREST, loadManualTasksREST } from './supabase-rest-fallback.js';
 // Supabase client and channel state
 let supabaseClient = null;
 let refreshChannel = null;
@@ -304,10 +305,10 @@ export async function sendRefreshSignal(updateInfo = {}) {
  * const description = descriptions.get(key);
  */
 export async function fetchTaskDescriptions() {
-    // Return empty Map in degraded mode
+    // Use REST API fallback in degraded mode
     if (isInDegradedMode()) {
-        logger.debug('⚠️ Task descriptions unavailable (degraded mode)');
-        return new Map();
+        logger.debug('⚠️ Using REST API fallback for task descriptions (degraded mode)');
+        return await fetchTaskDescriptionsREST();
     }
 
     if (!supabaseClient) {
@@ -364,10 +365,10 @@ export async function fetchTaskDescriptions() {
  * // Returns: [{id: 'custom-1', project: 'Manual Project', isManual: true, ...}]
  */
 export async function loadManualTasks() {
-    // Return empty array in degraded mode
+    // Use REST API fallback in degraded mode
     if (isInDegradedMode()) {
-        logger.debug('⚠️ Manual tasks unavailable (degraded mode)');
-        return [];
+        logger.debug('⚠️ Using REST API fallback for manual tasks (degraded mode)');
+        return await loadManualTasksREST();
     }
 
     if (!supabaseClient) {

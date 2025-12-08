@@ -84,11 +84,11 @@ export function checkBrowserCompatibility() {
 
     if (!supportsModern) {
         result.degradedMode = true;
-        result.message = `${browserInfo.browserName} ${browserInfo.browserVersion} detected. Running in read-only mode. For full features, please update to Chrome 80+, Firefox 72+, or Safari 13.1+.`;
+        result.message = `${browserInfo.browserName} ${browserInfo.browserVersion} detected. Running in read-only mode with REST API fallback. Editing disabled. For full features, update to Chrome 80+, Firefox 72+, or Safari 13.1+.`;
 
         logger.warn('⚠️ Browser does not support modern JavaScript features');
         logger.warn(`Browser: ${browserInfo.browserName} ${browserInfo.browserVersion}`);
-        logger.warn('Running in degraded mode with limited features');
+        logger.warn('Running in degraded mode - using REST API fallback for data access');
     } else {
         result.message = 'Browser fully supported';
         logger.info(`✅ Browser supported: ${browserInfo.browserName} ${browserInfo.browserVersion}`);

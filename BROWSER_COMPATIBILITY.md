@@ -18,13 +18,15 @@ When an older browser is detected, the app automatically:
 
 **✅ ENABLED (Core Features):**
 - View tasks from Google Sheets
+- **View manual tasks from Supabase** (via REST API)
+- **View task descriptions from Supabase** (via REST API)
 - Filter by department
 - Search projects
 - Navigate weeks
 - Print schedules
 
 **❌ DISABLED (Advanced Features):**
-- Manual task creation/editing
+- Manual task creation/editing/deletion
 - Task descriptions editing
 - Real-time sync between clients
 - Drag-and-drop reordering
@@ -49,11 +51,28 @@ Running in degraded mode with limited features
 
 ### New Files Created:
 - `src/utils/browser-compat.js` - Browser detection and UI disabling logic
+- `src/services/supabase-rest-fallback.js` - REST API fallback for old browsers
 
 ### Modified Files:
 1. `src/core/app-controller.js` - Added Phase 0 browser check before initialization
-2. `src/services/supabase-service.js` - Skip Supabase init in degraded mode
+2. `src/services/supabase-service.js` - Use REST fallback in degraded mode
 3. `src/core/error-handler.js` - Fixed null error handling for older browsers
+
+### How REST Fallback Works:
+In degraded mode, instead of loading the Supabase JS v2 library (which uses modern syntax), we make direct HTTP requests to the Supabase REST API using plain `fetch()`:
+
+```javascript
+// Modern browsers: Use Supabase client
+const { data } = await supabaseClient.from('tasks').select('*');
+
+// Old browsers: Use REST API fallback
+const response = await fetch(SUPABASE.URL + '/rest/v1/tasks', {
+  headers: { 'apikey': SUPABASE.ANON_KEY }
+});
+const data = await response.json();
+```
+
+This allows full read access to Supabase data without requiring modern JavaScript features.
 
 ## Testing
 
