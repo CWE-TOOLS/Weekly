@@ -185,7 +185,7 @@ function populatePrintOptions() {
 }
 
 /**
- * Update print type display (week vs day vs frozen-daily)
+ * Update print type display (week vs day vs frozen-daily vs phase-start)
  * @private
  */
 function updatePrintTypeDisplay() {
@@ -194,7 +194,8 @@ function updatePrintTypeDisplay() {
     setCurrentPrintType(printType);
 
     if (weekSectionElement && daySectionElement && frozenDailySectionElement && departmentsSectionElement) {
-        if (printType === 'week') {
+        if (printType === 'week' || printType === 'phase-start') {
+            // Both week and phase-start use week selector and departments
             weekSectionElement.style.display = 'block';
             daySectionElement.style.display = 'none';
             frozenDailySectionElement.style.display = 'none';

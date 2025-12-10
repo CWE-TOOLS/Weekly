@@ -439,6 +439,213 @@ function generateFrozenDailyContent(targetDate, allTasks) {
 }
 
 /**
+ * Generate phase start report content for a selected week
+ * Shows projects that are beginning a new department phase
+ * @param {Date} weekStartDate - The Monday of the selected week
+ */
+function generatePhaseStartContent(weekStartDate, selectedDepts, allTasks) {
+    const printContainer = document.createElement('div');
+    printContainer.className = 'print-preview-content phase-start-report';
+
+    // Create the page
+    const page = document.createElement('div');
+    page.className = 'print-page phase-start-page';
+
+    // Add header with week range
+    const header = document.createElement('div');
+    header.className = 'phase-start-header';
+
+    // weekStartDate is already a Date object - ensure it's the Monday of the week
+    let weekStart = weekStartDate instanceof Date ? weekStartDate : parseDate(weekStartDate);
+    if (!weekStart) {
+        logger.error('Invalid week date for phase start report');
+        return printContainer;
+    }
+
+    // Ensure weekStart is actually Monday (day 1)
+    const dayOfWeek = weekStart.getDay();
+    if (dayOfWeek !== 1) {
+        // Adjust to get the Monday of this week
+        const daysToSubtract = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Sunday is 0, Monday is 1
+        weekStart = new Date(weekStart);
+        weekStart.setDate(weekStart.getDate() - daysToSubtract);
+    }
+
+    // Normalize to midnight for accurate date comparisons
+    weekStart.setHours(0, 0, 0, 0);
+
+    // Week ends on Saturday (6 days from Monday) at end of day
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 5); // Mon-Sat
+    weekEnd.setHours(23, 59, 59, 999); // End of Saturday
+
+    const formatDate = (date) => {
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    };
+
+    header.innerHTML = `
+        <h1>PHASE START REPORT</h1>
+        <p class="week-range">${formatDate(weekStart)} - ${formatDate(weekEnd)}, ${weekStart.getFullYear()}</p>
+    `;
+    page.appendChild(header);
+
+    // Filter tasks for selected week (exclude manual tasks)
+    const weekTasks = allTasks.filter(task => {
+        if (task.isManual) return false; // Exclude manual tasks
+        const taskDate = parseDate(task.date);
+        return taskDate && taskDate >= weekStart && taskDate <= weekEnd;
+    });
+
+    // Filter all tasks to exclude manual tasks for phase detection
+    const nonManualTasks = allTasks.filter(task => !task.isManual);
+
+    // Detect phase starts - pass week dates explicitly
+    const phaseStarts = window.PrintUtils.detectPhaseStarts(weekTasks, nonManualTasks, weekStart, weekEnd);
+
+    // Get department order and filter
+    const departmentOrder = window.PrintUtils.PRINT_UTILS.DEPARTMENT_ORDER;
+    const sortedDepts = departmentOrder.filter(dept =>
+        phaseStarts.has(dept) &&
+        (selectedDepts.length === 0 || selectedDepts.includes(dept))
+    );
+
+    // Handle empty results
+    if (sortedDepts.length === 0) {
+        const emptyMsg = document.createElement('div');
+        emptyMsg.className = 'phase-start-empty';
+        emptyMsg.textContent = 'No phase starts found for the selected week.';
+        page.appendChild(emptyMsg);
+    } else {
+        // Create two-column layout container
+        const columnsContainer = document.createElement('div');
+        columnsContainer.className = 'phase-start-columns';
+
+        // LEFT COLUMN: Grouped by Department
+        const deptColumn = document.createElement('div');
+        deptColumn.className = 'phase-start-column';
+
+        const deptColumnHeader = document.createElement('h2');
+        deptColumnHeader.className = 'column-header';
+        deptColumnHeader.textContent = 'By Department';
+        deptColumn.appendChild(deptColumnHeader);
+
+        sortedDepts.forEach(dept => {
+            const projects = phaseStarts.get(dept);
+            if (!projects || projects.length === 0) return;
+
+            // Sort projects alphabetically
+            projects.sort((a, b) => a.project.localeCompare(b.project));
+
+            // Create department section
+            const section = document.createElement('div');
+            section.className = 'phase-start-section';
+
+            // Department header
+            const colors = window.PrintUtils.getDepartmentColorMapping()[window.PrintUtils.normalizeDepartmentClass(dept)] || { bg: '#333', text: '#FFFFFF' };
+            const deptHeader = document.createElement('div');
+            deptHeader.className = 'phase-start-dept-header';
+            deptHeader.style.backgroundColor = colors.bg;
+            deptHeader.style.color = colors.text;
+            deptHeader.textContent = dept.toUpperCase();
+            section.appendChild(deptHeader);
+
+            // Project list
+            const projectList = document.createElement('div');
+            projectList.className = 'phase-start-project-list';
+
+            projects.forEach(({ project, date }) => {
+                const projectItem = document.createElement('div');
+                projectItem.className = 'phase-start-project-item';
+
+                const projectDate = parseDate(date);
+                const dateStr = projectDate ? formatDate(projectDate) : date;
+
+                projectItem.innerHTML = `
+                    <span class="project-bullet">•</span>
+                    <span class="project-name">${project}</span>
+                    <span class="project-date">(${dateStr})</span>
+                `;
+                projectList.appendChild(projectItem);
+            });
+
+            section.appendChild(projectList);
+            deptColumn.appendChild(section);
+        });
+
+        // RIGHT COLUMN: Grouped by Project
+        const projectColumn = document.createElement('div');
+        projectColumn.className = 'phase-start-column';
+
+        const projectColumnHeader = document.createElement('h2');
+        projectColumnHeader.className = 'column-header';
+        projectColumnHeader.textContent = 'By Project';
+        projectColumn.appendChild(projectColumnHeader);
+
+        // Invert the data structure: project -> departments
+        const projectMap = new Map();
+        sortedDepts.forEach(dept => {
+            const projects = phaseStarts.get(dept);
+            if (!projects) return;
+
+            projects.forEach(({ project, date }) => {
+                if (!projectMap.has(project)) {
+                    projectMap.set(project, []);
+                }
+                projectMap.get(project).push({ department: dept, date });
+            });
+        });
+
+        // Sort projects alphabetically
+        const sortedProjects = Array.from(projectMap.keys()).sort((a, b) => a.localeCompare(b));
+
+        sortedProjects.forEach(project => {
+            const departments = projectMap.get(project);
+
+            // Create project section
+            const section = document.createElement('div');
+            section.className = 'phase-start-section';
+
+            // Project header
+            const projectHeader = document.createElement('div');
+            projectHeader.className = 'phase-start-project-header';
+            projectHeader.textContent = project;
+            section.appendChild(projectHeader);
+
+            // Department list
+            const deptList = document.createElement('div');
+            deptList.className = 'phase-start-dept-list';
+
+            departments.forEach(({ department, date }) => {
+                const deptItem = document.createElement('div');
+                deptItem.className = 'phase-start-dept-item';
+
+                const projectDate = parseDate(date);
+                const dateStr = projectDate ? formatDate(projectDate) : date;
+
+                const colors = window.PrintUtils.getDepartmentColorMapping()[window.PrintUtils.normalizeDepartmentClass(department)] || { bg: '#333', text: '#FFFFFF' };
+
+                deptItem.innerHTML = `
+                    <span class="dept-bullet">•</span>
+                    <span class="dept-name" style="color: ${colors.bg}; font-weight: 600;">${department}</span>
+                    <span class="dept-date">(${dateStr})</span>
+                `;
+                deptList.appendChild(deptItem);
+            });
+
+            section.appendChild(deptList);
+            projectColumn.appendChild(section);
+        });
+
+        columnsContainer.appendChild(deptColumn);
+        columnsContainer.appendChild(projectColumn);
+        page.appendChild(columnsContainer);
+    }
+
+    printContainer.appendChild(page);
+    return printContainer;
+}
+
+/**
  * Generate complete print content for selected departments with department-per-page scaling
  */
 function generatePrintContent(printType, selectedDepts, weekDates, allTasks) {
@@ -447,6 +654,13 @@ function generatePrintContent(printType, selectedDepts, weekDates, allTasks) {
         // Use the first date as the target date (should be next business day)
         const targetDate = weekDates && weekDates.length > 0 ? weekDates[0] : new Date();
         return generateFrozenDailyContent(targetDate, allTasks);
+    }
+
+    // Handle phase start report type
+    if (printType === 'phase-start') {
+        // Use the first date as the week start (Monday)
+        const weekStart = weekDates && weekDates.length > 0 ? weekDates[0] : new Date();
+        return generatePhaseStartContent(weekStart, selectedDepts, allTasks);
     }
     const printContainer = document.createElement('div');
     printContainer.className = 'print-preview-content';
@@ -532,9 +746,9 @@ function applyPrintScaling(printContent, printType) {
  * Execute print with proper setup and cleanup
  */
 function executePrint(printContent, printType = 'week') {
-    // Create dynamic print styles for portrait orientation (daily view)
+    // Create dynamic print styles for portrait orientation (daily view and phase start)
     let dynamicStyle = null;
-    if (printType === 'day') {
+    if (printType === 'day' || printType === 'phase-start') {
         dynamicStyle = document.createElement('style');
         dynamicStyle.textContent = '@page { size: letter portrait; margin: 0.5in; }';
         document.head.appendChild(dynamicStyle);

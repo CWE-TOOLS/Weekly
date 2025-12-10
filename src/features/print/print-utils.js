@@ -244,6 +244,71 @@ function executePrint(printContent, printType = 'week') {
 }
 
 /**
+ * Detect phase starts - projects beginning a new department phase in the selected week
+ * Returns a Map of department -> array of {project, date} objects
+ * @param {Array} weekTasks - Tasks in the selected week
+ * @param {Array} allTasks - All tasks across all weeks
+ * @param {Date} weekStart - Start date of the week (Monday)
+ * @param {Date} weekEnd - End date of the week (Saturday)
+ */
+function detectPhaseStarts(weekTasks, allTasks, weekStart, weekEnd) {
+    const phaseStarts = new Map();
+
+    if (!weekTasks || weekTasks.length === 0) return phaseStarts;
+    if (!weekStart || !weekEnd) return phaseStarts;
+
+    // Track processed combinations to avoid duplicates
+    const processed = new Set();
+
+    // Check each task in the selected week
+    for (const task of weekTasks) {
+        if (!task.project || !task.department || !task.date) continue;
+
+        const key = `${task.project}|${task.department}`;
+        if (processed.has(key)) continue;
+
+        // Get all tasks for this project+department combination across all weeks
+        const projectDeptTasks = allTasks.filter(t =>
+            t.project === task.project &&
+            t.department === task.department &&
+            t.date
+        );
+
+        if (projectDeptTasks.length === 0) continue;
+
+        // Find the earliest task date for this project+department
+        const earliestTask = projectDeptTasks.reduce((earliest, t) => {
+            const tDate = parseDate(t.date);
+            const earliestDate = parseDate(earliest.date);
+            return (tDate && earliestDate && tDate < earliestDate) ? t : earliest;
+        });
+
+        // Check if the earliest date falls within the selected week
+        const earliestDate = parseDate(earliestTask.date);
+        if (earliestDate) {
+            // Normalize to midnight for accurate comparison
+            earliestDate.setHours(0, 0, 0, 0);
+        }
+
+        if (earliestDate && earliestDate >= weekStart && earliestDate <= weekEnd) {
+            // This is a phase start!
+            if (!phaseStarts.has(task.department)) {
+                phaseStarts.set(task.department, []);
+            }
+
+            phaseStarts.get(task.department).push({
+                project: task.project,
+                date: earliestTask.date
+            });
+
+            processed.add(key);
+        }
+    }
+
+    return phaseStarts;
+}
+
+/**
  * Apply intelligent auto-scaling with department-per-page optimization
  * Enhanced scaling that respects department boundaries and prevents content overflow
  */
@@ -319,6 +384,7 @@ window.PrintUtils = {
     getNextBusinessDay,
     generateBatchTasks,  // Re-export from schedule-utils.js
     generateLayoutTasks,  // Re-export from schedule-utils.js
+    detectPhaseStarts,
     applyScaling,
     PRINT_UTILS
 };
