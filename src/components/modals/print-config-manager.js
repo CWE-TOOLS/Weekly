@@ -248,13 +248,13 @@ export function validatePrintConfig(printType, selectedDepts, dateSelectElement)
 /**
  * Prepare print dates based on print type
  * Sets up the date range for printing
- * @param {string} printType - Print type ('week' or 'day')
+ * @param {string} printType - Print type ('week', 'day', or 'phase-start')
  * @param {HTMLSelectElement} weekSelectElement - Week select dropdown element
  * @param {HTMLInputElement} dateSelectElement - Date input element
  * @returns {Date[]} Array of dates for printing
  */
 export function preparePrintDates(printType, weekSelectElement, dateSelectElement) {
-    if (printType === 'week') {
+    if (printType === 'week' || printType === 'phase-start') {
         updateWeekDates(weekSelectElement);
         return currentPrintWeekDates;
     } else if (printType === 'day') {
