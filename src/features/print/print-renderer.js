@@ -745,14 +745,39 @@ function applyPrintScaling(printContent, printType) {
 /**
  * Execute print with proper setup and cleanup
  */
-function executePrint(printContent, printType = 'week') {
-    // Create dynamic print styles for portrait orientation (daily view and phase start)
-    let dynamicStyle = null;
-    if (printType === 'day' || printType === 'phase-start') {
-        dynamicStyle = document.createElement('style');
-        dynamicStyle.textContent = '@page { size: letter portrait; margin: 0.5in; }';
-        document.head.appendChild(dynamicStyle);
+function executePrint(printContent, printType = 'week', orientation = null) {
+    // Determine orientation: use passed orientation for 'day' type, or default based on print type
+    let pageOrientation;
+    if (printType === 'day' && orientation) {
+        // For day print type, use the user-selected orientation
+        pageOrientation = orientation;
+    } else {
+        // Default orientation based on print type for other types
+        pageOrientation = (printType === 'day' || printType === 'phase-start') ? 'portrait' : 'landscape';
     }
+
+    // Debug logging
+    console.log('Print execution:', {
+        printType,
+        receivedOrientation: orientation,
+        finalOrientation: pageOrientation
+    });
+
+    // Create dynamic print styles for the selected orientation
+    // Note: We remove the static @page rule and add our dynamic one
+    let dynamicStyle = null;
+    dynamicStyle = document.createElement('style');
+    dynamicStyle.id = 'dynamic-page-orientation';
+    dynamicStyle.textContent = `
+        @page {
+            size: letter ${pageOrientation};
+            margin: 0.5in;
+        }
+    `;
+    document.head.appendChild(dynamicStyle);
+
+    // Debug: log the style content
+    console.log('Applied @page style:', dynamicStyle.textContent);
 
     // Add print color preservation
     const colorFix = document.createElement('style');
@@ -776,9 +801,7 @@ function executePrint(printContent, printType = 'week') {
         window.print();
 
         // Cleanup
-        if (dynamicStyle) {
-            document.head.removeChild(dynamicStyle);
-        }
+        document.head.removeChild(dynamicStyle);
         document.head.removeChild(colorFix);
         document.body.removeChild(printContent);
     }, RENDER_DELAY.PRINT_EXEC);

@@ -238,9 +238,9 @@ function generatePrintContent(printType, selectedDepts, weekDates, allTasks) {
  * Execute print with proper setup and cleanup
  * This delegates to the modular print renderer
  */
-function executePrint(printContent, printType = 'week') {
+function executePrint(printContent, printType = 'week', orientation = null) {
     // Use the modular renderer
-    PrintRenderer.executePrint(printContent, printType);
+    PrintRenderer.executePrint(printContent, printType, orientation);
 }
 
 /**

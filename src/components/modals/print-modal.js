@@ -15,6 +15,8 @@ import '../../features/print/print-utils.js';
 import {
     getCurrentPrintType,
     setCurrentPrintType,
+    getCurrentOrientation,
+    setCurrentOrientation,
     getCurrentPrintWeekDates,
     populateWeekSelect,
     setDefaultDate,
@@ -38,6 +40,7 @@ let weekSectionElement = null;
 let daySectionElement = null;
 let frozenDailySectionElement = null;
 let departmentsSectionElement = null;
+let orientationSectionElement = null;
 let departmentsGridElement = null;
 let checkAllButton = null;
 let uncheckAllButton = null;
@@ -59,6 +62,7 @@ export function initializePrintModal() {
     daySectionElement = document.getElementById('day-select-section');
     frozenDailySectionElement = document.getElementById('frozen-daily-select-section');
     departmentsSectionElement = document.getElementById('departments-section');
+    orientationSectionElement = document.getElementById('orientation-section');
     departmentsGridElement = document.querySelector('.departments-grid');
     checkAllButton = document.getElementById('check-all-depts');
     uncheckAllButton = document.getElementById('uncheck-all-depts');
@@ -84,6 +88,14 @@ export function initializePrintModal() {
     // Print type radio buttons
     document.querySelectorAll('input[name="print-type"]').forEach(radio => {
         radio.addEventListener('change', updatePrintTypeDisplay);
+    });
+
+    // Orientation radio buttons
+    document.querySelectorAll('input[name="print-orientation"]').forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            console.log('Orientation changed to:', e.target.value);
+            setCurrentOrientation(e.target.value);
+        });
     });
 
     // Week select change
@@ -193,24 +205,27 @@ function updatePrintTypeDisplay() {
     const printType = (checkedRadio && checkedRadio.value) || 'week';
     setCurrentPrintType(printType);
 
-    if (weekSectionElement && daySectionElement && frozenDailySectionElement && departmentsSectionElement) {
+    if (weekSectionElement && daySectionElement && frozenDailySectionElement && departmentsSectionElement && orientationSectionElement) {
         if (printType === 'week' || printType === 'phase-start') {
             // Both week and phase-start use week selector and departments
             weekSectionElement.style.display = 'block';
             daySectionElement.style.display = 'none';
             frozenDailySectionElement.style.display = 'none';
             departmentsSectionElement.style.display = 'block';
+            orientationSectionElement.style.display = 'none';
         } else if (printType === 'day') {
             weekSectionElement.style.display = 'none';
             daySectionElement.style.display = 'block';
             frozenDailySectionElement.style.display = 'none';
             departmentsSectionElement.style.display = 'block';
+            orientationSectionElement.style.display = 'block';
         } else if (printType === 'frozen-daily') {
             // Frozen daily uses date selector, no department selection
             weekSectionElement.style.display = 'none';
             daySectionElement.style.display = 'none';
             frozenDailySectionElement.style.display = 'block';
             departmentsSectionElement.style.display = 'none';
+            orientationSectionElement.style.display = 'none';
 
             // Set default date to next business day
             if (frozenDailyDateSelectElement && window.PrintUtils && window.PrintUtils.getNextBusinessDay) {
@@ -286,7 +301,9 @@ function handlePrintExecute() {
                 hasTables: printContent.querySelectorAll('table').length > 0,
                 hasHeaders: printContent.querySelectorAll('.print-department-header').length > 0
             });
-            window.PrintUtils.executePrint(printContent, printType);
+            const orientation = getCurrentOrientation();
+            console.log('Passing orientation to executePrint:', orientation, 'for printType:', printType);
+            window.PrintUtils.executePrint(printContent, printType, orientation);
         } else {
             logger.error('Failed to generate print content');
             alert('Failed to generate print content. Please try again.');

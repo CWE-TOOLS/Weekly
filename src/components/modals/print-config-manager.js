@@ -14,6 +14,7 @@ import { logger } from '../../utils/logger.js';
 let currentPrintWeekDates = [];
 let allDepartmentsForPrint = [];
 let currentPrintType = 'week';
+let currentOrientation = 'portrait';
 
 /**
  * Get current print type
@@ -29,6 +30,22 @@ export function getCurrentPrintType() {
  */
 export function setCurrentPrintType(type) {
     currentPrintType = type;
+}
+
+/**
+ * Get current page orientation
+ * @returns {string} Current orientation ('portrait' or 'landscape')
+ */
+export function getCurrentOrientation() {
+    return currentOrientation;
+}
+
+/**
+ * Set current page orientation
+ * @param {string} orientation - Page orientation ('portrait' or 'landscape')
+ */
+export function setCurrentOrientation(orientation) {
+    currentOrientation = orientation;
 }
 
 /**

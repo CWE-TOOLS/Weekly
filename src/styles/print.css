@@ -78,11 +78,11 @@ li:last-child {
 
 /* Print-specific styles for index.html (weekly and daily reports) */
 
-/* Set landscape orientation for all print pages */
-@page {
+/* Page orientation is now dynamically set via JavaScript based on user selection */
+/* @page {
     size: letter landscape;
     margin: 0.25in;
-}
+} */
 
 @media print {
 
