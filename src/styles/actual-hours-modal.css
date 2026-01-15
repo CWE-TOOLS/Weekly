@@ -118,6 +118,9 @@
   align-items: center;
   justify-content: center;
   user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
+  touch-action: manipulation;
 }
 
 .keypad-btn:hover {
@@ -173,6 +176,10 @@
   cursor: pointer;
   transition: all 0.2s ease;
   box-shadow: var(--shadow-sm);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
+  touch-action: manipulation;
 }
 
 .hours-confirm-btn {

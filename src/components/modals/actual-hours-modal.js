@@ -192,13 +192,34 @@ export function hideActualHoursModal() {
  * Initialize the actual hours modal
  * Sets up all event listeners
  */
+/**
+ * Add both click and touch event listeners for better compatibility
+ * @param {HTMLElement} element - Element to add listeners to
+ * @param {Function} handler - Handler function
+ */
+function addClickHandler(element, handler) {
+    if (!element) return;
+
+    // Add click event (works for mouse and some touch devices)
+    element.addEventListener('click', (e) => {
+        e.preventDefault();
+        handler();
+    });
+
+    // Add touchend for better touch responsiveness (Chrome OS, tablets, etc.)
+    element.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        handler();
+    });
+}
+
 export function initializeActualHoursModal() {
     logger.info('Initializing actual hours modal...');
 
     // Digit buttons
     const digitButtons = document.querySelectorAll('.keypad-btn[data-digit]');
     digitButtons.forEach(button => {
-        button.addEventListener('click', () => {
+        addClickHandler(button, () => {
             const digit = button.dataset.digit;
             handleDigit(digit);
         });
@@ -206,27 +227,19 @@ export function initializeActualHoursModal() {
 
     // Clear button
     const clearBtn = document.getElementById('hours-clear-btn');
-    if (clearBtn) {
-        clearBtn.addEventListener('click', handleClear);
-    }
+    addClickHandler(clearBtn, handleClear);
 
     // Backspace button
     const backspaceBtn = document.getElementById('hours-backspace-btn');
-    if (backspaceBtn) {
-        backspaceBtn.addEventListener('click', handleBackspace);
-    }
+    addClickHandler(backspaceBtn, handleBackspace);
 
     // Confirm button
     const confirmBtn = document.getElementById('hours-confirm-btn');
-    if (confirmBtn) {
-        confirmBtn.addEventListener('click', handleConfirm);
-    }
+    addClickHandler(confirmBtn, handleConfirm);
 
     // Cancel button
     const cancelBtn = document.getElementById('hours-cancel-btn');
-    if (cancelBtn) {
-        cancelBtn.addEventListener('click', handleCancel);
-    }
+    addClickHandler(cancelBtn, handleCancel);
 
     // Click outside modal to close
     const modal = document.getElementById('actual-hours-modal');
