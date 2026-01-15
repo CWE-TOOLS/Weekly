@@ -117,10 +117,13 @@ async function handleContextMenuClick(e) {
         }
     } else if (action === 'input-actual-hours' && currentTask) {
         // Open the actual hours modal
+        console.log('Input actual hours clicked, currentTask:', currentTask);
         if (window.showActualHoursModal) {
+            console.log('showActualHoursModal function exists, calling it');
             window.showActualHoursModal(currentTask);
         } else {
             logger.error('showActualHoursModal is not available');
+            console.error('showActualHoursModal function not found on window object');
         }
     }
 

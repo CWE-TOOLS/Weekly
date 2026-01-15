@@ -144,8 +144,11 @@ function handleCancel() {
  * @param {Object} task - Task object
  */
 export function showActualHoursModal(task) {
+    console.log('showActualHoursModal called with task:', task);
+
     if (!task) {
         logger.error('Cannot show actual hours modal: no task provided');
+        console.error('No task provided to modal');
         return;
     }
 
@@ -164,10 +167,17 @@ export function showActualHoursModal(task) {
     // Update display
     updateDisplay();
 
-    // Show modal
+    // Show modal - use both class and inline style for compatibility
     const modal = document.getElementById('actual-hours-modal');
     if (modal) {
+        console.log('Modal element found, showing modal');
         modal.classList.add('show');
+        // Fallback for older browsers - explicitly set display
+        modal.style.display = 'flex';
+        modal.style.alignItems = 'center';
+        modal.style.justifyContent = 'center';
+    } else {
+        console.error('Modal element not found!');
     }
 
     logger.info('Opened actual hours modal for task:', task.id);
@@ -180,6 +190,8 @@ export function hideActualHoursModal() {
     const modal = document.getElementById('actual-hours-modal');
     if (modal) {
         modal.classList.remove('show');
+        // Explicitly hide for compatibility
+        modal.style.display = 'none';
     }
 
     currentTask = null;

@@ -7,7 +7,6 @@
   width: 100%;
   height: 100%;
   background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(5px);
   z-index: 9999;
   display: none;
   padding: 2rem;
@@ -15,7 +14,7 @@
 }
 
 .actual-hours-modal.show {
-  display: flex;
+  display: flex !important;
   align-items: center;
   justify-content: center;
 }
