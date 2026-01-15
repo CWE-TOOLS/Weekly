@@ -18,6 +18,7 @@
     <link rel="stylesheet" href="src/styles/task-card.css">
     <link rel="stylesheet" href="src/styles/buttons.css">
     <link rel="stylesheet" href="src/styles/modals.css">
+    <link rel="stylesheet" href="src/styles/actual-hours-modal.css">
     <link rel="stylesheet" href="src/styles/schedule-grid.css">
     <link rel="stylesheet" href="src/styles/department-filter.css">
     <link rel="stylesheet" href="src/styles/context-menu.css">
@@ -162,6 +163,11 @@
             <div class="context-menu-item build-plan" data-action="build-plan" role="menuitem">
                 <div class="menu-text">
                     <span class="menu-icon">📋</span><small>View detailed project schedule</small>
+                </div>
+            </div>
+            <div class="context-menu-item input-actual-hours" data-action="input-actual-hours" role="menuitem">
+                <div class="menu-text">
+                    <span class="menu-icon">⏱️</span><small>Input actual hours</small>
                 </div>
             </div>
         </div>
@@ -362,6 +368,40 @@
                             <button type="submit" id="add-card-submit" class="btn-primary">Add Task</button>
                         </div>
                     </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Actual Hours Input Modal -->
+        <div class="actual-hours-modal" id="actual-hours-modal">
+            <div class="actual-hours-content">
+                <div class="actual-hours-header">
+                    <h3>Input Actual Hours</h3>
+                    <p class="task-name" id="actual-hours-task-name"></p>
+                </div>
+                <div class="actual-hours-body">
+                    <div class="hours-display">
+                        <div class="hours-display-value" id="hours-display-value">0</div>
+                        <div class="hours-display-label">Hours</div>
+                    </div>
+                    <div class="hours-keypad">
+                        <button class="keypad-btn" data-digit="1">1</button>
+                        <button class="keypad-btn" data-digit="2">2</button>
+                        <button class="keypad-btn" data-digit="3">3</button>
+                        <button class="keypad-btn" data-digit="4">4</button>
+                        <button class="keypad-btn" data-digit="5">5</button>
+                        <button class="keypad-btn" data-digit="6">6</button>
+                        <button class="keypad-btn" data-digit="7">7</button>
+                        <button class="keypad-btn" data-digit="8">8</button>
+                        <button class="keypad-btn" data-digit="9">9</button>
+                        <button class="keypad-btn action-btn clear" id="hours-clear-btn">C</button>
+                        <button class="keypad-btn zero" data-digit="0">0</button>
+                        <button class="keypad-btn action-btn backspace" id="hours-backspace-btn">←</button>
+                    </div>
+                    <div class="hours-actions">
+                        <button class="hours-cancel-btn" id="hours-cancel-btn">Cancel</button>
+                        <button class="hours-confirm-btn" id="hours-confirm-btn">Confirm</button>
+                    </div>
                 </div>
             </div>
         </div>

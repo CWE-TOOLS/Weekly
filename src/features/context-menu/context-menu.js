@@ -115,6 +115,13 @@ async function handleContextMenuClick(e) {
         } else {
             logger.error('showProjectModal is not available');
         }
+    } else if (action === 'input-actual-hours' && currentTask) {
+        // Open the actual hours modal
+        if (window.showActualHoursModal) {
+            window.showActualHoursModal(currentTask);
+        } else {
+            logger.error('showActualHoursModal is not available');
+        }
     }
 
     hideContextMenu();

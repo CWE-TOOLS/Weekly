@@ -169,6 +169,18 @@
   font-weight: 600;
 }
 
+/* Actual Hours Styling */
+.task-details .actual-hours {
+  color: inherit;
+  font-weight: 600;
+  margin-left: 0.25rem;
+}
+
+.task-details .actual-hours-value {
+  font-weight: 700;
+  color: #ef4444;
+}
+
 .task-day-counter {
   font-size: 0.75rem;
   font-weight: 600;

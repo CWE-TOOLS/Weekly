@@ -11,7 +11,8 @@
  * @modifies Sets up event listeners on event bus
  */
 
-import * as eventBus from './event-bus.js';
+import { on } from './event-bus.js';
+import { EVENTS } from './event-bus.js';
 import { render } from './renderer.js';
 import { isEditingActive, queueRefresh } from './refresh-queue.js';
 import { logger } from '../utils/logger.js';
@@ -22,7 +23,7 @@ import { logger } from '../utils/logger.js';
  */
 export function setupComponentEvents() {
     // Tasks filtered → render schedule (with editing check)
-    eventBus.on(eventBus.EVENTS.TASKS_FILTERED, () => {
+    on(EVENTS.TASKS_FILTERED, () => {
         if (isEditingActive()) {
             logger.info('📊 Tasks filtered but editing active, queueing refresh');
             queueRefresh(() => render(), { event: 'TASKS_FILTERED' });
@@ -32,11 +33,21 @@ export function setupComponentEvents() {
     });
 
     // Tasks loaded → render schedule (with editing check)
-    eventBus.on(eventBus.EVENTS.TASKS_LOADED, () => {
+    on(EVENTS.TASKS_LOADED, () => {
         logger.info('📊 Tasks loaded, rendering schedule...');
         if (isEditingActive()) {
             logger.info('📊 Editing active, queueing refresh');
             queueRefresh(() => render(), { event: 'TASKS_LOADED' });
+        } else {
+            render();
+        }
+    });
+
+    // Actual hours updated → re-render to show updated values
+    on('actual-hours-updated', (data) => {
+        logger.info('⏱️ Actual hours updated for task:', data.taskId);
+        if (isEditingActive()) {
+            queueRefresh(() => render(), { event: 'actual-hours-updated' });
         } else {
             render();
         }

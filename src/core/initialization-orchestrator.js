@@ -121,6 +121,11 @@ export async function initializeComponents() {
         initializePasswordModal();
         logger.debug('  Password modal');
 
+        // Initialize actual hours modal
+        const { initializeActualHoursModal } = await import('../components/modals/actual-hours-modal.js');
+        initializeActualHoursModal();
+        logger.debug('  Actual hours modal');
+
         // Other modals remain lazy loaded
         logger.debug('  Other modals: Lazy loaded (will initialize on demand)');
 

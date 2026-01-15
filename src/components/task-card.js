@@ -5,6 +5,7 @@
  */
 
 import { getIsEditingUnlocked } from '../core/state.js';
+import { getActualHours } from './modals/actual-hours-modal.js';
 
 /**
  * Normalize department name to CSS class format
@@ -84,12 +85,21 @@ export function createTaskCard(task, rowClass) {
     if (showHours) {
         const detailsDiv = document.createElement('div');
         detailsDiv.className = 'task-details';
+        detailsDiv.dataset.taskId = task.id; // For updating later
 
         let detailsHTML = '';
         if (task.missingDate) {
             detailsHTML += '<strong>Date:</strong> Missing<br>';
         }
-        detailsHTML += `<strong>Hours:</strong> ${task.hours}`;
+
+        // Check for actual hours
+        const actualHours = getActualHours(task.id);
+
+        if (actualHours !== null) {
+            detailsHTML += `<strong>Hours:</strong> ${task.hours} | <strong class="actual-hours">Actual:</strong> <span class="actual-hours-value">${actualHours}</span>`;
+        } else {
+            detailsHTML += `<strong>Hours:</strong> ${task.hours}`;
+        }
 
         detailsDiv.innerHTML = detailsHTML;
         card.appendChild(detailsDiv);

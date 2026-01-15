@@ -1,0 +1,239 @@
+/* Actual Hours Modal Styles */
+
+.actual-hours-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(5px);
+  z-index: 9999;
+  display: none;
+  padding: 2rem;
+  box-sizing: border-box;
+}
+
+.actual-hours-modal.show {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.actual-hours-content {
+  background: var(--background-secondary);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-md);
+  width: 90vw;
+  max-width: 420px;
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-primary);
+  animation: modalSlideIn 0.2s ease-out;
+}
+
+.actual-hours-header {
+  padding: 1.5rem;
+  border-bottom: 1px solid var(--border-primary);
+  background: var(--background-primary);
+}
+
+.actual-hours-header h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 0.5rem 0;
+}
+
+.actual-hours-header .task-name {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin: 0;
+  font-weight: 400;
+}
+
+.actual-hours-body {
+  flex: 1;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* Digital Display */
+.hours-display {
+  background: #ffffff;
+  border: 2px solid #d1d5db;
+  border-radius: var(--border-radius-md);
+  padding: 1.25rem 1.5rem;
+  text-align: right;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.hours-display-value {
+  font-family: 'Courier New', 'Consolas', monospace;
+  font-size: 3rem;
+  font-weight: 700;
+  color: #6b7280;
+  min-height: 3.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.hours-display-value.empty {
+  color: #d1d5db;
+}
+
+.hours-display-label {
+  font-size: 0.75rem;
+  color: #888;
+  margin-top: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Keypad Grid */
+.hours-keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+}
+
+.keypad-btn {
+  background: linear-gradient(135deg, var(--background-secondary) 0%, var(--background-primary) 100%);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--border-radius-md);
+  padding: 1.25rem;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: var(--shadow-sm);
+  min-height: 70px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+}
+
+.keypad-btn:hover {
+  background: linear-gradient(135deg, var(--accent-primary) 0%, #5b21b6 100%);
+  color: white;
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.keypad-btn:active {
+  transform: translateY(0);
+  box-shadow: var(--shadow-sm);
+}
+
+.keypad-btn.action-btn {
+  background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+  color: white;
+  font-size: 1.25rem;
+}
+
+.keypad-btn.action-btn:hover {
+  background: linear-gradient(135deg, #9ca3af 0%, #6b7280 100%);
+}
+
+.keypad-btn.zero {
+  grid-column: span 2;
+}
+
+.keypad-btn.clear {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.keypad-btn.backspace {
+  font-size: 1.5rem;
+}
+
+/* Action Buttons */
+.hours-actions {
+  display: flex;
+  gap: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-primary);
+}
+
+.hours-actions button {
+  flex: 1;
+  padding: 0.875rem 1.5rem;
+  border: none;
+  border-radius: var(--border-radius-md);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow-sm);
+}
+
+.hours-confirm-btn {
+  background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+  color: white;
+}
+
+.hours-confirm-btn:hover {
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.hours-confirm-btn:active {
+  transform: translateY(0);
+}
+
+.hours-confirm-btn:disabled {
+  background: #6b7280;
+  color: #d1d5db;
+  cursor: not-allowed;
+  transform: none;
+  opacity: 0.6;
+}
+
+.hours-cancel-btn {
+  background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+  color: white;
+}
+
+.hours-cancel-btn:hover {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.hours-cancel-btn:active {
+  transform: translateY(0);
+}
+
+/* Animation */
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 500px) {
+  .hours-display-value {
+    font-size: 2.5rem;
+  }
+
+  .keypad-btn {
+    min-height: 60px;
+    padding: 1rem;
+    font-size: 1.25rem;
+  }
+}

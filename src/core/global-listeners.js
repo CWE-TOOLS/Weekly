@@ -383,7 +383,8 @@ function handleGlobalKeydown(event) {
             'project-modal',
             'password-modal',
             'add-card-modal',
-            'print-modal'
+            'print-modal',
+            'actual-hours-modal'
         ];
 
         for (const modalId of openModals) {
