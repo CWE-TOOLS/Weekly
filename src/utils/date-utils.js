@@ -109,8 +109,16 @@ export function getWeekOfMonth(monday, month) {
     while (getWeekMonth(startOfWeek1) !== month) {
         startOfWeek1 = new Date(startOfWeek1.getTime() + TIME_CONSTANTS.DAYS_IN_WEEK_MS);
     }
-    const diffMs = monday - startOfWeek1;
-    const diffDays = diffMs / TIME_CONSTANTS.MILLISECONDS_PER_DAY;
+
+    // Calculate calendar day difference (not millisecond difference) to avoid DST issues
+    // Reset both dates to midnight to ensure accurate day counting
+    const start = new Date(startOfWeek1.getFullYear(), startOfWeek1.getMonth(), startOfWeek1.getDate());
+    const target = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate());
+
+    // Calculate difference in calendar days
+    const diffMs = target - start;
+    const diffDays = Math.round(diffMs / TIME_CONSTANTS.MILLISECONDS_PER_DAY);
+
     const weekNum = 1 + Math.floor(diffDays / TIME_CONSTANTS.DAYS_IN_WEEK);
     return Math.max(1, weekNum);
 }
