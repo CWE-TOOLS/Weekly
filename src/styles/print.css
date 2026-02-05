@@ -459,10 +459,10 @@ li:last-child {
        FROZEN DAILY REPORT STYLES
        ============================================ */
 
-    /* Override page orientation for frozen daily */
+    /* Override page orientation for frozen daily - force single page */
     .frozen-daily-report .print-page {
         page-break-after: auto;
-        page-break-inside: auto;
+        page-break-inside: avoid;
         width: 100%;
         height: auto;
         max-width: 10in;
@@ -473,8 +473,8 @@ li:last-child {
     .frozen-daily-header {
         text-align: center;
         border-bottom: 2px solid #000;
-        padding: 0.22em 0;
-        margin-bottom: 0.28em;
+        padding: 0.15em 0;
+        margin-bottom: 0.2em;
         background: #f5f5f5;
         border: 2px solid #000;
         border-bottom: 2px solid #000;
@@ -502,7 +502,7 @@ li:last-child {
         width: 95%;
         max-width: 9.5in;
         border-collapse: collapse;
-        margin: 0 auto 0.33em auto;
+        margin: 0 auto 0.2em auto;
         font-size: 8.8pt !important;
         border: 2px solid #000;
     }
@@ -525,21 +525,26 @@ li:last-child {
     }
 
     .frozen-summary-table thead th.dept-col {
-        width: 25%;
+        width: 20%;
     }
 
     .frozen-summary-table thead th.revenue-col {
-        width: 20%;
+        width: 18%;
         text-align: right !important;
     }
 
     .frozen-summary-table thead th.actual-col {
-        width: 25%;
+        width: 20%;
         text-align: center !important;
     }
 
     .frozen-summary-table thead th.overtime-col {
-        width: 30%;
+        width: 22%;
+        text-align: center !important;
+    }
+
+    .frozen-summary-table thead th.qc-col {
+        width: 20%;
         text-align: center !important;
     }
 
@@ -593,6 +598,14 @@ li:last-child {
         font-size: 8.8pt !important;
     }
 
+    .frozen-summary-table tbody td.qc-blank {
+        text-align: center !important;
+        color: #bbb !important;
+        letter-spacing: -0.03em;
+        background: #fafafa !important;
+        font-size: 8.8pt !important;
+    }
+
     .frozen-summary-table tfoot {
         border-top: 2px solid #000 !important;
     }
@@ -637,13 +650,20 @@ li:last-child {
         background: #fafafa !important;
     }
 
+    .frozen-summary-table tfoot td.total-qc {
+        text-align: center !important;
+        background: #e8e8e8 !important;
+        print-color-adjust: exact !important;
+        -webkit-print-color-adjust: exact !important;
+    }
+
     /* Notes section - scaled up 10% */
     .frozen-notes-section {
         display: table;
         width: 95%;
         max-width: 9.5in;
         border: 2px solid #000;
-        margin: 0.33em auto 0 auto;
+        margin: 0.2em auto 0 auto;
         table-layout: fixed;
     }
 
@@ -674,21 +694,62 @@ li:last-child {
     }
 
     .frozen-notes-lines {
-        padding: 0.22em 0.28em;
+        padding: 0.15em 0.28em;
         background: white;
-        min-height: 1.32in;
+        min-height: 0.7in;
     }
 
     .frozen-note-line {
         font-size: 8.8pt !important;
         color: #ccc !important;
-        padding: 0.22em 0;
+        padding: 0.15em 0;
         border-bottom: 1px solid #ccc;
         letter-spacing: -0.04em;
-        line-height: 1.4;
+        line-height: 1.3;
     }
 
     .frozen-note-line:last-child {
+        border-bottom: 1px solid #ccc;
+    }
+
+    /* Remarks section below Wins and Losses */
+    .frozen-remarks-section {
+        width: 95%;
+        max-width: 9.5in;
+        border: 2px solid #000;
+        margin: 0.2em auto 0 auto;
+    }
+
+    .frozen-remarks-header {
+        background: #333 !important;
+        color: white !important;
+        font-weight: 700 !important;
+        font-size: 8.8pt !important;
+        text-align: center !important;
+        padding: 0.22em !important;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        border-bottom: 1px solid #000;
+        print-color-adjust: exact !important;
+        -webkit-print-color-adjust: exact !important;
+    }
+
+    .frozen-remarks-lines {
+        padding: 0.15em 0.28em;
+        background: white;
+        min-height: 0.6in;
+    }
+
+    .frozen-remark-line {
+        font-size: 8.8pt !important;
+        color: #ccc !important;
+        padding: 0.15em 0;
+        border-bottom: 1px solid #ccc;
+        letter-spacing: -0.04em;
+        line-height: 1.3;
+    }
+
+    .frozen-remark-line:last-child {
         border-bottom: 1px solid #ccc;
     }
 

@@ -364,6 +364,7 @@ function createFrozenDailySummaryTable(departmentSummaries) {
             <th class="revenue-col">Target Revenue</th>
             <th class="actual-col">Actual</th>
             <th class="overtime-col">Overtime</th>
+            <th class="qc-col">QC (Pass/Fail)</th>
         </tr>
     `;
     table.appendChild(thead);
@@ -434,6 +435,12 @@ function createFrozenDailySummaryTable(departmentSummaries) {
         overtimeCell.textContent = '____________';
         row.appendChild(overtimeCell);
 
+        // Create QC pass/fail cell
+        const qcCell = document.createElement('td');
+        qcCell.className = 'qc-blank';
+        qcCell.textContent = '____________';
+        row.appendChild(qcCell);
+
         tbody.appendChild(row);
         grandTotal += summary.targetRevenue;
     });
@@ -448,6 +455,7 @@ function createFrozenDailySummaryTable(departmentSummaries) {
             <td class="total-revenue">$${grandTotal.toLocaleString()}</td>
             <td class="total-actual">____________</td>
             <td class="total-overtime">____________</td>
+            <td class="total-qc"></td>
         </tr>
     `;
     table.appendChild(tfoot);
@@ -469,8 +477,6 @@ function createFrozenDailyNotesSection() {
                 <div class="frozen-note-line">_______________________________________________________________________________</div>
                 <div class="frozen-note-line">_______________________________________________________________________________</div>
                 <div class="frozen-note-line">_______________________________________________________________________________</div>
-                <div class="frozen-note-line">_______________________________________________________________________________</div>
-                <div class="frozen-note-line">_______________________________________________________________________________</div>
             </div>
         </div>
         <div class="frozen-notes-column">
@@ -479,13 +485,31 @@ function createFrozenDailyNotesSection() {
                 <div class="frozen-note-line">_______________________________________________________________________________</div>
                 <div class="frozen-note-line">_______________________________________________________________________________</div>
                 <div class="frozen-note-line">_______________________________________________________________________________</div>
-                <div class="frozen-note-line">_______________________________________________________________________________</div>
-                <div class="frozen-note-line">_______________________________________________________________________________</div>
             </div>
         </div>
     `;
 
     return notesSection;
+}
+
+/**
+ * Create additional remarks section below Wins and Losses
+ */
+function createFrozenDailyRemarksSection() {
+    const remarksSection = document.createElement('div');
+    remarksSection.className = 'frozen-remarks-section';
+
+    remarksSection.innerHTML = `
+        <div class="frozen-remarks-header">REMAKE / QC NOTES</div>
+        <div class="frozen-remarks-lines">
+            <div class="frozen-remark-line">_______________________________________________________________________________</div>
+            <div class="frozen-remark-line">_______________________________________________________________________________</div>
+            <div class="frozen-remark-line">_______________________________________________________________________________</div>
+            <div class="frozen-remark-line">_______________________________________________________________________________</div>
+        </div>
+    `;
+
+    return remarksSection;
 }
 
 // Export layout components
@@ -499,5 +523,6 @@ export {
     createDepartmentTable,
     createFrozenDailyHeader,
     createFrozenDailySummaryTable,
-    createFrozenDailyNotesSection
+    createFrozenDailyNotesSection,
+    createFrozenDailyRemarksSection
 };

@@ -434,6 +434,10 @@ function generateFrozenDailyContent(targetDate, allTasks) {
     const notesSection = PrintLayout.createFrozenDailyNotesSection();
     page.appendChild(notesSection);
 
+    // Add remarks section below Wins and Losses
+    const remarksSection = PrintLayout.createFrozenDailyRemarksSection();
+    page.appendChild(remarksSection);
+
     printContainer.appendChild(page);
     return printContainer;
 }
