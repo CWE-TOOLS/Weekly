@@ -6,8 +6,8 @@
 
 import { getAllTasks, getAllWeekStartDates, getCurrentViewedWeekIndex } from '../../core/state.js';
 import { normalizeDepartmentClass } from '../../utils/ui-utils.js';
-import { getMonday, getWeekMonth, getWeekOfMonth } from '../../utils/date-utils.js';
-import { DEPARTMENT_ORDER } from '../../config/department-config.js';
+import { getMonday, getWeekMonth, getWeekOfMonth, DAYS_IN_WORK_WEEK } from '../../utils/date-utils.js';
+import { DEPARTMENT_ORDER, SYNTHETIC_DEPARTMENT_NAMES } from '../../config/department-config.js';
 
 import { logger } from '../../utils/logger.js';
 // Configuration state
@@ -128,8 +128,7 @@ export function getFilteredDepartments() {
         dept && dept.toLowerCase() !== 'department' &&
         !dept.toLowerCase().includes('link') &&
         !dept.toLowerCase().includes('live') &&
-        dept !== 'Batch' &&
-        dept !== 'Layout' &&
+        !SYNTHETIC_DEPARTMENT_NAMES.has(dept) &&
         dept !== 'Special Events'
     ))];
 
@@ -219,7 +218,7 @@ export function updateWeekDates(weekSelectElement) {
         return;
     }
 
-    currentPrintWeekDates = Array.from({ length: 6 }).map((_, i) => {
+    currentPrintWeekDates = Array.from({ length: DAYS_IN_WORK_WEEK }).map((_, i) => {
         const date = new Date(selectedWeekStart);
         date.setDate(selectedWeekStart.getDate() + i);
         return date;

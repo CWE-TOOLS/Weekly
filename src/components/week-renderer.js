@@ -27,7 +27,7 @@ import { parseDate, getMonday, getLocalDateString, createWeekDates } from '../ut
 import { DEPARTMENT_ORDER } from '../config/department-config.js';
 import { groupTasksByDepartment } from '../utils/department-utils.js';
 import { createTaskCard, createTaskCardPlaceholder, normalizeDepartmentClass } from './task-card.js';
-import { generateBatchTasks, generateLayoutTasks } from '../utils/schedule-utils.js';
+import { generateAllSyntheticTasks } from '../utils/schedule-utils.js';
 import { Z_INDEX } from '../config/layout-constants.js';
 import { logger } from '../utils/logger.js';
 
@@ -236,17 +236,16 @@ export function renderWeekGrid(dateForWeek, maxTasksPerDept) {
     const weekDates = createWeekDates(monday);
 
     // Generate special department tasks
-    const batchTasks = generateBatchTasks(weekDates, monday, getAllTasks);
-    const layoutTasks = generateLayoutTasks(weekDates, monday, getAllTasks);
+    const syntheticTasksByDept = generateAllSyntheticTasks(weekDates, monday, getAllTasks);
 
     // Inject synthetic tasks into state for smart renderer
-    injectSyntheticTasks([...batchTasks, ...layoutTasks]);
+    injectSyntheticTasks(Object.values(syntheticTasksByDept).flat());
 
     // Create header row
     grid.appendChild(createHeaderRow(weekDates));
 
     // Group and sort tasks
-    const tasksByDept = groupTasksByDepartment(filteredTasks, batchTasks, layoutTasks);
+    const tasksByDept = groupTasksByDepartment(filteredTasks, syntheticTasksByDept);
     const sortedDepts = Object.keys(tasksByDept).sort((a, b) => {
         const aIndex = DEPARTMENT_ORDER.indexOf(a);
         const bIndex = DEPARTMENT_ORDER.indexOf(b);

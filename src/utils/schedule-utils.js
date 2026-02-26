@@ -20,6 +20,7 @@
 import { parseDate, getLocalDateString, getMonday } from './date-utils.js';
 import { escapeHtml } from './security-utils.js';
 import { logger } from './logger.js';
+import { SYNTHETIC_DEPARTMENT_CONFIG } from '../config/department-config.js';
 /**
  * Generate special department tasks (Batch or Layout) for a week
  *
@@ -143,6 +144,24 @@ export function generateSpecialDepartmentTasks(weekDates, monday, departmentName
     });
 
     return specialTasks;
+}
+
+/**
+ * Generate all synthetic department tasks in one call, driven by SYNTHETIC_DEPARTMENT_CONFIG.
+ * Returns an object keyed by synthetic department name (e.g., { 'Batch': [...], 'Layout': [...] }).
+ *
+ * @param {Date[]} weekDates - Array of dates for the week
+ * @param {Date} monday - Monday of the week
+ * @param {Function} getAllTasks - Function that returns all tasks
+ * @returns {Object<string, Object[]>} Map of synthetic dept name to task arrays
+ */
+export function generateAllSyntheticTasks(weekDates, monday, getAllTasks) {
+    const result = {};
+    for (const primaryDept in SYNTHETIC_DEPARTMENT_CONFIG) {
+        const config = SYNTHETIC_DEPARTMENT_CONFIG[primaryDept];
+        result[config.synthetic] = generateSpecialDepartmentTasks(weekDates, monday, config.synthetic, getAllTasks);
+    }
+    return result;
 }
 
 /**

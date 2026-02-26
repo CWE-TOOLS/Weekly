@@ -7,7 +7,7 @@
 import { getAllTasks, setFilteredTasks } from '../core/state.js';
 import { emit, on, EVENTS } from '../core/event-bus.js';
 import { saveState, loadState } from '../core/storage.js';
-import { DEPARTMENT_ORDER } from '../config/department-config.js';
+import { DEPARTMENT_ORDER, SYNTHETIC_DEPARTMENT_NAMES } from '../config/department-config.js';
 
 import { logger } from '../utils/logger.js';
 /**
@@ -112,11 +112,10 @@ export function populateDepartmentCheckboxes() {
     // These are special departments that should always be selected by default
     // If they're missing from saved state (e.g., user saved before they were added),
     // we need to add them automatically
-    if (!savedDepartments.includes('Batch')) {
-        savedDepartments = [...savedDepartments, 'Batch'];
-    }
-    if (!savedDepartments.includes('Layout')) {
-        savedDepartments = [...savedDepartments, 'Layout'];
+    for (const dept of SYNTHETIC_DEPARTMENT_NAMES) {
+        if (!savedDepartments.includes(dept)) {
+            savedDepartments = [...savedDepartments, dept];
+        }
     }
 
     departments.forEach(dept => {

@@ -15,6 +15,7 @@ import { logger } from './logger.js';
 import { createTaskCard, createTaskCardPlaceholder } from '../components/task-card.js';
 import { getEditingCardId } from '../core/refresh-queue.js';
 import { debug } from './debug.js';
+import { RENDERING } from '../config/rendering-constants.js';
 
 /**
  * Create a task map for quick lookups
@@ -93,7 +94,7 @@ function updateTaskCard(cardElement, newTask, rowClass) {
         const hasDescription = newTask.description && newTask.description.trim();
         if (hasDescription) {
             // Use innerHTML for Batch and Layout to support <br> tags
-            if (newTask.department === 'Batch' || newTask.department === 'Layout') {
+            if (RENDERING.shouldUseHtmlDescription(newTask.department)) {
                 if (descDiv.innerHTML !== newTask.description) {
                     descDiv.innerHTML = newTask.description;
                 }
@@ -112,7 +113,7 @@ function updateTaskCard(cardElement, newTask, rowClass) {
 
     // Update hours (if present)
     const detailsDiv = cardElement.querySelector('.task-details');
-    if (detailsDiv && newTask.department !== 'Batch' && newTask.department !== 'Layout') {
+    if (detailsDiv && RENDERING.shouldShowHours(newTask.department)) {
         let detailsHTML = '';
         if (newTask.missingDate) {
             detailsHTML += '<strong>Date:</strong> Missing<br>';
@@ -125,6 +126,149 @@ function updateTaskCard(cardElement, newTask, rowClass) {
     }
 
     logger.debug('SmartRenderer: Updated card', { taskId: newTask.id });
+}
+
+/**
+ * Remove a task card from its cell and replace with a placeholder
+ * @param {HTMLElement} cardElement - Card element to remove
+ * @param {Object} stats - Stats object to update
+ */
+function removeCard(cardElement, stats) {
+    const parentCell = cardElement.parentElement;
+    if (parentCell && parentCell.classList.contains('grid-cell')) {
+        // Replace card with placeholder
+        const rowClass = cardElement.dataset.row || '';
+        const dept = cardElement.dataset.department || '';
+        const dateStr = cardElement.dataset.date || '';
+        const weekStr = cardElement.dataset.week || '';
+
+        // Extract from card's classes or data attributes
+        const placeholder = createTaskCardPlaceholder(dept, dateStr, weekStr, rowClass);
+        parentCell.replaceChild(placeholder, cardElement);
+        stats.removed++;
+        logger.debug('SmartRenderer: Removed card', { taskId: cardElement.dataset.taskId });
+    }
+}
+
+/**
+ * Move a task card to a new cell when its date or week changed
+ * @param {HTMLElement} cardElement - Card element to move
+ * @param {HTMLElement} container - Schedule container element
+ * @param {Object} oldTask - Previous task data
+ * @param {Object} newTask - New task data
+ * @param {string} rowClass - Row class for the card
+ * @param {Object} stats - Stats object to update
+ * @returns {boolean} True if move succeeded, false if full re-render is needed
+ */
+function moveCard(cardElement, container, oldTask, newTask, rowClass, stats) {
+    debug.log('=== SMART RENDERER: Moving card to new date ===', {
+        taskId: newTask.id,
+        oldDate: oldTask.date,
+        newDate: newTask.date
+    });
+
+    // Find the new target cell using correct selector (date + department)
+    // Use YYYY-MM-DD format to match DOM data attributes
+    const newDateStr = newTask.date || '';
+    const newDept = newTask.department;
+
+    // Find all cells for this date + department
+    const candidateCells = container.querySelectorAll(`.grid-cell[data-date="${newDateStr}"][data-department="${newDept}"]`);
+
+    debug.log('=== SMART RENDERER: Searching for target cell ===', {
+        selector: `.grid-cell[data-date="${newDateStr}"][data-department="${newDept}"]`,
+        candidateCellsFound: candidateCells.length,
+        rowClass: rowClass
+    });
+
+    // Log what's in each candidate cell
+    if (candidateCells.length > 0) {
+        candidateCells.forEach((cell, idx) => {
+            const placeholders = cell.querySelectorAll('.task-card-placeholder');
+            const placeholderClasses = Array.from(placeholders).map(p => Array.from(p.classList).join(' '));
+            debug.log(`  Candidate cell ${idx}:`, {
+                date: cell.dataset.date,
+                dept: cell.dataset.department,
+                placeholders: placeholderClasses
+            });
+        });
+    }
+
+    // Find the cell that contains a placeholder with matching row class
+    let newTargetCell = null;
+    for (const cell of candidateCells) {
+        const placeholder = cell.querySelector(`.task-card-placeholder.${rowClass}`);
+        if (placeholder) {
+            newTargetCell = cell;
+            break;
+        }
+    }
+
+    if (newTargetCell) {
+        // Get the old cell to add a placeholder back
+        const oldCell = cardElement.parentElement;
+
+        // Find and remove the placeholder from the new cell
+        const placeholder = newTargetCell.querySelector('.task-card-placeholder');
+        if (placeholder) {
+            placeholder.remove();
+        }
+
+        // Remove card from old cell
+        cardElement.remove();
+
+        // Add card to new cell
+        newTargetCell.appendChild(cardElement);
+
+        // Update card content with new task data
+        updateTaskCard(cardElement, newTask, rowClass);
+
+        // Add placeholder back to old cell
+        if (oldCell && oldCell.classList.contains('grid-cell')) {
+            const oldDept = oldCell.dataset.department;
+            const oldDate = oldTask.date ? oldTask.date.split('-').join('-') : '';
+            const oldWeek = oldTask.week || '';
+
+            const newPlaceholder = document.createElement('div');
+            newPlaceholder.className = `task-card-placeholder ${rowClass}`;
+            const editingUnlocked = localStorage.getItem('editingUnlocked') === 'true';
+            if (editingUnlocked) {
+                newPlaceholder.classList.add('add-enabled');
+            }
+            newPlaceholder.dataset.department = oldDept;
+            newPlaceholder.dataset.date = oldDate;
+            newPlaceholder.dataset.week = oldWeek;
+            oldCell.appendChild(newPlaceholder);
+        }
+
+        stats.updated++;
+        logger.debug('SmartRenderer: Moved card to new cell', { taskId: newTask.id, newDate: newTask.date });
+        return true;
+    } else {
+        // Can't find new cell, need full re-render
+        logger.warn('SmartRenderer: Could not find target cell, will force full re-render', {
+            taskId: newTask.id,
+            newDate: newTask.date,
+            dateStr: newDateStr,
+            dept: newDept,
+            rowClass: rowClass
+        });
+        return false;
+    }
+}
+
+/**
+ * Update a card's content in place when only non-positional fields changed
+ * @param {HTMLElement} cardElement - Card element to update
+ * @param {Object} newTask - New task data
+ * @param {Object} stats - Stats object to update
+ */
+function updateCardContent(cardElement, newTask, stats) {
+    const rowClass = cardElement.classList.contains('dept-row-')
+        ? Array.from(cardElement.classList).find(c => c.startsWith('dept-row-'))
+        : '';
+    updateTaskCard(cardElement, newTask, rowClass);
+    stats.updated++;
 }
 
 /**
@@ -177,21 +321,8 @@ export function smartUpdateSchedule(container, oldTasks, newTasks) {
         const newTask = newTaskMap.get(taskId);
 
         if (!newTask) {
-            // Task was removed - remove card
-            const parentCell = cardElement.parentElement;
-            if (parentCell && parentCell.classList.contains('grid-cell')) {
-                // Replace card with placeholder
-                const rowClass = cardElement.dataset.row || '';
-                const dept = cardElement.dataset.department || '';
-                const dateStr = cardElement.dataset.date || '';
-                const weekStr = cardElement.dataset.week || '';
-
-                // Extract from card's classes or data attributes
-                const placeholder = createTaskCardPlaceholder(dept, dateStr, weekStr, rowClass);
-                parentCell.replaceChild(placeholder, cardElement);
-                stats.removed++;
-                logger.debug('SmartRenderer: Removed card', { taskId });
-            }
+            // Task was removed - remove card and replace with placeholder
+            removeCard(cardElement, stats);
         } else if (hasTaskChanged(oldTask, newTask)) {
             // Log what we're comparing for manual tasks
             if (newTask.isManual) {
@@ -209,110 +340,14 @@ export function smartUpdateSchedule(container, oldTasks, newTasks) {
 
             // Check if date or week changed - need to move card to new cell
             if (oldTask.date !== newTask.date || oldTask.week !== newTask.week) {
-                debug.log('=== SMART RENDERER: Moving card to new date ===', {
-                    taskId: newTask.id,
-                    oldDate: oldTask.date,
-                    newDate: newTask.date
-                });
-
-                // Get the row class from the card before moving it
                 const rowClass = Array.from(cardElement.classList).find(c => c.startsWith('dept-row-')) || '';
-
-                // Find the new target cell using correct selector (date + department)
-                // Use YYYY-MM-DD format to match DOM data attributes
-                const newDateStr = newTask.date || '';
-                const newDept = newTask.department;
-
-                // Find all cells for this date + department
-                const candidateCells = container.querySelectorAll(`.grid-cell[data-date="${newDateStr}"][data-department="${newDept}"]`);
-
-                debug.log('=== SMART RENDERER: Searching for target cell ===', {
-                    selector: `.grid-cell[data-date="${newDateStr}"][data-department="${newDept}"]`,
-                    candidateCellsFound: candidateCells.length,
-                    rowClass: rowClass
-                });
-
-                // Log what's in each candidate cell
-                if (candidateCells.length > 0) {
-                    candidateCells.forEach((cell, idx) => {
-                        const placeholders = cell.querySelectorAll('.task-card-placeholder');
-                        const placeholderClasses = Array.from(placeholders).map(p => Array.from(p.classList).join(' '));
-                        debug.log(`  Candidate cell ${idx}:`, {
-                            date: cell.dataset.date,
-                            dept: cell.dataset.department,
-                            placeholders: placeholderClasses
-                        });
-                    });
-                }
-
-                // Find the cell that contains a placeholder with matching row class
-                let newTargetCell = null;
-                for (const cell of candidateCells) {
-                    const placeholder = cell.querySelector(`.task-card-placeholder.${rowClass}`);
-                    if (placeholder) {
-                        newTargetCell = cell;
-                        break;
-                    }
-                }
-
-                if (newTargetCell) {
-                    // Get the old cell to add a placeholder back
-                    const oldCell = cardElement.parentElement;
-
-                    // Find and remove the placeholder from the new cell
-                    const placeholder = newTargetCell.querySelector('.task-card-placeholder');
-                    if (placeholder) {
-                        placeholder.remove();
-                    }
-
-                    // Remove card from old cell
-                    cardElement.remove();
-
-                    // Add card to new cell
-                    newTargetCell.appendChild(cardElement);
-
-                    // Update card content with new task data
-                    updateTaskCard(cardElement, newTask, rowClass);
-
-                    // Add placeholder back to old cell
-                    if (oldCell && oldCell.classList.contains('grid-cell')) {
-                        const oldDateStr = oldCell.dataset.date;
-                        const oldDept = oldCell.dataset.department;
-                        const oldDate = oldTask.date ? oldTask.date.split('-').join('-') : '';
-                        const oldWeek = oldTask.week || '';
-
-                        const newPlaceholder = document.createElement('div');
-                        newPlaceholder.className = `task-card-placeholder ${rowClass}`;
-                        const editingUnlocked = localStorage.getItem('editingUnlocked') === 'true';
-                        if (editingUnlocked) {
-                            newPlaceholder.classList.add('add-enabled');
-                        }
-                        newPlaceholder.dataset.department = oldDept;
-                        newPlaceholder.dataset.date = oldDate;
-                        newPlaceholder.dataset.week = oldWeek;
-                        oldCell.appendChild(newPlaceholder);
-                    }
-
-                    stats.updated++;
-                    logger.debug('SmartRenderer: Moved card to new cell', { taskId: newTask.id, newDate: newTask.date });
-                } else {
-                    // Can't find new cell, need full re-render
-                    logger.warn('SmartRenderer: Could not find target cell, will force full re-render', {
-                        taskId: newTask.id,
-                        newDate: newTask.date,
-                        dateStr: newDateStr,
-                        dept: newDept,
-                        rowClass: rowClass
-                    });
+                const moveSucceeded = moveCard(cardElement, container, oldTask, newTask, rowClass, stats);
+                if (!moveSucceeded) {
                     needsFullRender = true;
                 }
             } else {
                 // Only content changed, update in place
-                const rowClass = cardElement.classList.contains('dept-row-')
-                    ? Array.from(cardElement.classList).find(c => c.startsWith('dept-row-'))
-                    : '';
-                updateTaskCard(cardElement, newTask, rowClass);
-                stats.updated++;
+                updateCardContent(cardElement, newTask, stats);
             }
         } else {
             // Task unchanged
@@ -326,16 +361,48 @@ export function smartUpdateSchedule(container, oldTasks, newTasks) {
         return null;
     }
 
-    // Phase 2: Add new cards
-    // This is more complex - we need to find the right cell to add to
-    // For now, we'll trigger a full re-render if we detect new cards
-    // (This is a simplified approach; full implementation would require more complex logic)
-    const addedTasks = Array.from(newTaskMap.keys()).filter(id => !oldTaskMap.has(id));
+    // Phase 2: Add new cards by finding the correct cell and replacing a placeholder
+    const addedTaskIds = Array.from(newTaskMap.keys()).filter(id => !oldTaskMap.has(id));
 
-    if (addedTasks.length > 0) {
-        logger.warn('SmartRenderer: Detected new tasks, need full re-render', { count: addedTasks.length });
-        stats.added = addedTasks.length;
-        return null; // Signal that full re-render is needed
+    for (const taskId of addedTaskIds) {
+        const newTask = newTaskMap.get(taskId);
+        const dateStr = newTask.date || '';
+        const dept = newTask.department;
+
+        // Find all cells for this date + department (same pattern as moveCard)
+        const candidateCells = container.querySelectorAll(`.grid-cell[data-date="${dateStr}"][data-department="${dept}"]`);
+
+        if (candidateCells.length === 0) {
+            // Target cell doesn't exist in DOM (task belongs to a week grid not rendered)
+            logger.warn('SmartRenderer: No cell found for new task, need full re-render', {
+                taskId, date: dateStr, dept
+            });
+            return null;
+        }
+
+        // Find a placeholder in one of the candidate cells to replace
+        let inserted = false;
+        for (const cell of candidateCells) {
+            const placeholder = cell.querySelector('.task-card-placeholder');
+            if (placeholder) {
+                // Determine row class from the placeholder
+                const rowClass = Array.from(placeholder.classList).find(c => c.startsWith('dept-row-')) || '';
+                const card = createTaskCard(newTask, rowClass);
+                cell.replaceChild(card, placeholder);
+                stats.added++;
+                inserted = true;
+                logger.debug('SmartRenderer: Inserted new card', { taskId, date: dateStr, dept });
+                break;
+            }
+        }
+
+        if (!inserted) {
+            // No placeholder available in any matching cell - fall back to full re-render
+            logger.warn('SmartRenderer: No placeholder for new task, need full re-render', {
+                taskId, date: dateStr, dept
+            });
+            return null;
+        }
     }
 
     const duration = performance.now() - startTime;

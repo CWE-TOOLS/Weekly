@@ -6,6 +6,7 @@
  */
 
 import { generateBatchTasks, generateLayoutTasks } from '../../utils/schedule-utils.js';
+import { isSyntheticDepartment } from '../../config/department-config.js';
 import { DATE_BOUNDARIES, PRINT_LAYOUT } from '../../config/layout-constants.js';
 import { RENDER_DELAY } from '../../config/timing-constants.js';
 import { logger } from '../../utils/logger.js';
@@ -195,7 +196,7 @@ function getNextBusinessDay() {
  * Calculate maximum number of tasks for a department across given dates
  */
 function getMaxTasksForDept(dept, tasks, dates, printType) {
-    if (dept === 'Batch' || dept === 'Layout') return 1;
+    if (isSyntheticDepartment(dept)) return 1;
 
     const deptTasks = tasks.filter(t => t.department === dept);
 

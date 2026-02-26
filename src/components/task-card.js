@@ -6,6 +6,7 @@
 
 import { getIsEditingUnlocked } from '../core/state.js';
 import { getActualHours } from './modals/actual-hours-modal.js';
+import { RENDERING } from '../config/rendering-constants.js';
 
 /**
  * Normalize department name to CSS class format
@@ -34,7 +35,7 @@ function normalizeDepartmentClass(dept) {
  */
 export function createTaskCard(task, rowClass) {
     const isEditingUnlocked = getIsEditingUnlocked();
-    const showHours = task.department !== 'Batch' && task.department !== 'Layout';
+    const showHours = RENDERING.shouldShowHours(task.department);
     const isDraggable = task.isManual && isEditingUnlocked;
 
     const card = document.createElement('div');
@@ -71,7 +72,7 @@ export function createTaskCard(task, rowClass) {
     descDiv.className = 'task-description';
     if (task.description && task.description.trim()) {
         // Use innerHTML for Batch and Layout to support <br> tags, textContent for others for safety
-        if (task.department === 'Batch' || task.department === 'Layout') {
+        if (RENDERING.shouldUseHtmlDescription(task.department)) {
             descDiv.innerHTML = task.description;
         } else {
             descDiv.textContent = task.description;

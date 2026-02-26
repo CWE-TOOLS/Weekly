@@ -4,19 +4,19 @@
  * @module utils/department-utils
  */
 
-import { DEPARTMENT_ORDER, SYNTHETIC_DEPARTMENT_CONFIG } from '../config/department-config.js';
+import { DEPARTMENT_ORDER, SYNTHETIC_DEPARTMENT_CONFIG, SYNTHETIC_DEPARTMENT_NAMES, isSyntheticDepartment } from '../config/department-config.js';
 import { parseDate } from './date-utils.js';
 import { debug } from './debug.js';
 
 /**
  * Groups tasks by department, nesting synthetic departments under their primary department.
  * @param {Object[]} filteredTasks - Array of filtered task objects.
- * @param {Object[]} batchTasks - Array of generated batch tasks.
- * @param {Object[]} layoutTasks - Array of generated layout tasks.
+ * @param {Object<string, Object[]>} syntheticTasksByDept - Map of synthetic dept name to task arrays
+ *        (e.g., { 'Batch': [...], 'Layout': [...] }).
  * @returns {Object} A nested structure where each key is a department name.
  *                   The value is an object with `tasks` and optional `syntheticTasks`.
  */
-export function groupTasksByDepartment(filteredTasks, batchTasks, layoutTasks) {
+export function groupTasksByDepartment(filteredTasks, syntheticTasksByDept) {
     const tasksByDept = {};
 
     // 1. Initialize all departments from the canonical order
@@ -38,17 +38,11 @@ export function groupTasksByDepartment(filteredTasks, batchTasks, layoutTasks) {
         tasksByDept['Special Events'] = { tasks: [] };
     }
 
-    // 4. Nest synthetic departments
+    // 4. Nest synthetic departments (driven by config)
     for (const primaryDept in SYNTHETIC_DEPARTMENT_CONFIG) {
         const config = SYNTHETIC_DEPARTMENT_CONFIG[primaryDept];
         const syntheticDeptName = config.synthetic;
-        let syntheticTasks = [];
-
-        if (syntheticDeptName === 'Batch') {
-            syntheticTasks = batchTasks;
-        } else if (syntheticDeptName === 'Layout') {
-            syntheticTasks = layoutTasks;
-        }
+        const syntheticTasks = (syntheticTasksByDept && syntheticTasksByDept[syntheticDeptName]) || [];
 
         if (tasksByDept[primaryDept]) {
             tasksByDept[primaryDept].syntheticTasks = syntheticTasks;
@@ -57,8 +51,9 @@ export function groupTasksByDepartment(filteredTasks, batchTasks, layoutTasks) {
     }
 
     // 5. Remove synthetic departments from top-level keys
-    delete tasksByDept['Batch'];
-    delete tasksByDept['Layout'];
+    for (const dept of SYNTHETIC_DEPARTMENT_NAMES) {
+        delete tasksByDept[dept];
+    }
 
     return tasksByDept;
 }
@@ -99,8 +94,8 @@ export function groupTasksByDate(tasks, weekDates, departmentName = '') {
             const taskDate = parseDate(t.date);
             const matches = taskDate && taskDate.toDateString() === dateString;
 
-            // DEBUG for Batch/Layout synthetic departments
-            if (departmentName === 'Batch' || departmentName === 'Layout') {
+            // DEBUG for synthetic departments
+            if (isSyntheticDepartment(departmentName)) {
                 debug.log(`[${departmentName}] Task:`, t.date, '→ parsed:', (taskDate && taskDate.toDateString()), '→ matches:', matches, '→ expected:', dateString);
             }
 
@@ -108,7 +103,7 @@ export function groupTasksByDate(tasks, weekDates, departmentName = '') {
         });
     });
 
-    if (departmentName === 'Batch' || departmentName === 'Layout') {
+    if (isSyntheticDepartment(departmentName)) {
         debug.log(`[${departmentName}] tasksByDate:`, tasksByDate);
     }
 
@@ -126,8 +121,8 @@ export function groupTasksByDate(tasks, weekDates, departmentName = '') {
 export function calculateMaxTasksPerDept(tasksByDept, weekDates) {
     const maxTasks = {};
     for (const dept in tasksByDept) {
-        if (dept === 'Batch' || dept === 'Layout') {
-            maxTasks[dept] = 1; // These are special synthetic departments, always render one row
+        if (isSyntheticDepartment(dept)) {
+            maxTasks[dept] = 1; // Synthetic departments always render one row
             continue;
         }
 

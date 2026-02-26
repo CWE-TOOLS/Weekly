@@ -165,3 +165,20 @@ export const SYNTHETIC_DEPARTMENT_CONFIG = {
     'Cast': { synthetic: 'Batch', label: 'Batch' },
     'Demold': { synthetic: 'Layout', label: 'Layout' }
 };
+
+/**
+ * Set of all synthetic department names, derived from SYNTHETIC_DEPARTMENT_CONFIG.
+ * Use this for membership checks instead of hardcoding 'Batch'/'Layout'.
+ */
+export const SYNTHETIC_DEPARTMENT_NAMES = new Set(
+    Object.values(SYNTHETIC_DEPARTMENT_CONFIG).map(c => c.synthetic)
+);
+
+/**
+ * Check if a department is a synthetic department
+ * @param {string} dept - Department name
+ * @returns {boolean} True if the department is synthetic (e.g., Batch, Layout)
+ */
+export function isSyntheticDepartment(dept) {
+    return SYNTHETIC_DEPARTMENT_NAMES.has(dept);
+}

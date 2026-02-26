@@ -22,7 +22,8 @@ import {
     preserveScrollPosition
 } from '../utils/smart-renderer.js';
 import { clearSyntheticTasks, injectSyntheticTasks, getAllTasks, getAllWeekStartDates } from './state.js';
-import { generateBatchTasks, generateLayoutTasks } from '../utils/schedule-utils.js';
+import { SYNTHETIC_DEPARTMENT_NAMES } from '../config/department-config.js';
+import { generateAllSyntheticTasks } from '../utils/schedule-utils.js';
 
 let isRendering = false;
 
@@ -64,9 +65,8 @@ export async function render() {
             // Generate synthetic tasks for ALL weeks in the current view
             allWeekStartDates.forEach(monday => {
                 const weekDates = createWeekDates(monday);
-                const batchTasks = generateBatchTasks(weekDates, monday, getAllTasks);
-                const layoutTasks = generateLayoutTasks(weekDates, monday, getAllTasks);
-                allSyntheticTasks.push(...batchTasks, ...layoutTasks);
+                const syntheticTasksByDept = generateAllSyntheticTasks(weekDates, monday, getAllTasks);
+                allSyntheticTasks.push(...Object.values(syntheticTasksByDept).flat());
             });
 
             // Inject into state BEFORE smart update comparison
@@ -140,8 +140,9 @@ export async function render() {
         filteredTasks.forEach(task => {
             if (!task.project) return;
             let taskDate = parseDate(task.date);
+            let taskToStore = task;
             if (!taskDate) {
-                task.missingDate = true;
+                taskToStore = { ...task, missingDate: true };
                 taskDate = currentMonday;
             }
             const monday = getMonday(taskDate);
@@ -149,7 +150,7 @@ export async function render() {
             if (!tasksByWeek[mondayString]) {
                 tasksByWeek[mondayString] = [];
             }
-            tasksByWeek[mondayString].push(task);
+            tasksByWeek[mondayString].push(taskToStore);
         });
 
         const mondayStrings = Object.keys(tasksByWeek);
@@ -196,11 +197,7 @@ export async function render() {
             const tasksByDate = {};
             deptTasks.forEach(task => {
                 if (!task.project) return;
-                let taskDate = parseDate(task.date);
-                if (!taskDate) {
-                    task.missingDate = true;
-                    taskDate = getMonday(new Date());
-                }
+                const taskDate = parseDate(task.date) || getMonday(new Date());
                 const dateString = taskDate.toDateString();
                 if (!tasksByDate[dateString]) tasksByDate[dateString] = [];
                 tasksByDate[dateString].push(task);
@@ -211,8 +208,9 @@ export async function render() {
                 maxTasksPerDept[dept] = maxTasks;
             }
         });
-        maxTasksPerDept['Batch'] = 1;
-        maxTasksPerDept['Layout'] = 1;
+        for (const dept of SYNTHETIC_DEPARTMENT_NAMES) {
+            maxTasksPerDept[dept] = 1;
+        }
 
         const fragment = document.createDocumentFragment();
         allMondays.forEach(mondayDate => {

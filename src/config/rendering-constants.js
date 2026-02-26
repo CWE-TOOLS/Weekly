@@ -3,6 +3,8 @@
  * @module config/rendering-constants
  */
 
+import { SYNTHETIC_DEPARTMENT_NAMES, isSyntheticDepartment } from './department-config.js';
+
 export const RENDERING = {
     /**
      * Number of days shown in a week view (Mon-Sat)
@@ -11,8 +13,9 @@ export const RENDERING = {
 
     /**
      * Special synthetic departments that don't follow standard task rendering rules
+     * Derived from SYNTHETIC_DEPARTMENT_CONFIG in department-config.js
      */
-    SPECIAL_DEPARTMENTS: ['Batch', 'Layout'],
+    SPECIAL_DEPARTMENTS: [...SYNTHETIC_DEPARTMENT_NAMES],
 
     /**
      * Determines if a department should show hours in task cards
@@ -20,7 +23,7 @@ export const RENDERING = {
      * @returns {boolean} True if hours should be displayed
      */
     shouldShowHours(dept) {
-        return dept !== 'Batch' && dept !== 'Layout';
+        return !isSyntheticDepartment(dept);
     },
 
     /**
@@ -30,7 +33,7 @@ export const RENDERING = {
      * @returns {boolean} True if HTML should be used in description
      */
     shouldUseHtmlDescription(dept) {
-        return dept === 'Batch' || dept === 'Layout';
+        return isSyntheticDepartment(dept);
     },
 
     /**
@@ -39,6 +42,6 @@ export const RENDERING = {
      * @returns {boolean} True if department is synthetic (Batch or Layout)
      */
     isSpecialDepartment(dept) {
-        return this.SPECIAL_DEPARTMENTS.includes(dept);
+        return isSyntheticDepartment(dept);
     }
 };

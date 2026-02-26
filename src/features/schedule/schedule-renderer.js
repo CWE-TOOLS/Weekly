@@ -14,6 +14,7 @@ import { renderWeekGrid } from '../../components/week-renderer.js';
 import { Z_INDEX } from '../../config/layout-constants.js';
 import { RENDER_DELAY } from '../../config/timing-constants.js';
 import { showRenderingStatus } from '../../utils/ui-utils.js';
+import { SYNTHETIC_DEPARTMENT_NAMES } from '../../config/department-config.js';
 
 // State references (will be set by state.js)
 let filteredTasks = [];
@@ -117,8 +118,9 @@ export function renderAllWeeks() {
             maxTasksPerDept[dept] = maxTasks;
         }
     });
-    maxTasksPerDept['Batch'] = 1;
-    maxTasksPerDept['Layout'] = 1;
+    for (const dept of SYNTHETIC_DEPARTMENT_NAMES) {
+        maxTasksPerDept[dept] = 1;
+    }
     maxTasksPerDept['Sample'] = 1;
 
     // Render a grid for each week using the global max tasks count - use document fragment for better performance

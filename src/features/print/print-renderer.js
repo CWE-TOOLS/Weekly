@@ -11,7 +11,7 @@ import { RENDER_DELAY } from '../../config/timing-constants.js';
 import { parseDate } from '../../utils/date-utils.js';
 import * as PrintLayout from './print-layout.js';
 import * as DepartmentUtils from '../../utils/department-utils.js';
-import { generateBatchTasks, generateLayoutTasks } from '../../utils/schedule-utils.js';
+import { generateAllSyntheticTasks } from '../../utils/schedule-utils.js';
 
 // ============================================
 // PAGE ASSEMBLY
@@ -353,10 +353,9 @@ function generateFrozenDailyContent(targetDate, allTasks) {
     const diff = monday.getDate() - day + (day === 0 ? -6 : 1);
     monday.setDate(diff);
 
-    const batchTasks = generateBatchTasks([targetDate], monday, () => allTasks);
-    const layoutTasks = generateLayoutTasks([targetDate], monday, () => allTasks);
+    const syntheticTasksByDept = generateAllSyntheticTasks([targetDate], monday, () => allTasks);
 
-    const tasksByDept = groupTasksByDepartment(dayTasks, batchTasks, layoutTasks);
+    const tasksByDept = groupTasksByDepartment(dayTasks, syntheticTasksByDept);
     const sortedDepts = sortDepartments(Object.keys(tasksByDept));
 
     // Calculate revenue for each department
@@ -677,12 +676,11 @@ function generatePrintContent(printType, selectedDepts, weekDates, allTasks) {
         const diff = monday.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
         monday = new Date(monday.setDate(diff));
     }
-    const batchTasks = monday ? generateBatchTasks(weekDates, monday, () => allTasks) : [];
-    const layoutTasks = monday ? generateLayoutTasks(weekDates, monday, () => allTasks) : [];
+    const syntheticTasksByDept = monday ? generateAllSyntheticTasks(weekDates, monday, () => allTasks) : {};
 
     // 2. Group tasks using the centralized utility
     const { groupTasksByDepartment, sortDepartments } = DepartmentUtils;
-    const tasksByDept = groupTasksByDepartment(allTasks, batchTasks, layoutTasks);
+    const tasksByDept = groupTasksByDepartment(allTasks, syntheticTasksByDept);
     const sortedDepts = sortDepartments(Object.keys(tasksByDept));
 
     // 3. Calculate layout compactness
