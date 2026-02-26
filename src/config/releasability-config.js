@@ -60,24 +60,22 @@ export const STATUS_DISPLAY = {
  * Order matches the standard workflow sequence
  */
 export const TRACKING_ITEMS = [
+  'Classroom #1',
+  'Classroom #2',
+  'Classroom #3',
   'Shop Folder Built',
+  'Approved SDs',
   'Sample Approval',
   'Color Log',
   'Optimize Hours',
-  'Approved SDs',
-  'Begin Tracking',
   'Work Order',
-  'Classroom #1',
   'Final Tracking',
   'Batching Sheets',
-  'QA Template Changes',
   'Rebar/Drilling Layout',
   'Casting Layout',
   'Final Optimizer HRS',
-  'Classroom #2',
   'Inflow Sales Ticket',
   '3D Drawings/Parts List',
-  'Classroom #3',
   'Toolpath Program',
   'Staging'
 ];

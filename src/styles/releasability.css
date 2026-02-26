@@ -33,26 +33,24 @@
   --legend-height: 40px;
 
   /* Tracking Item Header Colors - Softer, more refined palette */
-  --tracking-0-color: #a3e6e6;   /* Shop Folder Built - Softer cyan */
-  --tracking-1-color: #a3e6e6;   /* Sample Approval */
-  --tracking-2-color: #a3e6e6;   /* Color Log */
-  --tracking-3-color: #a3e6e6;   /* Optimize Hours */
+  --tracking-0-color: #c4a3f0;   /* Classroom #1 - Lavender */
+  --tracking-1-color: #c4a3f0;   /* Classroom #2 - Lavender */
+  --tracking-2-color: #c4a3f0;   /* Classroom #3 - Lavender */
+  --tracking-3-color: #a3e6e6;   /* Shop Folder Built - Softer cyan */
   --tracking-4-color: #a3e6e6;   /* Approved SDs */
-  --tracking-5-color: #a3e6e6;   /* Begin Tracking */
-  --tracking-6-color: #a3e6e6;   /* Work Order */
-  --tracking-7-color: #a3e6e6;   /* Classroom #1 */
-  --tracking-8-color: #a3e6a3;   /* Final Tracking - Softer green */
-  --tracking-9-color: #a3e6a3;   /* Batching Sheets */
-  --tracking-10-color: #a3e6a3;  /* QA Template Changes */
+  --tracking-5-color: #a3e6e6;   /* Sample Approval */
+  --tracking-6-color: #a3e6e6;   /* Color Log */
+  --tracking-7-color: #a3e6e6;   /* Optimize Hours */
+  --tracking-8-color: #a3e6e6;   /* Work Order */
+  --tracking-9-color: #a3e6a3;   /* Final Tracking - Softer green */
+  --tracking-10-color: #a3e6a3;  /* Batching Sheets */
   --tracking-11-color: #a3e6a3;  /* Rebar/Drilling Layout */
   --tracking-12-color: #a3e6a3;  /* Casting Layout */
   --tracking-13-color: #f5f5a3;  /* Final Optimizer HRS - Softer yellow */
-  --tracking-14-color: #f5f5a3;  /* Classroom #2 */
-  --tracking-15-color: #a3c2f0;  /* Inflow Sales Ticket - Softer blue */
-  --tracking-16-color: #a3c2f0;  /* 3D Drawings/Parts List */
-  --tracking-17-color: #a3c2f0;  /* Classroom #3 */
-  --tracking-18-color: #a3c2f0;  /* Toolpath Program */
-  --tracking-19-color: #a3c2f0;  /* Staging */
+  --tracking-14-color: #a3c2f0;  /* Inflow Sales Ticket - Softer blue */
+  --tracking-15-color: #a3c2f0;  /* 3D Drawings/Parts List */
+  --tracking-16-color: #a3c2f0;  /* Toolpath Program */
+  --tracking-17-color: #a3c2f0;  /* Staging */
 }
 
 /* ============================================================================
@@ -512,7 +510,7 @@ html {
   grid-template-columns:
     250px
     70px
-    repeat(20, minmax(50px, 1fr));
+    repeat(18, minmax(50px, 1fr));
   gap: var(--grid-cell-gap);
   background-color: black;
   width: fit-content;
@@ -582,26 +580,24 @@ html {
 }
 
 /* Individual tracking item header colors */
-.tracking-item-header[data-tracking-index="0"] { background-color: var(--tracking-0-color); }   /* Shop Folder Built */
-.tracking-item-header[data-tracking-index="1"] { background-color: var(--tracking-1-color); }   /* Sample Approval */
-.tracking-item-header[data-tracking-index="2"] { background-color: var(--tracking-2-color); }   /* Color Log */
-.tracking-item-header[data-tracking-index="3"] { background-color: var(--tracking-3-color); }   /* Optimize Hours */
+.tracking-item-header[data-tracking-index="0"] { background-color: var(--tracking-0-color); }   /* Classroom #1 */
+.tracking-item-header[data-tracking-index="1"] { background-color: var(--tracking-1-color); }   /* Classroom #2 */
+.tracking-item-header[data-tracking-index="2"] { background-color: var(--tracking-2-color); }   /* Classroom #3 */
+.tracking-item-header[data-tracking-index="3"] { background-color: var(--tracking-3-color); }   /* Shop Folder Built */
 .tracking-item-header[data-tracking-index="4"] { background-color: var(--tracking-4-color); }   /* Approved SDs */
-.tracking-item-header[data-tracking-index="5"] { background-color: var(--tracking-5-color); }   /* Begin Tracking */
-.tracking-item-header[data-tracking-index="6"] { background-color: var(--tracking-6-color); }   /* Work Order */
-.tracking-item-header[data-tracking-index="7"] { background-color: var(--tracking-7-color); }   /* Classroom #1 */
-.tracking-item-header[data-tracking-index="8"] { background-color: var(--tracking-8-color); }   /* Final Tracking */
-.tracking-item-header[data-tracking-index="9"] { background-color: var(--tracking-9-color); }   /* Batching Sheets */
-.tracking-item-header[data-tracking-index="10"] { background-color: var(--tracking-10-color); } /* QA Template Changes */
+.tracking-item-header[data-tracking-index="5"] { background-color: var(--tracking-5-color); }   /* Sample Approval */
+.tracking-item-header[data-tracking-index="6"] { background-color: var(--tracking-6-color); }   /* Color Log */
+.tracking-item-header[data-tracking-index="7"] { background-color: var(--tracking-7-color); }   /* Optimize Hours */
+.tracking-item-header[data-tracking-index="8"] { background-color: var(--tracking-8-color); }   /* Work Order */
+.tracking-item-header[data-tracking-index="9"] { background-color: var(--tracking-9-color); }   /* Final Tracking */
+.tracking-item-header[data-tracking-index="10"] { background-color: var(--tracking-10-color); } /* Batching Sheets */
 .tracking-item-header[data-tracking-index="11"] { background-color: var(--tracking-11-color); } /* Rebar/Drilling Layout */
 .tracking-item-header[data-tracking-index="12"] { background-color: var(--tracking-12-color); } /* Casting Layout */
 .tracking-item-header[data-tracking-index="13"] { background-color: var(--tracking-13-color); } /* Final Optimizer HRS */
-.tracking-item-header[data-tracking-index="14"] { background-color: var(--tracking-14-color); } /* Classroom #2 */
-.tracking-item-header[data-tracking-index="15"] { background-color: var(--tracking-15-color); } /* Inflow Sales Ticket */
-.tracking-item-header[data-tracking-index="16"] { background-color: var(--tracking-16-color); } /* 3D Drawings/Parts List */
-.tracking-item-header[data-tracking-index="17"] { background-color: var(--tracking-17-color); } /* Classroom #3 */
-.tracking-item-header[data-tracking-index="18"] { background-color: var(--tracking-18-color); } /* Toolpath Program */
-.tracking-item-header[data-tracking-index="19"] { background-color: var(--tracking-19-color); } /* Staging */
+.tracking-item-header[data-tracking-index="14"] { background-color: var(--tracking-14-color); } /* Inflow Sales Ticket */
+.tracking-item-header[data-tracking-index="15"] { background-color: var(--tracking-15-color); } /* 3D Drawings/Parts List */
+.tracking-item-header[data-tracking-index="16"] { background-color: var(--tracking-16-color); } /* Toolpath Program */
+.tracking-item-header[data-tracking-index="17"] { background-color: var(--tracking-17-color); } /* Staging */
 
 /* Week Section */
 .week-section {
