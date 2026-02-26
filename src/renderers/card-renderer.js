@@ -183,8 +183,8 @@ export class CardRenderer {
         // Apply inline styles for print mode
         if (this.config.applyInlineStyles && this.mode === 'print') {
             const colors = this.getDepartmentColors(task.department);
-            titleDiv.style.backgroundColor = `${colors.bg} !important`;
-            titleDiv.style.color = `${colors.text} !important`;
+            titleDiv.style.setProperty('background-color', colors.bg, 'important');
+            titleDiv.style.setProperty('color', colors.text, 'important');
         }
         
         card.appendChild(titleDiv);
@@ -261,27 +261,29 @@ export class CardRenderer {
     }
 
     /**
+     * Build details HTML string for a task (hours and/or revenue)
+     */
+    buildDetailsHTML(task) {
+        let html = '';
+        if (task.missingDate) {
+            html += '<strong>Date:</strong> Missing<br>';
+        }
+        const hours = parseFloat(task.hours || 0);
+        html += `<strong>Hours:</strong> ${hours.toFixed(1)}`;
+        if (this.config.showRevenue) {
+            const revenue = this.calculateRevenue(hours);
+            html += ` | <strong>Revenue:</strong> $${revenue.toLocaleString()}`;
+        }
+        return html;
+    }
+
+    /**
      * Add details element (hours and/or revenue)
      */
     addDetails(card, task) {
         const detailsDiv = document.createElement('div');
         detailsDiv.className = this.config.detailsClass;
-        
-        let detailsHTML = '';
-        
-        if (task.missingDate) {
-            detailsHTML += '<strong>Date:</strong> Missing<br>';
-        }
-        
-        const hours = parseFloat(task.hours || 0);
-        detailsHTML += `<strong>Hours:</strong> ${hours.toFixed(1)}`;
-        
-        if (this.config.showRevenue) {
-            const revenue = this.calculateRevenue(hours);
-            detailsHTML += ` | <strong>Revenue:</strong> $${revenue.toLocaleString()}`;
-        }
-        
-        detailsDiv.innerHTML = detailsHTML;
+        detailsDiv.innerHTML = this.buildDetailsHTML(task);
         card.appendChild(detailsDiv);
     }
 
@@ -291,21 +293,7 @@ export class CardRenderer {
     updateDetails(cardElement, newTask) {
         const detailsDiv = cardElement.querySelector(`.${this.config.detailsClass}`);
         if (!detailsDiv) return;
-
-        let detailsHTML = '';
-        
-        if (newTask.missingDate) {
-            detailsHTML += '<strong>Date:</strong> Missing<br>';
-        }
-        
-        const hours = parseFloat(newTask.hours || 0);
-        detailsHTML += `<strong>Hours:</strong> ${hours.toFixed(1)}`;
-        
-        if (this.config.showRevenue) {
-            const revenue = this.calculateRevenue(hours);
-            detailsHTML += ` | <strong>Revenue:</strong> $${revenue.toLocaleString()}`;
-        }
-
+        const detailsHTML = this.buildDetailsHTML(newTask);
         if (detailsDiv.innerHTML !== detailsHTML) {
             detailsDiv.innerHTML = detailsHTML;
         }

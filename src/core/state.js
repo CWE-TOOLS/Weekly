@@ -22,7 +22,6 @@
  */
 
 import { emit, EVENTS } from './event-bus.js';
-import { MISC_CONFIG } from '../config/layout-constants.js';
 import { logger } from '../utils/logger.js';
 // ============================================================================
 // Internal State Variables (private)
@@ -305,52 +304,11 @@ export function getCurrentWeekDate() {
 }
 
 /**
- * Get task by ID
- * @param {string|number} taskId - Task ID to find
- * @returns {Object|null} Task object or null if not found
- */
-export function getTaskById(taskId) {
-    return _allTasks.find(task => task.id === taskId) || null;
-}
-
-/**
- * Get tasks by project name
- * @param {string} projectName - Project name to search for
- * @returns {Array} Array of tasks matching the project
- */
-export function getTasksByProject(projectName) {
-    return _allTasks.filter(task => task.project === projectName);
-}
-
-/**
- * Get tasks by department
- * @param {string} department - Department name
- * @returns {Array} Array of tasks in the department
- */
-export function getTasksByDepartment(department) {
-    return _allTasks.filter(task => task.department === department);
-}
-
-/**
  * Check if state has been initialized with data
  * @returns {boolean} True if state has tasks loaded
  */
 export function isStateInitialized() {
     return _allTasks.length > 0 && _allWeekStartDates.length > 0;
-}
-
-/**
- * Get count of filtered vs all tasks
- * @returns {Object} Object with filtered and total counts
- */
-export function getTaskCounts() {
-    return {
-        filtered: _filteredTasks.length,
-        total: _allTasks.length,
-        percentage: _allTasks.length > 0
-            ? Math.round((_filteredTasks.length / _allTasks.length) * MISC_CONFIG.PERCENTAGE_DIVISOR)
-            : 0
-    };
 }
 
 // ============================================================================
@@ -397,11 +355,3 @@ export function getStateSnapshot() {
     };
 }
 
-/**
- * Debug helper - log current state to console
- */
-export function debugState() {
-    logger.info('[State] Current state:', getStateSnapshot());
-    logger.info('[State] Task counts:', getTaskCounts());
-    logger.info('[State] Initialized:', isStateInitialized());
-}

@@ -22,6 +22,9 @@ import { showPasswordModal, lockEditing } from '../components/modals/password-mo
 import { makeTaskCardEditable } from './task-card-editor.js';
 
 import { logger } from '../utils/logger.js';
+
+let isRefreshing = false;
+
 /**
  * Initialize button event handlers
  * Sets up all click listeners for buttons and interactive elements
@@ -33,6 +36,8 @@ export function initializeButtonHandlers() {
     const refreshBtn = document.getElementById('refresh-btn');
     if (refreshBtn) {
         refreshBtn.addEventListener('click', async () => {
+            if (isRefreshing) return;
+            isRefreshing = true;
             try {
                 showLoading();
 
@@ -59,6 +64,8 @@ export function initializeButtonHandlers() {
                     operation: 'Data refresh',
                     retry: () => refreshBtn.click()
                 });
+            } finally {
+                isRefreshing = false;
             }
         });
     }
@@ -106,8 +113,9 @@ export function initializeButtonHandlers() {
         });
     }
 
-    // Event delegation for task card Plan buttons - show project modal
+    // Consolidated event delegation for task card interactions
     document.addEventListener('click', async (e) => {
+        // Plan button - show project modal
         const planBtn = e.target.closest('.task-plan-btn');
         if (planBtn) {
             const taskId = planBtn.dataset.taskId;
@@ -117,26 +125,24 @@ export function initializeButtonHandlers() {
                 const module = await loadProjectModal();
                 module.showProjectModal(task.project);
             }
+            return;
         }
-    });
 
-    // Event delegation for task card Edit buttons - make card editable inline
-    document.addEventListener('click', (e) => {
+        // Edit button - make card editable inline
         const editBtn = e.target.closest('.task-edit-btn');
         if (editBtn) {
             const taskCard = editBtn.closest('.task-card');
             if (taskCard && !taskCard.classList.contains('editing')) {
                 makeTaskCardEditable(taskCard);
             }
+            return;
         }
-    });
 
-    // Event delegation for empty cells - click to add task
-    document.addEventListener('click', async (e) => {
+        // Placeholder cell - click to add task
         const placeholder = e.target.closest('.task-card-placeholder');
         if (placeholder) {
             const isEditingUnlocked = state.getIsEditingUnlocked();
-            if (!isEditingUnlocked) return; // Only allow adding tasks when editing is unlocked
+            if (!isEditingUnlocked) return;
 
             const department = placeholder.dataset.department;
             const date = placeholder.dataset.date;

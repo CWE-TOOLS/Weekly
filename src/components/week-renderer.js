@@ -10,7 +10,7 @@
  * @exports renderWeekGrid
  * @key-functions
  *   - renderWeekGrid() - Generate complete week grid HTML structure
- *   - createWeekDates() - Generate array of dates for the week
+ *   - createWeekDates() - Generate array of dates for the week (imported from date-utils)
  *   - createHeaderRow() - Generate day header row
  *   - createDepartmentRows() - Generate department rows with task cards
  * @rendering-logic
@@ -23,7 +23,7 @@
  */
 
 import { getFilteredTasks, getAllTasks, injectSyntheticTasks } from '../core/state.js';
-import { parseDate, getMonday, getLocalDateString } from '../utils/date-utils.js';
+import { parseDate, getMonday, getLocalDateString, createWeekDates } from '../utils/date-utils.js';
 import { DEPARTMENT_ORDER } from '../config/department-config.js';
 import { groupTasksByDepartment } from '../utils/department-utils.js';
 import { createTaskCard, createTaskCardPlaceholder, normalizeDepartmentClass } from './task-card.js';
@@ -32,30 +32,44 @@ import { Z_INDEX } from '../config/layout-constants.js';
 import { logger } from '../utils/logger.js';
 
 /**
- * Create array of dates for a week (Monday through Saturday)
- * @param {Date} monday - Monday date of the week
- * @returns {Date[]} Array of 6 dates (Mon-Sat)
- */
-function createWeekDates(monday) {
-    return Array.from({ length: 6 }).map((_, i) => {
-        const date = new Date(monday);
-        date.setDate(monday.getDate() + i);
-        return date;
-    });
-}
-
-/**
- * Create header row HTML for week grid
+ * Create header row elements for week grid
  * @param {Date[]} weekDates - Array of dates for the week
- * @returns {string} HTML string for header row
+ * @returns {DocumentFragment} Fragment containing header elements
  */
 function createHeaderRow(weekDates) {
-    let headerHTML = '<div class="grid-header">Department</div>';
+    const fragment = document.createDocumentFragment();
+    const todayStr = new Date().toDateString();
+
+    const deptHeader = document.createElement('div');
+    deptHeader.className = 'grid-header';
+    deptHeader.textContent = 'Department';
+    fragment.appendChild(deptHeader);
+
     weekDates.forEach(date => {
-        const isToday = date.toDateString() === new Date().toDateString();
-        headerHTML += `<div class="grid-header"><div class="date-container ${isToday ? 'today-highlight' : ''}"><div class="date-weekday">${date.toLocaleDateString('en-US', { weekday: 'short' })}</div><div class="date-day">${date.toLocaleDateString('en-US', { day: 'numeric' })}</div></div></div>`;
+        const header = document.createElement('div');
+        header.className = 'grid-header';
+
+        const container = document.createElement('div');
+        container.className = 'date-container';
+        if (date.toDateString() === todayStr) {
+            container.classList.add('today-highlight');
+        }
+
+        const weekday = document.createElement('div');
+        weekday.className = 'date-weekday';
+        weekday.textContent = date.toLocaleDateString('en-US', { weekday: 'short' });
+
+        const day = document.createElement('div');
+        day.className = 'date-day';
+        day.textContent = date.toLocaleDateString('en-US', { day: 'numeric' });
+
+        container.appendChild(weekday);
+        container.appendChild(day);
+        header.appendChild(container);
+        fragment.appendChild(header);
     });
-    return headerHTML;
+
+    return fragment;
 }
 
 
@@ -229,7 +243,7 @@ export function renderWeekGrid(dateForWeek, maxTasksPerDept) {
     injectSyntheticTasks([...batchTasks, ...layoutTasks]);
 
     // Create header row
-    grid.innerHTML = createHeaderRow(weekDates);
+    grid.appendChild(createHeaderRow(weekDates));
 
     // Group and sort tasks
     const tasksByDept = groupTasksByDepartment(filteredTasks, batchTasks, layoutTasks);

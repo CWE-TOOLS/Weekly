@@ -23,34 +23,15 @@
  */
 
 import {
-    getFilteredTasks,
-    getAllTasks,
-    setAllWeekStartDates,
     getAllWeekStartDates,
-    getCurrentViewedWeekIndex,
     setCurrentViewedWeekIndex
 } from '../core/state.js';
 import { emit, EVENTS } from '../core/event-bus.js';
-import { loadWeekIndex, saveWeekIndex } from '../core/storage.js';
-import { parseDate, getMonday, getLocalDateString } from '../utils/date-utils.js';
-import { showRenderingStatus } from '../utils/ui-utils.js';
-import { DEPARTMENT_ORDER } from '../config/department-config.js';
-import { renderWeekGrid } from './week-renderer.js';
-import { logger } from '../utils/logger.js';
+import { saveWeekIndex } from '../core/storage.js';
 import {
     equalizeAllCardHeights as equalizeHeights,
-    setGridWidths,
     scrollToWeek
 } from '../utils/grid-layout-manager.js';
-import { RENDER_DELAY } from '../config/timing-constants.js';
-import {
-    canUseSmartUpdate,
-    smartUpdateSchedule,
-    preserveScrollPosition as smartPreserveScroll
-} from '../utils/smart-renderer.js';
-
-// Track previous tasks for smart updates
-let _previousTasks = [];
 
 /**
  * Equalize card heights across all weeks for consistent layout
@@ -59,15 +40,6 @@ let _previousTasks = [];
 export function equalizeAllCardHeights() {
     equalizeHeights();
 }
-
-/**
- * Enable add card indicators (placeholder cells)
- */
-function enableAddCardIndicators() {
-    // This function is called after rendering completes
-    // Placeholder cells are already created with add-enabled class if editing is unlocked
-}
-
 
 /**
  * Navigate to a specific week by index

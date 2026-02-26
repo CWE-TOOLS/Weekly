@@ -12,7 +12,6 @@ import {
 import { emit, on, EVENTS } from '../core/event-bus.js';
 import { saveWeekIndex } from '../core/storage.js';
 import { getMonday, getWeekMonth, getWeekOfMonth } from '../utils/date-utils.js';
-import { navigateToWeek } from './schedule-grid.js';
 
 import { logger } from '../utils/logger.js';
 import { RENDER_DELAY } from '../config/timing-constants.js';
@@ -38,38 +37,6 @@ export function updateWeekHeader(date) {
     const weekEndStr = weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
     weekDisplay.textContent = `Week ${weekNum}: ${weekStartStr} - ${weekEndStr}`;
-}
-
-/**
- * Navigate to the previous week
- */
-export function navigateToPreviousWeek() {
-    const currentIndex = getCurrentViewedWeekIndex();
-    const allWeekStartDates = getAllWeekStartDates();
-
-    if (currentIndex > 0) {
-        const newIndex = currentIndex - 1;
-        navigateToWeek(newIndex);
-    } else {
-        // Already at first week
-        logger.debug('Already at the first week');
-    }
-}
-
-/**
- * Navigate to the next week
- */
-export function navigateToNextWeek() {
-    const currentIndex = getCurrentViewedWeekIndex();
-    const allWeekStartDates = getAllWeekStartDates();
-
-    if (currentIndex < allWeekStartDates.length - 1) {
-        const newIndex = currentIndex + 1;
-        navigateToWeek(newIndex);
-    } else {
-        // Already at last week
-        logger.debug('Already at the last week');
-    }
 }
 
 /**

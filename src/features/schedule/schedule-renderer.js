@@ -13,6 +13,7 @@ import { parseDate, getMonday, getLocalDateString, getWeekMonth, getWeekOfMonth 
 import { renderWeekGrid } from '../../components/week-renderer.js';
 import { Z_INDEX } from '../../config/layout-constants.js';
 import { RENDER_DELAY } from '../../config/timing-constants.js';
+import { showRenderingStatus } from '../../utils/ui-utils.js';
 
 // State references (will be set by state.js)
 let filteredTasks = [];
@@ -36,15 +37,18 @@ export function renderAllWeeks() {
         return;
     }
 
+    // Compute current Monday once for the entire function
+    const todayMonday = getMonday(new Date());
+
     // Group tasks by the Monday of their week
     const tasksByWeek = {};
-    let currentMonday = getMonday(new Date()); // Assign early for missing dates
+    let currentMonday = todayMonday;
     filteredTasks.forEach(task => {
         if (!task.project) return;
         let taskDate = parseDate(task.date);
         if (!taskDate) {
             task.missingDate = true;
-            taskDate = currentMonday; // Assign to current week for display
+            taskDate = todayMonday; // Assign to current week for display
         }
         const monday = getMonday(taskDate);
         const mondayString = getLocalDateString(monday);
@@ -59,7 +63,7 @@ export function renderAllWeeks() {
     let allMondays = [];
     if (mondayStrings.length === 0) {
         // No tasks, include only current week
-        currentMonday = getMonday(new Date());
+        currentMonday = todayMonday;
         const currentMondayString = getLocalDateString(currentMonday);
         allMondays = [currentMonday];
         tasksByWeek[currentMondayString] = [];
@@ -77,7 +81,7 @@ export function renderAllWeeks() {
             current.setDate(current.getDate() + 7);
         }
         // Include current week if not already included
-        currentMonday = getMonday(new Date());
+        currentMonday = todayMonday;
         const currentMondayString = getLocalDateString(currentMonday);
         if (!allMondays.some(d => d.getTime() === currentMonday.getTime())) {
             allMondays.push(currentMonday);
@@ -101,7 +105,7 @@ export function renderAllWeeks() {
             let taskDate = parseDate(task.date);
             if (!taskDate) {
                 task.missingDate = true;
-                taskDate = getMonday(new Date());
+                taskDate = todayMonday;
             }
             const dateString = taskDate.toDateString();
             if (!tasksByDate[dateString]) tasksByDate[dateString] = [];
@@ -138,8 +142,8 @@ export function renderAllWeeks() {
 
         // If no valid saved position, set to current week
         if (currentViewedWeekIndex === -1 || currentViewedWeekIndex >= allWeekStartDates.length) {
-            currentMonday = getMonday(new Date());
-            currentViewedWeekIndex = allWeekStartDates.findIndex(d => d.getTime() === currentMonday.getTime());
+            currentMonday = todayMonday;
+            currentViewedWeekIndex = allWeekStartDates.findIndex(d => d.getTime() === todayMonday.getTime());
             if (currentViewedWeekIndex === -1) {
                 currentViewedWeekIndex = allWeekStartDates.findIndex(d => d > currentMonday);
                 if (currentViewedWeekIndex === -1) currentViewedWeekIndex = allWeekStartDates.length - 1;
@@ -277,16 +281,4 @@ export function setStateReferences(refs) {
     allTasks = refs.allTasks;
     allWeekStartDates = refs.allWeekStartDates;
     currentViewedWeekIndex = refs.currentViewedWeekIndex;
-}
-
-
-// UI Helper function
-function showRenderingStatus(show, message = 'Optimizing layout...') {
-    const statusElement = document.getElementById('rendering-status');
-    if (show) {
-        statusElement.textContent = message;
-        statusElement.style.display = 'block';
-    } else {
-        statusElement.style.display = 'none';
-    }
 }

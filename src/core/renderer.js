@@ -11,7 +11,7 @@ import { logger } from '../utils/logger.js';
 import * as state from './state.js';
 import { loadWeekIndex } from './storage.js';
 import { renderWeekGrid } from '../components/week-renderer.js';
-import { getMonday, parseDate, getLocalDateString } from '../utils/date-utils.js';
+import { getMonday, parseDate, getLocalDateString, createWeekDates } from '../utils/date-utils.js';
 import { equalizeAllCardHeights, setGridWidths, scrollToWeek } from '../utils/grid-layout-manager.js';
 import { showRenderingStatus } from '../utils/ui-utils.js';
 import { RENDER_DELAY } from '../config/timing-constants.js';
@@ -25,19 +25,6 @@ import { clearSyntheticTasks, injectSyntheticTasks, getAllTasks, getAllWeekStart
 import { generateBatchTasks, generateLayoutTasks } from '../utils/schedule-utils.js';
 
 let isRendering = false;
-
-/**
- * Generate array of dates for a week (Monday through Saturday)
- * @param {Date} monday - Monday date of the week
- * @returns {Date[]} Array of 6 dates (Mon-Sat)
- */
-function createWeekDates(monday) {
-    return Array.from({ length: 6 }).map((_, i) => {
-        const date = new Date(monday);
-        date.setDate(monday.getDate() + i);
-        return date;
-    });
-}
 
 /**
  * Main render function for the entire application.
@@ -256,11 +243,8 @@ export async function render() {
             equalizeAllCardHeights();
 
             requestAnimationFrame(() => {
-                // Simple restoration: load week index and scroll to that week
-                const savedWeekIndex = loadWeekIndex();
-                const weekIndex = (savedWeekIndex !== null && savedWeekIndex >= 0 && savedWeekIndex < allMondays.length)
-                    ? savedWeekIndex
-                    : currentViewedWeekIndex;
+                // Scroll to the week index already resolved above (includes saved index fallback)
+                const weekIndex = currentViewedWeekIndex;
 
                 scrollToWeek(wrapper, container, weekIndex);
 

@@ -11,45 +11,30 @@
  * @modifies Sets up event listeners on event bus
  */
 
-import { on } from './event-bus.js';
-import { EVENTS } from './event-bus.js';
+import { on, EVENTS } from './event-bus.js';
 import { render } from './renderer.js';
 import { isEditingActive, queueRefresh } from './refresh-queue.js';
 import { logger } from '../utils/logger.js';
+
+/**
+ * Render or queue a refresh depending on editing state
+ * @param {string} eventName - Name of the triggering event (for logging/context)
+ */
+function renderOrQueue(eventName) {
+    if (isEditingActive()) {
+        logger.info(`Editing active during ${eventName}, queueing refresh`);
+        queueRefresh(() => render(), { event: eventName });
+    } else {
+        render();
+    }
+}
 
 /**
  * Set up component event listeners
  * Subscribes components to relevant event bus events
  */
 export function setupComponentEvents() {
-    // Tasks filtered → render schedule (with editing check)
-    on(EVENTS.TASKS_FILTERED, () => {
-        if (isEditingActive()) {
-            logger.info('📊 Tasks filtered but editing active, queueing refresh');
-            queueRefresh(() => render(), { event: 'TASKS_FILTERED' });
-        } else {
-            render();
-        }
-    });
-
-    // Tasks loaded → render schedule (with editing check)
-    on(EVENTS.TASKS_LOADED, () => {
-        logger.info('📊 Tasks loaded, rendering schedule...');
-        if (isEditingActive()) {
-            logger.info('📊 Editing active, queueing refresh');
-            queueRefresh(() => render(), { event: 'TASKS_LOADED' });
-        } else {
-            render();
-        }
-    });
-
-    // Actual hours updated → re-render to show updated values
-    on('actual-hours-updated', (data) => {
-        logger.info('⏱️ Actual hours updated for task:', data.taskId);
-        if (isEditingActive()) {
-            queueRefresh(() => render(), { event: 'actual-hours-updated' });
-        } else {
-            render();
-        }
-    });
+    on(EVENTS.TASKS_FILTERED, () => renderOrQueue('TASKS_FILTERED'));
+    on(EVENTS.TASKS_LOADED, () => renderOrQueue('TASKS_LOADED'));
+    on('actual-hours-updated', () => renderOrQueue('actual-hours-updated'));
 }

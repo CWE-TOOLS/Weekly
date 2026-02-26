@@ -220,13 +220,3 @@ export function initializeDepartmentFilter() {
     // Perform initial filter (silent mode since no tasks loaded yet)
     filterTasks(true);
 }
-
-/**
- * Toggle dropdown visibility (for backward compatibility)
- */
-export function toggleDepartmentDropdown() {
-    const dropdown = document.getElementById('department-dropdown');
-    if (dropdown) {
-        dropdown.classList.toggle('show');
-    }
-}

@@ -102,6 +102,19 @@ export function getWeekMonth(monday) {
  * @param {number} month - Month index (0-11)
  * @returns {number} Week number within the month (1-based)
  */
+/**
+ * Generate array of dates for a week (Monday through Saturday)
+ * @param {Date} monday - Monday date of the week
+ * @returns {Date[]} Array of 6 dates (Mon-Sat)
+ */
+export function createWeekDates(monday) {
+    return Array.from({ length: 6 }).map((_, i) => {
+        const date = new Date(monday);
+        date.setDate(monday.getDate() + i);
+        return date;
+    });
+}
+
 export function getWeekOfMonth(monday, month) {
     const year = monday.getFullYear();
     let startOfWeek1 = getMonday(new Date(year, month, 1));
