@@ -74,8 +74,9 @@ A service should return data/throw errors. The caller should handle UI feedback.
 ~~Exists in `ui-utils.js` (imported by `schedule-grid.js`) and re-implemented locally in `schedule-renderer.js:284-292`.~~
 > Fixed: deleted the local re-implementation and added `import { showRenderingStatus } from '../../utils/ui-utils.js'`.
 
-### 19. Hardcoded `'Batch'` and `'Layout'` scattered across ~8 files
-Found in `renderer.js`, `task-card.js`, `department-utils.js`, `department-filter.js`, `schedule-renderer.js`, `schedule-utils.js`. Should derive from `SYNTHETIC_DEPARTMENT_CONFIG`.
+### ~~19. Hardcoded `'Batch'` and `'Layout'` scattered across ~8 files~~ ✅ COMPLETED
+~~Found in `renderer.js`, `task-card.js`, `department-utils.js`, `department-filter.js`, `schedule-renderer.js`, `schedule-utils.js`. Should derive from `SYNTHETIC_DEPARTMENT_CONFIG`.~~
+> Fixed: Added `SYNTHETIC_DEPARTMENT_NAMES` Set, `isSyntheticDepartment()` helper, and `generateAllSyntheticTasks()` to config/utils. Replaced ~30 hardcoded checks across 12 files with config-driven references.
 
 ### ~~20. Duplicated details HTML in `card-renderer.js` (`addDetails` vs `updateDetails`)~~ ✅ COMPLETED
 ~~Lines 266-286 and 291-312 contain nearly identical HTML-building logic.~~
@@ -120,22 +121,27 @@ Found in `renderer.js`, `task-card.js`, `department-utils.js`, `department-filte
 ### ~~28. `loadWeekIndex()` called twice in same render (`renderer.js:238,260`)~~ ✅ COMPLETED
 > Fixed: removed redundant second call inside nested `requestAnimationFrame`. Now reuses `currentViewedWeekIndex` which already incorporates the saved index.
 
-### 29. Magic number `6` for work week days (multiple files)
-Should be a constant like `DAYS_IN_WORK_WEEK`.
+### ~~29. Magic number `6` for work week days (multiple files)~~ ✅ COMPLETED
+~~Should be a constant like `DAYS_IN_WORK_WEEK`.~~
+> Fixed: added `DAYS_IN_WORK_WEEK = 6` constant to `date-utils.js`. Updated `createWeekDates()` and `print-config-manager.js` to use it.
 
 ### ~~30. Inconsistent HTML construction — `createHeaderRow` returns a string while siblings return DOM elements (`week-renderer.js:52-59`)~~ ✅ COMPLETED
 > Fixed: converted `createHeaderRow` from string concatenation + `innerHTML` to `createElement` + `DocumentFragment`. Usage changed from `grid.innerHTML =` to `grid.appendChild()`.
 
-### 31. Task objects mutated during rendering (`renderer.js:157,214` — `task.missingDate = true`)
+### ~~31. Task objects mutated during rendering (`renderer.js:157,214` — `task.missingDate = true`)~~ ✅ COMPLETED
+> Fixed: first occurrence now creates a shallow copy `{ ...task, missingDate: true }` instead of mutating the original. Second occurrence (used only for counting) no longer sets the flag at all.
 
-### 32. `smart-renderer.js:smartUpdateSchedule` is 208 lines with 7 levels of nesting
+### ~~32. `smart-renderer.js:smartUpdateSchedule` is 208 lines with 7 levels of nesting~~ ✅ COMPLETED
+> Fixed: extracted `removeCard()`, `moveCard()`, and `updateCardContent()` helper functions. Main function is now a clean orchestrator with max 3 levels of nesting.
 
-### 33. Smart renderer gives up on any new tasks (`smart-renderer.js:330-338`) — falls back to full re-render, negating the optimization
+### ~~33. Smart renderer gives up on any new tasks (`smart-renderer.js:330-338`) — falls back to full re-render, negating the optimization~~ ✅ COMPLETED
+> Fixed: Phase 2 now finds the correct grid cell for new tasks and replaces a placeholder with `createTaskCard()`. Only falls back to full re-render if no matching cell or placeholder exists.
 
 ### ~~34. `getMonday(new Date())` computed 4 separate times in `schedule-renderer.js:renderAllWeeks`~~ ✅ COMPLETED
 > Fixed: computed `todayMonday` once at the top of the function. All 5 occurrences now reuse the cached value.
 
-### 35. `flushQueue` in `refresh-queue.js` calls queued function synchronously but it may return a Promise — async rejections go unhandled
+### ~~35. `flushQueue` in `refresh-queue.js` calls queued function synchronously but it may return a Promise — async rejections go unhandled~~ ✅ COMPLETED
+> Fixed: `flushQueue` is now `async` and `await`s the queued function. `queueRefresh` also handles promises when executing immediately.
 
 ---
 
