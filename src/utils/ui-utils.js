@@ -224,21 +224,4 @@ export function normalizeProjectName(projectName) {
     return projectName.replace(/\s+/g, ' ').trim();
 }
 
-/**
- * Normalize department name for CSS class names
- *
- * Converts department names to valid CSS class names by converting to lowercase,
- * replacing spaces with hyphens, and removing special characters.
- *
- * @param {string} dept - Department name to normalize
- * @returns {string} CSS-safe department class name
- *
- * @example
- * normalizeDepartmentClass('Special Events'); // Returns: 'special-events'
- * normalizeDepartmentClass('Form Out');       // Returns: 'form-out'
- * normalizeDepartmentClass('Mill');           // Returns: 'mill'
- */
-export function normalizeDepartmentClass(dept) {
-    if (!dept) return '';
-    return dept.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-}
+export { normalizeDepartmentClass } from '../config/department-config.js';

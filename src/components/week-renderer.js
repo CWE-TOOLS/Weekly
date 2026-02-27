@@ -24,9 +24,9 @@
 
 import { getFilteredTasks, getAllTasks, injectSyntheticTasks } from '../core/state.js';
 import { getMonday, getLocalDateString, createWeekDates } from '../utils/date-utils.js';
-import { DEPARTMENT_ORDER } from '../config/department-config.js';
+import { DEPARTMENT_ORDER, normalizeDepartmentClass } from '../config/department-config.js';
 import { groupTasksByDepartment, groupTasksByDate } from '../utils/department-utils.js';
-import { createTaskCard, createTaskCardPlaceholder, normalizeDepartmentClass } from './task-card.js';
+import { createTaskCard, createTaskCardPlaceholder } from './task-card.js';
 import { generateAllSyntheticTasks } from '../utils/schedule-utils.js';
 import { Z_INDEX } from '../config/layout-constants.js';
 import { logger } from '../utils/logger.js';

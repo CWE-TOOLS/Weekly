@@ -17,6 +17,7 @@ import { getEditingCardId } from '../core/refresh-queue.js';
 import { getIsEditingUnlocked } from '../core/state.js';
 import { debug } from './debug.js';
 import { RENDERING } from '../config/rendering-constants.js';
+import { sanitizeDescription } from './security-utils.js';
 
 /**
  * Create a task map for quick lookups
@@ -96,8 +97,9 @@ function updateTaskCard(cardElement, newTask, rowClass) {
         if (hasDescription) {
             // Use innerHTML for Batch and Layout to support <br> tags
             if (RENDERING.shouldUseHtmlDescription(newTask.department)) {
-                if (descDiv.innerHTML !== newTask.description) {
-                    descDiv.innerHTML = newTask.description;
+                const sanitized = sanitizeDescription(newTask.description);
+                if (descDiv.innerHTML !== sanitized) {
+                    descDiv.innerHTML = sanitized;
                 }
             } else {
                 if (descDiv.textContent !== newTask.description) {

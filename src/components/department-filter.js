@@ -7,18 +7,9 @@
 import { getAllTasks, setFilteredTasks } from '../core/state.js';
 import { emit, on, EVENTS } from '../core/event-bus.js';
 import { saveState, loadState } from '../core/storage.js';
-import { DEPARTMENT_ORDER, SYNTHETIC_DEPARTMENT_NAMES } from '../config/department-config.js';
+import { DEPARTMENT_ORDER, SYNTHETIC_DEPARTMENT_NAMES, normalizeDepartmentClass } from '../config/department-config.js';
 
 import { logger } from '../utils/logger.js';
-/**
- * Normalize department name to CSS class format
- * @param {string} dept - Department name
- * @returns {string} Normalized class name
- */
-function normalizeDepartmentClass(dept) {
-    if (!dept) return '';
-    return dept.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-}
 
 /**
  * Get currently selected departments from checkboxes

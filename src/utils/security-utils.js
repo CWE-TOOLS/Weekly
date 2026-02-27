@@ -57,3 +57,18 @@ export function safeHtmlWrap(content, openTag, closeTag = '') {
 export function safeHtmlJoin(items, separator = '') {
     return items.map(escapeHtml).join(separator);
 }
+
+/**
+ * Sanitize HTML description by escaping all content except <br> tags.
+ * Used for Batch/Layout descriptions that contain <br> for line breaks
+ * but should not allow any other HTML (preventing XSS).
+ * @param {string} html - HTML string to sanitize
+ * @returns {string} Sanitized string with only <br> tags preserved
+ */
+export function sanitizeDescription(html) {
+    if (typeof html !== 'string') return html;
+    let safe = escapeHtml(html);
+    // Restore <br> variants that were escaped
+    safe = safe.replace(/&lt;br\s*&#x2F;?&gt;/gi, '<br>');
+    return safe;
+}

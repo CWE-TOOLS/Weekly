@@ -28,6 +28,144 @@ import { generateAllSyntheticTasks } from '../utils/schedule-utils.js';
 let isRendering = false;
 
 /**
+ * Group filtered tasks by their week Monday and compute the sorted list of all Mondays.
+ * @param {Array} filteredTasks - Currently filtered tasks
+ * @returns {{ tasksByWeek: Object, allMondays: Date[] }}
+ */
+function groupTasksByWeek(filteredTasks) {
+    const tasksByWeek = {};
+    const currentMonday = getMonday(new Date());
+
+    filteredTasks.forEach(task => {
+        if (!task.project) return;
+        let taskDate = parseDate(task.date);
+        let taskToStore = task;
+        if (!taskDate) {
+            taskToStore = { ...task, missingDate: true };
+            taskDate = currentMonday;
+        }
+        const monday = getMonday(taskDate);
+        const mondayString = getLocalDateString(monday);
+        if (!tasksByWeek[mondayString]) {
+            tasksByWeek[mondayString] = [];
+        }
+        tasksByWeek[mondayString].push(taskToStore);
+    });
+
+    const mondayStrings = Object.keys(tasksByWeek);
+    let allMondays = [];
+
+    if (mondayStrings.length === 0) {
+        const currentMondayString = getLocalDateString(currentMonday);
+        allMondays = [currentMonday];
+        tasksByWeek[currentMondayString] = [];
+    } else {
+        mondayStrings.sort();
+        const minMonday = new Date(mondayStrings[0] + 'T00:00:00');
+        const maxMonday = new Date(mondayStrings[mondayStrings.length - 1] + 'T00:00:00');
+        let current = new Date(minMonday);
+
+        while (current <= maxMonday) {
+            const mondayString = getLocalDateString(current);
+            allMondays.push(new Date(current));
+            if (!tasksByWeek[mondayString]) {
+                tasksByWeek[mondayString] = [];
+            }
+            current.setDate(current.getDate() + 7);
+        }
+
+        const currentMondayString = getLocalDateString(currentMonday);
+        if (!allMondays.some(d => d.getTime() === currentMonday.getTime())) {
+            allMondays.push(currentMonday);
+            allMondays.sort((a, b) => a - b);
+            if (!tasksByWeek[currentMondayString]) {
+                tasksByWeek[currentMondayString] = [];
+            }
+        }
+    }
+
+    return { tasksByWeek, allMondays };
+}
+
+/**
+ * Single-pass computation of the maximum tasks per department across all dates.
+ * @param {Array} filteredTasks - Currently filtered tasks
+ * @returns {Object} Map of department name to maximum task count
+ */
+function buildMaxTasksPerDept(filteredTasks) {
+    const taskCountByDeptDate = new Map();
+    filteredTasks.forEach(task => {
+        if (!task.project || !task.department) return;
+        const taskDate = parseDate(task.date) || getMonday(new Date());
+        const key = `${task.department}|${taskDate.toDateString()}`;
+        taskCountByDeptDate.set(key, (taskCountByDeptDate.get(key) || 0) + 1);
+    });
+    const maxTasksPerDept = {};
+    for (const [key, count] of taskCountByDeptDate) {
+        const dept = key.split('|')[0];
+        maxTasksPerDept[dept] = Math.max(maxTasksPerDept[dept] || 0, count);
+    }
+    for (const dept of SYNTHETIC_DEPARTMENT_NAMES) {
+        maxTasksPerDept[dept] = 1;
+    }
+    return maxTasksPerDept;
+}
+
+/**
+ * Resolve the current viewed week index using fallback chain:
+ * existing state -> saved storage -> current Monday -> next future Monday -> last week.
+ * @param {Date[]} allMondays - All available week start dates
+ * @returns {number} Resolved week index
+ */
+function resolveWeekIndex(allMondays) {
+    let currentViewedWeekIndex = state.getCurrentViewedWeekIndex();
+    if (currentViewedWeekIndex === -1 || currentViewedWeekIndex >= allMondays.length) {
+        const savedWeekIndex = loadWeekIndex();
+        if (savedWeekIndex !== null && savedWeekIndex >= 0 && savedWeekIndex < allMondays.length) {
+            currentViewedWeekIndex = savedWeekIndex;
+        }
+
+        if (currentViewedWeekIndex === -1 || currentViewedWeekIndex >= allMondays.length) {
+            const currentMonday = getMonday(new Date());
+            currentViewedWeekIndex = allMondays.findIndex(d => d.getTime() === currentMonday.getTime());
+            if (currentViewedWeekIndex === -1) {
+                currentViewedWeekIndex = allMondays.findIndex(d => d > currentMonday);
+                if (currentViewedWeekIndex === -1) currentViewedWeekIndex = allMondays.length - 1;
+            }
+        }
+    }
+    return currentViewedWeekIndex;
+}
+
+/**
+ * Schedule the post-render layout pass: grid widths -> card heights -> scroll to week -> restore vertical scroll -> emit events.
+ * @param {HTMLElement} container - Schedule container element
+ * @param {HTMLElement} wrapper - Schedule wrapper element
+ * @param {number} weekIndex - Target week index to scroll to
+ * @param {Date[]} allMondays - All available week start dates
+ * @param {number} savedScrollTop - Vertical scroll position to restore
+ */
+function scheduleLayoutAndScroll(container, wrapper, weekIndex, allMondays, savedScrollTop) {
+    requestAnimationFrame(() => {
+        setGridWidths(container, wrapper);
+        equalizeAllCardHeights();
+
+        requestAnimationFrame(() => {
+            scrollToWeek(wrapper, container, weekIndex);
+
+            if (typeof savedScrollTop === 'number') {
+                wrapper.scrollTop = savedScrollTop;
+            }
+
+            const finalWeekIndex = Math.min(weekIndex, allMondays.length - 1);
+            emit(EVENTS.WEEK_CHANGED, { weekIndex: finalWeekIndex, weekDate: allMondays[finalWeekIndex] });
+
+            wrapper.style.willChange = 'auto';
+        });
+    });
+}
+
+/**
  * Main render function for the entire application.
  * This is the single entry point for all rendering operations.
  */
@@ -136,77 +274,10 @@ export async function render() {
             return;
         }
 
-        const tasksByWeek = {};
-        let currentMonday = getMonday(new Date());
-
-        filteredTasks.forEach(task => {
-            if (!task.project) return;
-            let taskDate = parseDate(task.date);
-            let taskToStore = task;
-            if (!taskDate) {
-                taskToStore = { ...task, missingDate: true };
-                taskDate = currentMonday;
-            }
-            const monday = getMonday(taskDate);
-            const mondayString = getLocalDateString(monday);
-            if (!tasksByWeek[mondayString]) {
-                tasksByWeek[mondayString] = [];
-            }
-            tasksByWeek[mondayString].push(taskToStore);
-        });
-
-        const mondayStrings = Object.keys(tasksByWeek);
-        let allMondays = [];
-
-        if (mondayStrings.length === 0) {
-            currentMonday = getMonday(new Date());
-            const currentMondayString = getLocalDateString(currentMonday);
-            allMondays = [currentMonday];
-            tasksByWeek[currentMondayString] = [];
-        } else {
-            mondayStrings.sort();
-            const minMonday = new Date(mondayStrings[0] + 'T00:00:00');
-            const maxMonday = new Date(mondayStrings[mondayStrings.length - 1] + 'T00:00:00');
-            let current = new Date(minMonday);
-
-            while (current <= maxMonday) {
-                const mondayString = getLocalDateString(current);
-                allMondays.push(new Date(current));
-                if (!tasksByWeek[mondayString]) {
-                    tasksByWeek[mondayString] = [];
-                }
-                current.setDate(current.getDate() + 7);
-            }
-
-            currentMonday = getMonday(new Date());
-            const currentMondayString = getLocalDateString(currentMonday);
-            if (!allMondays.some(d => d.getTime() === currentMonday.getTime())) {
-                allMondays.push(currentMonday);
-                allMondays.sort((a, b) => a - b);
-                if (!tasksByWeek[currentMondayString]) {
-                    tasksByWeek[currentMondayString] = [];
-                }
-            }
-        }
-
+        const { tasksByWeek, allMondays } = groupTasksByWeek(filteredTasks);
         state.setAllWeekStartDates(allMondays);
 
-        // Single-pass: count tasks per dept|date key
-        const taskCountByDeptDate = new Map();
-        filteredTasks.forEach(task => {
-            if (!task.project || !task.department) return;
-            const taskDate = parseDate(task.date) || getMonday(new Date());
-            const key = `${task.department}|${taskDate.toDateString()}`;
-            taskCountByDeptDate.set(key, (taskCountByDeptDate.get(key) || 0) + 1);
-        });
-        const maxTasksPerDept = {};
-        for (const [key, count] of taskCountByDeptDate) {
-            const dept = key.split('|')[0];
-            maxTasksPerDept[dept] = Math.max(maxTasksPerDept[dept] || 0, count);
-        }
-        for (const dept of SYNTHETIC_DEPARTMENT_NAMES) {
-            maxTasksPerDept[dept] = 1;
-        }
+        const maxTasksPerDept = buildMaxTasksPerDept(filteredTasks);
 
         const isEditingUnlocked = getIsEditingUnlocked();
         const fragment = document.createDocumentFragment();
@@ -215,45 +286,10 @@ export async function render() {
         });
         container.appendChild(fragment);
 
-        let currentViewedWeekIndex = state.getCurrentViewedWeekIndex();
-        if (currentViewedWeekIndex === -1 || currentViewedWeekIndex >= allMondays.length) {
-            const savedWeekIndex = loadWeekIndex();
-            if (savedWeekIndex !== null && savedWeekIndex >= 0 && savedWeekIndex < allMondays.length) {
-                currentViewedWeekIndex = savedWeekIndex;
-            }
+        const weekIndex = resolveWeekIndex(allMondays);
+        state.setCurrentViewedWeekIndex(weekIndex);
 
-            if (currentViewedWeekIndex === -1 || currentViewedWeekIndex >= allMondays.length) {
-                currentMonday = getMonday(new Date());
-                currentViewedWeekIndex = allMondays.findIndex(d => d.getTime() === currentMonday.getTime());
-                if (currentViewedWeekIndex === -1) {
-                    currentViewedWeekIndex = allMondays.findIndex(d => d > currentMonday);
-                    if (currentViewedWeekIndex === -1) currentViewedWeekIndex = allMondays.length - 1;
-                }
-            }
-        }
-        state.setCurrentViewedWeekIndex(currentViewedWeekIndex);
-
-        requestAnimationFrame(() => {
-            setGridWidths(container, wrapper);
-            equalizeAllCardHeights();
-
-            requestAnimationFrame(() => {
-                // Scroll to the week index already resolved above (includes saved index fallback)
-                const weekIndex = currentViewedWeekIndex;
-
-                scrollToWeek(wrapper, container, weekIndex);
-
-                // RESTORE VERTICAL SCROLL (if we had to do full render)
-                if (typeof savedScrollTop === 'number') {
-                    wrapper.scrollTop = savedScrollTop;
-                }
-
-                const finalWeekIndex = Math.min(weekIndex, allMondays.length - 1);
-                emit(EVENTS.WEEK_CHANGED, { weekIndex: finalWeekIndex, weekDate: allMondays[finalWeekIndex] });
-
-                wrapper.style.willChange = 'auto';
-            });
-        });
+        scheduleLayoutAndScroll(container, wrapper, weekIndex, allMondays, savedScrollTop);
 
         setTimeout(() => {
             showRenderingStatus(false);

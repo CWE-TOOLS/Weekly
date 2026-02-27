@@ -7,16 +7,8 @@
 import { getIsEditingUnlocked } from '../core/state.js';
 import { getActualHours } from './modals/actual-hours-modal.js';
 import { RENDERING } from '../config/rendering-constants.js';
-
-/**
- * Normalize department name to CSS class format
- * @param {string} dept - Department name
- * @returns {string} Normalized class name
- */
-function normalizeDepartmentClass(dept) {
-    if (!dept) return '';
-    return dept.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-}
+import { normalizeDepartmentClass } from '../config/department-config.js';
+import { sanitizeDescription } from '../utils/security-utils.js';
 
 /**
  * Create a task card element
@@ -74,7 +66,7 @@ export function createTaskCard(task, rowClass, isEditingUnlocked) {
     if (task.description && task.description.trim()) {
         // Use innerHTML for Batch and Layout to support <br> tags, textContent for others for safety
         if (RENDERING.shouldUseHtmlDescription(task.department)) {
-            descDiv.innerHTML = task.description;
+            descDiv.innerHTML = sanitizeDescription(task.description);
         } else {
             descDiv.textContent = task.description;
         }
@@ -161,4 +153,4 @@ export function createTaskCardPlaceholder(department, dateString, weekString, ro
  * @param {string} dept - Department name
  * @returns {string} Normalized class name
  */
-export { normalizeDepartmentClass };
+export { normalizeDepartmentClass } from '../config/department-config.js';

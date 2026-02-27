@@ -6,7 +6,7 @@
  */
 
 import { generateBatchTasks, generateLayoutTasks } from '../../utils/schedule-utils.js';
-import { isSyntheticDepartment } from '../../config/department-config.js';
+import { isSyntheticDepartment, normalizeDepartmentClass } from '../../config/department-config.js';
 import { DATE_BOUNDARIES, PRINT_LAYOUT } from '../../config/layout-constants.js';
 import { RENDER_DELAY } from '../../config/timing-constants.js';
 import { logger } from '../../utils/logger.js';
@@ -165,13 +165,6 @@ function parseDate(dateStr) {
     return isNaN(date.getTime()) ? null : date;
 }
 
-/**
- * Normalize department class name for CSS
- */
-function normalizeDepartmentClass(dept) {
-    if (!dept) return '';
-    return dept.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-}
 
 /**
  * Get next business day (skip weekends)

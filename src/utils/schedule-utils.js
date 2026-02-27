@@ -6,7 +6,7 @@
  * @claude-context
  * @purpose Consolidate duplicate task generation logic for Batch and Layout departments
  * @dependencies date-utils.js, security-utils.js
- * @used-by components/schedule-grid.js, features/print/print-renderer.js, features/print/print-utils.js, features/schedule/schedule-renderer.js
+ * @used-by components/schedule-grid.js, features/print/print-renderer.js, features/print/print-utils.js
  * @exports generateSpecialDepartmentTasks
  * @key-functions
  *   - generateSpecialDepartmentTasks() - Unified function to generate Batch or Layout tasks

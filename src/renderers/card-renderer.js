@@ -9,6 +9,7 @@
 import { RENDERING } from '../config/rendering-constants.js';
 import { normalizeDepartmentClass } from '../utils/ui-utils.js';
 import { getIsEditingUnlocked } from '../core/state.js';
+import { sanitizeDescription } from '../utils/security-utils.js';
 
 /**
  * Unified card renderer supporting multiple render modes
@@ -222,7 +223,7 @@ export class CardRenderer {
         if (hasDescription) {
             // Use innerHTML for special departments (Batch, Layout) to support <br> tags
             if (RENDERING.shouldUseHtmlDescription(task.department)) {
-                descDiv.innerHTML = task.description;
+                descDiv.innerHTML = sanitizeDescription(task.description);
             } else {
                 descDiv.textContent = task.description;
             }
@@ -244,8 +245,9 @@ export class CardRenderer {
         
         if (hasDescription) {
             if (RENDERING.shouldUseHtmlDescription(newTask.department)) {
-                if (descDiv.innerHTML !== newTask.description) {
-                    descDiv.innerHTML = newTask.description;
+                const sanitized = sanitizeDescription(newTask.description);
+                if (descDiv.innerHTML !== sanitized) {
+                    descDiv.innerHTML = sanitized;
                 }
             } else {
                 if (descDiv.textContent !== newTask.description) {

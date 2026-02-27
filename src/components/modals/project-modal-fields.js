@@ -7,6 +7,7 @@
 import { normalizeDepartmentClass } from '../../utils/ui-utils.js';
 import { parseDate } from '../../utils/date-utils.js';
 import { ANIMATION_CONFIG } from '../../config/visual-constants.js';
+import { escapeHtml, sanitizeDescription } from '../../utils/security-utils.js';
 
 /**
  * Render department section with task cards
@@ -49,16 +50,16 @@ export function renderTaskCard(task, index) {
     return `
         <div class="project-task-card task-card department-${normalizeDepartmentClass(task.department)}"
              style="animation-delay: ${index * ANIMATION_CONFIG.CARD_DELAY_STEP_S}s"
-             data-task-id="${task.id}"
+             data-task-id="${escapeHtml(task.id)}"
              title="Click for options">
-            <div class="task-title">${task.project}</div>
-            <div class="project-description">${task.projectDescription || ''}</div>
-            <div class="task-day-counter">${task.dayCounter || ''}</div>
-            <div class="task-description">${task.description && task.description.trim() ? task.description : '<span class="missing-description">Staging Missing</span>'}</div>
+            <div class="task-title">${escapeHtml(task.project)}</div>
+            <div class="project-description">${escapeHtml(task.projectDescription || '')}</div>
+            <div class="task-day-counter">${escapeHtml(task.dayCounter || '')}</div>
+            <div class="task-description">${task.description && task.description.trim() ? sanitizeDescription(task.description) : '<span class="missing-description">Staging Missing</span>'}</div>
             <div class="task-details">
-                <strong>Date:</strong> ${formattedDate}<br>
-                <strong>Hours:</strong> ${task.hours}<br>
-                <strong>Code:</strong> ${task.value}
+                <strong>Date:</strong> ${escapeHtml(formattedDate)}<br>
+                <strong>Hours:</strong> ${escapeHtml(task.hours || '')}<br>
+                <strong>Code:</strong> ${escapeHtml(task.value || '')}
             </div>
         </div>
     `;
@@ -84,7 +85,7 @@ export function createEditableDescriptionField(descDiv) {
 export function createReadOnlyDescriptionField(text) {
     const descDiv = document.createElement('div');
     descDiv.className = 'task-description';
-    descDiv.innerHTML = text || '<span class="missing-description">Staging Missing</span>';
+    descDiv.innerHTML = sanitizeDescription(text) || '<span class="missing-description">Staging Missing</span>';
     return descDiv;
 }
 
@@ -98,7 +99,7 @@ export function updateWeeklyViewCard(taskId, newText) {
     if (weeklyCard) {
         const descElement = weeklyCard.querySelector('.task-description');
         if (descElement) {
-            descElement.innerHTML = newText || '<span class="missing-description">Staging Missing</span>';
+            descElement.innerHTML = sanitizeDescription(newText) || '<span class="missing-description">Staging Missing</span>';
         }
     }
 }
