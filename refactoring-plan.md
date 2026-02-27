@@ -41,24 +41,28 @@ Called for every task card and placeholder. Should be computed once per render c
 
 ## MEDIUM SEVERITY — Architecture
 
-### 11. DOM access in the state module (`state.js:288-294`)
-`getSelectedDepartments()` directly queries `#department-list` checkboxes. A "pure data layer" should not touch the DOM. Department selection should be stored as state via a setter.
+### ~~11. DOM access in the state module (`state.js:288-294`)~~ ✅ COMPLETED
+~~`getSelectedDepartments()` directly queries `#department-list` checkboxes. A "pure data layer" should not touch the DOM. Department selection should be stored as state via a setter.~~
+> Fixed: deleted the dead `getSelectedDepartments()` function from `state.js`. Zero callers — the real version lives in `department-filter.js`.
 
 ### ~~12. DOM/UI access in data service (`data-service.js:93-94`)~~ ✅ COMPLETED
 ~~`fetchAllTasks()` checks `document.getElementById('project-modal')` to determine modal state. Data services should not inspect the DOM.~~
 > Fixed: removed modal DOM check and all UI calls (`showLoading`, `hideError`, `showError`) from `fetchAllTasks()`. Callers now own their own loading/error UI.
 
-### 13. Inconsistent state access patterns across files
-Three different approaches to reading editing state:
-- `getIsEditingUnlocked()` from `state.js`
-- `localStorage.getItem('editingUnlocked')` in `smart-renderer.js:286`
-- `isEditingActive()` from `refresh-queue.js`
+### ~~13. Inconsistent state access patterns across files~~ ✅ COMPLETED
+~~Three different approaches to reading editing state:~~
+~~- `getIsEditingUnlocked()` from `state.js`~~
+~~- `localStorage.getItem('editingUnlocked')` in `smart-renderer.js:286`~~
+~~- `isEditingActive()` from `refresh-queue.js`~~
+> Fixed: replaced direct `localStorage.getItem('editingUnlocked')` in `smart-renderer.js` with `getIsEditingUnlocked()` from `state.js`.
 
-### 14. `window.*` global pollution in an ES module codebase
-`department-utils.js` exports to `window.DepartmentUtils`, `schedule-renderer.js` uses `window.DEPARTMENT_ORDER`, `window.lastRenderTimestamp`, `window.renderCache`. This undermines the module architecture.
+### ~~14. `window.*` global pollution in an ES module codebase~~ ✅ COMPLETED
+~~`department-utils.js` exports to `window.DepartmentUtils`, `schedule-renderer.js` uses `window.DEPARTMENT_ORDER`, `window.lastRenderTimestamp`, `window.renderCache`. This undermines the module architecture.~~
+> Fixed: deleted `window.DepartmentUtils` from `department-utils.js`. Replaced `window.DEPARTMENT_ORDER` with proper import, `window.lastRenderTimestamp`/`window.renderCache` with `setLastRenderTimestamp()`/`setRenderCache()` from `state.js`.
 
-### 15. Synthetic tasks injected in two places
-`renderer.js:86-88` and `week-renderer.js:229` both call `injectSyntheticTasks()`. During a full render, both execute, potentially double-injecting.
+### ~~15. Synthetic tasks injected in two places~~ ✅ COMPLETED
+~~`renderer.js:86-88` and `week-renderer.js:229` both call `injectSyntheticTasks()`. During a full render, both execute, potentially double-injecting.~~
+> Fixed: moved synthetic task generation inside the `previousFilteredTasks.length > 0` guard so injection only happens on the smart-update path. Made `injectSyntheticTasks()` idempotent by filtering out existing synthetic tasks before appending.
 
 ### ~~16. `data-service.js` mixes data fetching with UI (`showLoading`, `showError`)~~ ✅ COMPLETED
 ~~A service should return data/throw errors. The caller should handle UI feedback.~~

@@ -53,64 +53,64 @@ export async function render() {
         let filteredTasks = state.getFilteredTasks();
         const previousFilteredTasks = state.getPreviousFilteredTasks();
 
-        // CRITICAL: Generate synthetic tasks BEFORE smart update comparison
-        // Problem: previousFilteredTasks has synthetic tasks (from last render)
-        //          but filteredTasks doesn't (not generated yet)
-        // Solution: Generate and inject synthetic tasks into current state
-        //           so both old and new have them for accurate comparison
-        const allWeekStartDates = getAllWeekStartDates();
-        if (allWeekStartDates.length > 0) {
-            const allSyntheticTasks = [];
-
-            // Generate synthetic tasks for ALL weeks in the current view
-            allWeekStartDates.forEach(monday => {
-                const weekDates = createWeekDates(monday);
-                const syntheticTasksByDept = generateAllSyntheticTasks(weekDates, monday, getAllTasks);
-                allSyntheticTasks.push(...Object.values(syntheticTasksByDept).flat());
-            });
-
-            // Inject into state BEFORE smart update comparison
-            if (allSyntheticTasks.length > 0) {
-                injectSyntheticTasks(allSyntheticTasks);
-                // Re-fetch filteredTasks after injection to get the updated array
-                filteredTasks = state.getFilteredTasks();
-                logger.debug('Renderer: Injected synthetic tasks before smart update', {
-                    count: allSyntheticTasks.length,
-                    weeks: allWeekStartDates.length
-                });
-            }
-        }
-
         // Attempt smart update first to preserve scroll position
-        if (previousFilteredTasks.length > 0 &&
-            canUseSmartUpdate(container, previousFilteredTasks, filteredTasks)) {
+        // Only generate synthetic tasks when smart update is a possibility
+        // (on full-render path they'd be immediately cleared — wasted work)
+        if (previousFilteredTasks.length > 0) {
+            // Generate synthetic tasks BEFORE smart update comparison
+            // Problem: previousFilteredTasks has synthetic tasks (from last render)
+            //          but filteredTasks doesn't (not generated yet)
+            // Solution: Generate and inject synthetic tasks into current state
+            //           so both old and new have them for accurate comparison
+            const allWeekStartDates = getAllWeekStartDates();
+            if (allWeekStartDates.length > 0) {
+                const allSyntheticTasks = [];
 
-            logger.info('🔄 Attempting smart update to preserve scroll position...');
-
-            const restoreScroll = preserveScrollPosition(wrapper);
-            const stats = smartUpdateSchedule(container, previousFilteredTasks, filteredTasks);
-
-            if (stats !== null) {
-                logger.info('✅ Smart update successful:', stats);
-
-                // Recalculate heights BEFORE restoring scroll to prevent jumping
-                requestAnimationFrame(() => {
-                    equalizeAllCardHeights();
-                    restoreScroll(); // Restores BOTH scrollTop and scrollLeft AFTER heights are stable
-                    requestAnimationFrame(() => {
-                        emit(EVENTS.SCHEDULE_RENDERED);
-                    });
+                allWeekStartDates.forEach(monday => {
+                    const weekDates = createWeekDates(monday);
+                    const syntheticTasksByDept = generateAllSyntheticTasks(weekDates, monday, getAllTasks);
+                    allSyntheticTasks.push(...Object.values(syntheticTasksByDept).flat());
                 });
 
-                setTimeout(() => {
-                    showRenderingStatus(false);
-                }, RENDER_DELAY.SCHEDULE);
-
-                isRendering = false;
-                return; // Early exit - skip full render (synthetic tasks preserved)
+                if (allSyntheticTasks.length > 0) {
+                    injectSyntheticTasks(allSyntheticTasks);
+                    filteredTasks = state.getFilteredTasks();
+                    logger.debug('Renderer: Injected synthetic tasks before smart update', {
+                        count: allSyntheticTasks.length,
+                        weeks: allWeekStartDates.length
+                    });
+                }
             }
 
-            logger.warn('⚠️ Smart update not possible, falling back to full render');
+            if (canUseSmartUpdate(container, previousFilteredTasks, filteredTasks)) {
+
+                logger.info('🔄 Attempting smart update to preserve scroll position...');
+
+                const restoreScroll = preserveScrollPosition(wrapper);
+                const stats = smartUpdateSchedule(container, previousFilteredTasks, filteredTasks);
+
+                if (stats !== null) {
+                    logger.info('✅ Smart update successful:', stats);
+
+                    // Recalculate heights BEFORE restoring scroll to prevent jumping
+                    requestAnimationFrame(() => {
+                        equalizeAllCardHeights();
+                        restoreScroll(); // Restores BOTH scrollTop and scrollLeft AFTER heights are stable
+                        requestAnimationFrame(() => {
+                            emit(EVENTS.SCHEDULE_RENDERED);
+                        });
+                    });
+
+                    setTimeout(() => {
+                        showRenderingStatus(false);
+                    }, RENDER_DELAY.SCHEDULE);
+
+                    isRendering = false;
+                    return; // Early exit - skip full render (synthetic tasks preserved)
+                }
+
+                logger.warn('⚠️ Smart update not possible, falling back to full render');
+            }
         }
 
         // Clear any existing synthetic tasks before doing a FULL render

@@ -14,7 +14,8 @@ import { renderWeekGrid } from '../../components/week-renderer.js';
 import { Z_INDEX } from '../../config/layout-constants.js';
 import { RENDER_DELAY } from '../../config/timing-constants.js';
 import { showRenderingStatus } from '../../utils/ui-utils.js';
-import { SYNTHETIC_DEPARTMENT_NAMES } from '../../config/department-config.js';
+import { SYNTHETIC_DEPARTMENT_NAMES, DEPARTMENT_ORDER } from '../../config/department-config.js';
+import { setLastRenderTimestamp, setRenderCache } from '../../core/state.js';
 
 // State references (will be set by state.js)
 let filteredTasks = [];
@@ -96,7 +97,7 @@ export function renderAllWeeks() {
 
     // --- Global Calculation for Row Normalization ---
     const maxTasksPerDept = {};
-    window.DEPARTMENT_ORDER.forEach(dept => {
+    DEPARTMENT_ORDER.forEach(dept => {
         const deptTasks = filteredTasks.filter(t => t.department === dept);
         if (deptTasks.length === 0) return;
 
@@ -179,13 +180,13 @@ export function renderAllWeeks() {
     });
 
     // Store successful render state
-    window.lastRenderTimestamp = Date.now();
-    window.renderCache = {
+    setLastRenderTimestamp(Date.now());
+    setRenderCache({
         containerHTML: container.innerHTML,
         scrollPosition: wrapper.scrollLeft,
         weekIndex: currentViewedWeekIndex,
         weekDates: [...allWeekStartDates]
-    };
+    });
 
     // Re-enable add card indicators after rendering
     setTimeout(() => {

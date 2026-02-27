@@ -140,10 +140,3 @@ export function calculateMaxTasksPerDept(tasksByDept, weekDates) {
     }
     return maxTasks;
 }
-// Expose utilities to the global scope for the print module
-window.DepartmentUtils = {
-    groupTasksByDepartment,
-    sortDepartments,
-    groupTasksByDate,
-    calculateMaxTasksPerDept
-};

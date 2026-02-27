@@ -257,9 +257,9 @@ export function getIsEditingUnlocked() {
  * @param {Array} syntheticTasks - Array of synthetic tasks to add
  */
 export function injectSyntheticTasks(syntheticTasks) {
-    // Add synthetic tasks to both current and previous filtered tasks
-    _filteredTasks = [..._filteredTasks, ...syntheticTasks];
-    _previousFilteredTasks = [..._previousFilteredTasks, ...syntheticTasks];
+    // Filter out existing synthetic tasks before appending (idempotent)
+    _filteredTasks = [..._filteredTasks.filter(t => !t.isSynthetic), ...syntheticTasks];
+    _previousFilteredTasks = [..._previousFilteredTasks.filter(t => !t.isSynthetic), ...syntheticTasks];
     // No event emission - silent operation
 }
 
@@ -277,20 +277,6 @@ export function clearSyntheticTasks() {
 // ============================================================================
 // Computed State & Helper Methods
 // ============================================================================
-
-/**
- * Get selected departments from the DOM
- * This reads directly from the checkbox elements in the UI
- * @returns {string[]} Array of selected department names
- */
-export function getSelectedDepartments() {
-    const selected = [];
-    const checkboxes = document.querySelectorAll('#department-list input[type="checkbox"]:checked');
-    checkboxes.forEach(checkbox => {
-        selected.push(checkbox.value);
-    });
-    return selected;
-}
 
 /**
  * Get the current week's start date (Monday)

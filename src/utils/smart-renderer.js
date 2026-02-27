@@ -14,6 +14,7 @@
 import { logger } from './logger.js';
 import { createTaskCard, createTaskCardPlaceholder } from '../components/task-card.js';
 import { getEditingCardId } from '../core/refresh-queue.js';
+import { getIsEditingUnlocked } from '../core/state.js';
 import { debug } from './debug.js';
 import { RENDERING } from '../config/rendering-constants.js';
 
@@ -231,7 +232,7 @@ function moveCard(cardElement, container, oldTask, newTask, rowClass, stats) {
 
             const newPlaceholder = document.createElement('div');
             newPlaceholder.className = `task-card-placeholder ${rowClass}`;
-            const editingUnlocked = localStorage.getItem('editingUnlocked') === 'true';
+            const editingUnlocked = getIsEditingUnlocked();
             if (editingUnlocked) {
                 newPlaceholder.classList.add('add-enabled');
             }
