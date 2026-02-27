@@ -5,6 +5,9 @@
 
 import { TIME_CONSTANTS } from '../config/timing-constants.js';
 
+/** Number of days in the work week (Monday through Saturday) */
+export const DAYS_IN_WORK_WEEK = 6;
+
 /**
  * Parse a date string in multiple formats (MM/DD/YYYY, YYYY-MM-DD, or ISO)
  * @param {string} dateStr - The date string to parse
@@ -108,7 +111,7 @@ export function getWeekMonth(monday) {
  * @returns {Date[]} Array of 6 dates (Mon-Sat)
  */
 export function createWeekDates(monday) {
-    return Array.from({ length: 6 }).map((_, i) => {
+    return Array.from({ length: DAYS_IN_WORK_WEEK }).map((_, i) => {
         const date = new Date(monday);
         date.setDate(monday.getDate() + i);
         return date;

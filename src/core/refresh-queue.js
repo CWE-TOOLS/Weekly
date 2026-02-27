@@ -72,7 +72,9 @@ export function endEditing(taskId) {
 export function queueRefresh(refreshFunction, context = {}) {
     if (!_isEditingActive) {
         logger.warn('RefreshQueue: Attempted to queue refresh while not editing, executing immediately');
-        refreshFunction();
+        Promise.resolve().then(() => refreshFunction()).catch(error => {
+            logger.error('RefreshQueue: Error executing immediate refresh', error);
+        });
         return;
     }
 
@@ -93,7 +95,7 @@ export function queueRefresh(refreshFunction, context = {}) {
  * Execute all queued refreshes
  * Uses the most recent refresh only (coalescing)
  */
-export function flushQueue() {
+export async function flushQueue() {
     if (_queuedRefreshes.length === 0) {
         return;
     }
@@ -108,7 +110,7 @@ export function flushQueue() {
     _queuedRefreshes = [];
 
     try {
-        latestRefresh.fn();
+        await latestRefresh.fn();
         logger.info('RefreshQueue: Successfully executed queued refresh');
     } catch (error) {
         logger.error('RefreshQueue: Error executing queued refresh', error);
