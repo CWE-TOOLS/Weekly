@@ -323,6 +323,9 @@ export function smartUpdateSchedule(container, oldTasks, newTasks) {
         if (!newTask) {
             // Task was removed - remove card and replace with placeholder
             removeCard(cardElement, stats);
+        } else if (!oldTask) {
+            // Task exists in DOM but not in old data — can't diff, update content in place
+            updateCardContent(cardElement, newTask, stats);
         } else if (hasTaskChanged(oldTask, newTask)) {
             // Log what we're comparing for manual tasks
             if (newTask.isManual) {
