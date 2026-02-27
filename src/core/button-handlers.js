@@ -39,7 +39,8 @@ export function initializeButtonHandlers() {
             if (isRefreshing) return;
             isRefreshing = true;
             try {
-                showLoading();
+                showLoading(true);
+                hideError();
 
                 // Invalidate cache to force fresh data fetch
                 logger.info('🗑️ Invalidating caches for manual refresh...');
@@ -50,7 +51,6 @@ export function initializeButtonHandlers() {
                 logger.info('✅ Caches invalidated, fetching fresh data...');
 
                 await dataService.fetchAllTasks();
-                hideError();
                 showSuccessNotification('Data refreshed successfully!');
 
                 // Send refresh signal to all other clients
@@ -65,6 +65,7 @@ export function initializeButtonHandlers() {
                     retry: () => refreshBtn.click()
                 });
             } finally {
+                showLoading(false);
                 isRefreshing = false;
             }
         });

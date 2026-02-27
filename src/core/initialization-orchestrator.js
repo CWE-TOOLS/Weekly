@@ -19,6 +19,7 @@ import * as state from './state.js';
 import * as eventBus from './event-bus.js';
 import * as storage from './storage.js';
 import * as errorHandler from './error-handler.js';
+import { showLoading, hideError, showError } from '../utils/ui-utils.js';
 
 // Services
 import * as supabaseService from '../services/supabase-service.js';
@@ -160,19 +161,24 @@ export async function initializeComponents() {
 export async function loadInitialData() {
     logger.debug('Loading initial data...');
 
+    showLoading(true);
+    hideError();
     try {
         // Wait for data fetch to complete before proceeding
         // This prevents race conditions with Supabase initialization on cold start
-        await dataService.fetchAllTasks(false); // silent=false to show loading UI
+        await dataService.fetchAllTasks();
 
         logger.debug('Initial data loaded successfully');
     } catch (error) {
         logger.error('Failed to load initial data:', error);
+        showError('Failed to load tasks: ' + error.message);
         errorHandler.handleError(error, {
             operation: 'Initial data load',
             retry: loadInitialData
         });
         throw error;
+    } finally {
+        showLoading(false);
     }
 }
 

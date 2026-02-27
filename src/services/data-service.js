@@ -29,7 +29,6 @@
 import { fetchTasks as fetchSheetsTasks } from './sheets-service.js';
 import { loadManualTasks, fetchTaskDescriptions } from './supabase-service.js';
 import { parseDate } from '../utils/date-utils.js';
-import { showLoading, hideError, showError } from '../utils/ui-utils.js';
 import { setAllTasks, getAllTasks } from '../core/state.js';
 
 import { logger } from '../utils/logger.js';
@@ -69,38 +68,21 @@ async function fetchWithTimeout(promise, timeoutMs, source) {
  * Fetches tasks from Google Sheets and Supabase, merges them with manual tasks
  * taking precedence, calculates project day counts, and updates global state.
  *
- * @param {boolean} [silent=false] - If true, skip loading indicators (for background refresh)
- * @param {boolean|null} [suppressEvents=null] - If true, don't emit events. Defaults to silent value if null
+ * @param {boolean} [suppressEvents=false] - If true, don't emit events during state update
  * @returns {Promise<Array>} Combined array of all tasks from both sources
  * @throws {Error} If fetching from either data source fails
  *
  * @example
- * // Normal fetch with loading indicator
+ * // Normal fetch (emits events)
  * const tasks = await fetchAllTasks();
  *
  * @example
- * // Silent background refresh
- * const tasks = await fetchAllTasks(true);
- *
- * @example
- * // Silent but still emit events for UI update
- * const tasks = await fetchAllTasks(true, false);
+ * // Fetch without emitting events
+ * const tasks = await fetchAllTasks(false);
  */
-export async function fetchAllTasks(silent = false, suppressEvents = null) {
+export async function fetchAllTasks(suppressEvents = false) {
     debug.log('[Startup] Starting fetchAllTasks');
     debug.time('[Startup] fetchAllTasks');
-
-    const modalElement = document.getElementById('project-modal');
-    const modalOpen = modalElement && modalElement.classList.contains('show');
-    const shouldBeSilent = silent || modalOpen;
-
-    // If suppressEvents not explicitly set, default to shouldBeSilent behavior
-    const shouldSuppressEvents = suppressEvents !== null ? suppressEvents : shouldBeSilent;
-
-    if (!shouldBeSilent) {
-        showLoading(true);
-        hideError();
-    }
 
     try {
         // Fetch Google Sheets data, Supabase manual tasks, and task descriptions in parallel for faster loading
@@ -153,12 +135,8 @@ export async function fetchAllTasks(silent = false, suppressEvents = null) {
         // Update state with fetched tasks (will emit 'tasks:loaded' event unless suppressed)
         debug.log('[Startup] Starting state update');
         debug.time('[Startup] State update');
-        setAllTasks(allTasks, shouldSuppressEvents);
+        setAllTasks(allTasks, suppressEvents);
         debug.timeEnd('[Startup] State update');
-
-        if (!shouldBeSilent) {
-            showLoading(false);
-        }
 
         debug.log('[Startup] Emitting TASKS_LOADED event');
         debug.timeEnd('[Startup] fetchAllTasks');
@@ -173,20 +151,10 @@ export async function fetchAllTasks(silent = false, suppressEvents = null) {
         if (existingTasks && existingTasks.length > 0) {
             logger.warn('⚠️ Keeping existing data due to fetch failure');
             // Don't update state - keep what we have
-            if (!shouldBeSilent) {
-                showError('Failed to load tasks: ' + error.message);
-                showLoading(false);
-            }
             throw error; // Re-throw so caller knows it failed
         } else {
             // No existing data, set empty but still throw
-            setAllTasks([], shouldSuppressEvents);
-            if (!shouldBeSilent) {
-                showError('Failed to load tasks: ' + error.message);
-                showLoading(false);
-            } else {
-                logger.error('Silent refresh failed:', error);
-            }
+            setAllTasks([], suppressEvents);
             throw error;
         }
     }

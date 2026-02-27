@@ -289,8 +289,8 @@ async function handleDrop(e) {
         setFilteredTasks([], true);
 
         // Refresh local data using the same approach as remote clients
-        // silent=true hides loading spinner, suppressEvents=false emits events to trigger UI refresh
-        await fetchAllTasks(true, false);
+        // suppressEvents=false emits events to trigger UI refresh (no loading spinner for drag-drop)
+        await fetchAllTasks(false);
 
         debug.log('=== DRAG-DROP: After fetchAllTasks ===');
         const allTasks = getAllTasks();

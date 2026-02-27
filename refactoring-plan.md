@@ -44,8 +44,9 @@ Called for every task card and placeholder. Should be computed once per render c
 ### 11. DOM access in the state module (`state.js:288-294`)
 `getSelectedDepartments()` directly queries `#department-list` checkboxes. A "pure data layer" should not touch the DOM. Department selection should be stored as state via a setter.
 
-### 12. DOM/UI access in data service (`data-service.js:93-94`)
-`fetchAllTasks()` checks `document.getElementById('project-modal')` to determine modal state. Data services should not inspect the DOM.
+### ~~12. DOM/UI access in data service (`data-service.js:93-94`)~~ ✅ COMPLETED
+~~`fetchAllTasks()` checks `document.getElementById('project-modal')` to determine modal state. Data services should not inspect the DOM.~~
+> Fixed: removed modal DOM check and all UI calls (`showLoading`, `hideError`, `showError`) from `fetchAllTasks()`. Callers now own their own loading/error UI.
 
 ### 13. Inconsistent state access patterns across files
 Three different approaches to reading editing state:
@@ -59,8 +60,9 @@ Three different approaches to reading editing state:
 ### 15. Synthetic tasks injected in two places
 `renderer.js:86-88` and `week-renderer.js:229` both call `injectSyntheticTasks()`. During a full render, both execute, potentially double-injecting.
 
-### 16. `data-service.js` mixes data fetching with UI (`showLoading`, `showError`)
-A service should return data/throw errors. The caller should handle UI feedback.
+### ~~16. `data-service.js` mixes data fetching with UI (`showLoading`, `showError`)~~ ✅ COMPLETED
+~~A service should return data/throw errors. The caller should handle UI feedback.~~
+> Fixed: removed `showLoading`/`hideError`/`showError` imports and all UI calls from `fetchAllTasks()`. Removed `silent` parameter and modal DOM check. Callers (`initialization-orchestrator.js`, `button-handlers.js`, `keyboard-shortcuts.js`) now manage their own loading spinners and error banners.
 
 ---
 

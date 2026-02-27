@@ -96,12 +96,17 @@ function registerDefaultShortcuts() {
         logger.debug('⌨️ Shortcut: Refresh data');
         try {
             if (typeof window.showLoading === 'function') {
-                window.showLoading();
+                window.showLoading(true);
             }
             await dataService.fetchAllTasks();
             showInfoNotification('✅ Data refreshed');
         } catch (error) {
             logger.error('Failed to refresh:', error);
+            showInfoNotification('❌ Refresh failed: ' + error.message);
+        } finally {
+            if (typeof window.showLoading === 'function') {
+                window.showLoading(false);
+            }
         }
     });
 
