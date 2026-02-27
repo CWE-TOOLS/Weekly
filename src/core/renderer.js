@@ -260,14 +260,14 @@ export async function render() {
         // FALLBACK: Capture vertical scroll before full render
         const savedScrollTop = wrapper.scrollTop;
 
-        // Clear the container
-        container.innerHTML = '';
-
         if (filteredTasks.length === 0) {
             const currentMonday = getMonday(new Date());
             state.setAllWeekStartDates([currentMonday]);
             state.setCurrentViewedWeekIndex(0);
-            container.innerHTML = '<div class="no-tasks-message">No tasks found for the selected criteria.</div>';
+            const emptyMsg = document.createElement('div');
+            emptyMsg.className = 'no-tasks-message';
+            emptyMsg.textContent = 'No tasks found for the selected criteria.';
+            container.replaceChildren(emptyMsg);
             emit(EVENTS.WEEK_CHANGED, { weekIndex: 0, weekDate: currentMonday });
             showRenderingStatus(false);
             isRendering = false;
@@ -279,12 +279,15 @@ export async function render() {
 
         const maxTasksPerDept = buildMaxTasksPerDept(filteredTasks);
 
+        // Build new content while old content is still visible (no blank flash)
         const isEditingUnlocked = getIsEditingUnlocked();
         const fragment = document.createDocumentFragment();
         allMondays.forEach(mondayDate => {
             fragment.appendChild(renderWeekGrid(mondayDate, maxTasksPerDept, isEditingUnlocked));
         });
-        container.appendChild(fragment);
+
+        // Atomic swap: removes old children and appends new in one operation
+        container.replaceChildren(fragment);
 
         const weekIndex = resolveWeekIndex(allMondays);
         state.setCurrentViewedWeekIndex(weekIndex);
