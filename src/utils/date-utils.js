@@ -9,19 +9,40 @@ import { TIME_CONSTANTS } from '../config/timing-constants.js';
 export const DAYS_IN_WORK_WEEK = 6;
 
 /**
+ * Module-level cache for parseDate results.
+ * Cleared at the start of each full render cycle.
+ * @type {Map<string, Date|null>}
+ */
+const _parseDateCache = new Map();
+
+/**
+ * Clear the parseDate cache. Call at the start of each render cycle.
+ */
+export function clearParseDateCache() {
+    _parseDateCache.clear();
+}
+
+/**
  * Parse a date string in multiple formats (MM/DD/YYYY, YYYY-MM-DD, or ISO)
+ * Results are memoized — repeated calls with the same string return the cached Date.
  * @param {string} dateStr - The date string to parse
  * @returns {Date|null} Parsed date or null if invalid
  */
 export function parseDate(dateStr) {
     if (!dateStr) return null;
 
+    if (_parseDateCache.has(dateStr)) return _parseDateCache.get(dateStr);
+
+    let result;
+
     // Try MM/DD/YYYY format
     const slashParts = dateStr.split("/");
     if (slashParts.length === 3) {
         const [month, day, year] = slashParts.map(Number);
         const date = new Date(year, month - 1, day);
-        return isNaN(date) ? null : date;
+        result = isNaN(date) ? null : date;
+        _parseDateCache.set(dateStr, result);
+        return result;
     }
 
     // Try YYYY-MM-DD format
@@ -29,11 +50,15 @@ export function parseDate(dateStr) {
     if (dashParts.length === 3) {
         const [year, month, day] = dashParts.map(Number);
         const date = new Date(year, month - 1, day);
-        return isNaN(date) ? null : date;
+        result = isNaN(date) ? null : date;
+        _parseDateCache.set(dateStr, result);
+        return result;
     }
 
     // Try native parsing
-    return isNaN(new Date(dateStr)) ? null : new Date(dateStr);
+    result = isNaN(new Date(dateStr)) ? null : new Date(dateStr);
+    _parseDateCache.set(dateStr, result);
+    return result;
 }
 
 /**

@@ -86,24 +86,29 @@ export function sortDepartments(departmentNames) {
  */
 export function groupTasksByDate(tasks, weekDates, departmentName = '') {
     const tasksByDate = {};
+    const weekDateStrings = new Set();
 
-    weekDates.forEach(date => {
-        const dateString = date.toDateString();
-        tasksByDate[dateString] = tasks.filter(t => {
-            if (!t.date) return false;
-            const taskDate = parseDate(t.date);
-            const matches = taskDate && taskDate.toDateString() === dateString;
-
-            // DEBUG for synthetic departments
-            if (isSyntheticDepartment(departmentName)) {
-                debug.log(`[${departmentName}] Task:`, t.date, '→ parsed:', (taskDate && taskDate.toDateString()), '→ matches:', matches, '→ expected:', dateString);
-            }
-
-            return matches;
-        });
+    weekDates.forEach(d => {
+        const ds = d.toDateString();
+        tasksByDate[ds] = [];
+        weekDateStrings.add(ds);
     });
 
-    if (isSyntheticDepartment(departmentName)) {
+    const isSynthetic = isSyntheticDepartment(departmentName);
+
+    tasks.forEach(t => {
+        if (!t.date) return;
+        const taskDate = parseDate(t.date);
+        if (!taskDate) return;
+        const ds = taskDate.toDateString();
+        if (weekDateStrings.has(ds)) tasksByDate[ds].push(t);
+
+        if (isSynthetic) {
+            debug.log(`[${departmentName}] Task:`, t.date, '→ parsed:', ds, '→ matches:', weekDateStrings.has(ds));
+        }
+    });
+
+    if (isSynthetic) {
         debug.log(`[${departmentName}] tasksByDate:`, tasksByDate);
     }
 
@@ -126,17 +131,13 @@ export function calculateMaxTasksPerDept(tasksByDept, weekDates) {
             continue;
         }
 
-        const dailyCounts = weekDates.map(date => {
-            const dateString = date.toDateString();
-            if (tasksByDept[dept] && Array.isArray(tasksByDept[dept].tasks)) {
-                return tasksByDept[dept].tasks.filter(task => {
-                    const taskDate = parseDate(task.date);
-                    return taskDate && taskDate.toDateString() === dateString;
-                }).length;
-            }
-            return 0;
-        });
-        maxTasks[dept] = Math.max(0, ...dailyCounts);
+        const deptTasks = tasksByDept[dept]?.tasks;
+        if (!Array.isArray(deptTasks) || deptTasks.length === 0) {
+            maxTasks[dept] = 0;
+            continue;
+        }
+        const byDate = groupTasksByDate(deptTasks, weekDates);
+        maxTasks[dept] = Math.max(0, ...Object.values(byDate).map(arr => arr.length));
     }
     return maxTasks;
 }

@@ -53,35 +53,33 @@ export function equalizeAllCardHeights() {
         });
     });
 
-    // PHASE 0: Clear all existing minHeight values first
-    // This allows rows to return to their natural height at the current width
+    // PHASE 0+1 (merged): Query once, clear minHeight, cache refs, then read heights
+    // This eliminates a duplicate querySelectorAll per row class (~30+ saved queries)
+    const rowNodeLists = new Map();
+
     allRowClasses.forEach(rowClass => {
         const rows = container.querySelectorAll(`.${rowClass}`);
-        rows.forEach(row => {
-            row.style.minHeight = '';  // Clear minHeight
-        });
+        if (rows.length === 0) return;
+        // Clear minHeight so rows return to natural height
+        rows.forEach(row => { row.style.minHeight = ''; });
+        // Cache the NodeList for read + write phases
+        rowNodeLists.set(rowClass, rows);
     });
 
     // Force a reflow so the browser recalculates natural heights
     // This is necessary for offsetHeight to reflect the cleared minHeight
     container.offsetHeight;
 
-    // PHASE 1: Batch all DOM reads first (prevents layout thrashing)
-    // Store row references and their max heights for later application
+    // Read all heights from cached refs (no second querySelectorAll)
     const rowHeights = new Map();
 
-    allRowClasses.forEach(rowClass => {
-        const rows = container.querySelectorAll(`.${rowClass}`);
-        if (rows.length === 0) return;
-
-        // Read all heights without any writes
+    rowNodeLists.forEach((rows, rowClass) => {
         let maxHeight = 0;
         rows.forEach(row => {
             const height = row.offsetHeight;  // DOM READ only
             if (height > maxHeight) maxHeight = height;
         });
 
-        // Cache the data for the write phase
         if (maxHeight > 0) {
             rowHeights.set(rowClass, { rows, maxHeight });
         }

@@ -23,9 +23,9 @@
  */
 
 import { getFilteredTasks, getAllTasks, injectSyntheticTasks } from '../core/state.js';
-import { parseDate, getMonday, getLocalDateString, createWeekDates } from '../utils/date-utils.js';
+import { getMonday, getLocalDateString, createWeekDates } from '../utils/date-utils.js';
 import { DEPARTMENT_ORDER } from '../config/department-config.js';
-import { groupTasksByDepartment } from '../utils/department-utils.js';
+import { groupTasksByDepartment, groupTasksByDate } from '../utils/department-utils.js';
 import { createTaskCard, createTaskCardPlaceholder, normalizeDepartmentClass } from './task-card.js';
 import { generateAllSyntheticTasks } from '../utils/schedule-utils.js';
 import { Z_INDEX } from '../config/layout-constants.js';
@@ -74,29 +74,6 @@ function createHeaderRow(weekDates) {
 
 
 /**
- * Group department tasks by date
- * @param {Object[]} deptTasks - Tasks for a department
- * @param {Date[]} weekDates - Array of dates for the week
- * @returns {Object} Tasks grouped by date string
- */
-function groupTasksByDate(deptTasks, weekDates) {
-    const tasksByDate = {};
-
-    weekDates.forEach(date => {
-        const dateString = date.toDateString();
-        tasksByDate[dateString] = deptTasks.filter(t => {
-            if (!t.date) {
-                return false;
-            }
-            const taskDate = parseDate(t.date);
-            return taskDate && taskDate.toDateString() === dateString;
-        });
-    });
-
-    return tasksByDate;
-}
-
-/**
  * Create department label element
  * @param {string} dept - Department name
  * @param {number} maxTasksInRow - Maximum tasks in row for gridRow span
@@ -126,7 +103,7 @@ function createDepartmentLabel(dept, maxTasksInRow) {
  * @param {string} rowClass - Row class for height equalization
  * @returns {HTMLElement} Grid cell element
  */
-function createGridCell(task, date, dept, rowClass) {
+function createGridCell(task, date, dept, rowClass, isEditingUnlocked) {
     const dayCell = document.createElement('div');
     dayCell.className = 'grid-cell';
 
@@ -140,11 +117,11 @@ function createGridCell(task, date, dept, rowClass) {
     dayCell.dataset.department = dept;
 
     if (task) {
-        const card = createTaskCard(task, rowClass);
+        const card = createTaskCard(task, rowClass, isEditingUnlocked);
         dayCell.appendChild(card);
     } else {
         const weekStr = getLocalDateString(getMonday(date));
-        const placeholder = createTaskCardPlaceholder(dept, dateStr, weekStr, rowClass);
+        const placeholder = createTaskCardPlaceholder(dept, dateStr, weekStr, rowClass, isEditingUnlocked);
         dayCell.appendChild(placeholder);
     }
 
@@ -160,8 +137,9 @@ function createGridCell(task, date, dept, rowClass) {
  * @param {Object} maxTasksPerDept - Maximum tasks per department
  * @returns {Set<string>} Set of all row classes created
  */
-function renderDepartmentRows(grid, sortedDepts, tasksByDept, weekDates, maxTasksPerDept) {
+function renderDepartmentRows(grid, sortedDepts, tasksByDept, weekDates, maxTasksPerDept, isEditingUnlocked) {
     const allRowClasses = new Set();
+    const weekDateStrings = weekDates.map(d => d.toDateString());
 
     sortedDepts.forEach(dept => {
         const deptData = tasksByDept[dept];
@@ -186,10 +164,10 @@ function renderDepartmentRows(grid, sortedDepts, tasksByDept, weekDates, maxTask
             for (let i = 0; i < rowsToRender; i++) {
                 const rowClass = `dept-row-${normalizeDepartmentClass(dept)}-${i}`;
                 allRowClasses.add(rowClass);
-                weekDates.forEach(date => {
-                    const dateString = date.toDateString();
+                weekDates.forEach((date, dateIdx) => {
+                    const dateString = weekDateStrings[dateIdx];
                     const task = (primaryTasksByDate[dateString] && primaryTasksByDate[dateString][i]) || undefined;
-                    grid.appendChild(createGridCell(task, date, dept, rowClass));
+                    grid.appendChild(createGridCell(task, date, dept, rowClass, isEditingUnlocked));
                 });
             }
         }
@@ -205,10 +183,10 @@ function renderDepartmentRows(grid, sortedDepts, tasksByDept, weekDates, maxTask
             for (let i = 0; i < syntheticMaxTasks; i++) {
                 const rowClass = `dept-row-${normalizeDepartmentClass(syntheticDeptName)}-${i}`;
                 allRowClasses.add(rowClass);
-                weekDates.forEach(date => {
-                    const dateString = date.toDateString();
+                weekDates.forEach((date, dateIdx) => {
+                    const dateString = weekDateStrings[dateIdx];
                     const task = (syntheticTasksByDate[dateString] && syntheticTasksByDate[dateString][i]) || undefined;
-                    grid.appendChild(createGridCell(task, date, syntheticDeptName, rowClass));
+                    grid.appendChild(createGridCell(task, date, syntheticDeptName, rowClass, isEditingUnlocked));
                 });
             }
         }
@@ -223,7 +201,7 @@ function renderDepartmentRows(grid, sortedDepts, tasksByDept, weekDates, maxTask
  * @param {Object} maxTasksPerDept - Maximum tasks per department for row normalization
  * @returns {HTMLElement} Week grid element
  */
-export function renderWeekGrid(dateForWeek, maxTasksPerDept) {
+export function renderWeekGrid(dateForWeek, maxTasksPerDept, isEditingUnlocked) {
     const filteredTasks = getFilteredTasks();
     const grid = document.createElement('div');
     grid.className = 'schedule-grid';
@@ -255,7 +233,7 @@ export function renderWeekGrid(dateForWeek, maxTasksPerDept) {
     });
 
     // Render department rows
-    const allRowClasses = renderDepartmentRows(grid, sortedDepts, tasksByDept, weekDates, maxTasksPerDept);
+    const allRowClasses = renderDepartmentRows(grid, sortedDepts, tasksByDept, weekDates, maxTasksPerDept, isEditingUnlocked);
 
     // Store row classes for height equalization
     grid.dataset.rowClasses = [...allRowClasses].join(',');

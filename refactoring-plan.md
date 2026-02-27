@@ -22,20 +22,25 @@ Batch/Layout task descriptions are rendered via `innerHTML` without sanitization
 
 ## MEDIUM SEVERITY — Performance
 
-### 6. O(n*d) task grouping in multiple files
-In `renderer.js:204-226`, `week-renderer.js:68-83`, `department-utils.js:95-109`, and `schedule-utils.js:89-115` — tasks are filtered per-department or per-date in nested loops. A single-pass `Map` grouping would reduce complexity from O(n*d) to O(n+d).
+### ~~6. O(n*d) task grouping in multiple files~~ ✅ COMPLETED
+~~In `renderer.js:204-226`, `week-renderer.js:68-83`, `department-utils.js:95-109`, and `schedule-utils.js:89-115` — tasks are filtered per-department or per-date in nested loops. A single-pass `Map` grouping would reduce complexity from O(n*d) to O(n+d).~~
+> Fixed: Single-pass Map grouping in `renderer.js` (`taskCountByDeptDate`), rewrote `groupTasksByDate()` in `department-utils.js` with Set-based lookup, `calculateMaxTasksPerDept()` now delegates to `groupTasksByDate()`, removed duplicate local `groupTasksByDate()` from `week-renderer.js`.
 
-### 7. `parseDate()` called repeatedly on same task data
-Across `schedule-utils.js`, `department-utils.js`, and `week-renderer.js`, the same task's date is re-parsed multiple times per render cycle. Results should be cached or precomputed.
+### ~~7. `parseDate()` called repeatedly on same task data~~ ✅ COMPLETED
+~~Across `schedule-utils.js`, `department-utils.js`, and `week-renderer.js`, the same task's date is re-parsed multiple times per render cycle. Results should be cached or precomputed.~~
+> Fixed: Added module-level `Map` cache to `parseDate()` in `date-utils.js` with `clearParseDateCache()` called at top of render cycle. Fixed double-parse pattern in 3 locations in `schedule-utils.js`.
 
-### 8. `date.toDateString()` called in tight inner loops (`week-renderer.js:175,194`)
-For 6 dates × n rows per department, this creates O(6n) string allocations per department. Week dates should be precomputed once into an array of strings.
+### ~~8. `date.toDateString()` called in tight inner loops (`week-renderer.js:175,194`)~~ ✅ COMPLETED
+~~For 6 dates × n rows per department, this creates O(6n) string allocations per department. Week dates should be precomputed once into an array of strings.~~
+> Fixed: Precomputed `weekDateStrings` array in `renderDepartmentRows()`, inner loops use indexed lookup instead of calling `toDateString()` per cell.
 
-### 9. Triple DOM traversal in `equalizeAllCardHeights` (`grid-layout-manager.js:49-96`)
-Queries the same row-class elements 3 times (clear phase, read phase, write phase). Can be reduced to 1 query with cached references.
+### ~~9. Triple DOM traversal in `equalizeAllCardHeights` (`grid-layout-manager.js:49-96`)~~ ✅ COMPLETED
+~~Queries the same row-class elements 3 times (clear phase, read phase, write phase). Can be reduced to 1 query with cached references.~~
+> Fixed: Merged Phase 0+1 — single `querySelectorAll` per row class stored in `rowNodeLists` Map, reused for clear, read, and write phases.
 
-### 10. `getIsEditingUnlocked()` called per-card (`task-card.js:36,145`)
-Called for every task card and placeholder. Should be computed once per render cycle and passed as a parameter.
+### ~~10. `getIsEditingUnlocked()` called per-card (`task-card.js:36,145`)~~ ✅ COMPLETED
+~~Called for every task card and placeholder. Should be computed once per render cycle and passed as a parameter.~~
+> Fixed: Computed once in `renderer.js`, threaded through `renderWeekGrid` → `renderDepartmentRows` → `createGridCell` → `createTaskCard`/`createTaskCardPlaceholder`. Fallback preserved for `smart-renderer.js` callers.
 
 ---
 

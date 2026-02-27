@@ -31,10 +31,11 @@ function normalizeDepartmentClass(dept) {
  * @param {boolean} task.isManual - Whether this is a manually added task
  * @param {boolean} task.missingDate - Whether the task has a missing date
  * @param {string} rowClass - CSS class for row alignment
+ * @param {boolean} [isEditingUnlocked] - Whether editing is unlocked (falls back to state if omitted)
  * @returns {HTMLElement} Task card element
  */
-export function createTaskCard(task, rowClass) {
-    const isEditingUnlocked = getIsEditingUnlocked();
+export function createTaskCard(task, rowClass, isEditingUnlocked) {
+    if (isEditingUnlocked === undefined) isEditingUnlocked = getIsEditingUnlocked();
     const showHours = RENDERING.shouldShowHours(task.department);
     const isDraggable = task.isManual && isEditingUnlocked;
 
@@ -140,10 +141,11 @@ export function createTaskCard(task, rowClass) {
  * @param {string} dateString - Date in YYYY-MM-DD format
  * @param {string} weekString - Week start date string
  * @param {string} rowClass - CSS class for row alignment
+ * @param {boolean} [isEditingUnlocked] - Whether editing is unlocked (falls back to state if omitted)
  * @returns {HTMLElement} Placeholder element
  */
-export function createTaskCardPlaceholder(department, dateString, weekString, rowClass) {
-    const isEditingUnlocked = getIsEditingUnlocked();
+export function createTaskCardPlaceholder(department, dateString, weekString, rowClass, isEditingUnlocked) {
+    if (isEditingUnlocked === undefined) isEditingUnlocked = getIsEditingUnlocked();
 
     const placeholder = document.createElement('div');
     placeholder.className = `task-card-placeholder ${rowClass}${isEditingUnlocked ? ' add-enabled' : ''}`;

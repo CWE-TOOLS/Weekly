@@ -11,7 +11,7 @@ import { logger } from '../utils/logger.js';
 import * as state from './state.js';
 import { loadWeekIndex } from './storage.js';
 import { renderWeekGrid } from '../components/week-renderer.js';
-import { getMonday, parseDate, getLocalDateString, createWeekDates } from '../utils/date-utils.js';
+import { getMonday, parseDate, getLocalDateString, createWeekDates, clearParseDateCache } from '../utils/date-utils.js';
 import { equalizeAllCardHeights, setGridWidths, scrollToWeek } from '../utils/grid-layout-manager.js';
 import { showRenderingStatus } from '../utils/ui-utils.js';
 import { RENDER_DELAY } from '../config/timing-constants.js';
@@ -21,7 +21,7 @@ import {
     smartUpdateSchedule,
     preserveScrollPosition
 } from '../utils/smart-renderer.js';
-import { clearSyntheticTasks, injectSyntheticTasks, getAllTasks, getAllWeekStartDates } from './state.js';
+import { clearSyntheticTasks, injectSyntheticTasks, getAllTasks, getAllWeekStartDates, getIsEditingUnlocked } from './state.js';
 import { SYNTHETIC_DEPARTMENT_NAMES } from '../config/department-config.js';
 import { generateAllSyntheticTasks } from '../utils/schedule-utils.js';
 
@@ -42,6 +42,8 @@ export async function render() {
     showRenderingStatus(true, 'Rendering schedule...');
 
     try {
+        clearParseDateCache();
+
         const container = document.getElementById('schedule-container');
         const wrapper = document.getElementById('schedule-wrapper');
 
@@ -189,32 +191,27 @@ export async function render() {
 
         state.setAllWeekStartDates(allMondays);
 
-        const maxTasksPerDept = {};
-        state.DEPARTMENT_ORDER.forEach(dept => {
-            const deptTasks = filteredTasks.filter(t => t.department === dept);
-            if (deptTasks.length === 0) return;
-
-            const tasksByDate = {};
-            deptTasks.forEach(task => {
-                if (!task.project) return;
-                const taskDate = parseDate(task.date) || getMonday(new Date());
-                const dateString = taskDate.toDateString();
-                if (!tasksByDate[dateString]) tasksByDate[dateString] = [];
-                tasksByDate[dateString].push(task);
-            });
-
-            const maxTasks = Math.max(0, ...Object.values(tasksByDate).map(tasks => tasks.length));
-            if (maxTasks > 0) {
-                maxTasksPerDept[dept] = maxTasks;
-            }
+        // Single-pass: count tasks per dept|date key
+        const taskCountByDeptDate = new Map();
+        filteredTasks.forEach(task => {
+            if (!task.project || !task.department) return;
+            const taskDate = parseDate(task.date) || getMonday(new Date());
+            const key = `${task.department}|${taskDate.toDateString()}`;
+            taskCountByDeptDate.set(key, (taskCountByDeptDate.get(key) || 0) + 1);
         });
+        const maxTasksPerDept = {};
+        for (const [key, count] of taskCountByDeptDate) {
+            const dept = key.split('|')[0];
+            maxTasksPerDept[dept] = Math.max(maxTasksPerDept[dept] || 0, count);
+        }
         for (const dept of SYNTHETIC_DEPARTMENT_NAMES) {
             maxTasksPerDept[dept] = 1;
         }
 
+        const isEditingUnlocked = getIsEditingUnlocked();
         const fragment = document.createDocumentFragment();
         allMondays.forEach(mondayDate => {
-            fragment.appendChild(renderWeekGrid(mondayDate, maxTasksPerDept));
+            fragment.appendChild(renderWeekGrid(mondayDate, maxTasksPerDept, isEditingUnlocked));
         });
         container.appendChild(fragment);
 
