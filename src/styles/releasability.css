@@ -11,13 +11,13 @@
 
 :root {
   /* Releasability Status Colors */
-  --status-incomplete: #EF4444;       /* Red */
+  --status-incomplete: #F87171;       /* Red (softened) */
   --status-incomplete-text: #FFFFFF;
 
   --status-in-progress: #F59E0B;      /* Yellow/Orange */
   --status-in-progress-text: #FFFFFF;
 
-  --status-complete: #22C55E;         /* Green */
+  --status-complete: #34D399;         /* Green (softened) */
   --status-complete-text: #FFFFFF;
 
   /* Grid Dimensions */
@@ -512,7 +512,7 @@ html {
     70px
     repeat(18, minmax(50px, 1fr));
   gap: var(--grid-cell-gap);
-  background-color: black;
+  background-color: var(--border-secondary);
   width: fit-content;
   min-width: 100%;
 }
@@ -853,6 +853,17 @@ html {
 .start-date-cell:hover {
   background-color: #ececec;
   transition: background-color 0.15s ease-in-out;
+}
+
+/* Alternating row striping for visual rhythm */
+.project-row:nth-child(even) > .project-name-cell,
+.project-row:nth-child(even) > .start-date-cell {
+  background-color: #ebebeb;
+}
+
+.project-row:nth-child(even) > .project-name-cell:hover,
+.project-row:nth-child(even) > .start-date-cell:hover {
+  background-color: #e0e0e0;
 }
 
 /* Project Menu Button (three dots) */
