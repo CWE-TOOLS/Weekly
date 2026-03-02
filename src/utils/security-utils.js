@@ -59,16 +59,19 @@ export function safeHtmlJoin(items, separator = '') {
 }
 
 /**
- * Sanitize HTML description by escaping all content except <br> tags.
+ * Sanitize HTML description by escaping all content except safe tags.
  * Used for Batch/Layout descriptions that contain <br> for line breaks
- * but should not allow any other HTML (preventing XSS).
+ * and <b> for day labels (e.g., Friday's "Sat:"/"Mon:" prefixes).
  * @param {string} html - HTML string to sanitize
- * @returns {string} Sanitized string with only <br> tags preserved
+ * @returns {string} Sanitized string with only <br> and <b> tags preserved
  */
 export function sanitizeDescription(html) {
     if (typeof html !== 'string') return html;
     let safe = escapeHtml(html);
     // Restore <br> variants that were escaped
-    safe = safe.replace(/&lt;br\s*&#x2F;?&gt;/gi, '<br>');
+    safe = safe.replace(/&lt;br\s*(?:&#x2F;)?&gt;/gi, '<br>');
+    // Restore <b> and </b> tags that were escaped
+    safe = safe.replace(/&lt;b&gt;/gi, '<b>');
+    safe = safe.replace(/&lt;&#x2F;b&gt;/gi, '</b>');
     return safe;
 }
