@@ -24,6 +24,30 @@
   --border-radius-md: 0.5rem;
   --border-radius-lg: 0.75rem;
 
+  /* Surface Tokens (warm neutrals) */
+  --surface-default: #F8F7F4;
+  --surface-container: #FFFFFE;
+  --surface-container-low: #F5F4F1;
+  --surface-container-high: #EEEDEA;
+  --surface-dim: #E6E5E2;
+
+  /* Elevation Shadows (Material Design 3) */
+  --elevation-1: 0 1px 3px 0 rgb(0 0 0 / 0.08), 0 1px 2px -1px rgb(0 0 0 / 0.08);
+  --elevation-2: 0 4px 6px -1px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.06);
+  --elevation-3: 0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.06);
+
+  /* Transitions (Material Design 3 easing) */
+  --transition-fast: 150ms cubic-bezier(0.2, 0, 0, 1);
+  --transition-medium: 250ms cubic-bezier(0.2, 0, 0, 1);
+
+  /* Spacing Scale */
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 0.75rem;
+  --space-lg: 1rem;
+  --space-xl: 1.5rem;
+  --space-2xl: 2rem;
+
   /* Department Colors */
   --color-mill: #06B6D4;
   --color-mill-text: #FFFFFF;
