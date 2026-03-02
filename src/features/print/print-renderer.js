@@ -755,7 +755,7 @@ function executePrint(printContent, printType = 'week', orientation = null) {
         pageOrientation = orientation;
     } else {
         // Default orientation based on print type for other types
-        pageOrientation = (printType === 'day' || printType === 'phase-start') ? 'portrait' : 'landscape';
+        pageOrientation = (printType === 'phase-start') ? 'portrait' : 'landscape';
     }
 
     // Debug logging

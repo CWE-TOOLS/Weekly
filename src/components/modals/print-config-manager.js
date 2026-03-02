@@ -14,7 +14,7 @@ import { logger } from '../../utils/logger.js';
 let currentPrintWeekDates = [];
 let allDepartmentsForPrint = [];
 let currentPrintType = 'week';
-let currentOrientation = 'portrait';
+let currentOrientation = 'landscape';
 
 /**
  * Get current print type
