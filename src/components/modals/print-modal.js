@@ -107,6 +107,7 @@ export function initializePrintModal() {
     if (checkAllButton) {
         checkAllButton.addEventListener('click', () => {
             document.querySelectorAll('.departments-grid input[type="checkbox"]').forEach(cb => cb.checked = true);
+            document.querySelectorAll('.departments-grid .dept-chip').forEach(chip => chip.classList.add('selected'));
             saveDepartmentSelection();
         });
     }
@@ -114,6 +115,7 @@ export function initializePrintModal() {
     if (uncheckAllButton) {
         uncheckAllButton.addEventListener('click', () => {
             document.querySelectorAll('.departments-grid input[type="checkbox"]').forEach(cb => cb.checked = false);
+            document.querySelectorAll('.departments-grid .dept-chip').forEach(chip => chip.classList.remove('selected'));
             saveDepartmentSelection();
         });
     }

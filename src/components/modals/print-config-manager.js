@@ -7,7 +7,7 @@
 import { getAllTasks, getAllWeekStartDates, getCurrentViewedWeekIndex } from '../../core/state.js';
 import { normalizeDepartmentClass } from '../../utils/ui-utils.js';
 import { getMonday, getWeekMonth, getWeekOfMonth, DAYS_IN_WORK_WEEK } from '../../utils/date-utils.js';
-import { DEPARTMENT_ORDER, SYNTHETIC_DEPARTMENT_NAMES } from '../../config/department-config.js';
+import { DEPARTMENT_ORDER, SYNTHETIC_DEPARTMENT_NAMES, DEPARTMENT_COLORS } from '../../config/department-config.js';
 
 import { logger } from '../../utils/logger.js';
 // Configuration state
@@ -129,7 +129,8 @@ export function getFilteredDepartments() {
         !dept.toLowerCase().includes('link') &&
         !dept.toLowerCase().includes('live') &&
         !SYNTHETIC_DEPARTMENT_NAMES.has(dept) &&
-        dept !== 'Special Events'
+        dept !== 'Special Events' &&
+        dept !== 'Samples' && dept !== 'Sample' && dept !== 'Custom'
     ))];
 
     // Sort departments
@@ -165,19 +166,25 @@ export function populateDepartmentsGrid(departmentsGridElement, onChangeCallback
     const defaultSelectedDepts = savedPrintDepartments !== null ? savedPrintDepartments : departments;
 
     departments.forEach(dept => {
-        const checkboxDiv = document.createElement('div');
-        checkboxDiv.className = 'department-checkbox';
-        checkboxDiv.innerHTML = `
-            <input type="checkbox" id="print-dept-${normalizeDepartmentClass(dept)}" value="${dept}" ${defaultSelectedDepts.includes(dept) ? 'checked' : ''}>
-            <label for="print-dept-${normalizeDepartmentClass(dept)}">${dept}</label>
-        `;
-        departmentsGridElement.appendChild(checkboxDiv);
+        const deptKey = normalizeDepartmentClass(dept);
+        const color = DEPARTMENT_COLORS[deptKey]?.background || '#6B7280';
+        const isSelected = defaultSelectedDepts.includes(dept);
 
-        // Add event listener to save selection when changed
-        if (onChangeCallback) {
-            const checkbox = checkboxDiv.querySelector('input[type="checkbox"]');
-            checkbox.addEventListener('change', onChangeCallback);
-        }
+        const chip = document.createElement('label');
+        chip.className = `dept-chip${isSelected ? ' selected' : ''}`;
+        chip.style.setProperty('--dept-color', color);
+        chip.innerHTML = `
+            <input type="checkbox" value="${dept}" ${isSelected ? 'checked' : ''}>
+            <span class="dept-chip-check">✓</span>
+            <span class="dept-chip-name">${dept}</span>
+        `;
+        departmentsGridElement.appendChild(chip);
+
+        const checkbox = chip.querySelector('input[type="checkbox"]');
+        checkbox.addEventListener('change', () => {
+            chip.classList.toggle('selected', checkbox.checked);
+            if (onChangeCallback) onChangeCallback();
+        });
     });
 }
 
