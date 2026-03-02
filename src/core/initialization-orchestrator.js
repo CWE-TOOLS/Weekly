@@ -20,6 +20,7 @@ import * as eventBus from './event-bus.js';
 import * as storage from './storage.js';
 import * as errorHandler from './error-handler.js';
 import { showLoading, hideError, showError } from '../utils/ui-utils.js';
+import { getLocalDateString } from '../utils/date-utils.js';
 
 // Services
 import * as supabaseService from '../services/supabase-service.js';
@@ -63,6 +64,9 @@ export async function restoreState() {
         // Set up event listeners for state persistence
         eventBus.on(eventBus.EVENTS.WEEK_CHANGED, (data) => {
             storage.saveWeekIndex(data.weekIndex);
+            if (data.weekDate) {
+                storage.saveWeekDate(getLocalDateString(data.weekDate));
+            }
         });
 
         eventBus.on(eventBus.EVENTS.EDITING_TOGGLED, (data) => {

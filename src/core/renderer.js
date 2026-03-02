@@ -9,7 +9,7 @@
 
 import { logger } from '../utils/logger.js';
 import * as state from './state.js';
-import { loadWeekIndex } from './storage.js';
+import { loadWeekIndex, loadWeekDate } from './storage.js';
 import { renderWeekGrid } from '../components/week-renderer.js';
 import { getMonday, parseDate, getLocalDateString, createWeekDates, clearParseDateCache } from '../utils/date-utils.js';
 import { equalizeAllCardHeights, setGridWidths, scrollToWeek } from '../utils/grid-layout-manager.js';
@@ -118,23 +118,38 @@ function buildMaxTasksPerDept(filteredTasks) {
  * @returns {number} Resolved week index
  */
 function resolveWeekIndex(allMondays) {
+    // 1. Use in-session state if already set
     let currentViewedWeekIndex = state.getCurrentViewedWeekIndex();
-    if (currentViewedWeekIndex === -1 || currentViewedWeekIndex >= allMondays.length) {
-        const savedWeekIndex = loadWeekIndex();
-        if (savedWeekIndex !== null && savedWeekIndex >= 0 && savedWeekIndex < allMondays.length) {
-            currentViewedWeekIndex = savedWeekIndex;
-        }
+    if (currentViewedWeekIndex >= 0 && currentViewedWeekIndex < allMondays.length) {
+        return currentViewedWeekIndex;
+    }
 
-        if (currentViewedWeekIndex === -1 || currentViewedWeekIndex >= allMondays.length) {
-            const currentMonday = getMonday(new Date());
-            currentViewedWeekIndex = allMondays.findIndex(d => d.getTime() === currentMonday.getTime());
-            if (currentViewedWeekIndex === -1) {
-                currentViewedWeekIndex = allMondays.findIndex(d => d > currentMonday);
-                if (currentViewedWeekIndex === -1) currentViewedWeekIndex = allMondays.length - 1;
-            }
+    // 2. Try saved week date (survives data changes — matches by calendar date, not position)
+    const savedWeekDate = loadWeekDate();
+    if (savedWeekDate) {
+        const idx = allMondays.findIndex(d => getLocalDateString(d) === savedWeekDate);
+        if (idx !== -1) {
+            return idx;
         }
     }
-    return currentViewedWeekIndex;
+
+    // 3. Fallback to positional index (legacy support)
+    const savedWeekIndex = loadWeekIndex();
+    if (savedWeekIndex !== null && savedWeekIndex >= 0 && savedWeekIndex < allMondays.length) {
+        return savedWeekIndex;
+    }
+
+    // 4. Default to current week
+    const currentMonday = getMonday(new Date());
+    const currentMondayStr = getLocalDateString(currentMonday);
+    currentViewedWeekIndex = allMondays.findIndex(d => getLocalDateString(d) === currentMondayStr);
+    if (currentViewedWeekIndex !== -1) {
+        return currentViewedWeekIndex;
+    }
+
+    // 5. Current week not in data — find nearest future week, or last week
+    currentViewedWeekIndex = allMondays.findIndex(d => d > currentMonday);
+    return currentViewedWeekIndex !== -1 ? currentViewedWeekIndex : allMondays.length - 1;
 }
 
 /**

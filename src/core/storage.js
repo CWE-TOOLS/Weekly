@@ -15,6 +15,7 @@ import { logger } from '../utils/logger.js';
 export const STORAGE_KEYS = {
     SELECTED_DEPARTMENTS: 'selectedDepartments',
     CURRENT_WEEK_INDEX: 'currentViewedWeekIndex',
+    CURRENT_WEEK_DATE: 'currentViewedWeekDate',
     EDITING_UNLOCKED: 'editingUnlocked',
     PRINT_SELECTED_DEPARTMENTS: 'printSelectedDepartments'
 };
@@ -216,6 +217,28 @@ export function saveWeekIndex(index) {
 export function loadWeekIndex(defaultValue = -1) {
     const index = loadState(STORAGE_KEYS.CURRENT_WEEK_INDEX, defaultValue);
     return typeof index === 'number' ? index : defaultValue;
+}
+
+/**
+ * Save current week date string (YYYY-MM-DD Monday)
+ * @param {string} dateStr - Monday date string
+ * @returns {boolean} True if successful
+ */
+export function saveWeekDate(dateStr) {
+    if (typeof dateStr !== 'string') {
+        logger.error('[Storage] saveWeekDate expects a date string');
+        return false;
+    }
+    return saveState(STORAGE_KEYS.CURRENT_WEEK_DATE, dateStr);
+}
+
+/**
+ * Load current week date string
+ * @returns {string|null} Monday date string or null
+ */
+export function loadWeekDate() {
+    const dateStr = loadState(STORAGE_KEYS.CURRENT_WEEK_DATE, null);
+    return typeof dateStr === 'string' ? dateStr : null;
 }
 
 /**
