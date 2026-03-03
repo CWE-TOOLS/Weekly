@@ -115,6 +115,10 @@ export const DEPARTMENT_COLORS = {
     sample: {
         background: '#047857',
         text: '#FFFFFF'
+    },
+    samples: {
+        background: '#047857',
+        text: '#FFFFFF'
     }
 };
 

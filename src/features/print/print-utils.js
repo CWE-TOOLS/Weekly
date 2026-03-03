@@ -48,7 +48,8 @@ function getDepartmentColorMapping() {
         'special': { bg: '#EC4899', text: '#FFFFFF' },
         'crating': { bg: '#A16207', text: '#FFFFFF' },
         'load': { bg: '#F59E0B', text: '#FFFFFF' },
-        'ship': { bg: '#22C55E', text: '#FFFFFF' }
+        'ship': { bg: '#22C55E', text: '#FFFFFF' },
+        'samples': { bg: '#047857', text: '#FFFFFF' }
     };
 }
 

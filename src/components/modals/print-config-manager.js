@@ -130,11 +130,13 @@ export function getFilteredDepartments() {
         !dept.toLowerCase().includes('live') &&
         !SYNTHETIC_DEPARTMENT_NAMES.has(dept) &&
         dept !== 'Special Events' &&
-        dept !== 'Samples' && dept !== 'Sample' && dept !== 'Custom'
+        dept !== 'Sample' && dept !== 'Custom'
     ))];
 
-    // Sort departments
+    // Sort departments, keeping Samples at the very end
     departments.sort((a, b) => {
+        if (a === 'Samples') return 1;
+        if (b === 'Samples') return -1;
         const aIndex = DEPARTMENT_ORDER.indexOf(a);
         const bIndex = DEPARTMENT_ORDER.indexOf(b);
         if (aIndex === -1 && bIndex === -1) return a.localeCompare(b);
