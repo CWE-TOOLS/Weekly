@@ -23,7 +23,10 @@ export const STATUS = {
   IN_PROGRESS: 'in_progress',
 
   /** Item has been finished and verified - Green */
-  COMPLETE: 'complete'
+  COMPLETE: 'complete',
+
+  /** Item is not applicable for this project - Green */
+  NOT_APPLICABLE: 'not_applicable'
 };
 
 /**
@@ -47,6 +50,12 @@ export const STATUS_DISPLAY = {
     textColor: '#FFFFFF',   // White
     icon: '✓',              // Checkmark
     label: 'Complete'
+  },
+  [STATUS.NOT_APPLICABLE]: {
+    color: '#2E7D32',      // Dark Green
+    textColor: '#FFFFFF',   // White
+    icon: 'N/A',            // Not Applicable
+    label: 'N/A'
   }
 };
 

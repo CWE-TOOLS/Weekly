@@ -20,6 +20,9 @@
   --status-complete: #66BB6A;         /* Green (softened) */
   --status-complete-text: #FFFFFF;
 
+  --status-not-applicable: #2E7D32;  /* Dark Green */
+  --status-not-applicable-text: #FFFFFF;
+
   /* Grid Dimensions */
   --grid-project-column-width: 260px;
   --grid-tracking-column-width: 100px;
@@ -374,6 +377,16 @@ html {
 
 .status-indicator.status-incomplete::after {
   content: '−';
+}
+
+.status-indicator.status-not-applicable {
+  background-color: var(--status-not-applicable);
+  color: var(--status-not-applicable-text);
+}
+
+.status-indicator.status-not-applicable::after {
+  content: 'N/A';
+  font-size: 0.55rem;
 }
 
 .legend-label {
@@ -1054,10 +1067,22 @@ html {
   box-shadow: 0 2px 3px rgba(0, 0, 0, 0.18);
 }
 
+.status-cell.status-not-applicable {
+  background-color: var(--status-not-applicable);
+  color: var(--status-not-applicable-text);
+  border-top: 1px solid rgba(255, 255, 255, 0.4);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.15);
+  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.18);
+}
+
 .status-icon {
   font-size: 1.125rem;
   font-weight: bold;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.status-not-applicable .status-icon {
+  font-size: 0.7rem;
 }
 
 /* Status update animation */

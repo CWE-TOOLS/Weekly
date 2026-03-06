@@ -529,6 +529,8 @@ export function getNextStatus(currentStatus) {
     case STATUS.IN_PROGRESS:
       return STATUS.COMPLETE;
     case STATUS.COMPLETE:
+      return STATUS.NOT_APPLICABLE;
+    case STATUS.NOT_APPLICABLE:
       return STATUS.INCOMPLETE;
     default:
       return STATUS.INCOMPLETE;

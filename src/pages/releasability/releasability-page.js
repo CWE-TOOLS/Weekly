@@ -869,7 +869,7 @@ function updateCellVisual(cell, newStatus) {
   const statusConfig = STATUS_DISPLAY[newStatus];
 
   // Remove old status class
-  cell.classList.remove('status-incomplete', 'status-in-progress', 'status-complete');
+  cell.classList.remove('status-incomplete', 'status-in-progress', 'status-complete', 'status-not-applicable');
 
   // Convert underscore to hyphen for CSS class (in_progress -> in-progress)
   const cssStatus = newStatus.replace(/_/g, '-');
