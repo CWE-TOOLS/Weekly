@@ -795,11 +795,10 @@ li:last-child {
         font-weight: 500;
     }
 
-    /* Two-column layout container */
+    /* Two-column layout */
     .phase-start-columns {
         display: flex;
-        gap: 0.5em;
-        justify-content: space-between;
+        gap: 0.3em;
     }
 
     .phase-start-column {
@@ -807,113 +806,95 @@ li:last-child {
         min-width: 0;
     }
 
-    .column-header {
-        font-size: 10pt !important;
+    .phase-start-section-title {
+        font-size: 8pt !important;
         font-weight: 700 !important;
         text-align: center;
-        margin: 0 0 0.3em 0 !important;
-        padding: 0.2em;
+        margin: 0 0 0.15em 0 !important;
+        padding: 0.1em;
         background: #e0e0e0;
         border: 1px solid #000;
         text-transform: uppercase;
         letter-spacing: 0.03em;
     }
 
-    /* Department sections - compact layout */
-    .phase-start-section {
-        margin-bottom: 0.3em;
+    /* Department/Project blocks */
+    .phase-start-block {
+        margin-bottom: 0.15em;
         page-break-inside: avoid;
     }
 
     .phase-start-dept-header {
-        font-size: 9pt !important;
+        font-size: 7pt !important;
         font-weight: 700 !important;
-        padding: 0.2em 0.3em !important;
-        margin-bottom: 0.15em;
+        padding: 0.1em 0.3em !important;
         text-transform: uppercase;
-        letter-spacing: 0.03em;
+        letter-spacing: 0.02em;
         border: 1px solid #000;
+        border-bottom: none;
         print-color-adjust: exact !important;
         -webkit-print-color-adjust: exact !important;
     }
 
-    /* Project list - compact */
-    .phase-start-project-list {
-        padding-left: 0.5em;
-    }
-
-    .phase-start-project-item {
-        font-size: 8pt !important;
-        padding: 0.1em 0;
-        margin-bottom: 0.05em;
-        display: flex;
-        align-items: baseline;
-        gap: 0.3em;
-        line-height: 1.2;
-    }
-
-    .phase-start-project-item .project-bullet {
-        font-size: 9pt;
-        font-weight: bold;
-        flex-shrink: 0;
-    }
-
-    .phase-start-project-item .project-name {
-        font-weight: 600;
-        flex-grow: 1;
-        color: #000;
-    }
-
-    .phase-start-project-item .project-date {
-        font-size: 7pt !important;
-        color: #666 !important;
-        font-style: italic;
-        flex-shrink: 0;
-    }
-
-    /* Project header (for right column) */
     .phase-start-project-header {
-        font-size: 8pt !important;
+        font-size: 7pt !important;
         font-weight: 700 !important;
-        padding: 0.2em 0.3em !important;
-        margin-bottom: 0.15em;
+        padding: 0.1em 0.3em !important;
         background: #333 !important;
         color: #fff !important;
         border: 1px solid #000;
+        border-bottom: none;
         print-color-adjust: exact !important;
         -webkit-print-color-adjust: exact !important;
     }
 
-    /* Department list (for right column) */
-    .phase-start-dept-list {
-        padding-left: 0.5em;
-    }
-
-    .phase-start-dept-item {
-        font-size: 8pt !important;
-        padding: 0.1em 0;
-        margin-bottom: 0.05em;
-        display: flex;
-        align-items: baseline;
-        gap: 0.3em;
-        line-height: 1.2;
-    }
-
-    .phase-start-dept-item .dept-bullet {
-        font-size: 9pt;
-        font-weight: bold;
-        flex-shrink: 0;
-    }
-
-    .phase-start-dept-item .dept-name {
-        flex-grow: 1;
-    }
-
-    .phase-start-dept-item .dept-date {
+    /* Tables */
+    .phase-start-table {
+        width: 100%;
+        border-collapse: collapse;
         font-size: 7pt !important;
-        color: #666 !important;
-        font-style: italic;
-        flex-shrink: 0;
+        margin: 0;
+    }
+
+    .phase-start-table tr {
+        border-bottom: 1px solid #ddd;
+    }
+
+    .phase-start-table tr:last-child {
+        border-bottom: 1px solid #000;
+    }
+
+    .phase-start-table td {
+        padding: 0.05em 0.25em;
+        vertical-align: middle;
+        line-height: 1.15;
+    }
+
+    .ps-cell-name {
+        font-weight: 600;
+        color: #000;
+        border-left: 1px solid #000;
+    }
+
+    .ps-cell-date {
+        width: auto;
+        text-align: right;
+        color: #555;
+        font-size: 6.5pt !important;
+        white-space: nowrap;
+        border-right: 1px solid #000;
+    }
+
+    /* Department color chip in project section */
+    .ps-dept-color {
+        display: inline-block;
+        width: 0.5em;
+        height: 0.5em;
+        border-radius: 1px;
+        vertical-align: middle;
+        margin-right: 0.15em;
+        print-color-adjust: exact !important;
+        -webkit-print-color-adjust: exact !important;
     }
 
     /* Empty state */

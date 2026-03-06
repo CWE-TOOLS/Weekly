@@ -519,16 +519,16 @@ function generatePhaseStartContent(weekStartDate, selectedDepts, allTasks) {
         emptyMsg.textContent = 'No phase starts found for the selected week.';
         page.appendChild(emptyMsg);
     } else {
-        // Create two-column layout container
+        // Two-column layout: By Department (left) | By Project (right)
         const columnsContainer = document.createElement('div');
         columnsContainer.className = 'phase-start-columns';
 
-        // LEFT COLUMN: Grouped by Department
+        // LEFT COLUMN: By Department
         const deptColumn = document.createElement('div');
         deptColumn.className = 'phase-start-column';
 
         const deptColumnHeader = document.createElement('h2');
-        deptColumnHeader.className = 'column-header';
+        deptColumnHeader.className = 'phase-start-section-title';
         deptColumnHeader.textContent = 'By Department';
         deptColumn.appendChild(deptColumnHeader);
 
@@ -536,51 +536,45 @@ function generatePhaseStartContent(weekStartDate, selectedDepts, allTasks) {
             const projects = phaseStarts.get(dept);
             if (!projects || projects.length === 0) return;
 
-            // Sort projects alphabetically
             projects.sort((a, b) => a.project.localeCompare(b.project));
 
-            // Create department section
-            const section = document.createElement('div');
-            section.className = 'phase-start-section';
+            const block = document.createElement('div');
+            block.className = 'phase-start-block';
 
-            // Department header
             const colors = window.PrintUtils.getDepartmentColorMapping()[window.PrintUtils.normalizeDepartmentClass(dept)] || { bg: '#333', text: '#FFFFFF' };
             const deptHeader = document.createElement('div');
             deptHeader.className = 'phase-start-dept-header';
             deptHeader.style.backgroundColor = colors.bg;
             deptHeader.style.color = colors.text;
             deptHeader.textContent = dept.toUpperCase();
-            section.appendChild(deptHeader);
+            block.appendChild(deptHeader);
 
-            // Project list
-            const projectList = document.createElement('div');
-            projectList.className = 'phase-start-project-list';
+            const table = document.createElement('table');
+            table.className = 'phase-start-table';
 
             projects.forEach(({ project, date }) => {
-                const projectItem = document.createElement('div');
-                projectItem.className = 'phase-start-project-item';
-
+                const row = document.createElement('tr');
                 const projectDate = parseDate(date);
                 const dateStr = projectDate ? formatDate(projectDate) : date;
+                const dayStr = projectDate ? projectDate.toLocaleDateString('en-US', { weekday: 'short' }) : '';
 
-                projectItem.innerHTML = `
-                    <span class="project-bullet">•</span>
-                    <span class="project-name">${project}</span>
-                    <span class="project-date">(${dateStr})</span>
+                row.innerHTML = `
+                    <td class="ps-cell-name">${project}</td>
+                    <td class="ps-cell-date">${dayStr} ${dateStr}</td>
                 `;
-                projectList.appendChild(projectItem);
+                table.appendChild(row);
             });
 
-            section.appendChild(projectList);
-            deptColumn.appendChild(section);
+            block.appendChild(table);
+            deptColumn.appendChild(block);
         });
 
-        // RIGHT COLUMN: Grouped by Project
+        // RIGHT COLUMN: By Project
         const projectColumn = document.createElement('div');
         projectColumn.className = 'phase-start-column';
 
         const projectColumnHeader = document.createElement('h2');
-        projectColumnHeader.className = 'column-header';
+        projectColumnHeader.className = 'phase-start-section-title';
         projectColumnHeader.textContent = 'By Project';
         projectColumn.appendChild(projectColumnHeader);
 
@@ -598,45 +592,39 @@ function generatePhaseStartContent(weekStartDate, selectedDepts, allTasks) {
             });
         });
 
-        // Sort projects alphabetically
         const sortedProjects = Array.from(projectMap.keys()).sort((a, b) => a.localeCompare(b));
 
         sortedProjects.forEach(project => {
             const departments = projectMap.get(project);
 
-            // Create project section
-            const section = document.createElement('div');
-            section.className = 'phase-start-section';
+            const block = document.createElement('div');
+            block.className = 'phase-start-block';
 
-            // Project header
             const projectHeader = document.createElement('div');
             projectHeader.className = 'phase-start-project-header';
             projectHeader.textContent = project;
-            section.appendChild(projectHeader);
+            block.appendChild(projectHeader);
 
-            // Department list
-            const deptList = document.createElement('div');
-            deptList.className = 'phase-start-dept-list';
+            const table = document.createElement('table');
+            table.className = 'phase-start-table';
 
             departments.forEach(({ department, date }) => {
-                const deptItem = document.createElement('div');
-                deptItem.className = 'phase-start-dept-item';
-
+                const row = document.createElement('tr');
                 const projectDate = parseDate(date);
                 const dateStr = projectDate ? formatDate(projectDate) : date;
+                const dayStr = projectDate ? projectDate.toLocaleDateString('en-US', { weekday: 'short' }) : '';
 
                 const colors = window.PrintUtils.getDepartmentColorMapping()[window.PrintUtils.normalizeDepartmentClass(department)] || { bg: '#333', text: '#FFFFFF' };
 
-                deptItem.innerHTML = `
-                    <span class="dept-bullet">•</span>
-                    <span class="dept-name" style="color: ${colors.bg}; font-weight: 600;">${department}</span>
-                    <span class="dept-date">(${dateStr})</span>
+                row.innerHTML = `
+                    <td class="ps-cell-name"><span class="ps-dept-color" style="background-color: ${colors.bg};"></span>${department}</td>
+                    <td class="ps-cell-date">${dayStr} ${dateStr}</td>
                 `;
-                deptList.appendChild(deptItem);
+                table.appendChild(row);
             });
 
-            section.appendChild(deptList);
-            projectColumn.appendChild(section);
+            block.appendChild(table);
+            projectColumn.appendChild(block);
         });
 
         columnsContainer.appendChild(deptColumn);
