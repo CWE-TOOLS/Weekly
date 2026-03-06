@@ -52,8 +52,8 @@ export const STATUS_DISPLAY = {
     label: 'Complete'
   },
   [STATUS.NOT_APPLICABLE]: {
-    color: '#2E7D32',      // Dark Green
-    textColor: '#FFFFFF',   // White
+    color: '#E8E7E4',      // Grid background gray
+    textColor: '#999999',   // Gray text
     icon: 'N/A',            // Not Applicable
     label: 'N/A'
   }

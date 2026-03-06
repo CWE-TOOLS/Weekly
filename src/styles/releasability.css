@@ -20,8 +20,8 @@
   --status-complete: #66BB6A;         /* Green (softened) */
   --status-complete-text: #FFFFFF;
 
-  --status-not-applicable: #2E7D32;  /* Dark Green */
-  --status-not-applicable-text: #FFFFFF;
+  --status-not-applicable: #E8E7E4;  /* Grid background gray */
+  --status-not-applicable-text: #999999; /* Gray text */
 
   /* Grid Dimensions */
   --grid-project-column-width: 260px;
@@ -382,6 +382,7 @@ html {
 .status-indicator.status-not-applicable {
   background-color: var(--status-not-applicable);
   color: var(--status-not-applicable-text);
+  border: 1px solid #bbb;
 }
 
 .status-indicator.status-not-applicable::after {
@@ -1070,9 +1071,8 @@ html {
 .status-cell.status-not-applicable {
   background-color: var(--status-not-applicable);
   color: var(--status-not-applicable-text);
-  border-top: 1px solid rgba(255, 255, 255, 0.4);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.15);
-  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.18);
+  border: none;
+  box-shadow: none;
 }
 
 .status-icon {
