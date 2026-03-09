@@ -378,9 +378,13 @@ function generateFrozenDailyContent(targetDate, allTasks) {
             const taskDate = parseDate(task.date);
             return taskDate && taskDate.toDateString() === targetDateString;
         });
+        const manualSyntheticTasks = (deptData.manualSyntheticTasks || []).filter(task => {
+            const taskDate = parseDate(task.date);
+            return taskDate && taskDate.toDateString() === targetDateString;
+        });
 
-        // Combine regular and synthetic tasks
-        const allDeptTasks = [...deptTasks, ...syntheticTasks];
+        // Combine regular, synthetic, and manual synthetic tasks
+        const allDeptTasks = [...deptTasks, ...syntheticTasks, ...manualSyntheticTasks];
 
         if (allDeptTasks.length === 0) return;
 
@@ -694,7 +698,7 @@ function generatePrintContent(printType, selectedDepts, weekDates, allTasks) {
         };
 
         const deptTasks = (deptData.tasks || []).filter(filterByDate);
-        const syntheticTasks = (deptData.syntheticTasks || []).filter(filterByDate);
+        const syntheticTasks = [...(deptData.syntheticTasks || []), ...(deptData.manualSyntheticTasks || [])].filter(filterByDate);
         const syntheticDeptName = deptData.syntheticDeptName;
 
         if (deptTasks.length === 0 && syntheticTasks.length === 0) return;

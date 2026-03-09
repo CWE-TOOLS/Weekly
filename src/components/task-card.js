@@ -28,7 +28,7 @@ import { sanitizeDescription } from '../utils/security-utils.js';
  */
 export function createTaskCard(task, rowClass, isEditingUnlocked) {
     if (isEditingUnlocked === undefined) isEditingUnlocked = getIsEditingUnlocked();
-    const showHours = RENDERING.shouldShowHours(task.department);
+    const showHours = task.isSynthetic ? false : RENDERING.shouldShowHours(task.department);
     const isDraggable = task.isManual && isEditingUnlocked;
 
     const card = document.createElement('div');
@@ -64,8 +64,8 @@ export function createTaskCard(task, rowClass, isEditingUnlocked) {
     const descDiv = document.createElement('div');
     descDiv.className = 'task-description';
     if (task.description && task.description.trim()) {
-        // Use innerHTML for Batch and Layout to support <br> tags, textContent for others for safety
-        if (RENDERING.shouldUseHtmlDescription(task.department)) {
+        // Use innerHTML for synthetic Batch/Layout tasks to support <br> tags, textContent for others for safety
+        if (task.isSynthetic && RENDERING.shouldUseHtmlDescription(task.department)) {
             descDiv.innerHTML = sanitizeDescription(task.description);
         } else {
             descDiv.textContent = task.description;

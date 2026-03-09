@@ -50,8 +50,18 @@ export function groupTasksByDepartment(filteredTasks, syntheticTasksByDept) {
         }
     }
 
-    // 5. Remove synthetic departments from top-level keys
+    // 5. Remove synthetic departments from top-level keys, preserving manual tasks
     for (const dept of SYNTHETIC_DEPARTMENT_NAMES) {
+        const manualTasks = (tasksByDept[dept]?.tasks || []).filter(t => t.isManual);
+        // Attach manual tasks to the parent department's synthetic section
+        if (manualTasks.length > 0) {
+            for (const primaryDept in SYNTHETIC_DEPARTMENT_CONFIG) {
+                if (SYNTHETIC_DEPARTMENT_CONFIG[primaryDept].synthetic === dept && tasksByDept[primaryDept]) {
+                    tasksByDept[primaryDept].manualSyntheticTasks = manualTasks;
+                    break;
+                }
+            }
+        }
         delete tasksByDept[dept];
     }
 

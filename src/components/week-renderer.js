@@ -174,18 +174,42 @@ function renderDepartmentRows(grid, sortedDepts, tasksByDept, weekDates, maxTask
 
         // --- Render Synthetic Department (if exists) ---
         const syntheticTasks = (deptData && deptData.syntheticTasks) || [];
+        const manualSyntheticTasks = (deptData && deptData.manualSyntheticTasks) || [];
         const syntheticDeptName = deptData && deptData.syntheticDeptName;
-        if (syntheticTasks.length > 0 && syntheticDeptName) {
+        if ((syntheticTasks.length > 0 || manualSyntheticTasks.length > 0) && syntheticDeptName) {
             const syntheticTasksByDate = groupTasksByDate(syntheticTasks, weekDates);
-            const syntheticMaxTasks = 1; // Always 1 row for synthetic depts
 
-            grid.appendChild(createDepartmentLabel(syntheticDeptName, syntheticMaxTasks));
-            for (let i = 0; i < syntheticMaxTasks; i++) {
-                const rowClass = `dept-row-${normalizeDepartmentClass(syntheticDeptName)}-${i}`;
+            // Calculate manual task rows needed
+            const manualByDate = manualSyntheticTasks.length > 0
+                ? groupTasksByDate(manualSyntheticTasks, weekDates, syntheticDeptName)
+                : {};
+            const maxManualRows = manualSyntheticTasks.length > 0
+                ? Math.max(0, ...Object.values(manualByDate).map(arr => arr.length))
+                : 0;
+
+            const syntheticAutoRows = syntheticTasks.length > 0 ? 1 : 0;
+            const totalSyntheticRows = syntheticAutoRows + maxManualRows;
+
+            grid.appendChild(createDepartmentLabel(syntheticDeptName, totalSyntheticRows));
+
+            // Render auto-generated synthetic row
+            if (syntheticAutoRows > 0) {
+                const rowClass = `dept-row-${normalizeDepartmentClass(syntheticDeptName)}-0`;
                 allRowClasses.add(rowClass);
                 weekDates.forEach((date, dateIdx) => {
                     const dateString = weekDateStrings[dateIdx];
-                    const task = (syntheticTasksByDate[dateString] && syntheticTasksByDate[dateString][i]) || undefined;
+                    const task = (syntheticTasksByDate[dateString] && syntheticTasksByDate[dateString][0]) || undefined;
+                    grid.appendChild(createGridCell(task, date, syntheticDeptName, rowClass, isEditingUnlocked));
+                });
+            }
+
+            // Render manual task rows in synthetic department
+            for (let i = 0; i < maxManualRows; i++) {
+                const rowClass = `dept-row-${normalizeDepartmentClass(syntheticDeptName)}-manual-${i}`;
+                allRowClasses.add(rowClass);
+                weekDates.forEach((date, dateIdx) => {
+                    const dateString = weekDateStrings[dateIdx];
+                    const task = (manualByDate[dateString] && manualByDate[dateString][i]) || undefined;
                     grid.appendChild(createGridCell(task, date, syntheticDeptName, rowClass, isEditingUnlocked));
                 });
             }
