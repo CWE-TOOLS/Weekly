@@ -236,7 +236,8 @@ function setupEventListeners() {
   // document.getElementById('add-project-btn')?.addEventListener('click', handleAddProjectClick);
   const refreshBtn = document.getElementById('refresh-btn');
   if (refreshBtn) refreshBtn.addEventListener('click', handleRefresh);
-  // document.getElementById('print-btn')?.addEventListener('click', handlePrint);
+  const printBtn = document.getElementById('print-btn');
+  if (printBtn) printBtn.addEventListener('click', handlePrint);
 
   // Add week button
   const addWeekBtn = document.getElementById('add-week-btn');
@@ -465,7 +466,186 @@ function handleRefresh() {
 }
 
 function handlePrint() {
-  window.print();
+  const projects = getFilteredProjects();
+  if (projects.length === 0) return;
+
+  // Group projects by week
+  const projectsByWeek = {};
+  projects.forEach(p => {
+    const key = p.manualWeekId || p.weekMonday;
+    if (!projectsByWeek[key]) projectsByWeek[key] = [];
+    projectsByWeek[key].push(p);
+  });
+
+  const weekKeys = Object.keys(projectsByWeek).sort();
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const fullMonthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+  // Build week label helper
+  function getWeekLabel(weekKey) {
+    const mw = manualWeeks.find(w => typeof w === 'object' && w.id === weekKey);
+    if (mw) return mw.name || mw.id;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(weekKey)) {
+      const monday = new Date(weekKey + 'T00:00:00');
+      const saturday = new Date(monday);
+      saturday.setDate(saturday.getDate() + 5);
+      const startMonth = monthNames[monday.getMonth()];
+      const endMonth = monthNames[saturday.getMonth()];
+      const startDay = monday.getDate();
+      const endDay = saturday.getDate();
+      const dateRange = monday.getMonth() === saturday.getMonth()
+        ? `${startMonth} ${startDay}-${endDay}`
+        : `${startMonth} ${startDay}-${endMonth} ${endDay}`;
+      return `Week of ${dateRange}`;
+    }
+    return weekKey;
+  }
+
+  // Collect unique months from date-based weeks
+  const months = new Map();
+  weekKeys.forEach(key => {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(key)) {
+      const d = new Date(key + 'T00:00:00');
+      const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (!months.has(monthKey)) {
+        months.set(monthKey, `${fullMonthNames[d.getMonth()]} ${d.getFullYear()}`);
+      }
+    }
+  });
+
+  // Build modal
+  const modal = document.createElement('div');
+  modal.className = 'modal';
+  modal.innerHTML = `
+    <div class="modal-content" style="max-width: 420px;">
+      <div class="modal-header">
+        <h2>Print Report</h2>
+        <button class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="margin-bottom: 16px;">
+          <label style="font-weight: 600; font-size: 14px; display: block; margin-bottom: 8px;">Filter by Month</label>
+          <select id="print-month-filter" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 13px;">
+            <option value="all">All Months</option>
+            ${Array.from(months.entries()).map(([val, label]) => `<option value="${val}">${label}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label style="font-weight: 600; font-size: 14px; display: block; margin-bottom: 8px;">Select Weeks</label>
+          <div id="print-week-list" style="max-height: 260px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 6px; padding: 4px;">
+            ${weekKeys.map(key => `
+              <label style="display: flex; align-items: center; padding: 6px 8px; cursor: pointer; gap: 8px; font-size: 13px;" data-week="${key}" data-month="${/^\d{4}-\d{2}-\d{2}$/.test(key) ? key.substring(0, 7) : ''}">
+                <input type="checkbox" value="${key}" checked style="margin: 0;" />
+                ${getWeekLabel(key)}
+                <span style="color: #999; margin-left: auto; font-size: 11px;">(${(projectsByWeek[key] || []).length})</span>
+              </label>
+            `).join('')}
+          </div>
+        </div>
+        <div style="display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end;">
+          <button id="print-cancel-btn" style="padding: 8px 16px; border: 1px solid #ccc; border-radius: 6px; background: white; cursor: pointer; font-size: 13px;">Cancel</button>
+          <button id="print-confirm-btn" style="padding: 8px 16px; border: none; border-radius: 6px; background: #2563eb; color: white; cursor: pointer; font-size: 13px; font-weight: 500;">Print</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  // Month filter handler
+  const monthSelect = modal.querySelector('#print-month-filter');
+  const weekLabels = modal.querySelectorAll('#print-week-list label');
+  monthSelect.addEventListener('change', () => {
+    const selected = monthSelect.value;
+    weekLabels.forEach(label => {
+      const cb = label.querySelector('input');
+      const weekMonth = label.dataset.month;
+      if (selected === 'all') {
+        label.style.display = 'flex';
+        cb.checked = true;
+      } else {
+        if (weekMonth === selected) {
+          label.style.display = 'flex';
+          cb.checked = true;
+        } else {
+          label.style.display = 'none';
+          cb.checked = false;
+        }
+      }
+    });
+  });
+
+  // Close handlers
+  const closeModal = () => modal.remove();
+  modal.querySelector('.modal-close').addEventListener('click', closeModal);
+  modal.querySelector('#print-cancel-btn').addEventListener('click', closeModal);
+  modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+
+  // Print handler
+  modal.querySelector('#print-confirm-btn').addEventListener('click', () => {
+    const selectedWeeks = new Set();
+    modal.querySelectorAll('#print-week-list input:checked').forEach(cb => selectedWeeks.add(cb.value));
+    closeModal();
+    if (selectedWeeks.size === 0) return;
+    executePrint(projects, projectsByWeek, selectedWeeks, getWeekLabel);
+  });
+}
+
+function executePrint(projects, projectsByWeek, selectedWeeks, getWeekLabel) {
+  const weekKeys = Array.from(selectedWeeks).sort();
+
+  let tableRows = '';
+  weekKeys.forEach(weekKey => {
+    if (!projectsByWeek[weekKey]) return;
+    tableRows += `<tr class="week-header"><td colspan="2">${getWeekLabel(weekKey)}</td></tr>`;
+
+    const weekProjects = projectsByWeek[weekKey].sort((a, b) => {
+      const dateA = a.actualStartDate || a.weekMonday || '';
+      const dateB = b.actualStartDate || b.weekMonday || '';
+      return dateA.localeCompare(dateB) || a.project.localeCompare(b.project);
+    });
+
+    weekProjects.forEach(p => {
+      let startDate = '--';
+      if (p.actualStartDate) {
+        const d = new Date(p.actualStartDate + 'T00:00:00');
+        const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+        startDate = `${days[d.getDay()]} ${d.getDate()}`;
+      }
+      tableRows += `<tr><td class="project-name">${p.project}</td><td class="start-date">${startDate}</td></tr>`;
+    });
+  });
+
+  const today = new Date();
+  const dateStr = today.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+
+  const printHtml = `<!DOCTYPE html>
+<html><head><title>Releasability Board - ${dateStr}</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 0.5in; }
+  h1 { font-size: 18px; margin: 0 0 2px 0; }
+  .print-date { font-size: 11px; color: #666; margin-bottom: 12px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #bbb; padding: 4px 8px; }
+  th { background: #f0f0f0; text-align: left; font-size: 11px; }
+  .project-name { font-size: 11px; }
+  .start-date { text-align: center; font-size: 11px; width: 70px; }
+  .week-header td { background: #e3e8f0; font-weight: bold; font-size: 12px; padding: 5px 8px; }
+  @page { size: portrait; margin: 0.5in; }
+</style></head><body>
+<h1>Releasability Board</h1>
+<div class="print-date">${dateStr}</div>
+<table>
+  <thead><tr><th>Project</th><th style="width:70px;text-align:center;">Start</th></tr></thead>
+  <tbody>${tableRows}</tbody>
+</table>
+</body></html>`;
+
+  const printWindow = window.open('', '_blank');
+  printWindow.document.write(printHtml);
+  printWindow.document.close();
+  printWindow.focus();
+  printWindow.print();
 }
 
 function handleSearchInput(e) {
