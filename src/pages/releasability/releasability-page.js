@@ -62,6 +62,7 @@ let manualWeeks = []; // Store manual weeks globally
 let copiedTrackingStatus = null; // Store copied tracking status for paste operation
 let cachedProjects = null; // Cache loaded projects to prevent duplicate loads
 let isInitializing = false; // Flag to prevent cache subscription from triggering during init
+let isManualRefreshing = false; // Flag to prevent cache subscription from overwriting a manual refresh
 
 /**
  * Get whether there is a copied tracking status
@@ -167,6 +168,15 @@ async function loadInitialData(forceRefresh = false) {
 async function handleCacheUpdate(payload) {
   debug.log('📡 Cache update received, refreshing data silently...', payload);
 
+  // Skip if a manual refresh is already in progress - the manual refresh will
+  // handle rendering the fresh data. Without this guard, the cache subscription
+  // fires during the manual refresh and loads stale cached data that overwrites
+  // the fresh data, causing the UI to "flash" and revert.
+  if (isManualRefreshing) {
+    debug.log('⏭️ Skipping cache update - manual refresh in progress');
+    return;
+  }
+
   try {
     // Invalidate local cache to force fresh load
     cachedProjects = null;
@@ -191,6 +201,12 @@ async function handleCacheUpdate(payload) {
  */
 async function handleSilentRefresh(payload) {
   debug.log('📡 Refresh signal received from another client, syncing data...', payload);
+
+  // Skip if a manual refresh is already in progress
+  if (isManualRefreshing) {
+    debug.log('⏭️ Skipping silent refresh - manual refresh in progress');
+    return;
+  }
 
   try {
     // Invalidate local cache to force fresh load
@@ -441,6 +457,7 @@ function handleAddProjectClick() {
 
 function handleRefresh() {
   setLoading(true);
+  isManualRefreshing = true;
   // Force refresh to bypass cache and get fresh data from Google Sheets
   loadInitialData(true)
     .then(() => {
@@ -452,6 +469,7 @@ function handleRefresh() {
       showError('Failed to refresh data');
     })
     .finally(() => {
+      isManualRefreshing = false;
       setLoading(false);
     });
 }
