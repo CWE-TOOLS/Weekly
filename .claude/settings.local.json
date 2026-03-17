@@ -58,7 +58,16 @@
       "Bash(git merge:*)",
       "Bash(git fetch:*)",
       "Bash(git diff:*)",
-      "Bash(node -c:*)"
+      "Bash(node -c:*)",
+      "Bash(node:*)",
+      "WebSearch",
+      "Bash(test:*)",
+      "Bash(cd:)",
+      "Bash(cd:*)",
+      "Bash(powershell:*)",
+      "Bash(source:*)",
+      "Bash(grep:*)",
+      "Bash(npx live-server:*)"
     ],
     "deny": [],
     "ask": []

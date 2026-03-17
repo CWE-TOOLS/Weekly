@@ -908,102 +908,45 @@ html {
   filter: brightness(0.97);
 }
 
-/* Project Menu Button (three dots) */
-.project-menu-btn {
-  padding: 0.125rem 0.35rem;
-  min-width: 24px;
-  background-color: transparent;
+/* Project Action Buttons (inline chips on hover) */
+.project-action-btn {
+  padding: 0.15rem 0.4rem;
+  background-color: var(--surface-container-high);
   color: var(--text-secondary);
-  border: none;
-  border-radius: 50%;
+  border: 1px solid var(--border-primary);
+  border-radius: 999px;
   cursor: pointer;
-  font-size: 0.9rem;
-  font-weight: 700;
+  font-size: 0.7rem;
   line-height: 1;
   transition: all var(--transition-fast);
   display: flex;
   align-items: center;
   justify-content: center;
-  letter-spacing: 0.05em;
+  white-space: nowrap;
 }
 
-.project-menu-btn:hover {
-  background-color: var(--surface-container-high);
+.project-action-btn:hover {
+  background-color: var(--surface-container-highest, #e0e0e0);
   color: var(--text-primary);
 }
 
-.project-menu-btn:active {
-  transform: translateY(0);
-}
-
-/* Project Menu Dropdown */
-.project-menu-dropdown {
-  display: none;
-  position: fixed;
-  margin-top: 0.25rem;
-  background-color: var(--surface-container);
-  border: 1px solid var(--border-primary);
-  border-radius: var(--border-radius-md);
-  box-shadow: var(--elevation-3);
-  min-width: 150px;
-  z-index: 9999;
-  overflow: hidden;
-  opacity: 0;
-  transform: translateY(-4px);
-  transition: opacity var(--transition-fast), transform var(--transition-fast);
-}
-
-.project-menu-dropdown.show {
-  display: block;
-  opacity: 1;
-  transform: translateY(0);
-}
-
-/* Menu Items */
-.project-menu-item {
-  width: 100%;
-  padding: var(--space-sm) var(--space-md);
-  background: none;
-  border: none;
-  text-align: left;
-  cursor: pointer;
-  font-size: 0.8rem;
-  color: var(--text-primary);
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  transition: background-color var(--transition-fast);
-}
-
-.project-menu-item:hover {
-  background-color: #f3f4f6;
-}
-
-.project-menu-item .menu-icon {
-  font-size: 0.9rem;
-  width: 16px;
-  display: inline-flex;
-  justify-content: center;
-}
-
-/* Paste item disabled state */
-.project-menu-item.paste-item:not(.has-copied-status) {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.project-menu-item.paste-item:not(.has-copied-status):hover {
-  background-color: transparent;
-}
-
-/* Delete item styling */
-.project-menu-item.delete-item {
-  color: var(--status-incomplete);
-  border-top: 1px solid var(--border-primary);
-}
-
-.project-menu-item.delete-item:hover {
+.project-action-btn.delete-btn {
   background-color: #FEE2E2;
+  color: var(--status-incomplete);
+  border-color: #FECACA;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.project-action-btn.delete-btn:hover {
+  background-color: #FECACA;
+}
+
+/* Paste button disabled state */
+.project-action-btn.paste-item:not(.has-copied-status) {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 /* Keep old class for compatibility (used in event handlers) */

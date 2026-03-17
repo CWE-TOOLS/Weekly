@@ -2,21 +2,25 @@
 
 ## HIGH SEVERITY
 
-### 1. `normalizeDepartmentClass` duplicated 6+ times
-Found identically implemented in `task-card.js`, `department-config.js`, `ui-utils.js`, `print-utils.js`, `department-filter.js`, and `week-renderer.js`. Should have a single canonical definition imported everywhere.
+### ~~1. `normalizeDepartmentClass` duplicated 6+ times~~ ✅ COMPLETED
+~~Found identically implemented in `task-card.js`, `department-config.js`, `ui-utils.js`, `print-utils.js`, `department-filter.js`, and `week-renderer.js`. Should have a single canonical definition imported everywhere.~~
+> Fixed: consolidated to single canonical definition in `department-config.js`. Removed 5 duplicate local definitions. `task-card.js` and `ui-utils.js` re-export for backward compatibility.
 
-### 2. `render()` in `renderer.js` is 244 lines with 7+ responsibilities
-Handles reentrance guards, synthetic task generation, smart update attempts, task grouping, Monday gap-filling, max-tasks-per-dept calculation, and DOM construction. Each should be its own function.
+### ~~2. `render()` in `renderer.js` is 244 lines with 7+ responsibilities~~ ✅ COMPLETED
+~~Handles reentrance guards, synthetic task generation, smart update attempts, task grouping, Monday gap-filling, max-tasks-per-dept calculation, and DOM construction. Each should be its own function.~~
+> Fixed: extracted `groupTasksByWeek()`, `buildMaxTasksPerDept()`, `resolveWeekIndex()`, and `scheduleLayoutAndScroll()` as private helpers. Full-render path reduced from ~120 lines to ~22 lines.
 
 ### ~~3. `style.backgroundColor = "... !important"` is a bug (`card-renderer.js:186-187`)~~ ✅ COMPLETED
 ~~Setting `!important` via `element.style.backgroundColor` is **silently ignored** by browsers. Must use `element.style.setProperty('background-color', value, 'important')`.~~
 > Fixed: now uses `style.setProperty()` with the `'important'` priority parameter.
 
-### 4. XSS risk with `innerHTML` for user content (`task-card.js:75`, `smart-renderer.js:96-109`)
-Batch/Layout task descriptions are rendered via `innerHTML` without sanitization. If descriptions from Supabase contain malicious content, it's injected directly into the DOM.
+### ~~4. XSS risk with `innerHTML` for user content (`task-card.js:75`, `smart-renderer.js:96-109`)~~ ✅ COMPLETED
+~~Batch/Layout task descriptions are rendered via `innerHTML` without sanitization. If descriptions from Supabase contain malicious content, it's injected directly into the DOM.~~
+> Fixed: added `sanitizeDescription()` to `security-utils.js` (escapes all HTML, restores only `<br>` tags). Applied across `task-card.js`, `smart-renderer.js`, `card-renderer.js`, and `project-modal-fields.js`. Template interpolations in `project-modal-fields.js` also escaped with `escapeHtml()`.
 
-### 5. Stale primitive state in `schedule-renderer.js` (`setStateReferences`)
-`setStateReferences()` copies `currentViewedWeekIndex` (a number) by value into a module-level variable. When state updates, this module's copy doesn't change — a correctness bug.
+### ~~5. Stale primitive state in `schedule-renderer.js` (`setStateReferences`)~~ ✅ COMPLETED
+~~`setStateReferences()` copies `currentViewedWeekIndex` (a number) by value into a module-level variable. When state updates, this module's copy doesn't change — a correctness bug.~~
+> Fixed: deleted `schedule-renderer.js` entirely — it was legacy dead code. `setStateReferences()` was never called. The modern renderer is `src/core/renderer.js`.
 
 ---
 

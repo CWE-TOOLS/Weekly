@@ -305,15 +305,6 @@ function setupEventListeners() {
   //   }
   // });
 
-  // Global click handler to close dropdown menus when clicking outside
-  document.addEventListener('click', (e) => {
-    // Check if click is outside a menu button or dropdown
-    if (!e.target.closest('.project-menu-btn') && !e.target.closest('.project-menu-dropdown')) {
-      document.querySelectorAll('.project-menu-dropdown.show').forEach(menu => {
-        menu.classList.remove('show');
-      });
-    }
-  });
 }
 
 /**
@@ -1208,9 +1199,6 @@ export async function handleDeleteProject(projectId) {
   const project = getAllProjects().find(p => p.id === projectId);
   if (!project) return;
 
-  const confirmed = confirm(`Are you sure you want to delete "${project.project}"?`);
-  if (!confirmed) return;
-
   // Delete from Supabase first
   try {
     await deleteTrackingStatus(project.project, project.weekMonday);
@@ -1259,10 +1247,6 @@ export async function handlePasteStatus(projectId) {
     showError('Project not found');
     return;
   }
-
-  // Confirm paste action
-  const confirmed = confirm(`Paste copied status to "${project.project}"?`);
-  if (!confirmed) return;
 
   // Update each tracking item status
   for (const [trackingItem, status] of Object.entries(copiedTrackingStatus)) {
