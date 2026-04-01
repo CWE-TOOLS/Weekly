@@ -513,14 +513,26 @@ function groupProjectsByWeek(projects) {
     grouped[weekKey].push(project);
   });
 
-  // Sort projects within each week by actual start date (earliest first)
+  // Sort projects within each week: real (sheets) projects first by start date, then manual projects alphabetically
   Object.keys(grouped).forEach(week => {
     grouped[week].sort((a, b) => {
+      const aIsManual = a.source === 'manual';
+      const bIsManual = b.source === 'manual';
+
+      // Manual projects always come after real projects
+      if (aIsManual !== bIsManual) {
+        return aIsManual ? 1 : -1;
+      }
+
+      // Both manual: sort alphabetically by project name
+      if (aIsManual) {
+        return a.project.localeCompare(b.project);
+      }
+
+      // Both real: sort by actual start date, then alphabetically
       const dateA = a.actualStartDate || a.weekMonday || '';
       const dateB = b.actualStartDate || b.weekMonday || '';
-      // Sort by date first (if both are date strings)
       const dateCompare = dateA.localeCompare(dateB);
-      // If dates are the same, sort alphabetically by project name
       if (dateCompare === 0) {
         return a.project.localeCompare(b.project);
       }
