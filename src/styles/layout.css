@@ -262,3 +262,7 @@ header p {
   background-color: var(--color-samples);
   color: var(--color-samples-text);
 }
+.department-label.department-facilities {
+  background-color: var(--color-facilities);
+  color: var(--color-facilities-text);
+}

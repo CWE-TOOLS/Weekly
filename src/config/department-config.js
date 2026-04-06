@@ -18,7 +18,8 @@ export const DEPARTMENT_ORDER = [
     'Special',
     'Crating',
     'Load',
-    'Ship'
+    'Ship',
+    'Facilities'
 ];
 
 // Department to day column mapping (for Google Sheets)
@@ -119,6 +120,10 @@ export const DEPARTMENT_COLORS = {
     samples: {
         background: '#047857',
         text: '#FFFFFF'
+    },
+    facilities: {
+        background: '#9CA3AF',
+        text: '#FFFFFF'
     }
 };
 
@@ -146,6 +151,7 @@ export function normalizeDepartment(dept) {
     if (normalized === 'load') return 'Load';
     if (normalized === 'ship') return 'Ship';
     if (normalized === 'sample' || normalized === 'custom' || normalized === 'samples') return 'Samples';
+    if (normalized === 'facilities' || normalized === 'facility') return 'Facilities';
 
     return dept;
 }

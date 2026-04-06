@@ -28,7 +28,8 @@ const PRINT_UTILS = {
         'Crating',
         'Load',
         'Ship',
-        'Samples'
+        'Samples',
+        'Facilities'
     ]
 };
 
@@ -49,7 +50,8 @@ function getDepartmentColorMapping() {
         'crating': { bg: '#A16207', text: '#FFFFFF' },
         'load': { bg: '#F59E0B', text: '#FFFFFF' },
         'ship': { bg: '#22C55E', text: '#FFFFFF' },
-        'samples': { bg: '#047857', text: '#FFFFFF' }
+        'samples': { bg: '#047857', text: '#FFFFFF' },
+        'facilities': { bg: '#9CA3AF', text: '#FFFFFF' }
     };
 }
 

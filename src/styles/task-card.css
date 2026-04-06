@@ -80,6 +80,10 @@
   background-color: var(--color-samples);
   color: var(--color-samples-text);
 }
+.task-card.department-facilities {
+  background-color: var(--color-facilities);
+  color: var(--color-facilities-text);
+}
 
 .task-card:hover {
   box-shadow: var(--shadow-md);

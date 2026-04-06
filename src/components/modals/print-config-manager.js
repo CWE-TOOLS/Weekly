@@ -133,10 +133,14 @@ export function getFilteredDepartments() {
         dept !== 'Sample' && dept !== 'Custom'
     ))];
 
-    // Sort departments, keeping Samples at the very end
+    // Sort departments, keeping Samples and Facilities at the very end
+    const endDepts = ['Samples', 'Facilities'];
     departments.sort((a, b) => {
-        if (a === 'Samples') return 1;
-        if (b === 'Samples') return -1;
+        const aEnd = endDepts.indexOf(a);
+        const bEnd = endDepts.indexOf(b);
+        if (aEnd !== -1 && bEnd !== -1) return aEnd - bEnd;
+        if (aEnd !== -1) return 1;
+        if (bEnd !== -1) return -1;
         const aIndex = DEPARTMENT_ORDER.indexOf(a);
         const bIndex = DEPARTMENT_ORDER.indexOf(b);
         if (aIndex === -1 && bIndex === -1) return a.localeCompare(b);

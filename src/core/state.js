@@ -60,7 +60,8 @@ export const DEPARTMENT_ORDER = [
     'Crating',
     'Load',
     'Ship',
-    'Samples'
+    'Samples',
+    'Facilities'
 ];
 
 // ============================================================================
