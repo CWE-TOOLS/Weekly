@@ -56,6 +56,7 @@ export const DEPARTMENT_ORDER = [
     'Layout',
     'Finish',
     'Seal',
+    'Final Insp.',
     'Special',
     'Crating',
     'Load',

@@ -52,6 +52,11 @@
   color: var(--color-seal-text);
 }
 
+.task-card.department-final-insp {
+  background-color: var(--color-final-insp);
+  color: var(--color-final-insp-text);
+}
+
 .task-card.department-special {
   background-color: var(--color-special) !important;
   color: var(--color-special-text) !important;

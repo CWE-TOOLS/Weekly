@@ -234,6 +234,11 @@ header p {
   color: var(--color-seal-text);
 }
 
+.department-label.department-final-insp {
+  background-color: var(--color-final-insp);
+  color: var(--color-final-insp-text);
+}
+
 .department-label.department-special {
   background-color: var(--color-special);
   color: var(--color-special-text);

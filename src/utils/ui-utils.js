@@ -197,10 +197,13 @@ export function normalizeDepartment(dept) {
     if (normalized === 'layout') return 'Layout';
     if (normalized === 'finish') return 'Finish';
     if (normalized === 'seal') return 'Seal';
+    if (normalized === 'final' || normalized === 'final insp' || normalized === 'final insp.' || normalized === 'final inspection') return 'Final Insp.';
     if (normalized === 'special') return 'Special';
     if (normalized === 'crating') return 'Crating';
     if (normalized === 'load') return 'Load';
     if (normalized === 'ship') return 'Ship';
+    if (normalized === 'samples') return 'Samples';
+    if (normalized === 'facilities' || normalized === 'facility') return 'Facilities';
     return dept;
 }
 

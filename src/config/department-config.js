@@ -15,6 +15,7 @@ export const DEPARTMENT_ORDER = [
     'Layout',
     'Finish',
     'Seal',
+    'Final Insp.',
     'Special',
     'Crating',
     'Load',
@@ -93,6 +94,10 @@ export const DEPARTMENT_COLORS = {
         background: '#6B7280',
         text: '#FFFFFF'
     },
+    'final-insp': {
+        background: '#0D9488',
+        text: '#FFFFFF'
+    },
     special: {
         background: '#EC4899',
         text: '#FFFFFF'
@@ -146,6 +151,7 @@ export function normalizeDepartment(dept) {
     if (normalized === 'layout') return 'Layout';
     if (normalized === 'finish') return 'Finish';
     if (normalized === 'seal') return 'Seal';
+    if (normalized === 'final' || normalized === 'final insp' || normalized === 'final insp.' || normalized === 'final inspection') return 'Final Insp.';
     if (normalized === 'special') return 'Special';
     if (normalized === 'crating') return 'Crating';
     if (normalized === 'load') return 'Load';
