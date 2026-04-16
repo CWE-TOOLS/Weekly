@@ -21,6 +21,14 @@
         <!-- Status Legend -->
         <div class="status-legend">
             <div class="legend-left">
+                <div class="search-bar-wrapper">
+                    <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="8"/>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </svg>
+                    <input type="text" id="project-search" placeholder="Search projects..." autocomplete="off" />
+                    <button id="search-clear-btn" class="search-clear-btn" aria-label="Clear search" style="display:none;">&times;</button>
+                </div>
                 <span class="legend-title">Status:</span>
                 <div class="legend-item">
                     <span class="status-indicator status-complete"></span>
@@ -37,6 +45,16 @@
                 <div class="legend-item">
                     <span class="status-indicator status-not-applicable"></span>
                     <span class="legend-label">Not Applicable</span>
+                </div>
+                <span class="legend-divider"></span>
+                <span class="legend-title">Tasks:</span>
+                <div class="legend-item">
+                    <span class="dept-indicator dept-pm"></span>
+                    <span class="legend-label">PM</span>
+                </div>
+                <div class="legend-item">
+                    <span class="dept-indicator dept-engineering"></span>
+                    <span class="legend-label">Engineering</span>
                 </div>
             </div>
             <div class="legend-right">

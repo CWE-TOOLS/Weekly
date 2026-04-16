@@ -180,12 +180,10 @@ export function getFilteredProjects() {
     );
   }
 
-  // Apply search query
+  // Apply search query (fuzzy match)
   if (_searchQuery.trim()) {
     const query = _searchQuery.toLowerCase();
-    filtered = filtered.filter(p =>
-      p.project.toLowerCase().includes(query)
-    );
+    filtered = filtered.filter(p => fuzzyMatch(p.project.toLowerCase(), query));
   }
 
   // Apply hide completed filter
@@ -508,6 +506,22 @@ export function setLoading(loading, silent = false) {
 // ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
+
+/**
+ * Fuzzy match: checks if all characters of the query appear in order in the text.
+ * @param {string} text - The text to search in (already lowercased)
+ * @param {string} query - The query to match (already lowercased)
+ * @returns {boolean} True if text fuzzy-matches the query
+ */
+function fuzzyMatch(text, query) {
+  let ti = 0;
+  for (let qi = 0; qi < query.length; qi++) {
+    const idx = text.indexOf(query[qi], ti);
+    if (idx === -1) return false;
+    ti = idx + 1;
+  }
+  return true;
+}
 
 /**
  * Generate a unique project ID

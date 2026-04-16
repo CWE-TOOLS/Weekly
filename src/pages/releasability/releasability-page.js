@@ -300,11 +300,22 @@ function setupEventListeners() {
     hideCompletedToggle.addEventListener('change', handleHideCompletedToggle);
   }
 
-  // Search input - REMOVED (UI element deleted)
-  // const searchInput = document.getElementById('project-search');
-  // if (searchInput) {
-  //   searchInput.addEventListener('input', handleSearchInput);
-  // }
+  // Search input
+  const searchInput = document.getElementById('project-search');
+  if (searchInput) {
+    searchInput.addEventListener('input', handleSearchInput);
+  }
+
+  // Search clear button
+  const searchClearBtn = document.getElementById('search-clear-btn');
+  if (searchClearBtn) {
+    searchClearBtn.addEventListener('click', () => {
+      const input = document.getElementById('project-search');
+      if (input) input.value = '';
+      setSearchQuery('');
+      searchClearBtn.style.display = 'none';
+    });
+  }
 
   // Clear filters button - REMOVED (UI element deleted)
   // document.getElementById('clear-filters-btn')?.addEventListener('click', handleClearFilters);
@@ -660,6 +671,8 @@ function executePrint(projects, projectsByWeek, selectedWeeks, getWeekLabel) {
 function handleSearchInput(e) {
   const query = e.target.value;
   setSearchQuery(query);
+  const clearBtn = document.getElementById('search-clear-btn');
+  if (clearBtn) clearBtn.style.display = query ? 'flex' : 'none';
 }
 
 function handleClearFilters() {

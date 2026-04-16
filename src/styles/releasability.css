@@ -45,15 +45,15 @@
   --tracking-6-color: #80CBC4;   /* Sample Approval */
   --tracking-7-color: #80CBC4;   /* Color Log */
   --tracking-8-color: #80CBC4;   /* Final Optimizer HRS */
-  --tracking-9-color: #A5D6A7;   /* Final Tracking - Green */
-  --tracking-10-color: #A5D6A7;  /* Labels */
-  --tracking-11-color: #A5D6A7;  /* Batching Sheets */
-  --tracking-12-color: #A5D6A7;  /* Rebar/Drilling Layout */
+  --tracking-9-color: #80CBC4;   /* Rebar/Drilling Layout - Teal (PM) */
+  --tracking-10-color: #80CBC4;  /* Labels - Teal (PM) */
+  --tracking-11-color: #A5D6A7;  /* Final Tracking - Green (Engineering) */
+  --tracking-12-color: #A5D6A7;  /* Batching Sheets */
   --tracking-13-color: #A5D6A7;  /* Casting Layout */
-  --tracking-14-color: #90CAF9;  /* Inflow Sales Ticket - Blue */
-  --tracking-15-color: #90CAF9;  /* 3D Drawings/Parts List */
-  --tracking-16-color: #90CAF9;  /* Toolpath Program */
-  --tracking-17-color: #90CAF9;  /* Staging */
+  --tracking-14-color: #A5D6A7;  /* Inflow Sales Ticket */
+  --tracking-15-color: #A5D6A7;  /* 3D Drawings/Parts List */
+  --tracking-16-color: #A5D6A7;  /* Toolpath Program */
+  --tracking-17-color: #A5D6A7;  /* Staging */
 }
 
 /* ============================================================================
@@ -395,10 +395,92 @@ html {
   color: var(--text-primary);
 }
 
+.legend-divider {
+  width: 1px;
+  height: 20px;
+  background-color: var(--border-primary);
+  margin: 0 0.25rem;
+}
+
+.dept-indicator {
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
+}
+
+.dept-indicator.dept-pm {
+  background-color: #80CBC4;
+}
+
+.dept-indicator.dept-engineering {
+  background-color: #A5D6A7;
+}
+
 .legend-right {
   display: flex;
   gap: 1rem;
   align-items: center;
+}
+
+/* Search bar */
+.search-bar-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-bar-wrapper .search-icon {
+  position: absolute;
+  left: 8px;
+  width: 16px;
+  height: 16px;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+#project-search {
+  padding: 0.35rem 1.75rem 0.35rem 1.85rem;
+  font-size: 0.85rem;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--border-radius-md);
+  background: var(--surface-container);
+  color: var(--text-primary);
+  width: 200px;
+  outline: none;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+#project-search::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.7;
+}
+
+#project-search:focus {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px rgba(var(--accent-primary-rgb, 59, 130, 246), 0.15);
+}
+
+.search-clear-btn {
+  position: absolute;
+  right: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 1rem;
+  cursor: pointer;
+  border-radius: 50%;
+  padding: 0;
+  line-height: 1;
+}
+
+.search-clear-btn:hover {
+  background-color: var(--surface-container-high);
+  color: var(--text-primary);
 }
 
 .hide-completed-label {
@@ -558,6 +640,39 @@ html {
   min-height: 0;
 }
 
+/* Group header row (Classroom / PM / Engineering) */
+.group-header-cell {
+  padding: 0.35rem 0.75rem;
+  font-weight: 700;
+  font-size: 0.75rem;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-primary);
+}
+
+.group-header-cell.group-spacer {
+  background-color: var(--surface-container);
+}
+
+.group-header-cell.group-classroom {
+  background-color: #B39DDB;
+  color: #000;
+  border-radius: 4px 4px 0 0;
+}
+
+.group-header-cell.group-pm {
+  background-color: #80CBC4;
+  color: #000;
+  border-radius: 4px 4px 0 0;
+}
+
+.group-header-cell.group-engineering {
+  background-color: #A5D6A7;
+  color: #000;
+  border-radius: 4px 4px 0 0;
+}
+
 /* Header cells - no longer need position: sticky */
 .header-cell {
   background-color: var(--surface-container);
@@ -629,10 +744,10 @@ html {
 .tracking-item-header[data-tracking-index="6"] { background-color: var(--tracking-6-color); }   /* Sample Approval */
 .tracking-item-header[data-tracking-index="7"] { background-color: var(--tracking-7-color); }   /* Color Log */
 .tracking-item-header[data-tracking-index="8"] { background-color: var(--tracking-8-color); }   /* Final Optimizer HRS */
-.tracking-item-header[data-tracking-index="9"] { background-color: var(--tracking-9-color); }   /* Final Tracking */
+.tracking-item-header[data-tracking-index="9"] { background-color: var(--tracking-9-color); }   /* Rebar/Drilling Layout */
 .tracking-item-header[data-tracking-index="10"] { background-color: var(--tracking-10-color); } /* Labels */
-.tracking-item-header[data-tracking-index="11"] { background-color: var(--tracking-11-color); } /* Batching Sheets */
-.tracking-item-header[data-tracking-index="12"] { background-color: var(--tracking-12-color); } /* Rebar/Drilling Layout */
+.tracking-item-header[data-tracking-index="11"] { background-color: var(--tracking-11-color); } /* Final Tracking */
+.tracking-item-header[data-tracking-index="12"] { background-color: var(--tracking-12-color); } /* Batching Sheets */
 .tracking-item-header[data-tracking-index="13"] { background-color: var(--tracking-13-color); } /* Casting Layout */
 .tracking-item-header[data-tracking-index="14"] { background-color: var(--tracking-14-color); } /* Inflow Sales Ticket */
 .tracking-item-header[data-tracking-index="15"] { background-color: var(--tracking-15-color); } /* 3D Drawings/Parts List */

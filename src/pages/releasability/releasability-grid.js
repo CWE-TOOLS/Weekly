@@ -84,12 +84,44 @@ export function renderReleasabilityGrid(projects, manualWeeks = []) {
 // ============================================================================
 
 /**
- * Create the header row with tracking item labels
- * @returns {Array<HTMLElement>} Array of header cell elements
+ * Department group definitions for column headers.
+ * Each group spans a range of tracking item indices.
+ */
+const COLUMN_GROUPS = [
+  { label: 'Classroom', startIndex: 0, endIndex: 2, className: 'group-classroom' },
+  { label: 'Project Manager', startIndex: 3, endIndex: 10, className: 'group-pm' },
+  { label: 'Engineering', startIndex: 11, endIndex: 17, className: 'group-engineering' }
+];
+
+/**
+ * Create the header rows (group header + tracking item headers)
+ * @returns {Array<HTMLElement>} Array of header cell elements (group row first, then item row)
  */
 function createHeaderRow() {
   const cells = [];
 
+  // === Group header row ===
+  // Empty cell spanning Project column
+  const groupProjectSpacer = document.createElement('div');
+  groupProjectSpacer.className = 'group-header-cell group-spacer';
+  cells.push(groupProjectSpacer);
+
+  // Empty cell spanning Start Date column
+  const groupDateSpacer = document.createElement('div');
+  groupDateSpacer.className = 'group-header-cell group-spacer';
+  cells.push(groupDateSpacer);
+
+  // Group header cells spanning tracking columns
+  COLUMN_GROUPS.forEach(group => {
+    const span = group.endIndex - group.startIndex + 1;
+    const groupCell = document.createElement('div');
+    groupCell.className = `group-header-cell ${group.className}`;
+    groupCell.textContent = group.label;
+    groupCell.style.gridColumn = `span ${span}`;
+    cells.push(groupCell);
+  });
+
+  // === Tracking item header row ===
   // Project name header (first column)
   const projectHeader = document.createElement('div');
   projectHeader.className = 'header-cell project-header';
