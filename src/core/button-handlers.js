@@ -17,7 +17,7 @@ import * as supabaseService from '../services/supabase-service.js';
 import * as dataService from '../services/data-service.js';
 import { clearCache } from '../services/sheets-cache-service.js';
 import { showLoading, hideError, showSuccessNotification } from '../utils/ui-utils.js';
-import { loadAddTaskModal, loadProjectModal, loadPrintModal } from './modal-loader.js';
+import { loadAddTaskModal, loadProjectModal, loadPrintModal, loadRevenueModal } from './modal-loader.js';
 import { showPasswordModal, lockEditing } from '../components/modals/password-modal.js';
 import { makeTaskCardEditable } from './task-card-editor.js';
 
@@ -77,6 +77,15 @@ export function initializeButtonHandlers() {
         printBtn.addEventListener('click', async () => {
             const module = await loadPrintModal();
             module.showPrintModal();
+        });
+    }
+
+    // Revenue button (lazy loaded)
+    const revenueBtn = document.getElementById('revenue-btn');
+    if (revenueBtn) {
+        revenueBtn.addEventListener('click', async () => {
+            const module = await loadRevenueModal();
+            module.showRevenueModal();
         });
     }
 

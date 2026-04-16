@@ -23,8 +23,9 @@
  */
 
 import { getFilteredTasks, getAllTasks, injectSyntheticTasks } from '../core/state.js';
+import { parseDate } from '../utils/date-utils.js';
 import { getMonday, getLocalDateString, createWeekDates } from '../utils/date-utils.js';
-import { DEPARTMENT_ORDER, normalizeDepartmentClass } from '../config/department-config.js';
+import { DEPARTMENT_ORDER, normalizeDepartmentClass, DEPARTMENT_COLORS } from '../config/department-config.js';
 import { groupTasksByDepartment, groupTasksByDate } from '../utils/department-utils.js';
 import { createTaskCard, createTaskCardPlaceholder } from './task-card.js';
 import { generateAllSyntheticTasks } from '../utils/schedule-utils.js';
@@ -95,6 +96,68 @@ function createDepartmentLabel(dept, maxTasksInRow) {
     return deptLabel;
 }
 
+const HOURLY_RATE = 135;
+
+/**
+ * Build a lookup of dateKey -> department -> total hours from all non-manual tasks
+ * @returns {Object}
+ */
+function buildHoursLookup() {
+    const tasks = getAllTasks();
+    const lookup = {};
+    for (const task of tasks) {
+        if (!task.date || !task.department || task.isManual) continue;
+        const hours = parseFloat(task.hours) || 0;
+        if (hours === 0) continue;
+        const parsed = parseDate(task.date);
+        if (!parsed) continue;
+        const y = parsed.getFullYear();
+        const m = String(parsed.getMonth() + 1).padStart(2, '0');
+        const d = String(parsed.getDate()).padStart(2, '0');
+        const dateKey = `${y}-${m}-${d}`;
+        if (!lookup[dateKey]) lookup[dateKey] = {};
+        if (!lookup[dateKey][task.department]) lookup[dateKey][task.department] = 0;
+        lookup[dateKey][task.department] += hours;
+    }
+    return lookup;
+}
+
+/**
+ * Create a thin revenue summary row for a department
+ * @param {string} dept - Department name
+ * @param {Date[]} weekDates - Array of dates for the week
+ * @param {Object} hoursLookup - dateKey -> dept -> hours lookup
+ * @returns {DocumentFragment}
+ */
+function createRevenueSummaryRow(dept, weekDates, hoursLookup) {
+    const fragment = document.createDocumentFragment();
+
+    // Only 6 day cells (no label cell — department label already spans this row)
+    weekDates.forEach(date => {
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        const dateKey = `${y}-${m}-${d}`;
+
+        const hours = (hoursLookup[dateKey] && hoursLookup[dateKey][dept]) || 0;
+        const revenue = hours * HOURLY_RATE;
+
+        const cell = document.createElement('div');
+        cell.className = 'grid-cell dept-revenue-cell';
+        const colorKey = normalizeDepartmentClass(dept);
+        const colors = DEPARTMENT_COLORS[colorKey];
+        if (colors) {
+            cell.style.borderBottomColor = colors.background;
+        }
+        if (revenue > 0) {
+            cell.textContent = revenue.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 });
+        }
+        fragment.appendChild(cell);
+    });
+
+    return fragment;
+}
+
 /**
  * Create grid cell with task card or placeholder
  * @param {Object} task - Task object (or undefined for placeholder)
@@ -140,6 +203,7 @@ function createGridCell(task, date, dept, rowClass, isEditingUnlocked) {
 function renderDepartmentRows(grid, sortedDepts, tasksByDept, weekDates, maxTasksPerDept, isEditingUnlocked) {
     const allRowClasses = new Set();
     const weekDateStrings = weekDates.map(d => d.toDateString());
+    const hoursLookup = buildHoursLookup();
 
     sortedDepts.forEach(dept => {
         const deptData = tasksByDept[dept];
@@ -160,7 +224,7 @@ function renderDepartmentRows(grid, sortedDepts, tasksByDept, weekDates, maxTask
         const rowsToRender = Math.max(primaryMaxTasks, 0);
 
         if (rowsToRender > 0) {
-            grid.appendChild(createDepartmentLabel(dept, rowsToRender));
+            grid.appendChild(createDepartmentLabel(dept, rowsToRender + 1));
             for (let i = 0; i < rowsToRender; i++) {
                 const rowClass = `dept-row-${normalizeDepartmentClass(dept)}-${i}`;
                 allRowClasses.add(rowClass);
@@ -170,6 +234,8 @@ function renderDepartmentRows(grid, sortedDepts, tasksByDept, weekDates, maxTask
                     grid.appendChild(createGridCell(task, date, dept, rowClass, isEditingUnlocked));
                 });
             }
+            // Revenue summary row
+            grid.appendChild(createRevenueSummaryRow(dept, weekDates, hoursLookup));
         }
 
         // --- Render Synthetic Department (if exists) ---

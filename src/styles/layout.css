@@ -175,6 +175,23 @@ header p {
   border-right: none;
 }
 
+/* Department Revenue Summary Row */
+.dept-revenue-cell {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #6b7280;
+  text-align: center;
+  padding: 3px 6px;
+  border-bottom: 3px solid #d1d5db;
+  border-right: 2px solid var(--border-primary);
+  background: #f9fafb;
+  min-height: 0;
+  height: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 /* Department Labels */
 .department-label {
   font-weight: 600;

@@ -88,6 +88,22 @@ export async function loadPrintModal() {
 }
 
 /**
+ * Lazy load and initialize revenue modal
+ * @returns {Promise<Object>} Revenue modal module
+ */
+export async function loadRevenueModal() {
+    const module = await lazyLoad(
+        () => import('../components/modals/revenue-modal.js'),
+        'revenue-modal'
+    );
+    if (!initializedModals.has('revenue-modal')) {
+        module.initializeRevenueModal();
+        initializedModals.add('revenue-modal');
+    }
+    return module;
+}
+
+/**
  * Show project modal (lazy loaded)
  * Exposed globally for context menu
  * @param {string} projectName - Project name
@@ -162,6 +178,10 @@ export function preloadFeaturesOnIdle() {
         {
             importer: () => import('../components/modals/add-task-modal.js'),
             key: 'add-task-modal'
+        },
+        {
+            importer: () => import('../components/modals/revenue-modal.js'),
+            key: 'revenue-modal'
         },
         {
             importer: () => import('../features/context-menu/context-menu.js'),

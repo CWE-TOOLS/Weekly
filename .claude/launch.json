@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "weekly-schedule",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["live-server", "--port=8090", "--no-browser"],
+      "port": 8090
+    }
+  ]
+}
