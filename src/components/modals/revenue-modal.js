@@ -7,7 +7,7 @@
 
 import { getAllTasks } from '../../core/state.js';
 import { normalizeDepartment, normalizeDepartmentClass, DEPARTMENT_COLORS } from '../../config/department-config.js';
-import { parseDate } from '../../utils/date-utils.js';
+import { parseDate, getWeekMonth, getMonday } from '../../utils/date-utils.js';
 import { logger } from '../../utils/logger.js';
 
 // ============================================================================
@@ -75,60 +75,37 @@ function formatWeekDate(date) {
 }
 
 /**
- * Get the Monday on or before a given date.
- * @param {Date} date
- * @returns {Date}
- */
-function getMondayOnOrBefore(date) {
-    const d = new Date(date);
-    const dayOfWeek = d.getDay(); // 0=Sun, 1=Mon, ...
-    const diff = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-    d.setDate(d.getDate() - diff);
-    return d;
-}
-
-/**
- * Calculate all Mon-Sat weeks that overlap with a given month.
+ * Calculate all Mon-Sat weeks that belong to a given month,
+ * using the majority-weekday rule (Mon-Fri) from the main schedule system.
  * @param {number} year
  * @param {number} month - 0-indexed
  * @returns {Array<{ monday: Date, days: Date[] }>}
  */
 function getWeeksInMonth(year, month) {
-    const firstOfMonth = new Date(year, month, 1);
-    const lastOfMonth = new Date(year, month + 1, 0);
     const weeks = [];
 
-    let monday = getMondayOnOrBefore(firstOfMonth);
+    // Start from the Monday of the week containing the 1st of the month
+    const firstOfMonth = new Date(year, month, 1);
+    let monday = getMonday(firstOfMonth);
 
-    while (true) {
-        const days = [];
-        for (let i = 0; i < 6; i++) { // Mon through Sat
-            const day = new Date(monday);
-            day.setDate(monday.getDate() + i);
-            days.push(day);
-        }
+    // Scan enough weeks to cover the month (go back 1 week early to catch edge cases)
+    monday.setDate(monday.getDate() - 7);
 
-        // Check if at least one day falls within the month
-        const hasOverlap = days.some(d =>
-            d.getMonth() === month && d.getFullYear() === year
-        );
-
-        if (!hasOverlap && monday > lastOfMonth) {
-            break;
-        }
-
-        if (hasOverlap) {
+    for (let i = 0; i < 8; i++) {
+        // Use the system's majority-weekday rule to determine which month this week belongs to
+        if (getWeekMonth(monday) === month && monday.getFullYear() === year) {
+            const days = [];
+            for (let d = 0; d < 6; d++) { // Mon through Sat
+                const day = new Date(monday);
+                day.setDate(monday.getDate() + d);
+                days.push(day);
+            }
             weeks.push({ monday: new Date(monday), days });
         }
 
         // Advance to next Monday
+        monday = new Date(monday);
         monday.setDate(monday.getDate() + 7);
-
-        // Safety: stop if we're well past the month
-        if (monday.getMonth() > month + 1 || (monday.getMonth() === 0 && month === 11)) {
-            break;
-        }
-        if (weeks.length > 6) break; // No month has more than 6 weeks
     }
 
     return weeks;
