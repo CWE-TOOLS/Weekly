@@ -175,6 +175,23 @@ header p {
   border-right: none;
 }
 
+/* Google Translate Widget */
+.translate-widget {
+  display: inline-block;
+}
+.translate-widget .goog-te-gadget {
+  font-size: 0 !important;
+}
+.translate-widget select {
+  padding: 6px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+body { top: 0 !important; }
+.goog-logo-link, .goog-te-gadget span { display: none !important; }
+
 /* Department Revenue Summary Row */
 .dept-revenue-cell {
   font-size: 0.85rem;
