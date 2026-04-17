@@ -118,7 +118,11 @@
                 <button id="next-week-btn">Next &rarr;</button>
             </div>
             <div class="action-group">
-               <div id="google_translate_element" class="translate-widget"></div>
+               <select id="lang-select" class="lang-select" aria-label="Language">
+                   <option value="en">English</option>
+                   <option value="es">Español</option>
+               </select>
+               <div id="google_translate_element" class="translate-widget-hidden"></div>
                <button id="refresh-btn">Refresh Data</button>
                 <button id="revenue-btn" class="icon-btn" aria-label="Revenue Summary" title="Revenue Summary">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -437,12 +441,40 @@
       function googleTranslateElementInit() {
         new google.translate.TranslateElement({
           pageLanguage: 'en',
-          includedLanguages: 'es,pt,fr,zh-CN,vi',
+          includedLanguages: 'es',
           layout: google.translate.TranslateElement.InlineLayout.SIMPLE,
           autoDisplay: false
         }, 'google_translate_element');
       }
     </script>
     <script type="text/javascript" src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
+    <script type="text/javascript">
+      (function() {
+        function setLang(lang) {
+          // Google Translate uses a cookie to remember language; also trigger via the hidden select
+          document.cookie = 'googtrans=/en/' + lang + ';path=/';
+          document.cookie = 'googtrans=/en/' + lang + ';path=/;domain=' + location.hostname;
+          const select = document.querySelector('.goog-te-combo');
+          if (select) {
+            select.value = lang === 'en' ? '' : lang;
+            select.dispatchEvent(new Event('change'));
+          } else {
+            // If widget hasn't loaded yet, reload with cookie set
+            location.reload();
+          }
+        }
+        // Restore on load from cookie
+        function getCurrentLang() {
+          const m = document.cookie.match(/googtrans=\/en\/(\w[\w-]*)/);
+          return m ? m[1] : 'en';
+        }
+        document.addEventListener('DOMContentLoaded', () => {
+          const customSelect = document.getElementById('lang-select');
+          if (!customSelect) return;
+          customSelect.value = getCurrentLang();
+          customSelect.addEventListener('change', (e) => setLang(e.target.value));
+        });
+      })();
+    </script>
 </body>
 </html>

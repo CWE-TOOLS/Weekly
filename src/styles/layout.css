@@ -175,21 +175,24 @@ header p {
   border-right: none;
 }
 
-/* Google Translate Widget */
-.translate-widget {
-  display: inline-block;
-}
-.translate-widget .goog-te-gadget {
-  font-size: 0 !important;
-}
-.translate-widget select {
+/* Custom Language Selector (Google Translate backend) */
+.lang-select {
   padding: 6px 10px;
   border: 1px solid #d1d5db;
   border-radius: 6px;
   font-size: 13px;
   cursor: pointer;
+  background: #fff;
 }
+.lang-select:hover {
+  border-color: #9ca3af;
+}
+.translate-widget-hidden {
+  display: none !important;
+}
+/* Prevent Google's top banner from pushing content down */
 body { top: 0 !important; }
+.skiptranslate, .goog-te-banner-frame { display: none !important; }
 .goog-logo-link, .goog-te-gadget span { display: none !important; }
 
 /* Department Revenue Summary Row */
