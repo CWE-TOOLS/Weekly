@@ -9,7 +9,7 @@
 
 import { logger } from '../utils/logger.js';
 import * as state from './state.js';
-import { loadWeekIndex, loadWeekDate } from './storage.js';
+import { loadWeekIndex, loadWeekDate, removeState, STORAGE_KEYS } from './storage.js';
 import { renderWeekGrid } from '../components/week-renderer.js';
 import { getMonday, parseDate, getLocalDateString, createWeekDates, clearParseDateCache } from '../utils/date-utils.js';
 import { equalizeAllCardHeights, setGridWidths, scrollToWeek } from '../utils/grid-layout-manager.js';
@@ -84,6 +84,21 @@ function groupTasksByWeek(filteredTasks) {
         }
     }
 
+    // Filter out weeks that contain only manual tasks (or are empty).
+    // The current week is always kept so navigation has a stable anchor.
+    const currentMondayString = getLocalDateString(currentMonday);
+    allMondays = allMondays.filter(monday => {
+        const mondayString = getLocalDateString(monday);
+        if (mondayString === currentMondayString) return true;
+        const weekTasks = tasksByWeek[mondayString] || [];
+        const hasSheetsTask = weekTasks.some(t => !t.isManual);
+        if (!hasSheetsTask) {
+            delete tasksByWeek[mondayString];
+            return false;
+        }
+        return true;
+    });
+
     return { tasksByWeek, allMondays };
 }
 
@@ -118,36 +133,45 @@ function buildMaxTasksPerDept(filteredTasks) {
  * @returns {number} Resolved week index
  */
 function resolveWeekIndex(allMondays) {
-    // 1. Use in-session state if already set
+    // 1. Use in-session state if already set (handles re-renders within a session)
     let currentViewedWeekIndex = state.getCurrentViewedWeekIndex();
     if (currentViewedWeekIndex >= 0 && currentViewedWeekIndex < allMondays.length) {
         return currentViewedWeekIndex;
     }
 
-    // 2. Try saved week date (survives data changes — matches by calendar date, not position)
+    const currentMonday = getMonday(new Date());
+    const currentMondayStr = getLocalDateString(currentMonday);
+
+    // 2. Try saved week date — but ONLY if it's the current week or a future week.
+    //    Past-dated saved weeks are stale (user navigated to an old week months ago,
+    //    closed the tab, and we don't want to strand them there on reopen).
     const savedWeekDate = loadWeekDate();
     if (savedWeekDate) {
-        const idx = allMondays.findIndex(d => getLocalDateString(d) === savedWeekDate);
-        if (idx !== -1) {
-            return idx;
+        if (savedWeekDate >= currentMondayStr) {
+            const idx = allMondays.findIndex(d => getLocalDateString(d) === savedWeekDate);
+            if (idx !== -1) {
+                return idx;
+            }
+        } else {
+            // Clear stale saved week so it doesn't keep getting reconsidered
+            removeState(STORAGE_KEYS.CURRENT_WEEK_DATE);
         }
     }
 
-    // 3. Fallback to positional index (legacy support)
-    const savedWeekIndex = loadWeekIndex();
-    if (savedWeekIndex !== null && savedWeekIndex >= 0 && savedWeekIndex < allMondays.length) {
-        return savedWeekIndex;
+    // Legacy positional index is intentionally ignored — it's unreliable across
+    // data updates (index 5 means a different week today than it did yesterday).
+    // Clear it if present so it doesn't linger forever.
+    if (loadWeekIndex(null) !== null) {
+        removeState(STORAGE_KEYS.CURRENT_WEEK_INDEX);
     }
 
-    // 4. Default to current week
-    const currentMonday = getMonday(new Date());
-    const currentMondayStr = getLocalDateString(currentMonday);
+    // 3. Default to current week
     currentViewedWeekIndex = allMondays.findIndex(d => getLocalDateString(d) === currentMondayStr);
     if (currentViewedWeekIndex !== -1) {
         return currentViewedWeekIndex;
     }
 
-    // 5. Current week not in data — find nearest future week, or last week
+    // 4. Current week not in data — find nearest future week, or last week
     currentViewedWeekIndex = allMondays.findIndex(d => d > currentMonday);
     return currentViewedWeekIndex !== -1 ? currentViewedWeekIndex : allMondays.length - 1;
 }
