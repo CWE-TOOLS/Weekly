@@ -39,7 +39,9 @@ import { logger } from '../utils/logger.js';
  */
 function createHeaderRow(weekDates) {
     const fragment = document.createDocumentFragment();
-    const todayStr = new Date().toDateString();
+    // "Today" is anchored to America/New_York (the business timezone),
+    // independent of the viewer's machine clock.
+    const todayNY = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
 
     const deptHeader = document.createElement('div');
     deptHeader.className = 'grid-header';
@@ -52,7 +54,9 @@ function createHeaderRow(weekDates) {
 
         const container = document.createElement('div');
         container.className = 'date-container';
-        if (date.toDateString() === todayStr) {
+        const dateKey = date.toLocaleDateString('en-CA'); // YYYY-MM-DD (local)
+        container.dataset.date = dateKey;
+        if (dateKey === todayNY) {
             container.classList.add('today-highlight');
         }
 

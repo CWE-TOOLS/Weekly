@@ -54,6 +54,47 @@ let resizeTimeout = null;
 let isPageVisible = true;
 let lastVisibilityChange = Date.now();
 
+// Today-highlight tracking
+let lastKnownNYDate = getNYDateString();
+let dateCheckIntervalId = null;
+
+/**
+ * Get today's date in America/New_York timezone as YYYY-MM-DD string.
+ * The business operates on NY time, so "today" is anchored there regardless
+ * of where the viewer's machine clock is set.
+ */
+function getNYDateString() {
+    return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+}
+
+/**
+ * Move the .today-highlight class to the date-container matching today's NY date.
+ * Lightweight DOM-only operation — does not trigger a re-render.
+ */
+function refreshTodayHighlight() {
+    const today = getNYDateString();
+    document.querySelectorAll('.date-container.today-highlight').forEach(el => {
+        if (el.dataset.date !== today) {
+            el.classList.remove('today-highlight');
+        }
+    });
+    document.querySelectorAll(`.date-container[data-date="${today}"]`).forEach(el => {
+        el.classList.add('today-highlight');
+    });
+}
+
+/**
+ * Check if the NY date has rolled over since last check; refresh highlight if so.
+ */
+function checkDateRollover() {
+    const today = getNYDateString();
+    if (today !== lastKnownNYDate) {
+        logger.debug(`📅 Date rolled over: ${lastKnownNYDate} → ${today}`);
+        lastKnownNYDate = today;
+        refreshTodayHighlight();
+    }
+}
+
 /**
  * Initialize global event listeners
  */
@@ -80,6 +121,12 @@ export function initializeGlobalListeners() {
     // Note: Specific shortcuts handled by keyboard-shortcuts.js
     addListener(document, 'keydown', handleGlobalKeydown);
 
+    // Hourly date-rollover check — keeps today-highlight correct without
+    // requiring a hard refresh when the day changes.
+    if (dateCheckIntervalId === null) {
+        dateCheckIntervalId = setInterval(checkDateRollover, 60 * 60 * 1000);
+    }
+
     logger.debug('✅ Global event listeners initialized');
 }
 
@@ -94,6 +141,11 @@ export function cleanupGlobalListeners() {
     });
 
     listeners.length = 0;
+
+    if (dateCheckIntervalId !== null) {
+        clearInterval(dateCheckIntervalId);
+        dateCheckIntervalId = null;
+    }
 
     logger.debug('✅ Global event listeners cleaned up');
 }
@@ -226,6 +278,10 @@ function handleVisibilityChange() {
 
     if (isPageVisible && !wasVisible) {
         logger.debug('👁️ Page became visible');
+
+        // Check for date rollover while tab was hidden — covers the common
+        // "left tab open overnight" case the moment the user returns.
+        checkDateRollover();
 
         // If page was hidden for more than 5 minutes, suggest refresh
         if (timeSinceLastChange > 5 * 60 * 1000) {
