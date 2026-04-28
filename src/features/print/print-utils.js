@@ -259,6 +259,18 @@ function detectPhaseStarts(weekTasks, allTasks, weekStart, weekEnd) {
     // Track processed combinations to avoid duplicates
     const processed = new Set();
 
+    // Department-specific code-prefix rules.
+    // For these departments, a project counts as a "phase start" any week that
+    // contains a task whose code (task.value) begins with the given letter,
+    // regardless of whether earlier tasks for that project+department exist.
+    //   - Crating: code starts with 'B' (e.g. "Build", "Build Crate")
+    //   - Special: code starts with 'S' (e.g. "Strip", "Strips")
+    // Match is case-insensitive and tolerates leading/trailing whitespace.
+    const CODE_PREFIX_RULES = {
+        'Crating': 'b',
+        'Special': 's'
+    };
+
     // Check each task in the selected week
     for (const task of weekTasks) {
         if (!task.project || !task.department || !task.date) continue;
@@ -266,6 +278,29 @@ function detectPhaseStarts(weekTasks, allTasks, weekStart, weekEnd) {
         const key = `${task.project}|${task.department}`;
         if (processed.has(key)) continue;
 
+        // --- Special-case rule: code-prefix departments ---
+        const requiredPrefix = CODE_PREFIX_RULES[task.department];
+        if (requiredPrefix) {
+            const code = (task.value || '').trim().toLowerCase();
+            if (!code.startsWith(requiredPrefix)) {
+                // This task doesn't satisfy the rule; skip it (but don't mark
+                // the project+dept processed — a later task in the same week
+                // might satisfy it).
+                continue;
+            }
+
+            if (!phaseStarts.has(task.department)) {
+                phaseStarts.set(task.department, []);
+            }
+            phaseStarts.get(task.department).push({
+                project: task.project,
+                date: task.date
+            });
+            processed.add(key);
+            continue;
+        }
+
+        // --- Default rule: earliest-task-date in this week ---
         // Get all tasks for this project+department combination across all weeks
         const projectDeptTasks = allTasks.filter(t =>
             t.project === task.project &&
