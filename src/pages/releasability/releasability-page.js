@@ -35,7 +35,7 @@ import {
   STATUS_DISPLAY
 } from '../../config/releasability-config.js';
 import { renderReleasabilityGrid, getUniqueDepartments, setProjectActions } from './releasability-grid.js';
-import { getMonday } from '../../utils/date-utils.js';
+import { getMonday, getWeekMonth, getWeekOfMonth } from '../../utils/date-utils.js';
 import { normalizeProjectName } from '../../utils/ui-utils.js';
 import {
   loadAllReleasabilityData,
@@ -501,12 +501,27 @@ function handlePrint() {
   const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const fullMonthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
-  // Build week label helper
+  // Build week label helper — matches the "Week N: MMM DD-DD" scheme used on the board
+  function getWeekInfo(weekKey) {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(weekKey)) {
+      const monday = new Date(weekKey + 'T00:00:00');
+      const weekMonth = getWeekMonth(monday); // 0-11 — month this week "belongs to"
+      const weekNum = getWeekOfMonth(monday, weekMonth);
+      // Use the year of the week-month, not the calendar Monday (handles Dec/Jan boundaries)
+      const ref = new Date(monday.getTime());
+      ref.setDate(monday.getDate() + 3); // Thursday — always in the week's month
+      const year = ref.getFullYear();
+      return { monday, weekMonth, weekNum, year };
+    }
+    return null;
+  }
+
   function getWeekLabel(weekKey) {
     const mw = manualWeeks.find(w => typeof w === 'object' && w.id === weekKey);
     if (mw) return mw.name || mw.id;
-    if (/^\d{4}-\d{2}-\d{2}$/.test(weekKey)) {
-      const monday = new Date(weekKey + 'T00:00:00');
+    const info = getWeekInfo(weekKey);
+    if (info) {
+      const { monday, weekMonth, weekNum } = info;
       const saturday = new Date(monday);
       saturday.setDate(saturday.getDate() + 5);
       const startMonth = monthNames[monday.getMonth()];
@@ -516,55 +531,95 @@ function handlePrint() {
       const dateRange = monday.getMonth() === saturday.getMonth()
         ? `${startMonth} ${startDay}-${endDay}`
         : `${startMonth} ${startDay}-${endMonth} ${endDay}`;
-      return `Week of ${dateRange}`;
+      return `Week ${weekNum}: ${dateRange}`;
     }
     return weekKey;
   }
 
-  // Collect unique months from date-based weeks
-  const months = new Map();
+  // Group weeks by the week-month (the month the week "belongs to" per the project's scheme),
+  // plus a "Manual Weeks" bucket
+  const groups = new Map(); // groupKey -> { label, weeks: [keys] }
+  const MANUAL_KEY = '__manual__';
   weekKeys.forEach(key => {
-    if (/^\d{4}-\d{2}-\d{2}$/.test(key)) {
-      const d = new Date(key + 'T00:00:00');
-      const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      if (!months.has(monthKey)) {
-        months.set(monthKey, `${fullMonthNames[d.getMonth()]} ${d.getFullYear()}`);
+    const info = getWeekInfo(key);
+    if (info) {
+      const { weekMonth, year } = info;
+      const groupKey = `${year}-${String(weekMonth + 1).padStart(2, '0')}`;
+      if (!groups.has(groupKey)) {
+        groups.set(groupKey, { label: `${fullMonthNames[weekMonth]} ${year}`, weeks: [] });
       }
+      groups.get(groupKey).weeks.push(key);
+    } else {
+      if (!groups.has(MANUAL_KEY)) {
+        groups.set(MANUAL_KEY, { label: 'Manual Weeks', weeks: [] });
+      }
+      groups.get(MANUAL_KEY).weeks.push(key);
     }
   });
+
+  // Determine the "current week-month" and "next week-month" for default state
+  const todayMonday = getMonday(new Date());
+  const currentWeekMonth = getWeekMonth(todayMonday);
+  const currentRef = new Date(todayMonday.getTime());
+  currentRef.setDate(todayMonday.getDate() + 3);
+  const currentMonthKey = `${currentRef.getFullYear()}-${String(currentWeekMonth + 1).padStart(2, '0')}`;
+  const nextMonthDate = new Date(currentRef.getFullYear(), currentWeekMonth + 1, 1);
+  const nextMonthKey = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}`;
+
+  // Default selection: next month's weeks only
+  const defaultSelectedGroup = nextMonthKey;
+
+  // Build group HTML — collapsible sections with master checkbox.
+  // By default, only the next-month group is checked and auto-expanded.
+  const groupsHTML = Array.from(groups.entries()).map(([groupKey, group]) => {
+    const isDefaultSelected = groupKey === defaultSelectedGroup;
+    const isOpen = isDefaultSelected; // expand the default group
+    const totalProjects = group.weeks.reduce((sum, k) => sum + (projectsByWeek[k] || []).length, 0);
+    const weeksHTML = group.weeks.map(key => `
+      <label class="print-week-row" data-week="${key}" data-group="${groupKey}" style="display: flex; align-items: center; padding: 6px 8px 6px 32px; cursor: pointer; gap: 8px; font-size: 13px; color: #333;">
+        <input type="checkbox" value="${key}"${isDefaultSelected ? ' checked' : ''} style="margin: 0;" />
+        <span style="flex: 1;">${getWeekLabel(key)}</span>
+        <span style="color: #999; font-size: 11px;">(${(projectsByWeek[key] || []).length})</span>
+      </label>
+    `).join('');
+    return `
+      <div class="print-group" data-group="${groupKey}" style="border-bottom: 1px solid #f0f0f0;">
+        <div class="print-group-header" style="display: flex; align-items: center; padding: 8px 10px; gap: 8px; cursor: pointer; background: #fafafa; user-select: none;">
+          <span class="print-group-toggle" style="display: inline-block; width: 12px; color: #666; transition: transform 0.15s; transform: rotate(${isOpen ? '90deg' : '0deg'});">▶</span>
+          <input type="checkbox" class="print-group-master" data-group="${groupKey}"${isDefaultSelected ? ' checked' : ''} style="margin: 0;" onclick="event.stopPropagation();" />
+          <span style="font-weight: 600; font-size: 13px; color: #333;">${group.label}</span>
+          <span class="print-group-count" style="margin-left: auto; font-size: 11px; color: #777;">${group.weeks.length} weeks · ${totalProjects} projects</span>
+        </div>
+        <div class="print-group-body" style="display: ${isOpen ? 'block' : 'none'};">
+          ${weeksHTML}
+        </div>
+      </div>
+    `;
+  }).join('');
 
   // Build modal
   const modal = document.createElement('div');
   modal.className = 'modal';
   modal.innerHTML = `
-    <div class="modal-content" style="max-width: 420px;">
+    <div class="modal-content" style="max-width: 460px;">
       <div class="modal-header">
         <h2>Print Report</h2>
         <button class="modal-close">&times;</button>
       </div>
       <div class="modal-body">
-        <div style="margin-bottom: 16px;">
-          <label style="font-weight: 600; font-size: 14px; display: block; margin-bottom: 8px;">Filter by Month</label>
-          <select id="print-month-filter" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 13px;">
-            <option value="all">All Months</option>
-            ${Array.from(months.entries()).map(([val, label]) => `<option value="${val}">${label}</option>`).join('')}
-          </select>
+        <div style="display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap;">
+          <button class="print-preset" data-preset="next-month" style="padding: 6px 12px; border: 1px solid #2563eb; border-radius: 999px; background: #2563eb; color: white; cursor: pointer; font-size: 12px; font-weight: 500;">Next Month</button>
+          <button class="print-preset" data-preset="current-month" style="padding: 6px 12px; border: 1px solid #ccc; border-radius: 999px; background: white; color: #333; cursor: pointer; font-size: 12px; font-weight: 500;">Current Month</button>
+          <button class="print-preset" data-preset="all" style="padding: 6px 12px; border: 1px solid #ccc; border-radius: 999px; background: white; color: #333; cursor: pointer; font-size: 12px; font-weight: 500;">All</button>
+          <button class="print-preset" data-preset="none" style="padding: 6px 12px; border: 1px solid #ccc; border-radius: 999px; background: white; color: #333; cursor: pointer; font-size: 12px; font-weight: 500;">None</button>
         </div>
-        <div>
-          <label style="font-weight: 600; font-size: 14px; display: block; margin-bottom: 8px;">Select Weeks</label>
-          <div id="print-week-list" style="max-height: 260px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 6px; padding: 4px;">
-            ${weekKeys.map(key => `
-              <label style="display: flex; align-items: center; padding: 6px 8px; cursor: pointer; gap: 8px; font-size: 13px;" data-week="${key}" data-month="${/^\d{4}-\d{2}-\d{2}$/.test(key) ? key.substring(0, 7) : ''}">
-                <input type="checkbox" value="${key}" checked style="margin: 0;" />
-                ${getWeekLabel(key)}
-                <span style="color: #999; margin-left: auto; font-size: 11px;">(${(projectsByWeek[key] || []).length})</span>
-              </label>
-            `).join('')}
-          </div>
+        <div id="print-week-list" style="max-height: 320px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 6px;">
+          ${groupsHTML}
         </div>
-        <div style="display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end;">
-          <button id="print-cancel-btn" style="padding: 8px 16px; border: 1px solid #ccc; border-radius: 6px; background: white; cursor: pointer; font-size: 13px;">Cancel</button>
-          <button id="print-confirm-btn" style="padding: 8px 16px; border: none; border-radius: 6px; background: #2563eb; color: white; cursor: pointer; font-size: 13px; font-weight: 500;">Print</button>
+        <div id="print-summary" style="margin-top: 10px; font-size: 12px; color: #666; text-align: center;"></div>
+        <div style="display: flex; gap: 8px; margin-top: 12px; justify-content: flex-end; align-items: center;">
+          <button id="print-cancel-btn" style="padding: 8px 16px; border: 1px solid #ccc; border-radius: 6px; background: white; color: #333; cursor: pointer; font-size: 13px;">Cancel</button>
+          <button id="print-confirm-btn" style="padding: 8px 16px; border: none; border-radius: 6px; background: #2563eb; color: white; cursor: pointer; font-size: 13px; font-weight: 500;">Print Selected</button>
         </div>
       </div>
     </div>
@@ -572,43 +627,120 @@ function handlePrint() {
 
   document.body.appendChild(modal);
 
-  // Month filter handler
-  const monthSelect = modal.querySelector('#print-month-filter');
-  const weekLabels = modal.querySelectorAll('#print-week-list label');
-  monthSelect.addEventListener('change', () => {
-    const selected = monthSelect.value;
-    weekLabels.forEach(label => {
-      const cb = label.querySelector('input');
-      const weekMonth = label.dataset.month;
-      if (selected === 'all') {
-        label.style.display = 'flex';
-        cb.checked = true;
-      } else {
-        if (weekMonth === selected) {
-          label.style.display = 'flex';
-          cb.checked = true;
-        } else {
-          label.style.display = 'none';
-          cb.checked = false;
-        }
-      }
+  // ---- Helpers ----
+  const allWeekCheckboxes = () => modal.querySelectorAll('#print-week-list .print-week-row input[type="checkbox"]');
+  const groupWeekCheckboxes = (groupKey) => modal.querySelectorAll(`.print-week-row[data-group="${groupKey}"] input[type="checkbox"]`);
+
+  function updateSummary() {
+    const total = allWeekCheckboxes().length;
+    const checked = modal.querySelectorAll('.print-week-row input[type="checkbox"]:checked').length;
+    const summaryEl = modal.querySelector('#print-summary');
+    summaryEl.textContent = `${checked} of ${total} weeks selected`;
+    const confirmBtn = modal.querySelector('#print-confirm-btn');
+    confirmBtn.disabled = checked === 0;
+    confirmBtn.style.opacity = checked === 0 ? '0.5' : '1';
+    confirmBtn.style.cursor = checked === 0 ? 'not-allowed' : 'pointer';
+  }
+
+  function syncMaster(groupKey) {
+    const master = modal.querySelector(`.print-group-master[data-group="${groupKey}"]`);
+    if (!master) return;
+    const cbs = Array.from(groupWeekCheckboxes(groupKey));
+    const checkedCount = cbs.filter(c => c.checked).length;
+    if (checkedCount === 0) {
+      master.checked = false;
+      master.indeterminate = false;
+    } else if (checkedCount === cbs.length) {
+      master.checked = true;
+      master.indeterminate = false;
+    } else {
+      master.checked = false;
+      master.indeterminate = true;
+    }
+  }
+
+  function syncAllMasters() {
+    modal.querySelectorAll('.print-group-master').forEach(m => syncMaster(m.dataset.group));
+  }
+
+  // ---- Group header click: toggle expand/collapse ----
+  modal.querySelectorAll('.print-group-header').forEach(header => {
+    header.addEventListener('click', (e) => {
+      // Ignore clicks on the master checkbox itself
+      if (e.target.classList.contains('print-group-master')) return;
+      const group = header.closest('.print-group');
+      const body = group.querySelector('.print-group-body');
+      const toggle = header.querySelector('.print-group-toggle');
+      const isOpen = body.style.display !== 'none';
+      body.style.display = isOpen ? 'none' : 'block';
+      toggle.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(90deg)';
     });
   });
 
-  // Close handlers
+  // ---- Master checkbox: toggle all weeks in group ----
+  modal.querySelectorAll('.print-group-master').forEach(master => {
+    master.addEventListener('change', (e) => {
+      e.stopPropagation();
+      const groupKey = master.dataset.group;
+      const shouldCheck = master.checked;
+      groupWeekCheckboxes(groupKey).forEach(cb => { cb.checked = shouldCheck; });
+      master.indeterminate = false;
+      updateSummary();
+    });
+  });
+
+  // ---- Individual week checkbox: sync master + summary ----
+  allWeekCheckboxes().forEach(cb => {
+    cb.addEventListener('change', () => {
+      const row = cb.closest('.print-week-row');
+      syncMaster(row.dataset.group);
+      updateSummary();
+    });
+  });
+
+  // ---- Preset buttons ----
+  modal.querySelectorAll('.print-preset').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const preset = btn.dataset.preset;
+      const allCbs = Array.from(allWeekCheckboxes());
+      if (preset === 'all') {
+        allCbs.forEach(cb => { cb.checked = true; });
+      } else if (preset === 'none') {
+        allCbs.forEach(cb => { cb.checked = false; });
+      } else if (preset === 'current-month') {
+        allCbs.forEach(cb => {
+          const row = cb.closest('.print-week-row');
+          cb.checked = row.dataset.group === currentMonthKey;
+        });
+      } else if (preset === 'next-month') {
+        allCbs.forEach(cb => {
+          const row = cb.closest('.print-week-row');
+          cb.checked = row.dataset.group === nextMonthKey;
+        });
+      }
+      syncAllMasters();
+      updateSummary();
+    });
+  });
+
+  // ---- Close handlers ----
   const closeModal = () => modal.remove();
   modal.querySelector('.modal-close').addEventListener('click', closeModal);
   modal.querySelector('#print-cancel-btn').addEventListener('click', closeModal);
   modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
 
-  // Print handler
+  // ---- Print handler ----
   modal.querySelector('#print-confirm-btn').addEventListener('click', () => {
     const selectedWeeks = new Set();
-    modal.querySelectorAll('#print-week-list input:checked').forEach(cb => selectedWeeks.add(cb.value));
-    closeModal();
+    modal.querySelectorAll('.print-week-row input[type="checkbox"]:checked').forEach(cb => selectedWeeks.add(cb.value));
     if (selectedWeeks.size === 0) return;
+    closeModal();
     executePrint(projects, projectsByWeek, selectedWeeks, getWeekLabel);
   });
+
+  // Initial render
+  syncAllMasters();
+  updateSummary();
 }
 
 function executePrint(projects, projectsByWeek, selectedWeeks, getWeekLabel) {
