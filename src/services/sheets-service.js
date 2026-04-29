@@ -210,19 +210,58 @@ export function parseSheetData(rows) {
                 week: row[0] || '',
                 project: row[1] || '',
                 projectDescription: row[2] || '',
-                description: row[9] || '',
                 date: row[3] || '',
                 department: normalizeDepartment(row[4] || ''),
                 value: row[5] || '',
                 hours: row[6] || '',
-                dayNumber: row[7] || '',
-                totalDays: row[8] || ''
+                projectNumber: (row[7] || '').toString().trim(),
+                castingNumber: (row[8] || '').toString().trim(),
+                dayNumber: '',
+                totalDays: ''
             };
             tasks.push(task);
         }
     }
 
+    computeDayNumbers(tasks);
     return tasks;
+}
+
+/**
+ * Compute dayNumber and totalDays for each task by grouping by
+ * (normalized project, department) and ordering by date ascending.
+ *
+ * The sheet's previous day_number/total_days columns were repurposed as
+ * project_number/casting_number, so these values are now derived rather
+ * than read directly. The supabase task_descriptions rows were originally
+ * keyed against the same 1..N sequence by date, so this should match.
+ *
+ * @param {Array<Object>} tasks
+ */
+function computeDayNumbers(tasks) {
+    const groups = new Map();
+    for (const task of tasks) {
+        if (!task.project || !task.department) continue;
+        const key = `${normalizeProjectName(task.project)}|${task.department}`;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(task);
+    }
+
+    for (const list of groups.values()) {
+        list.sort((a, b) => {
+            const da = Date.parse(a.date) || 0;
+            const db = Date.parse(b.date) || 0;
+            if (da !== db) return da - db;
+            const ai = parseInt((a.id || '').replace('task-', ''), 10) || 0;
+            const bi = parseInt((b.id || '').replace('task-', ''), 10) || 0;
+            return ai - bi;
+        });
+        const total = list.length;
+        list.forEach((t, idx) => {
+            t.dayNumber = String(idx + 1);
+            t.totalDays = String(total);
+        });
+    }
 }
 
 /**
