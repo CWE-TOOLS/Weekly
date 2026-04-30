@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="src/styles/variables.css">
     <link rel="stylesheet" href="src/styles/base.css">
     <link rel="stylesheet" href="src/styles/buttons.css">
-    <link rel="stylesheet" href="src/styles/project-portal.css?v=20260430-33">
+    <link rel="stylesheet" href="src/styles/project-portal.css?v=20260430-43">
 
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 </head>
@@ -53,6 +53,7 @@
                         <tr id="pp-list-thead-row">
                             <th data-sort-key="project_number" class="pp-sortable">Project #</th>
                             <th data-sort-key="project_name" class="pp-sortable">Project Name</th>
+                            <th data-sort-key="pm" class="pp-sortable">PM</th>
                             <th data-sort-key="status" class="pp-sortable">Status</th>
                             <th data-sort-key="estimator" class="pp-sortable">Estimator</th>
                             <th data-sort-key="architect" class="pp-sortable">Architect</th>
@@ -60,7 +61,7 @@
                         </tr>
                     </thead>
                     <tbody id="pp-list-tbody">
-                        <tr><td colspan="6" class="pp-empty">Loading projects...</td></tr>
+                        <tr><td colspan="7" class="pp-empty">Loading projects...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -129,6 +130,12 @@
                         <option value="Not Approved">Not Approved</option>
                         <option value="On Hold">On Hold</option>
                         <option value="Closed">Closed</option>
+                    </select>
+                    <label for="pp-f-pm" class="pp-pm-label">PM:</label>
+                    <select id="pp-f-pm" name="pm" class="pp-pm-select">
+                        <option value="">—</option>
+                        <option value="Tim">Tim</option>
+                        <option value="Islam">Islam</option>
                     </select>
                     <div class="pp-logo-mark">CWE</div>
                 </div>
@@ -327,6 +334,6 @@
         <div id="pp-toast" class="pp-toast" hidden></div>
     </div>
 
-    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20260430-34"></script>
+    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20260430-42"></script>
 </body>
 </html>

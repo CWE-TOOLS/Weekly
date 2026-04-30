@@ -40,7 +40,7 @@ import {
 } from '../../services/tracking-service.js';
 
 const FORM_FIELDS = [
-    'project_number', 'project_name', 'status', 'project_date', 'project_address',
+    'project_number', 'project_name', 'status', 'pm', 'project_date', 'project_address',
     'estimator', 'architect',
     'contact_name', 'contact_phone', 'contact_company', 'contact_email',
     'site_contact', 'site_phone', 'delivery_address', 'site_restrictions',
@@ -148,7 +148,7 @@ async function loadAllData() {
 
 async function refreshList() {
     const tbody = document.getElementById('pp-list-tbody');
-    tbody.innerHTML = '<tr><td colspan="8" class="pp-empty">Loading projects...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="pp-empty">Loading projects...</td></tr>';
 
     await loadAllData();
     renderList(document.getElementById('pp-search').value);
@@ -184,7 +184,7 @@ function renderList(searchQuery = '') {
     });
 
     if (filtered.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="pp-empty">No projects yet. Click "+ New Project" to get started.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="pp-empty">No projects yet. Click "+ New Project" to get started.</td></tr>';
         return;
     }
 
@@ -194,6 +194,7 @@ function renderList(searchQuery = '') {
             <tr class="pp-row-clickable" data-project-number="${escapeAttr(row.project_number)}">
                 <td class="pp-cell-num"><strong>${escapeHtml(row.project_number)}</strong></td>
                 <td>${escapeHtml(row.project_name || '')}</td>
+                <td>${escapeHtml(row.pm || '')}</td>
                 <td>${status}</td>
                 <td>${escapeHtml(row.estimator || '')}</td>
                 <td>${escapeHtml(row.architect || '')}</td>

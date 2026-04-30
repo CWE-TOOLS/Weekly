@@ -17,6 +17,7 @@ const PROJECT_COLUMNS = [
     'project_address',
     'estimator',
     'architect',
+    'pm',
     'contact_name',
     'contact_phone',
     'contact_company',

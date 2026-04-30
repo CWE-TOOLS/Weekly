@@ -139,6 +139,7 @@ html, body {
 .pp-table {
     width: 100%;
     border-collapse: collapse;
+    table-layout: fixed;
     background: #ffffff;
     border: 1px solid #e2e8f0;
     border-radius: 8px;
@@ -158,6 +159,17 @@ html, body {
     letter-spacing: 0.04em;
     color: #64748b;
     font-weight: 600;
+}
+/* Column widths (table-layout: fixed) */
+.pp-table th[data-sort-key="project_number"] { width: 110px; }
+.pp-table th[data-sort-key="project_name"]   { width: 220px; }
+.pp-table th[data-sort-key="pm"]              { width: 130px; }
+.pp-table th[data-sort-key="status"]          { width: 130px; }
+.pp-table th[data-sort-key="need_by_date"]   { width: 130px; }
+.pp-table td {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 .pp-table th.pp-sortable {
     cursor: pointer;
@@ -351,8 +363,35 @@ html, body {
 .pp-status-bar {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    gap: 10px;
     margin-bottom: 28px;
+}
+.pp-status-bar .pp-logo-mark { margin-left: auto; }
+.pp-pm-label {
+    margin-left: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.pp-pm-select {
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #334155;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+}
+.pp-pm-select:hover { border-color: #94a3b8; }
+.pp-pm-select:focus {
+    outline: none;
+    border-color: #1d4ed8;
+    box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.12);
 }
 .pp-status-select {
     padding: 6px 12px;
