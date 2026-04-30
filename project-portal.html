@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="src/styles/variables.css">
     <link rel="stylesheet" href="src/styles/base.css">
     <link rel="stylesheet" href="src/styles/buttons.css">
-    <link rel="stylesheet" href="src/styles/project-portal.css?v=20260430-23">
+    <link rel="stylesheet" href="src/styles/project-portal.css?v=20260430-33">
 
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 </head>
@@ -108,6 +108,13 @@
                         </svg>
                         <span>Optimizer Hours</span>
                     </button>
+                    <button class="pp-tab-btn" data-tab="tracking" type="button">
+                        <svg class="pp-tab-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 11l3 3L22 4"/>
+                            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                        </svg>
+                        <span>Tracking</span>
+                    </button>
                 </nav>
 
                 <div class="pp-tab-content">
@@ -133,7 +140,7 @@
                         <input type="text" id="pp-f-project_name" name="project_name" />
                     </div>
                     <div class="pp-field">
-                        <label>Date:</label>
+                        <label>Kickoff Date:</label>
                         <input type="date" id="pp-f-project_date" name="project_date" />
                     </div>
 
@@ -254,6 +261,29 @@
                         </div>
                     </div>
 
+                    <!-- Tab: Tracking -->
+                    <div class="pp-tab-panel" data-panel="tracking" hidden>
+                        <div class="pp-track-wrap">
+                            <div class="pp-track-header">
+                                <h2 class="pp-track-title">Tracking</h2>
+                                <p class="pp-muted pp-track-sub">Components produced in each casting. Lists are per-casting and independent.</p>
+                            </div>
+
+                            <div id="pp-track-needs-save" class="pp-castings-hint" hidden>
+                                Save the project first to use Tracking.
+                            </div>
+
+                            <div id="pp-track-no-castings" class="pp-opt-empty" hidden>
+                                <p>No castings yet.</p>
+                                <button class="pp-link-btn" type="button" data-action="goto-castings-from-tracking">Add a casting first &rarr;</button>
+                            </div>
+
+                            <div id="pp-track-editor" hidden>
+                                <div class="pp-track-list" id="pp-track-list"></div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Tab: Optimizer Hours -->
                     <div class="pp-tab-panel" data-panel="optimizer" hidden>
                         <div class="pp-opt-wrap">
@@ -297,6 +327,6 @@
         <div id="pp-toast" class="pp-toast" hidden></div>
     </div>
 
-    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20260430-24"></script>
+    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20260430-34"></script>
 </body>
 </html>

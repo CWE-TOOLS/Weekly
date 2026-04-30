@@ -31,6 +31,13 @@ import {
     replaceCastingPhases,
     seedDefaultPhasesForCasting
 } from '../../services/optimizer-hours-service.js';
+import {
+    loadAllComponentsForProject,
+    createComponent,
+    updateComponent,
+    deleteComponent,
+    setComponentsOrder
+} from '../../services/tracking-service.js';
 
 const FORM_FIELDS = [
     'project_number', 'project_name', 'status', 'project_date', 'project_address',
@@ -44,11 +51,13 @@ const FORM_FIELDS = [
 let allProjectRows = [];           // From Supabase
 let currentProjectNumber = null;     // null = list view; string = form view
 let listSort = { column: 'updated_at', direction: 'desc' };
-let currentTab = 'info';             // 'info' | 'castings' | 'optimizer'
+let currentTab = 'info';             // 'info' | 'castings' | 'optimizer' | 'tracking'
 let currentCastings = [];            // loaded for current project
 let currentOptCastingId = null;            // active casting in optimizer tab
 let currentCastingPhases = new Map();      // castingId -> Array<phase row>
 let copiedPhases = null;                   // Array<{phase_name, hours, sort_order}> from a copy action
+let currentTrackExpanded = new Set();      // castingIds whose tracking sections are open
+let currentCastingComponents = new Map();  // castingId -> Array<component row>
 
 function getPhasesFor(castingId) {
     return currentCastingPhases.get(castingId) || [];
@@ -203,6 +212,16 @@ function populateForm(project) {
         const v = project[field];
         el.value = (v === null || v === undefined) ? '' : v;
     }
+    applyStatusColor();
+}
+
+function applyStatusColor() {
+    const sel = document.getElementById('pp-f-status');
+    if (!sel) return;
+    const states = ['pp-status-approved', 'pp-status-not-approved', 'pp-status-pending', 'pp-status-on-hold', 'pp-status-closed'];
+    sel.classList.remove(...states);
+    const cls = `pp-status-${slug(sel.value)}`;
+    if (states.includes(cls)) sel.classList.add(cls);
 }
 
 function readForm() {
@@ -985,6 +1004,244 @@ function ensurePhaseSortable() {
     });
 }
 
+// ---------- Tracking (vertical accordion, one section per casting) ----------
+
+function getComponentsFor(castingId) {
+    return currentCastingComponents.get(castingId) || [];
+}
+function setComponentsFor(castingId, components) {
+    currentCastingComponents.set(castingId, components);
+}
+
+async function activateTrackingTab() {
+    const needsSave = document.getElementById('pp-track-needs-save');
+    const noCastings = document.getElementById('pp-track-no-castings');
+    const editor = document.getElementById('pp-track-editor');
+
+    if (!currentProjectNumber) {
+        needsSave.hidden = false;
+        noCastings.hidden = true;
+        editor.hidden = true;
+        return;
+    }
+    needsSave.hidden = true;
+
+    if (currentCastings.length === 0) {
+        try { currentCastings = await loadCastings(currentProjectNumber); } catch (e) { /* ignore */ }
+    }
+
+    if (currentCastings.length === 0) {
+        noCastings.hidden = false;
+        editor.hidden = true;
+        return;
+    }
+    noCastings.hidden = true;
+    editor.hidden = false;
+
+    // Drop expanded ids that no longer exist
+    const validIds = new Set(currentCastings.map(c => c.id));
+    for (const id of [...currentTrackExpanded]) {
+        if (!validIds.has(id)) currentTrackExpanded.delete(id);
+    }
+
+    await loadAllComponentsForCurrentProject();
+    renderTracking();
+}
+
+async function loadAllComponentsForCurrentProject() {
+    const ids = currentCastings.map(c => c.id);
+    try {
+        currentCastingComponents = await loadAllComponentsForProject(ids);
+    } catch (err) {
+        logger.error('[project-portal] loadAllComponentsForProject failed:', err);
+        currentCastingComponents = new Map();
+        for (const id of ids) currentCastingComponents.set(id, []);
+    }
+}
+
+function renderTracking() {
+    const list = document.getElementById('pp-track-list');
+    if (!list) return;
+    list.innerHTML = currentCastings.map(c => renderTrackSection(c)).join('');
+    ensureComponentSortables();
+}
+
+function renderTrackSection(casting) {
+    const isOpen = currentTrackExpanded.has(casting.id);
+    const components = getComponentsFor(casting.id);
+    const count = components.length;
+    const desc = casting.description ? `<span class="pp-track-section-desc">${escapeHtml(casting.description)}</span>` : '';
+
+    const cardsHtml = count === 0
+        ? `<div class="pp-opt-cards-empty">No components yet. Add one below.</div>`
+        : components.map(comp => renderTrackCard(comp, casting.id)).join('');
+
+    const headerRow = `
+        <div class="pp-track-header-row" aria-hidden="true">
+            <div class="pp-track-header-grip-spacer"></div>
+            <div class="pp-track-header-fields">
+                <span>Type</span>
+                <span>Width</span>
+                <span>Length</span>
+                <span>Panel ID</span>
+                <span>Color</span>
+                <span>Sealer</span>
+            </div>
+            <div class="pp-track-header-delete-spacer"></div>
+        </div>
+    `;
+
+    const body = isOpen ? `
+        <div class="pp-track-section-body">
+            ${headerRow}
+            <div class="pp-track-cards" data-casting-id="${escapeAttr(casting.id)}">
+                ${cardsHtml}
+            </div>
+            <button type="button" class="pp-add-btn pp-track-add" data-action="add-component" data-casting-id="${escapeAttr(casting.id)}">+ Add Component</button>
+        </div>
+    ` : '';
+
+    return `
+        <div class="pp-track-section${isOpen ? ' pp-track-section-open' : ''}" data-casting-id="${escapeAttr(casting.id)}">
+            <button type="button" class="pp-track-section-header" data-action="toggle-section" aria-expanded="${isOpen}">
+                <span class="pp-track-chevron" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="9 18 15 12 9 6"/>
+                    </svg>
+                </span>
+                <span class="pp-track-section-label">Cast</span>
+                <span class="pp-track-section-num">${escapeHtml(casting.casting_number || '')}</span>
+                ${desc}
+                <span class="pp-track-section-count">${count} ${count === 1 ? 'component' : 'components'}</span>
+            </button>
+            ${body}
+        </div>
+    `;
+}
+
+function renderTrackCard(comp, castingId) {
+    return `
+        <div class="pp-track-card" data-component-id="${escapeAttr(comp.id)}" data-casting-id="${escapeAttr(castingId)}">
+            <div class="pp-track-card-grip" aria-hidden="true" title="Drag to reorder">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/>
+                    <circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/>
+                </svg>
+            </div>
+            <div class="pp-track-card-fields">
+                <input type="text" class="pp-track-input" data-field="type" placeholder="Type" value="${escapeAttr(comp.type || '')}" />
+                <input type="text" class="pp-track-input" data-field="width" placeholder="Width" value="${escapeAttr(comp.width || '')}" />
+                <input type="text" class="pp-track-input" data-field="length" placeholder="Length" value="${escapeAttr(comp.length || '')}" />
+                <input type="text" class="pp-track-input" data-field="panel_id" placeholder="Panel ID" value="${escapeAttr(comp.panel_id || '')}" />
+                <input type="text" class="pp-track-input" data-field="color" placeholder="Color" value="${escapeAttr(comp.color || '')}" />
+                <input type="text" class="pp-track-input" data-field="sealer" placeholder="Sealer" value="${escapeAttr(comp.sealer || '')}" />
+            </div>
+            <button class="pp-track-card-delete" type="button" data-action="delete-component" aria-label="Delete component" title="Delete component">&times;</button>
+        </div>
+    `;
+}
+
+function handleToggleTrackSection(castingId) {
+    if (currentTrackExpanded.has(castingId)) currentTrackExpanded.delete(castingId);
+    else currentTrackExpanded.add(castingId);
+    renderTracking();
+}
+
+async function handleAddComponentClick(castingId) {
+    if (!currentProjectNumber || !castingId) return;
+    if (!currentTrackExpanded.has(castingId)) currentTrackExpanded.add(castingId);
+    try {
+        const created = await createComponent(castingId, {});
+        if (created) {
+            const list = getComponentsFor(castingId).slice();
+            list.push(created);
+            setComponentsFor(castingId, list);
+        }
+        renderTracking();
+        // Focus the first input on the newest card in this section
+        const section = document.querySelector(`.pp-track-section[data-casting-id="${castingId}"]`);
+        const last = section?.querySelector('.pp-track-card:last-of-type input[data-field="type"]');
+        last?.focus();
+    } catch (err) {
+        logger.error('[project-portal] add component failed:', err);
+        showToast('Add component failed: ' + (err.message || err), 'error');
+    }
+}
+
+async function handleUpdateComponent(componentId, castingId, field, value) {
+    const list = getComponentsFor(castingId);
+    const comp = list.find(c => c.id === componentId);
+    if (!comp) return;
+    const cleaned = (value || '').trim() === '' ? null : value.trim();
+    if ((comp[field] || null) === cleaned) return; // no change
+    try {
+        const updated = await updateComponent(componentId, { [field]: cleaned });
+        if (updated) Object.assign(comp, updated);
+        else comp[field] = cleaned;
+    } catch (err) {
+        logger.error('[project-portal] updateComponent failed:', err);
+        showToast('Save failed: ' + (err.message || err), 'error');
+    }
+}
+
+async function handleDeleteComponent(castingId, componentId) {
+    try {
+        await deleteComponent(componentId);
+        const list = getComponentsFor(castingId).filter(c => c.id !== componentId);
+        setComponentsFor(castingId, list);
+        renderTracking();
+    } catch (err) {
+        logger.error('[project-portal] deleteComponent failed:', err);
+        showToast('Delete failed: ' + (err.message || err), 'error');
+    }
+}
+
+// One SortableJS instance per expanded section
+let trackSortables = [];
+
+function ensureComponentSortables() {
+    trackSortables.forEach(s => { try { s.destroy(); } catch {} });
+    trackSortables = [];
+    if (typeof window.Sortable === 'undefined') return;
+
+    document.querySelectorAll('#pp-track-list .pp-track-section-body .pp-track-cards').forEach(el => {
+        const castingId = el.dataset.castingId;
+        if (!castingId) return;
+        const s = window.Sortable.create(el, {
+            animation: 180,
+            easing: 'cubic-bezier(0.22, 0.61, 0.36, 1)',
+            handle: '.pp-track-card-grip',
+            draggable: '.pp-track-card',
+            ghostClass: 'pp-track-card-ghost',
+            chosenClass: 'pp-track-card-chosen',
+            dragClass: 'pp-track-card-drag',
+            forceFallback: true,
+            fallbackTolerance: 4,
+            scroll: true,
+            scrollSensitivity: 60,
+            scrollSpeed: 14,
+            onEnd: async (evt) => {
+                const oldIdx = evt.oldIndex;
+                const newIdx = evt.newIndex;
+                if (oldIdx === newIdx || oldIdx === undefined || newIdx === undefined) return;
+                const list = getComponentsFor(castingId).slice();
+                const [moved] = list.splice(oldIdx, 1);
+                list.splice(newIdx, 0, moved);
+                list.forEach((c, idx) => { c.sort_order = idx; });
+                setComponentsFor(castingId, list);
+                try {
+                    await setComponentsOrder(list.map(c => c.id));
+                } catch (err) {
+                    logger.error('[project-portal] setComponentsOrder failed:', err);
+                    showToast('Reorder save failed: ' + (err.message || err), 'error');
+                    renderTracking();
+                }
+            }
+        });
+        trackSortables.push(s);
+    });
+}
+
 // ---------- Helpers ----------
 
 function escapeHtml(s) {
@@ -1075,6 +1332,9 @@ function wireEvents() {
         handleSave();
     });
 
+    // Status select: update color on change
+    document.getElementById('pp-f-status')?.addEventListener('change', applyStatusColor);
+
     // Sidebar tabs
     document.querySelectorAll('.pp-tab-btn').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -1085,6 +1345,8 @@ function wireEvents() {
                 loadAndRenderCastings();
             } else if (tab === 'optimizer') {
                 activateOptimizerTab();
+            } else if (tab === 'tracking') {
+                activateTrackingTab();
             }
         });
     });
@@ -1170,6 +1432,51 @@ function wireEvents() {
 
     // Optimizer: "go to castings" link in empty state
     document.querySelector('[data-action="goto-castings"]')?.addEventListener('click', () => {
+        setActiveTab('castings');
+        if (currentProjectNumber) loadAndRenderCastings();
+    });
+
+    // Tracking: accordion list (delegation)
+    const trackList = document.getElementById('pp-track-list');
+    trackList?.addEventListener('click', (e) => {
+        const headerBtn = e.target.closest('button[data-action="toggle-section"]');
+        if (headerBtn) {
+            const section = headerBtn.closest('.pp-track-section[data-casting-id]');
+            if (section) handleToggleTrackSection(section.dataset.castingId);
+            return;
+        }
+        const addBtn = e.target.closest('button[data-action="add-component"]');
+        if (addBtn) {
+            handleAddComponentClick(addBtn.dataset.castingId);
+            return;
+        }
+        const delBtn = e.target.closest('button[data-action="delete-component"]');
+        if (delBtn) {
+            const card = delBtn.closest('.pp-track-card[data-component-id]');
+            if (!card) return;
+            handleDeleteComponent(card.dataset.castingId, card.dataset.componentId);
+        }
+    });
+    trackList?.addEventListener('change', (e) => {
+        const card = e.target.closest('.pp-track-card[data-component-id]');
+        if (!card) return;
+        if (!e.target.matches('input[data-field]')) return;
+        handleUpdateComponent(
+            card.dataset.componentId,
+            card.dataset.castingId,
+            e.target.dataset.field,
+            e.target.value
+        );
+    });
+    trackList?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && e.target.matches('input[data-field]')) {
+            e.preventDefault();
+            e.target.blur();
+        }
+    });
+
+    // Tracking: "go to castings" link in empty state
+    document.querySelector('[data-action="goto-castings-from-tracking"]')?.addEventListener('click', () => {
         setActiveTab('castings');
         if (currentProjectNumber) loadAndRenderCastings();
     });
