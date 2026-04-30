@@ -17,7 +17,8 @@ import {
     loadCastings,
     createCasting,
     updateCasting,
-    deleteCasting
+    deleteCasting,
+    setCastingsOrder
 } from '../../services/castings-service.js';
 import {
     loadAllCastingPhasesForProject,
@@ -277,83 +278,172 @@ async function loadAndRenderCastings() {
 }
 
 function renderCastings() {
-    const tbody = document.getElementById('pp-castings-tbody');
-    const table = document.getElementById('pp-castings-table');
+    const list = document.getElementById('pp-castings-list');
     const empty = document.getElementById('pp-castings-empty');
     const needsSave = document.getElementById('pp-castings-needs-save');
     const addRow = document.querySelector('.pp-castings-add');
-    if (!tbody || !table || !empty || !needsSave || !addRow) return;
+    if (!list || !empty || !needsSave || !addRow) return;
 
     const hasProject = !!currentProjectNumber;
     needsSave.hidden = hasProject;
     addRow.style.display = hasProject ? '' : 'none';
 
     if (!hasProject) {
-        table.hidden = true;
+        list.hidden = true;
         empty.hidden = true;
-        tbody.innerHTML = '';
+        list.innerHTML = '';
         return;
     }
 
     if (currentCastings.length === 0) {
-        table.hidden = true;
+        list.hidden = true;
         empty.hidden = false;
-        tbody.innerHTML = '';
+        list.innerHTML = '';
         return;
     }
 
-    table.hidden = false;
+    list.hidden = false;
     empty.hidden = true;
-    tbody.innerHTML = currentCastings.map(c => `
-        <tr data-casting-id="${escapeAttr(c.id)}">
-            <td class="pp-castings-cell-num">
-                <input type="text" class="pp-castings-edit pp-castings-edit-num" data-field="casting_number" value="${escapeAttr(c.casting_number || '')}" />
-            </td>
-            <td>
-                <input type="text" class="pp-castings-edit" data-field="description" value="${escapeAttr(c.description || '')}" placeholder="(no description)" />
-            </td>
-            <td class="pp-castings-cell-actions">
+    list.innerHTML = currentCastings.map(c => `
+        <div class="pp-cast-card" data-casting-id="${escapeAttr(c.id)}">
+            <div class="pp-cast-card-grip" aria-hidden="true" title="Drag to reorder">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/>
+                    <circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/>
+                </svg>
+            </div>
+            <div class="pp-cast-card-num">
+                <input type="text" class="pp-cast-card-num-input" data-field="casting_number" value="${escapeAttr(c.casting_number || '')}" />
+            </div>
+            <div class="pp-cast-card-desc">
+                <input type="text" class="pp-cast-card-desc-input" data-field="description" value="${escapeAttr(c.description || '')}" placeholder="(no description)" />
+            </div>
+            <div class="pp-cast-card-actions">
                 <button class="pp-row-btn pp-row-btn-save" data-action="save" type="button">Save</button>
-                <button class="pp-row-btn pp-row-btn-delete" data-action="delete" type="button">Delete</button>
-            </td>
-        </tr>
+                <button class="pp-row-btn pp-row-btn-delete" data-action="delete" type="button" aria-label="Delete casting" title="Delete casting">&times;</button>
+            </div>
+        </div>
     `).join('');
+
+    ensureCastingsSortable();
+}
+
+let castingsSortable = null;
+
+function ensureCastingsSortable() {
+    if (castingsSortable) {
+        try { castingsSortable.destroy(); } catch {}
+        castingsSortable = null;
+    }
+    if (typeof window.Sortable === 'undefined') return;
+    const list = document.getElementById('pp-castings-list');
+    if (!list) return;
+
+    castingsSortable = window.Sortable.create(list, {
+        animation: 180,
+        easing: 'cubic-bezier(0.22, 0.61, 0.36, 1)',
+        handle: '.pp-cast-card-grip',
+        draggable: '.pp-cast-card',
+        ghostClass: 'pp-cast-card-ghost',
+        chosenClass: 'pp-cast-card-chosen',
+        dragClass: 'pp-cast-card-drag',
+        forceFallback: true,
+        fallbackTolerance: 4,
+        scroll: true,
+        scrollSensitivity: 60,
+        scrollSpeed: 14,
+        onEnd: async (evt) => {
+            const oldIdx = evt.oldIndex;
+            const newIdx = evt.newIndex;
+            if (oldIdx === newIdx || oldIdx === undefined || newIdx === undefined) return;
+
+            const reordered = currentCastings.slice();
+            const [moved] = reordered.splice(oldIdx, 1);
+            reordered.splice(newIdx, 0, moved);
+            reordered.forEach((c, idx) => { c.sort_order = idx; });
+            currentCastings = reordered;
+
+            // Pills/columns in the optimizer tab read currentCastings,
+            // so re-render if it's mounted.
+            if (currentTab === 'optimizer') renderOptimizer();
+
+            try {
+                await setCastingsOrder(currentCastings.map(c => c.id));
+            } catch (err) {
+                logger.error('[project-portal] setCastingsOrder failed:', err);
+                showToast('Reorder save failed: ' + (err.message || err), 'error');
+                await loadAndRenderCastings();
+            }
+        }
+    });
+}
+
+/**
+ * Suggest the next casting_number based on the trailing-number pattern of
+ * the last casting in the list. Preserves any prefix and leading zeros.
+ *   []                  -> '1'
+ *   ['1']               -> '2'
+ *   ['A1']              -> 'A2'
+ *   ['0001']            -> '0002'
+ *   ['C-3']             -> 'C-4'
+ *   ['foo']             -> ''   (no trailing digits, leave blank)
+ */
+function suggestNextCastingNumber(castings) {
+    if (!Array.isArray(castings) || castings.length === 0) return '1';
+    const last = castings[castings.length - 1]?.casting_number || '';
+    const m = last.match(/^(.*?)(\d+)$/);
+    if (!m) return '';
+    const [, prefix, digits] = m;
+    const next = String(Number(digits) + 1).padStart(digits.length, '0');
+    return prefix + next;
 }
 
 function handleAddCastingClick() {
     if (!currentProjectNumber) return;
-    const tbody = document.getElementById('pp-castings-tbody');
-    const table = document.getElementById('pp-castings-table');
+    const list = document.getElementById('pp-castings-list');
     const empty = document.getElementById('pp-castings-empty');
-    if (!tbody) return;
+    if (!list) return;
 
     // Cancel any existing draft
-    tbody.querySelector('tr[data-draft="true"]')?.remove();
+    list.querySelector('.pp-cast-card[data-draft="true"]')?.remove();
 
-    table.hidden = false;
+    list.hidden = false;
     empty.hidden = true;
 
-    const tr = document.createElement('tr');
-    tr.dataset.draft = 'true';
-    tr.innerHTML = `
-        <td class="pp-castings-cell-num">
-            <input type="text" class="pp-castings-edit pp-castings-edit-num" data-field="casting_number" placeholder="Casting #" />
-        </td>
-        <td>
-            <input type="text" class="pp-castings-edit" data-field="description" placeholder="Description (optional)" />
-        </td>
-        <td class="pp-castings-cell-actions">
-            <button class="pp-row-btn pp-row-btn-delete" data-action="cancel-draft" type="button">Cancel</button>
-        </td>
+    const card = document.createElement('div');
+    card.className = 'pp-cast-card pp-cast-card-draft';
+    card.dataset.draft = 'true';
+    card.innerHTML = `
+        <div class="pp-cast-card-grip" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/>
+                <circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/>
+            </svg>
+        </div>
+        <div class="pp-cast-card-num">
+            <input type="text" class="pp-cast-card-num-input" data-field="casting_number" placeholder="Casting #" />
+        </div>
+        <div class="pp-cast-card-desc">
+            <input type="text" class="pp-cast-card-desc-input" data-field="description" placeholder="Description (optional)" />
+        </div>
+        <div class="pp-cast-card-actions">
+            <button class="pp-row-btn pp-row-btn-delete" data-action="cancel-draft" type="button" aria-label="Cancel">&times;</button>
+        </div>
     `;
-    tbody.appendChild(tr);
+    list.appendChild(card);
 
-    const numInput = tr.querySelector('input[data-field="casting_number"]');
-    const descInput = tr.querySelector('input[data-field="description"]');
+    const numInput = card.querySelector('input[data-field="casting_number"]');
+    const descInput = card.querySelector('input[data-field="description"]');
+
+    const suggested = suggestNextCastingNumber(currentCastings);
+    if (suggested) {
+        numInput.value = suggested;
+    }
     numInput.focus();
+    numInput.select();
 
     let blurTimer = null;
-    const cleanup = () => tr.remove();
+    const cleanup = () => card.remove();
 
     const commit = async () => {
         const num = numInput.value.trim();
@@ -375,7 +465,6 @@ function handleAddCastingClick() {
                 description: desc
             });
             if (created) currentCastings.push(created);
-            currentCastings.sort((a, b) => (a.casting_number || '').localeCompare(b.casting_number || ''));
             renderCastings();
             showToast('Casting added.');
         } catch (err) {
@@ -386,13 +475,13 @@ function handleAddCastingClick() {
         }
     };
 
-    tr.addEventListener('focusout', () => {
+    card.addEventListener('focusout', () => {
         clearTimeout(blurTimer);
         blurTimer = setTimeout(() => {
-            if (!tr.contains(document.activeElement)) commit();
+            if (!card.contains(document.activeElement)) commit();
         }, 100);
     });
-    tr.addEventListener('keydown', (e) => {
+    card.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
             (document.activeElement || numInput).blur();
@@ -404,7 +493,7 @@ function handleAddCastingClick() {
             if (currentCastings.length === 0) renderCastings();
         }
     });
-    tr.querySelector('button[data-action="cancel-draft"]').addEventListener('click', () => {
+    card.querySelector('button[data-action="cancel-draft"]').addEventListener('click', () => {
         numInput.value = '';
         descInput.value = '';
         cleanup();
@@ -413,10 +502,10 @@ function handleAddCastingClick() {
 }
 
 async function handleSaveCasting(id) {
-    const tr = document.querySelector(`tr[data-casting-id="${id}"]`);
-    if (!tr) return;
-    const numInput = tr.querySelector('input[data-field="casting_number"]');
-    const descInput = tr.querySelector('input[data-field="description"]');
+    const card = document.querySelector(`.pp-cast-card[data-casting-id="${id}"]`);
+    if (!card) return;
+    const numInput = card.querySelector('input[data-field="casting_number"]');
+    const descInput = card.querySelector('input[data-field="description"]');
     const num = numInput.value.trim();
     const desc = descInput.value.trim();
     if (!num) {
@@ -1089,12 +1178,12 @@ function wireEvents() {
     document.getElementById('pp-cast-add-btn').addEventListener('click', handleAddCastingClick);
 
     // Castings: row actions (delegation)
-    document.getElementById('pp-castings-tbody').addEventListener('click', (e) => {
+    document.getElementById('pp-castings-list').addEventListener('click', (e) => {
         const btn = e.target.closest('button[data-action]');
         if (!btn) return;
-        const tr = btn.closest('tr[data-casting-id]');
-        if (!tr) return;
-        const id = tr.getAttribute('data-casting-id');
+        const card = btn.closest('.pp-cast-card[data-casting-id]');
+        if (!card) return;
+        const id = card.getAttribute('data-casting-id');
         const action = btn.dataset.action;
         if (action === 'save') handleSaveCasting(id);
         else if (action === 'delete') handleDeleteCasting(id);

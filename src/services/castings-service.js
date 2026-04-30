@@ -19,7 +19,8 @@ async function getClient() {
 }
 
 /**
- * Load all castings for a project, ordered by casting_number.
+ * Load all castings for a project, ordered by user-defined sort_order
+ * with casting_number as a stable tiebreaker.
  * @param {string} projectNumber
  * @returns {Promise<Array<Object>>}
  */
@@ -33,6 +34,7 @@ export async function loadCastings(projectNumber) {
             .from(CASTINGS_TABLE)
             .select('*')
             .eq('project_number', projectNumber)
+            .order('sort_order', { ascending: true })
             .order('casting_number', { ascending: true });
 
         if (error) {
@@ -57,10 +59,19 @@ export async function createCasting(casting) {
     const client = await getClient();
     if (!client) throw new Error('Supabase client unavailable');
 
+    let sortOrder = (typeof casting.sort_order === 'number') ? casting.sort_order : null;
+    if (sortOrder === null) {
+        const existing = await loadCastings(casting.project_number);
+        sortOrder = existing.length > 0
+            ? Math.max(...existing.map(c => c.sort_order || 0)) + 1
+            : 0;
+    }
+
     const payload = {
         project_number: casting.project_number,
         casting_number: casting.casting_number.trim(),
-        description: casting.description ? casting.description.trim() : null
+        description: casting.description ? casting.description.trim() : null,
+        sort_order: sortOrder
     };
 
     const { data, error } = await client
@@ -74,6 +85,22 @@ export async function createCasting(casting) {
         throw error;
     }
     return data;
+}
+
+/**
+ * Update sort_order for a list of casting ids in the order given.
+ * @param {string[]} castingIdsInOrder
+ */
+export async function setCastingsOrder(castingIdsInOrder) {
+    if (!Array.isArray(castingIdsInOrder) || castingIdsInOrder.length === 0) return;
+    const client = await getClient();
+    if (!client) throw new Error('Supabase client unavailable');
+
+    await Promise.all(castingIdsInOrder.map((id, idx) =>
+        client.from(CASTINGS_TABLE)
+            .update({ sort_order: idx })
+            .eq('id', id)
+    ));
 }
 
 /**

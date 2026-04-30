@@ -482,53 +482,136 @@ html, body {
 }
 .pp-castings-empty p { margin: 0; }
 
-.pp-castings-table {
-    width: 100%;
-    border-collapse: collapse;
+/* Card-style casting list (matches optimizer hours card layout) */
+.pp-castings-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
     margin-bottom: 18px;
-    font-size: 13px;
 }
-.pp-castings-table th,
-.pp-castings-table td {
-    padding: 8px 12px;
-    text-align: left;
-    border-bottom: 1px solid #f1f5f9;
+.pp-cast-card {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px 6px 4px;
+    min-height: 44px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    transition: border-color 0.15s, box-shadow 0.15s, opacity 0.15s;
 }
-.pp-castings-table th {
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: #64748b;
-    font-weight: 600;
-    background: #f8fafc;
+.pp-cast-card:hover {
+    border-color: #cbd5e1;
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
 }
-.pp-castings-col-num { width: 160px; }
-.pp-castings-col-actions { width: 140px; text-align: right; }
-.pp-castings-cell-actions { text-align: right; white-space: nowrap; }
-.pp-castings-cell-actions .pp-row-btn { margin-left: 6px; }
-.pp-row-btn-delete { background: #fee2e2; color: #b91c1c; }
-.pp-row-btn-delete:hover { background: #fecaca; }
+.pp-cast-card-grip {
+    flex: 0 0 auto;
+    width: 18px;
+    height: 28px;
+    color: #cbd5e1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: grab;
+    transition: color 0.15s;
+}
+.pp-cast-card-grip:hover { color: #64748b; }
+.pp-cast-card-grip svg { width: 16px; height: 16px; display: block; }
+.pp-cast-card-grip:active { cursor: grabbing; }
 
-.pp-castings-edit {
+.pp-cast-card-num {
+    flex: 0 0 140px;
+    min-width: 0;
+}
+.pp-cast-card-desc {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.pp-cast-card-actions {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.pp-cast-card-num-input,
+.pp-cast-card-desc-input {
     width: 100%;
-    padding: 5px 8px;
+    padding: 4px 6px;
     border: 1px solid transparent;
     border-radius: 4px;
-    font-size: 13px;
     background: transparent;
+    font-size: 13px;
     font-family: inherit;
+    line-height: 1.3;
 }
-.pp-castings-edit:focus,
-.pp-castings-edit:hover {
-    outline: none;
+.pp-cast-card-num-input {
+    font-weight: 700;
+    color: #0f172a;
+    font-size: 14px;
+}
+.pp-cast-card-desc-input { color: #475569; }
+.pp-cast-card-num-input:hover,
+.pp-cast-card-desc-input:hover {
     border-color: #cbd5e1;
-    background: #ffffff;
+    background: #f8fafc;
 }
-.pp-castings-edit:focus {
+.pp-cast-card-num-input:focus,
+.pp-cast-card-desc-input:focus {
+    outline: none;
     border-color: #1d4ed8;
-    box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.12);
+    background: #ffffff;
+    box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.12);
 }
-.pp-castings-edit-num { font-weight: 600; color: #0f172a; }
+
+.pp-cast-card .pp-row-btn-save {
+    padding: 5px 10px;
+    font-size: 12px;
+}
+.pp-cast-card .pp-row-btn-delete {
+    background: transparent;
+    border: none;
+    color: #cbd5e1;
+    width: 26px;
+    height: 26px;
+    border-radius: 4px;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: background 0.15s, color 0.15s, opacity 0.15s;
+    opacity: 0.6;
+}
+.pp-cast-card:hover .pp-row-btn-delete { opacity: 1; }
+.pp-cast-card .pp-row-btn-delete:hover {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+/* Sortable.js drag visuals for casting cards */
+.pp-cast-card-ghost {
+    opacity: 0.35;
+    background: #eff6ff;
+    border-color: #93c5fd;
+    box-shadow: none;
+}
+.pp-cast-card-ghost > * { visibility: hidden; }
+.pp-cast-card-chosen { cursor: grabbing; }
+.pp-cast-card-drag {
+    background: #ffffff;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
+    border-color: #cbd5e1;
+    cursor: grabbing;
+}
+.pp-cast-card.sortable-fallback {
+    opacity: 0.95;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
+    cursor: grabbing;
+}
 
 .pp-castings-add {
     margin-top: 4px;

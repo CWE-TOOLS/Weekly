@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="src/styles/variables.css">
     <link rel="stylesheet" href="src/styles/base.css">
     <link rel="stylesheet" href="src/styles/buttons.css">
-    <link rel="stylesheet" href="src/styles/project-portal.css?v=20260429-18">
+    <link rel="stylesheet" href="src/styles/project-portal.css?v=20260430-23">
 
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 </head>
@@ -242,16 +242,7 @@
                                 <p>No castings yet.</p>
                             </div>
 
-                            <table id="pp-castings-table" class="pp-castings-table" hidden>
-                                <thead>
-                                    <tr>
-                                        <th class="pp-castings-col-num">Casting #</th>
-                                        <th>Description</th>
-                                        <th class="pp-castings-col-actions"></th>
-                                    </tr>
-                                </thead>
-                                <tbody id="pp-castings-tbody"></tbody>
-                            </table>
+                            <div id="pp-castings-list" class="pp-castings-list" hidden></div>
 
                             <div class="pp-castings-add">
                                 <button id="pp-cast-add-btn" class="pp-add-btn" type="button">+ Add Casting</button>
@@ -306,6 +297,6 @@
         <div id="pp-toast" class="pp-toast" hidden></div>
     </div>
 
-    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20260429-19"></script>
+    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20260430-24"></script>
 </body>
 </html>
