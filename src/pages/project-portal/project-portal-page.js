@@ -44,6 +44,17 @@ import {
     loadPresets as loadColorLogPresets,
     saveAsPreset as saveColorLogAsPreset
 } from '../../services/color-log-service.js';
+import {
+    loadBatchTicketsForCastings,
+    saveBatchTicketForCasting,
+    emptyForm as emptyBatchTicketForm
+} from '../../services/batch-ticket-service.js';
+import {
+    buildBatchPlan,
+    getColorLogSandLbs,
+    roundSig,
+    FROM_LBS
+} from '../../utils/batch-calc.js';
 
 const FORM_FIELDS = [
     'project_number', 'project_name', 'status', 'pm', 'project_date', 'project_address',
@@ -68,6 +79,10 @@ let currentColorLog = null;                // form-shaped record (id null = unsa
 let colorLogPresets = [];                  // cached preset rows
 let colorLogSaveTimer = null;              // debounce timer
 let colorLogLoadedFor = null;              // project_number we last loaded for
+let batchTickets = new Map();              // castingId -> form-shaped batch ticket record
+let batchTicketsLoadedFor = null;          // project_number we last bulk-loaded for
+let currentBatchCastingId = null;          // active casting in batch tickets tab
+let batchTicketSaveTimers = new Map();     // castingId -> debounce handle
 
 function getPhasesFor(castingId) {
     return currentCastingPhases.get(castingId) || [];
@@ -101,12 +116,17 @@ async function showListView() {
         colorLogSaveTimer = null;
         try { await saveColorLogNow(); } catch (e) { /* error already logged */ }
     }
+    // Flush all pending batch-ticket saves.
+    await flushAllBatchTicketSaves();
     currentProjectNumber = null;
     document.getElementById('pp-list-view').hidden = false;
     document.getElementById('pp-form-view').hidden = true;
     setProjectInUrl(null);
     colorLogLoadedFor = null;
     currentColorLog = null;
+    batchTicketsLoadedFor = null;
+    batchTickets.clear();
+    currentBatchCastingId = null;
     await refreshList();
 }
 
@@ -120,6 +140,13 @@ async function showFormView(projectNumber) {
     colorLogLoadedFor = null;
     currentColorLog = null;
     if (colorLogSaveTimer) { clearTimeout(colorLogSaveTimer); colorLogSaveTimer = null; }
+
+    // Invalidate batch-ticket cache.
+    batchTicketsLoadedFor = null;
+    batchTickets.clear();
+    currentBatchCastingId = null;
+    for (const t of batchTicketSaveTimers.values()) clearTimeout(t);
+    batchTicketSaveTimers.clear();
 
     let project = null;
     if (projectNumber) {
@@ -147,6 +174,9 @@ async function showFormView(projectNumber) {
     if (currentTab === 'color-log') {
         activateColorLogTab();
     }
+    if (currentTab === 'batch-tickets') {
+        activateBatchTicketsTab();
+    }
 }
 
 function updateFormContext(project) {
@@ -166,6 +196,8 @@ function setActiveTab(tab) {
         panel.classList.toggle('pp-tab-panel-active', isActive);
         panel.hidden = !isActive;
     });
+    const printBtn = document.getElementById('pp-print-btn');
+    if (printBtn) printBtn.textContent = (tab === 'batch-tickets') ? 'Print Batch Tickets' : 'Print';
 }
 
 // ---------- Data ----------
@@ -1711,9 +1743,14 @@ function wireEvents() {
         handleDelete();
     });
 
-    // Form: print
+    // Form: print — on Batch Tickets tab, this prints the active casting's tickets instead.
     document.getElementById('pp-print-btn').addEventListener('click', (e) => {
         e.preventDefault();
+        if (currentTab === 'batch-tickets') {
+            if (currentBatchCastingId) handlePrintBatchTickets(currentBatchCastingId);
+            else showToast('Select a casting first', 'error');
+            return;
+        }
         handlePrint();
     });
 
@@ -1740,6 +1777,8 @@ function wireEvents() {
                 activateTrackingTab();
             } else if (tab === 'color-log') {
                 activateColorLogTab();
+            } else if (tab === 'batch-tickets') {
+                activateBatchTicketsTab();
             }
         });
     });
@@ -1959,6 +1998,38 @@ function wireEvents() {
         if (currentProjectNumber) loadAndRenderCastings();
     });
 
+    // Batch Tickets: pill bar (casting selector)
+    const btPills = document.getElementById('pp-bt-pills');
+    btPills?.addEventListener('click', (e) => {
+        const pill = e.target.closest('[data-bt-pill]');
+        if (!pill) return;
+        handleSelectBatchCasting(pill.dataset.castingId);
+    });
+
+    // Batch Tickets: active-casting form (delegation)
+    const btContent = document.getElementById('pp-bt-content');
+    btContent?.addEventListener('input', (e) => {
+        const target = e.target;
+        if (!currentBatchCastingId) return;
+        if (target.matches('[data-bt-field]')) {
+            handleBatchFieldInput(currentBatchCastingId, target.dataset.btField, target.value);
+        }
+    });
+    btContent?.addEventListener('change', (e) => {
+        const target = e.target;
+        if (!currentBatchCastingId) return;
+
+        if (target.matches('[data-bt-casting-date]')) {
+            handleCastingDateChange(currentBatchCastingId, target.value);
+            return;
+        }
+        if (target.matches('input[type="radio"][data-bt-assign]')) {
+            const idx = parseInt(target.dataset.btAssign, 10);
+            handleBatchAssignChange(currentBatchCastingId, idx, target.value);
+            return;
+        }
+    });
+
     // Castings: add
     document.getElementById('pp-cast-add-btn').addEventListener('click', handleAddCastingClick);
 
@@ -1983,6 +2054,684 @@ function wireEvents() {
             showListView();
         }
     });
+}
+
+// ===================================================================
+// Batch Tickets tab
+// Per-casting accordion. Each casting has its own batch_tickets row
+// holding the batch parameters + manual type overrides. The plan
+// (list of 250/150/50 lb batches, scaled ingredient values) is
+// derived on render from the project's color log + the casting's
+// settings.
+// ===================================================================
+
+// Pigment reduction applied to FINAL Backup batches (hardcoded — not user-editable).
+const FINAL_BACKUP_PIG_REDUCTION_PCT = 50;
+
+function getBatchTicketFor(castingId) {
+    if (!batchTickets.has(castingId)) {
+        batchTickets.set(castingId, emptyBatchTicketForm(castingId));
+    }
+    return batchTickets.get(castingId);
+}
+
+async function activateBatchTicketsTab() {
+    const needsSave    = document.getElementById('pp-bt-needs-save');
+    const needsCL      = document.getElementById('pp-bt-needs-color-log');
+    const noCastings   = document.getElementById('pp-bt-no-castings');
+    const pills        = document.getElementById('pp-bt-pills');
+    const content      = document.getElementById('pp-bt-content');
+
+    if (!content) return;
+
+    // Project not saved yet
+    if (!currentProjectNumber) {
+        if (needsSave) needsSave.hidden = false;
+        if (needsCL) needsCL.hidden = true;
+        if (noCastings) noCastings.hidden = true;
+        if (pills) pills.innerHTML = '';
+        content.innerHTML = '';
+        return;
+    }
+    if (needsSave) needsSave.hidden = true;
+
+    // Make sure color log is loaded — we need its ingredients to scale.
+    // Don't set colorLogLoadedFor — leave that to activateColorLogTab so its
+    // first activation still triggers renderColorLog + refreshPresetPicker.
+    if (!currentColorLog) {
+        try {
+            const existing = await loadColorLogForProject(currentProjectNumber);
+            currentColorLog = existing || createEmptyColorLog();
+        } catch (err) {
+            logger.error('[batch-tickets] color-log load failed', err);
+            currentColorLog = createEmptyColorLog();
+        }
+    }
+
+    // No color log yet → block until they create one.
+    if (!currentColorLog || !currentColorLog.id) {
+        if (needsCL) needsCL.hidden = false;
+        if (noCastings) noCastings.hidden = true;
+        if (pills) pills.innerHTML = '';
+        content.innerHTML = '';
+        return;
+    }
+    if (needsCL) needsCL.hidden = true;
+
+    // No castings → tell them to add one.
+    if (!currentCastings || currentCastings.length === 0) {
+        if (noCastings) noCastings.hidden = false;
+        if (pills) pills.innerHTML = '';
+        content.innerHTML = '';
+        return;
+    }
+    if (noCastings) noCastings.hidden = true;
+
+    // Bulk-load tickets for these castings if not yet loaded for this project.
+    if (batchTicketsLoadedFor !== currentProjectNumber) {
+        try {
+            const ids = currentCastings.map(c => c.id);
+            const map = await loadBatchTicketsForCastings(ids);
+            batchTickets.clear();
+            for (const c of currentCastings) {
+                batchTickets.set(c.id, map.get(c.id) || emptyBatchTicketForm(c.id));
+            }
+            batchTicketsLoadedFor = currentProjectNumber;
+        } catch (err) {
+            logger.error('[batch-tickets] load failed', err);
+            showToast('Failed to load batch tickets', 'error');
+        }
+    }
+
+    // Default active casting: the first one if not already chosen, or fall back if the previous active is gone.
+    if (!currentBatchCastingId || !currentCastings.some(c => c.id === currentBatchCastingId)) {
+        currentBatchCastingId = currentCastings[0]?.id || null;
+    }
+
+    renderBatchTickets();
+}
+
+function renderBatchTickets() {
+    renderBatchTicketsPills();
+    renderBatchTicketsContent();
+}
+
+function renderBatchTicketsPills() {
+    const pills = document.getElementById('pp-bt-pills');
+    if (!pills) return;
+    if (!currentCastings.length) { pills.innerHTML = ''; return; }
+    pills.innerHTML = currentCastings.map(c => {
+        const active = c.id === currentBatchCastingId ? ' pp-bt-pill-active' : '';
+        const date = c.casting_date ? `<span class="pp-bt-pill-date">${escapeHtml(c.casting_date)}</span>` : '';
+        return `<button type="button" class="pp-bt-pill${active}" data-bt-pill data-casting-id="${escapeAttr(c.id)}">${escapeHtml(c.casting_number || '')}${date}</button>`;
+    }).join('');
+}
+
+function renderBatchTicketsContent() {
+    const content = document.getElementById('pp-bt-content');
+    if (!content) return;
+    const casting = currentCastings.find(c => c.id === currentBatchCastingId);
+    if (!casting) { content.innerHTML = ''; return; }
+    const ticket = getBatchTicketFor(casting.id);
+    content.innerHTML = `<div data-casting-id="${escapeAttr(casting.id)}">${renderBatchTicketBody(casting, ticket)}</div>`;
+}
+
+function renderBatchTicketBody(casting, ticket) {
+    return `
+        <div class="pp-bt-form">
+            <div class="pp-bt-context">
+                <div class="pp-bt-context-cast">
+                    <span class="pp-bt-context-cast-label">Casting</span>${escapeHtml(casting.casting_number || '')}
+                </div>
+                <span class="pp-bt-save-status" data-bt-status></span>
+                <div class="pp-bt-context-date-group">
+                    <label class="pp-bt-context-date-label" for="pp-bt-castdate-${escapeAttr(casting.id)}">Cast Date</label>
+                    <input type="date" id="pp-bt-castdate-${escapeAttr(casting.id)}" class="pp-bt-context-date" data-bt-casting-date value="${escapeAttr(casting.casting_date || '')}">
+                </div>
+            </div>
+
+            <div class="pp-bt-card">
+                <h3 class="pp-bt-card-title">Batch Plan</h3>
+                <div class="pp-bt-grid">
+                    <div class="pp-bt-field">
+                        <label class="pp-bt-field-label">Total Cu Ft Needed</label>
+                        <input type="number" step="0.01" class="pp-bt-input" data-bt-field="cuFt" value="${escapeAttr(ticket.cuFt)}">
+                    </div>
+                    <div class="pp-bt-field">
+                        <label class="pp-bt-field-label">Face Sq Ft</label>
+                        <input type="number" step="0.01" class="pp-bt-input" data-bt-field="faceSqFt" value="${escapeAttr(ticket.faceSqFt)}">
+                    </div>
+                </div>
+                <details class="pp-bt-advanced"${parseFloat(ticket.cuFtPer250) !== 4.28 ? ' open' : ''}>
+                    <summary>Advanced</summary>
+                    <div class="pp-bt-advanced-body">
+                        <div class="pp-bt-field">
+                            <label class="pp-bt-field-label">Cu Ft per 250lb Batch</label>
+                            <input type="number" step="0.01" class="pp-bt-input" data-bt-field="cuFtPer250" value="${escapeAttr(ticket.cuFtPer250)}">
+                        </div>
+                    </div>
+                </details>
+            </div>
+
+            <div class="pp-bt-card">
+                <h3 class="pp-bt-card-title">Ticket Info</h3>
+                <div class="pp-bt-field">
+                    <label class="pp-bt-field-label">Batched By</label>
+                    <input type="text" class="pp-bt-input" data-bt-field="batchedBy" value="${escapeAttr(ticket.batchedBy)}">
+                </div>
+                <div class="pp-bt-field">
+                    <label class="pp-bt-field-label">Notes</label>
+                    <textarea class="pp-bt-textarea" data-bt-field="notes" rows="2">${escapeHtml(ticket.notes)}</textarea>
+                </div>
+            </div>
+
+            <div data-bt-preview>${renderBatchPreview(casting, ticket)}</div>
+        </div>
+    `;
+}
+
+/**
+ * Render the live preview: summary, assignment table, and ticket cards.
+ * Recomputed every render from current ticket state + color log.
+ */
+function renderBatchPreview(casting, ticket) {
+    const totalCuFt = parseFloat(ticket.cuFt);
+    if (!totalCuFt || totalCuFt <= 0) return '';
+
+    const sandLbs = getColorLogSandLbs(currentColorLog);
+    if (!sandLbs) {
+        return `<div class="pp-bt-no-color-log">No sand weight in this project's color log base ingredients. Add a sand entry to the color log to enable scaling.</div>`;
+    }
+
+    const plan = buildBatchPlan({
+        totalCuFt,
+        faceSqFt: parseFloat(ticket.faceSqFt) || 0,
+        cuFtPer250: parseFloat(ticket.cuFtPer250) || 4.28,
+        castMethod: currentColorLog?.castMethod || 'sprayUp',
+        colorLogSandLbs: sandLbs,
+        manualOverrides: ticket.batchAssignments
+    });
+
+    if (!plan.batches.length) return '';
+
+    const sectionHeader = renderBatchSectionHeader(plan);
+    const assign = renderBatchAssignTable(plan);
+    const tickets = renderBatchTicketCards(casting, ticket, plan);
+
+    return `
+        ${sectionHeader}
+        ${assign}
+        <div class="pp-bt-tickets">${tickets}</div>
+        <div class="pp-bt-print-hint">Use <strong>Print Batch Tickets</strong> in the top bar to print these.</div>
+    `;
+}
+
+function renderBatchSectionHeader(plan) {
+    const { summary } = plan;
+    const parts = [];
+    if (summary.count250) parts.push(`${summary.count250} × 250 lb`);
+    if (summary.count150) parts.push(`${summary.count150} × 150 lb`);
+    if (summary.count50)  parts.push(`${summary.count50} × 50 lb`);
+    return `
+        <div class="pp-bt-section-header">
+            <span class="pp-bt-section-header-title">Generated Batches</span>
+            <span class="pp-bt-section-header-summary">
+                <strong>${summary.total}</strong> batches · <strong>${roundSig(summary.actualCuFt, 2)}</strong> cu ft total${parts.length ? ' · ' + parts.join(' · ') : ''}
+            </span>
+        </div>
+    `;
+}
+
+function renderBatchAssignTable(plan) {
+    const rows = plan.batches.map((b, idx) => `
+        <tr>
+            <td>Batch ${b.num}</td>
+            <td>${b.batchSandLbs} lbs</td>
+            <td>${roundSig(b.cuFt, 2)} cu ft</td>
+            <td><input type="radio" name="bt_type_${idx}" data-bt-assign="${idx}" value="face"        ${b.type === 'face' ? 'checked' : ''}></td>
+            <td><input type="radio" name="bt_type_${idx}" data-bt-assign="${idx}" value="firstBackUp" ${b.type === 'firstBackUp' ? 'checked' : ''}></td>
+            <td><input type="radio" name="bt_type_${idx}" data-bt-assign="${idx}" value="finalBackUp" ${b.type === 'finalBackUp' ? 'checked' : ''}></td>
+        </tr>
+    `).join('');
+    return `
+        <div class="pp-bt-assign">
+            <div class="pp-bt-assign-title">Assign Batch Types <span class="pp-bt-assign-hint">auto-calculated from Face Sq Ft — override manually if needed</span></div>
+            <table class="pp-bt-assign-table">
+                <thead>
+                    <tr>
+                        <th>Batch</th>
+                        <th>Size</th>
+                        <th>Volume</th>
+                        <th>Face Mix</th>
+                        <th>First Back Up</th>
+                        <th>FINAL Back Up</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>
+    `;
+}
+
+function renderBatchTicketCards(casting, ticket, plan) {
+    const projectName = document.getElementById('pp-f-project_name')?.value || '';
+    const sampleName = currentColorLog?.name || '';
+    const castMethod = currentColorLog?.castMethod || '';
+    const castNumber = casting.casting_number || '';
+    const castDate = casting.casting_date || '';
+
+    return plan.batches.map(b =>
+        renderBatchTicketCard({
+            colorLog: currentColorLog,
+            batch: b,
+            project: projectName,
+            sampleName,
+            castMethod,
+            castNumber,
+            castDate,
+            batchedBy: ticket.batchedBy,
+            notes: ticket.notes
+        })
+    ).join('');
+}
+
+/**
+ * Build a single batch ticket card HTML. Pure (DOM-free).
+ * Mirrors Batchin Calc's renderBatchTicket().
+ */
+function renderBatchTicketCard({
+    colorLog, batch, project, sampleName, castMethod, castNumber, castDate,
+    batchedBy, notes
+}) {
+    const { batchSandLbs, scaleFactor, num, total, type: batchType } = batch;
+    const pigReductionPct = FINAL_BACKUP_PIG_REDUCTION_PCT;
+    const pigMultiplier = batchType === 'finalBackUp' ? (1 - pigReductionPct / 100) : 1;
+    const cb = (checked) => `<span class="bt-cb-box ${checked ? 'checked' : ''}"></span>`;
+
+    const findBase = (name) => (colorLog?.baseIngredients || []).find(i => (i.name || '').toLowerCase() === name.toLowerCase());
+    const findAdd  = (name) => (colorLog?.additives        || []).find(i => (i.name || '').toLowerCase() === name.toLowerCase());
+
+    const scaleBase = (name) => {
+        const f = findBase(name);
+        if (!f || !f.weight) return { qty: '-', unit: f?.unit || 'lbs', type: f?.note || '' };
+        return { qty: roundSig(Number(f.weight) * scaleFactor, 2), unit: f.unit || 'lbs', type: f.note || '' };
+    };
+    const scaleAdd = (name) => {
+        const f = findAdd(name);
+        if (!f || !f.amount) return { qty: '-', unit: f?.unit || 'oz', type: f?.note || '' };
+        return { qty: roundSig(Number(f.amount) * scaleFactor, 2), unit: f.unit || 'oz', type: f.note || '' };
+    };
+
+    const portland = scaleBase('Portland');
+    const sand     = scaleBase('Sand');
+    const pozzo    = scaleBase('Pozzotive');
+
+    let aggRows = '';
+    const aggs = (colorLog?.aggregates || []).filter(a => a && a.name);
+    if (aggs.length) {
+        aggRows = aggs.map(agg => {
+            const qty = agg.amount ? roundSig(Number(agg.amount) * scaleFactor, 2) : '-';
+            const unit = agg.unit || 'lbs';
+            return `<tr><td class="bt-label">Aggregate:</td><td class="bt-type">TYPE: ${escapeHtml(agg.name)}</td><td class="bt-qty-label">QTY:</td><td class="bt-qty">${qty}</td><td class="bt-unit">${escapeHtml(unit)}</td></tr>`;
+        }).join('');
+    } else {
+        aggRows = `<tr><td class="bt-label">Aggregate:</td><td class="bt-type">TYPE:</td><td class="bt-qty-label">QTY:</td><td class="bt-qty">-</td><td class="bt-unit">lbs</td></tr>`;
+    }
+
+    let fibers = scaleAdd('Fibers');
+    if (batchType === 'firstBackUp' || batchType === 'finalBackUp') {
+        // Backup batches: 18 lbs fibers per 250 lbs sand (Cemfill).
+        fibers = { qty: roundSig(18 * (batchSandLbs / 250), 2), unit: 'lbs', type: 'Cemfill' };
+    }
+
+    const waterBase = scaleBase('Water');
+    const waterAdd = scaleAdd('Water');
+    const water = waterBase.qty !== '-' ? waterBase : waterAdd;
+    const adva = scaleAdd('ADVA');
+    const eclipse = scaleAdd('Eclipse');
+    const fortonBase = scaleBase('Forton');
+    const fortonAdd = scaleAdd('Forton');
+    const forton = fortonBase.qty !== '-' ? fortonBase : fortonAdd;
+
+    // Pigments (4 slots)
+    const reducedLabel = (batchType === 'finalBackUp' && pigReductionPct > 0) ? ` (${pigReductionPct}% reduced)` : '';
+    let pigRows = '';
+    for (let i = 0; i < 4; i++) {
+        const p = (colorLog?.pigments || [])[i];
+        if (p && p.pct !== '' && p.pct != null && p.pct !== undefined) {
+            const effectivePct = Number(p.pct) * pigMultiplier;
+            const weightLbs = batchSandLbs * effectivePct / 100;
+            const unit = p.unit || 'lbs';
+            const converted = roundSig(weightLbs * (FROM_LBS[unit] || 1), 2);
+            const pctDisplay = pigMultiplier < 1 ? `${roundSig(effectivePct, 4)}%` : `${p.pct}%`;
+            pigRows += `<tr><td class="bt-label">Pigment #${i+1}:</td><td class="bt-type">COLOR: ${escapeHtml(p.name || '')} ${pctDisplay}${reducedLabel}</td><td class="bt-qty-label">QTY:</td><td class="bt-qty">${converted}</td><td class="bt-unit">${escapeHtml(unit)}</td></tr>`;
+        } else {
+            pigRows += `<tr><td class="bt-label">Pigment #${i+1}:</td><td class="bt-type">COLOR:</td><td class="bt-qty-label">QTY:</td><td class="bt-qty"></td><td class="bt-unit"></td></tr>`;
+        }
+    }
+
+    const bannerLabel = batchType === 'face' ? 'Face Mix'
+        : batchType === 'firstBackUp' ? 'First Back Up'
+        : batchType === 'finalBackUp' ? 'FINAL Back Up'
+        : '';
+
+    const isDirectCast = castMethod === 'directCast';
+    const sandTypeDisplay = (!isDirectCast && (batchType === 'firstBackUp' || batchType === 'finalBackUp'))
+        ? 'Bulk Sand (Cowbay)'
+        : escapeHtml(sand.type || '');
+
+    return `
+    <div class="batch-ticket bt-${batchType}">
+        <div class="bt-title">BATCHING TICKET</div>
+        <div class="bt-type-banner">${bannerLabel}</div>
+
+        <div class="bt-header-grid">
+            <div class="bt-hrow"><span class="bt-hlabel">PROJECT:</span><span class="bt-hval">${escapeHtml(project || '')}</span></div>
+            <div class="bt-hrow"><span class="bt-hlabel">Batched by:</span><span class="bt-hval">${escapeHtml(batchedBy || '')}</span></div>
+            <div class="bt-hrow"><span class="bt-hlabel">Sample #:</span><span class="bt-hval">${escapeHtml(sampleName || '')}</span></div>
+            <div class="bt-hrow"><span class="bt-hlabel">Cast #:</span><span class="bt-hval">${escapeHtml(castNumber || '')}</span></div>
+            <div class="bt-hrow"><span class="bt-hlabel">Cast Date:</span><span class="bt-hval">${escapeHtml(castDate || '')}</span></div>
+            <div class="bt-hrow"><span class="bt-hlabel">Batch:</span><span class="bt-hval">${num} of ${total}</span></div>
+        </div>
+
+        <div class="bt-mix-box">
+            <div class="bt-mix-label">MIX DESIGN</div>
+            <div class="bt-cb-row">
+                <span class="bt-cb">${cb(castMethod === 'sprayUp')} GFRC Spray</span>
+                <span class="bt-cb">${cb(castMethod === 'directCast')} GFRC Direct</span>
+                <span class="bt-cb">${cb(false)} Regular Concrete</span>
+                <span class="bt-cb">${cb(castMethod === 'other')} Other</span>
+            </div>
+        </div>
+        <div class="bt-cb-row">
+            <span class="bt-cb"><strong>Face Mix:</strong> ${cb(batchType === 'face')}</span>
+            <span class="bt-cb"><strong>First Back Up:</strong> ${cb(batchType === 'firstBackUp')}</span>
+            <span class="bt-cb"><strong>FINAL Back Up:</strong> ${cb(batchType === 'finalBackUp')}</span>
+        </div>
+
+        <div class="bt-section-label">DRY BATCH</div>
+        <table class="bt-table">
+            <tr><td class="bt-label">Portland:</td><td class="bt-type">TYPE: ${escapeHtml(portland.type || 'Portland')}</td><td class="bt-qty-label">QTY:</td><td class="bt-qty">${portland.qty}</td><td class="bt-unit">${escapeHtml(portland.unit)}</td></tr>
+            <tr><td class="bt-label">Sand:</td><td class="bt-type">TYPE: ${sandTypeDisplay}</td><td class="bt-qty-label">QTY:</td><td class="bt-qty">${sand.qty}</td><td class="bt-unit">${escapeHtml(sand.unit)}</td></tr>
+            <tr><td class="bt-label">Portland Reducer:</td><td class="bt-type">TYPE: ${escapeHtml(pozzo.type || 'Pozzotive')}</td><td class="bt-qty-label">QTY:</td><td class="bt-qty">${pozzo.qty}</td><td class="bt-unit">${escapeHtml(pozzo.unit)}</td></tr>
+            ${aggRows}
+            <tr><td class="bt-label">Fibers:</td><td class="bt-type">TYPE: ${escapeHtml(fibers.type || '')}</td><td class="bt-qty-label">QTY:</td><td class="bt-qty">${fibers.qty}</td><td class="bt-unit">${escapeHtml(fibers.unit)}</td></tr>
+        </table>
+
+        <div class="bt-section-label">PIGMENTS</div>
+        <table class="bt-table">${pigRows}</table>
+
+        <div class="bt-section-label">ADDITIVES</div>
+        <table class="bt-table">
+            <tr><td class="bt-label">Additive #1:</td><td class="bt-type">TYPE: Water</td><td class="bt-qty-label">QTY:</td><td class="bt-qty">${water.qty}</td><td class="bt-unit">${escapeHtml(water.unit)}</td></tr>
+            <tr><td class="bt-label">Additive #2:</td><td class="bt-type">TYPE: ${escapeHtml(adva.type || 'ADVA Flex')}</td><td class="bt-qty-label">QTY:</td><td class="bt-qty">${adva.qty}</td><td class="bt-unit">${escapeHtml(adva.unit)}</td></tr>
+            <tr><td class="bt-label">Additive #3:</td><td class="bt-type">TYPE: ${escapeHtml(eclipse.type || 'Eclipse')}</td><td class="bt-qty-label">QTY:</td><td class="bt-qty">${eclipse.qty}</td><td class="bt-unit">${escapeHtml(eclipse.unit)}</td></tr>
+            <tr><td class="bt-label">Additive #4:</td><td class="bt-type">TYPE: Forton</td><td class="bt-qty-label">QTY:</td><td class="bt-qty">${forton.qty}</td><td class="bt-unit">${escapeHtml(forton.unit)}</td></tr>
+        </table>
+
+        <div class="bt-notes-title">NOTES:</div>
+        <div class="bt-notes">${batchSandLbs} lbs Mix\nBatch ${num} of ${total}${notes ? '\n' + escapeHtml(notes) : ''}</div>
+    </div>`;
+}
+
+// ---------- Save / state ----------
+
+function setBatchTicketStatus(castingId, state) {
+    if (castingId !== currentBatchCastingId) return; // only the visible casting has a status indicator
+    const el = document.querySelector('#pp-bt-content [data-bt-status]');
+    if (!el) return;
+    el.classList.remove('is-saving', 'is-saved', 'is-error');
+    if (state === 'saving') { el.classList.add('is-saving'); el.textContent = 'Saving…'; }
+    else if (state === 'saved') { el.classList.add('is-saved'); el.textContent = 'Saved'; }
+    else if (state === 'error') { el.classList.add('is-error'); el.textContent = 'Save failed'; }
+    else el.textContent = '';
+}
+
+function scheduleBatchTicketSave(castingId) {
+    if (!currentProjectNumber) return;
+    const existing = batchTicketSaveTimers.get(castingId);
+    if (existing) clearTimeout(existing);
+    setBatchTicketStatus(castingId, 'saving');
+    const t = setTimeout(() => saveBatchTicketNow(castingId), 700);
+    batchTicketSaveTimers.set(castingId, t);
+}
+
+async function saveBatchTicketNow(castingId) {
+    const ticket = batchTickets.get(castingId);
+    if (!ticket) return;
+    batchTicketSaveTimers.delete(castingId);
+    try {
+        const saved = await saveBatchTicketForCasting(castingId, ticket);
+        if (saved) ticket.id = saved.id;
+        setBatchTicketStatus(castingId, 'saved');
+        setTimeout(() => setBatchTicketStatus(castingId, ''), 1500);
+    } catch (err) {
+        logger.error('[batch-tickets] save failed', err);
+        setBatchTicketStatus(castingId, 'error');
+    }
+}
+
+async function flushAllBatchTicketSaves() {
+    const pending = Array.from(batchTicketSaveTimers.entries());
+    if (!pending.length) return;
+    for (const [, t] of pending) clearTimeout(t);
+    batchTicketSaveTimers.clear();
+    await Promise.all(pending.map(([id]) => saveBatchTicketNow(id).catch(() => {})));
+}
+
+async function handleSelectBatchCasting(castingId) {
+    if (castingId === currentBatchCastingId) return;
+    // Flush any pending save on the casting we're leaving so its DB state matches the form.
+    const prev = currentBatchCastingId;
+    if (prev && batchTicketSaveTimers.has(prev)) {
+        clearTimeout(batchTicketSaveTimers.get(prev));
+        batchTicketSaveTimers.delete(prev);
+        try { await saveBatchTicketNow(prev); } catch (e) { /* logged */ }
+    }
+    currentBatchCastingId = castingId;
+    renderBatchTickets();
+}
+
+function handleBatchFieldInput(castingId, field, value) {
+    const ticket = getBatchTicketFor(castingId);
+    if (!(field in ticket)) return;
+    ticket[field] = value;
+    // Inputs that affect the visible preview: re-render it so summary/tickets stay in sync.
+    const previewAffectingFields = ['cuFt', 'faceSqFt', 'cuFtPer250', 'batchedBy', 'notes'];
+    if (previewAffectingFields.includes(field)) {
+        // If the batch count would change, drop manual overrides so they don't desync.
+        const sandLbs = getColorLogSandLbs(currentColorLog);
+        if (sandLbs && Array.isArray(ticket.batchAssignments) && ticket.batchAssignments.length) {
+            const newPlan = buildBatchPlan({
+                totalCuFt: parseFloat(ticket.cuFt) || 0,
+                faceSqFt: parseFloat(ticket.faceSqFt) || 0,
+                cuFtPer250: parseFloat(ticket.cuFtPer250) || 4.28,
+                castMethod: currentColorLog?.castMethod || 'sprayUp',
+                colorLogSandLbs: sandLbs,
+                manualOverrides: null
+            });
+            if (newPlan.batches.length !== ticket.batchAssignments.length) {
+                ticket.batchAssignments = [];
+            }
+        }
+        rerenderBatchPreview(castingId);
+    }
+    scheduleBatchTicketSave(castingId);
+}
+
+function handleBatchAssignChange(castingId, idx, type) {
+    const ticket = getBatchTicketFor(castingId);
+    const sandLbs = getColorLogSandLbs(currentColorLog);
+    if (!sandLbs) return;
+    const plan = buildBatchPlan({
+        totalCuFt: parseFloat(ticket.cuFt) || 0,
+        faceSqFt: parseFloat(ticket.faceSqFt) || 0,
+        cuFtPer250: parseFloat(ticket.cuFtPer250) || 4.28,
+        castMethod: currentColorLog?.castMethod || 'sprayUp',
+        colorLogSandLbs: sandLbs,
+        manualOverrides: ticket.batchAssignments
+    });
+    // Materialize current assignments (auto + any prior overrides), then update one.
+    const assignments = plan.batches.map(b => ({ batchLbs: b.batchSandLbs, type: b.type }));
+    if (idx >= 0 && idx < assignments.length) assignments[idx].type = type;
+    ticket.batchAssignments = assignments;
+    rerenderBatchPreview(castingId);
+    scheduleBatchTicketSave(castingId);
+}
+
+async function handleCastingDateChange(castingId, value) {
+    try {
+        await updateCasting(castingId, { casting_date: value || null });
+        const c = currentCastings.find(x => x.id === castingId);
+        if (c) c.casting_date = value || null;
+        // Refresh both pills (date label) and content if this is the active casting.
+        renderBatchTicketsPills();
+    } catch (err) {
+        logger.error('[batch-tickets] casting_date update failed', err);
+        showToast('Failed to update cast date', 'error');
+    }
+}
+
+/** Update only the live-preview region (summary + assignment + ticket cards) — keeps focus in the inputs. */
+function rerenderBatchPreview(castingId) {
+    if (castingId !== currentBatchCastingId) return;
+    const wrap = document.querySelector('#pp-bt-content [data-bt-preview]');
+    if (!wrap) return;
+    const casting = currentCastings.find(c => c.id === castingId);
+    const ticket = batchTickets.get(castingId);
+    if (!casting || !ticket) return;
+    wrap.innerHTML = renderBatchPreview(casting, ticket);
+}
+
+// CSS.escape polyfill — for our IDs (UUIDs, no specials), plain interpolation works,
+// but use the native API when available for safety.
+function cssEscape(s) {
+    if (window.CSS && typeof window.CSS.escape === 'function') return window.CSS.escape(s);
+    return String(s).replace(/[^a-zA-Z0-9_-]/g, m => '\\' + m);
+}
+
+// ---------- Print ----------
+
+const BATCH_PRINT_CSS = `
+/* Letter portrait: printable area with our 0.3in × 0.4in @page margin = 7.7in × 10.4in (~554pt × 748pt).
+   Goal: each ticket fits on a single page. Sizes are tuned so total content height + padding + border
+   stays under 748pt, leaving the notes block to soak up the rest. */
+@page { size: letter portrait; margin: 0.3in 0.4in; }
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: 'Segoe UI', Arial, sans-serif; color:#000; font-size:11pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+/* Fixed pt height (NOT vh) so each ticket fills the printable area exactly without
+   the cross-page rendering bugs that vh+flex caused. Letter portrait minus 0.3in
+   margins = ~748pt printable; we use 745pt for a touch of safety against rounding. */
+.bt-page {
+    page-break-after: always;
+    page-break-inside: avoid;
+    break-after: page;
+    break-inside: avoid;
+    padding: 12pt 14pt;
+    border: 6pt solid #ccc;
+    height: 745pt;
+    display: flex;
+    flex-direction: column;
+}
+.bt-page:last-child { page-break-after: auto; break-after: auto; }
+.bt-page.bt-face { border-color: #f97316; }
+.bt-page.bt-firstBackUp { border-color: #3b82f6; }
+.bt-page.bt-finalBackUp { border-color: #eab308; }
+.batch-ticket {
+    border: none !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    max-width: none !important;
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+}
+.bt-title { font-size: 18pt; font-weight: 900; color: #000; margin-bottom: 2pt; letter-spacing: 0.5pt; }
+.bt-type-banner { font-size: 11pt; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5pt; margin-bottom: 6pt; }
+.batch-ticket.bt-face .bt-type-banner { color: #f97316; }
+.batch-ticket.bt-firstBackUp .bt-type-banner { color: #3b82f6; }
+.batch-ticket.bt-finalBackUp .bt-type-banner { color: #ca8a04; }
+.bt-header-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; margin-bottom: 4pt; }
+.bt-hrow { display: flex; align-items: baseline; padding: 2.5pt 0; border-bottom: 0.75pt solid #000; }
+.bt-hrow:nth-child(odd) { padding-right: 12pt; }
+.bt-hrow:nth-child(even) { padding-left: 12pt; }
+.bt-hlabel { font-size: 9.5pt; font-weight: 700; min-width: 78pt; margin-right: 6pt; }
+.bt-hval { flex: 1; font-size: 10.5pt; font-style: italic; min-height: 12pt; }
+.bt-mix-box { border: 1.5pt solid #000; padding: 6pt 10pt; margin: 4pt 0; background: #fff; color: #000; }
+.batch-ticket.bt-face .bt-mix-box { background: #f97316; border-color: #f97316; color: #fff; }
+.batch-ticket.bt-firstBackUp .bt-mix-box { background: #3b82f6; border-color: #3b82f6; color: #fff; }
+.batch-ticket.bt-finalBackUp .bt-mix-box { background: #eab308; border-color: #eab308; }
+.bt-mix-label { font-size: 9pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8pt; margin-bottom: 3pt; }
+.bt-cb-row { display: flex; justify-content: space-between; align-items: center; padding: 2pt 0; gap: 8pt; flex-wrap: wrap; }
+.bt-cb { display: flex; align-items: center; gap: 5pt; font-size: 10pt; }
+.bt-cb-box { width: 14pt; height: 14pt; border: 1.5pt solid #000; display: inline-flex; align-items: center; justify-content: center; font-size: 11pt; font-weight: 900; background: #fff; color: #000; }
+.bt-cb-box.checked::after { content: '\\2713'; }
+.bt-section-label { font-weight: 700; font-size: 9.5pt; text-transform: uppercase; letter-spacing: 0.8pt; padding: 4pt 0 1.5pt; border-bottom: 1pt solid #000; margin-top: 3pt; }
+.bt-table { width: 100%; border-collapse: collapse; margin-bottom: 2pt; }
+.bt-table td { font-size: 10pt; padding: 2.5pt 4pt; border-bottom: 0.5pt solid #d4d4d4; vertical-align: baseline; }
+.bt-table .bt-label { font-weight: 700; width: 22%; white-space: nowrap; }
+.bt-table .bt-type { width: 40%; }
+.bt-table .bt-qty-label { font-weight: 700; width: 8%; text-align: right; }
+.bt-table .bt-qty { width: 18%; text-align: right; font-style: italic; }
+.bt-table .bt-unit { width: 12%; padding-left: 4pt; }
+.bt-notes-title { font-size: 9.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5pt; margin-top: 6pt; margin-bottom: 2pt; }
+/* flex: 1 inside the fixed-height .bt-page lets this absorb leftover vertical space and fill the page. */
+.bt-notes { border: 1pt solid #000; padding: 6pt 8pt; flex: 1 1 auto; min-height: 70pt; font-size: 10pt; line-height: 1.4; white-space: pre-wrap; }
+`;
+
+function handlePrintBatchTickets(castingId) {
+    const ticket = batchTickets.get(castingId);
+    if (!ticket) return;
+    const casting = currentCastings.find(c => c.id === castingId);
+    if (!casting) return;
+    const sandLbs = getColorLogSandLbs(currentColorLog);
+    if (!sandLbs) {
+        showToast('Add a sand entry to the color log first', 'error');
+        return;
+    }
+    const plan = buildBatchPlan({
+        totalCuFt: parseFloat(ticket.cuFt) || 0,
+        faceSqFt: parseFloat(ticket.faceSqFt) || 0,
+        cuFtPer250: parseFloat(ticket.cuFtPer250) || 4.28,
+        castMethod: currentColorLog?.castMethod || 'sprayUp',
+        colorLogSandLbs: sandLbs,
+        manualOverrides: ticket.batchAssignments
+    });
+    if (!plan.batches.length) {
+        showToast('Enter Total Cu Ft to generate tickets', 'error');
+        return;
+    }
+
+    const projectName = document.getElementById('pp-f-project_name')?.value || '';
+    const sampleName = currentColorLog?.name || '';
+    const castMethod = currentColorLog?.castMethod || '';
+
+    const pages = plan.batches.map(b => `
+        <div class="bt-page bt-${b.type}">
+            ${renderBatchTicketCard({
+                colorLog: currentColorLog,
+                batch: b,
+                project: projectName,
+                sampleName,
+                castMethod,
+                castNumber: casting.casting_number || '',
+                castDate: casting.casting_date || '',
+                batchedBy: ticket.batchedBy,
+                notes: ticket.notes
+            })}
+        </div>
+    `).join('');
+
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Batch Tickets — ${escapeHtml(projectName)} — Cast ${escapeHtml(casting.casting_number || '')}</title><style>${BATCH_PRINT_CSS}</style></head><body>${pages}<script>window.addEventListener('load',()=>{setTimeout(()=>window.print(),200);});<\/script></body></html>`;
+
+    const w = window.open('', '_blank');
+    if (!w) {
+        showToast('Pop-up blocked — allow pop-ups for printing', 'error');
+        return;
+    }
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
 }
 
 // ---------- Bootstrap ----------

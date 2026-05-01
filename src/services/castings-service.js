@@ -106,7 +106,7 @@ export async function setCastingsOrder(castingIdsInOrder) {
 /**
  * Update an existing casting by id.
  * @param {string} id
- * @param {{casting_number?:string, description?:string}} fields
+ * @param {{casting_number?:string, description?:string, casting_date?:string|null}} fields
  * @returns {Promise<Object>}
  */
 export async function updateCasting(id, fields) {
@@ -117,6 +117,7 @@ export async function updateCasting(id, fields) {
     const payload = {};
     if (fields.casting_number !== undefined) payload.casting_number = fields.casting_number.trim();
     if (fields.description !== undefined) payload.description = fields.description ? fields.description.trim() : null;
+    if (fields.casting_date !== undefined) payload.casting_date = fields.casting_date || null;
 
     const { data, error } = await client
         .from(CASTINGS_TABLE)

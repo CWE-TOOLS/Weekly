@@ -1855,3 +1855,467 @@ body.pp-printing .pp-tab-panel[data-panel="castings"] { display: none !important
 }
 
 body.pp-printing .pp-tab-panel[data-panel="color-log"] { display: none !important; }
+
+/* =====================================================================
+   Batch Tickets tab
+   Per-casting accordion (reuses .pp-track-section* classes for the shell).
+   The form inside each accordion is .pp-bt-*; tickets are .batch-ticket / .bt-*
+   ===================================================================== */
+
+.pp-bt-wrap {
+    padding: 8px 20px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    /* Match the .batch-ticket card width so pills, form cards, and tickets align in one column. */
+    max-width: 850px;
+}
+
+.pp-bt-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 0 12px;
+    border-bottom: 1px solid #e2e8f0;
+    margin-bottom: 12px;
+}
+.pp-bt-pill {
+    background: #f1f5f9;
+    border: 1px solid transparent;
+    color: #475569;
+    padding: 6px 14px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s, color 0.15s;
+}
+.pp-bt-pill:hover { background: #e2e8f0; color: #0f172a; }
+.pp-bt-pill-active {
+    background: var(--accent-primary, #4f46e5);
+    color: #fff;
+}
+.pp-bt-pill-active:hover {
+    background: var(--accent-primary, #4f46e5);
+    color: #fff;
+    filter: brightness(0.95);
+}
+.pp-bt-pill-date {
+    margin-left: 6px;
+    font-weight: 400;
+    opacity: 0.8;
+    font-size: 11px;
+}
+.pp-bt-pill-active .pp-bt-pill-date { opacity: 0.85; }
+
+#pp-bt-content { display: flex; flex-direction: column; gap: 8px; }
+
+/* Per-casting form */
+.pp-bt-form {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+/* Active-casting context bar: Cast # + editable Cast Date */
+.pp-bt-context {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 10px 14px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    flex-wrap: wrap;
+}
+.pp-bt-context-cast {
+    font-size: 16px;
+    font-weight: 700;
+    color: #0f172a;
+}
+.pp-bt-context-cast .pp-bt-context-cast-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-right: 6px;
+}
+.pp-bt-context-date-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+}
+.pp-bt-context-date-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.pp-bt-context-date {
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    padding: 5px 8px;
+    font: inherit;
+    font-size: 13px;
+    background: #fff;
+    color: #0f172a;
+}
+.pp-bt-context-date:focus {
+    outline: none;
+    border-color: var(--accent-primary, #4f46e5);
+    box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.15);
+}
+
+/* Form cards: visually grouped sections */
+.pp-bt-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 12px 14px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.pp-bt-card-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin: 0 0 2px;
+}
+
+/* Advanced disclosure (Cu Ft per 250lb) */
+.pp-bt-advanced { margin-top: 4px; }
+.pp-bt-advanced > summary {
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+    list-style: none;
+    user-select: none;
+    padding: 4px 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+.pp-bt-advanced > summary::-webkit-details-marker { display: none; }
+.pp-bt-advanced > summary::before {
+    content: '\25B6';
+    font-size: 9px;
+    color: #94a3b8;
+    transition: transform 0.15s;
+    display: inline-block;
+}
+.pp-bt-advanced[open] > summary::before { transform: rotate(90deg); }
+.pp-bt-advanced > summary:hover { color: var(--accent-primary, #4f46e5); }
+.pp-bt-advanced-body {
+    padding-top: 8px;
+    max-width: 280px;
+}
+
+/* Section header that separates form from generated output */
+.pp-bt-section-header {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-top: 6px;
+    padding-top: 12px;
+    border-top: 1px solid #e2e8f0;
+}
+.pp-bt-section-header-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #0f172a;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.pp-bt-section-header-summary {
+    font-size: 12px;
+    color: #475569;
+}
+
+/* End-of-tab reminder about Print Batch Tickets */
+.pp-bt-print-hint {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    color: #1e40af;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    text-align: center;
+}
+
+.pp-bt-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 10px 14px;
+}
+.pp-bt-field { display: flex; flex-direction: column; gap: 4px; }
+.pp-bt-field-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.pp-bt-input,
+.pp-bt-textarea {
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    padding: 6px 8px;
+    font: inherit;
+    font-size: 13px;
+    color: #0f172a;
+    background: #fff;
+    width: 100%;
+    box-sizing: border-box;
+}
+.pp-bt-textarea { resize: vertical; min-height: 56px; }
+.pp-bt-input:focus,
+.pp-bt-textarea:focus {
+    outline: none;
+    border-color: var(--accent-primary, #4f46e5);
+    box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.15);
+}
+
+.pp-bt-btn {
+    background: var(--accent-primary, #4f46e5);
+    border: 1px solid var(--accent-primary, #4f46e5);
+    color: #fff;
+    padding: 7px 14px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+}
+.pp-bt-btn:hover { filter: brightness(0.93); }
+.pp-bt-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.pp-bt-btn-secondary {
+    background: #fff;
+    color: var(--accent-primary, #4f46e5);
+}
+.pp-bt-btn-secondary:hover { background: rgba(79, 70, 229, 0.05); }
+
+.pp-bt-save-status {
+    font-size: 11px;
+    color: #94a3b8;
+    margin-left: auto;
+    min-width: 70px;
+    text-align: right;
+}
+.pp-bt-save-status.is-saving { color: #4f46e5; }
+.pp-bt-save-status.is-saved { color: #16a34a; }
+.pp-bt-save-status.is-error { color: #dc2626; }
+
+.pp-bt-no-color-log {
+    background: #fef3c7;
+    border: 1px solid #fde68a;
+    color: #92400e;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+}
+
+/* Batch assignment table */
+.pp-bt-assign {
+    background: #fff;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 10px 12px;
+}
+.pp-bt-assign-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: #334155;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.pp-bt-assign-hint {
+    font-size: 11px;
+    color: #64748b;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: normal;
+    margin-left: 6px;
+}
+.pp-bt-assign-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+.pp-bt-assign-table th {
+    font-size: 10px;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 6px 8px;
+    text-align: center;
+    border-bottom: 2px solid #e2e8f0;
+}
+.pp-bt-assign-table th:first-child,
+.pp-bt-assign-table th:nth-child(2),
+.pp-bt-assign-table th:nth-child(3) { text-align: left; }
+.pp-bt-assign-table td {
+    padding: 6px 8px;
+    text-align: center;
+    border-bottom: 1px solid #f1f5f9;
+}
+.pp-bt-assign-table td:first-child,
+.pp-bt-assign-table td:nth-child(2),
+.pp-bt-assign-table td:nth-child(3) { text-align: left; }
+.pp-bt-assign-table input[type="radio"] {
+    width: 16px; height: 16px;
+    accent-color: var(--accent-primary, #4f46e5);
+    cursor: pointer;
+}
+.pp-bt-assign-table tr:hover { background: #f8fafc; }
+
+/* Tickets list */
+.pp-bt-tickets {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 4px;
+}
+
+/* =====================================================================
+   Batch Ticket card (.batch-ticket / .bt-*)
+   Ported from Batchin Calc.
+   ===================================================================== */
+.batch-ticket {
+    background: #fff;
+    border: 6px solid #ccc;
+    border-radius: 6px;
+    padding: 22px 28px;
+    max-width: 850px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    color: #0f172a;
+}
+.batch-ticket.bt-face { border-color: #f97316; }
+.batch-ticket.bt-face .bt-mix-box { background: #f97316; border-color: #f97316; color: #fff; }
+.batch-ticket.bt-firstBackUp { border-color: #3b82f6; }
+.batch-ticket.bt-firstBackUp .bt-mix-box { background: #3b82f6; border-color: #3b82f6; color: #fff; }
+.batch-ticket.bt-finalBackUp { border-color: #eab308; }
+.batch-ticket.bt-finalBackUp .bt-mix-box { background: #eab308; border-color: #eab308; }
+
+.bt-title {
+    font-size: 17px;
+    font-weight: 900;
+    color: #000;
+    margin-bottom: 8px;
+}
+.bt-type-banner {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+}
+.batch-ticket.bt-face .bt-type-banner { color: #f97316; }
+.batch-ticket.bt-firstBackUp .bt-type-banner { color: #3b82f6; }
+.batch-ticket.bt-finalBackUp .bt-type-banner { color: #ca8a04; }
+
+.bt-header-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    margin-bottom: 6px;
+}
+.bt-hrow {
+    display: flex;
+    align-items: baseline;
+    padding: 4px 0;
+    border-bottom: 1px solid #000;
+}
+.bt-hrow:nth-child(odd) { padding-right: 12px; }
+.bt-hrow:nth-child(even) { padding-left: 12px; }
+.bt-hlabel { font-size: 11px; font-weight: 700; white-space: nowrap; margin-right: 6px; }
+.bt-hval { flex: 1; font-size: 12px; font-style: italic; min-height: 16px; }
+
+.bt-mix-box {
+    border: 2px solid #000;
+    padding: 10px 16px 12px;
+    margin: 10px 0 8px;
+    background: #fff;
+}
+.bt-mix-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+}
+.bt-cb-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    padding: 4px 0;
+}
+.bt-cb { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.bt-cb-box {
+    width: 18px; height: 18px;
+    border: 2px solid #000;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 900;
+    flex-shrink: 0;
+    background: #fff;
+    color: #000;
+}
+.bt-cb-box.checked::after { content: '\2713'; }
+
+.bt-section-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1.5px solid #000;
+    padding: 6px 0 2px;
+    margin-top: 4px;
+}
+.bt-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 4px;
+}
+.bt-table td {
+    font-size: 11px;
+    padding: 3px 5px;
+    border-bottom: 1px solid #ddd;
+    vertical-align: baseline;
+}
+.bt-table .bt-label    { font-weight: 700; width: 22%; white-space: nowrap; }
+.bt-table .bt-type     { width: 40%; }
+.bt-table .bt-qty-label{ font-weight: 700; width: 8%; text-align: right; }
+.bt-table .bt-qty      { width: 18%; text-align: right; font-style: italic; }
+.bt-table .bt-unit     { width: 12%; padding-left: 4px; }
+
+.bt-notes-title {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    margin-top: 8px;
+    margin-bottom: 3px;
+}
+.bt-notes {
+    border: 1px solid #000;
+    padding: 6px 8px;
+    min-height: 40px;
+    font-size: 11px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+}
+
+body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !important; }

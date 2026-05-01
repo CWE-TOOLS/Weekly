@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="src/styles/variables.css">
     <link rel="stylesheet" href="src/styles/base.css">
     <link rel="stylesheet" href="src/styles/buttons.css">
-    <link rel="stylesheet" href="src/styles/project-portal.css?v=20260501-01">
+    <link rel="stylesheet" href="src/styles/project-portal.css?v=20260501-05">
 
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 </head>
@@ -125,6 +125,14 @@
                             <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>
                         </svg>
                         <span>Color Log</span>
+                    </button>
+                    <button class="pp-tab-btn" data-tab="batch-tickets" type="button">
+                        <svg class="pp-tab-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 2h6a2 2 0 0 1 2 2v2H7V4a2 2 0 0 1 2-2z"/>
+                            <path d="M5 6h14a1 1 0 0 1 1 1v14l-3-2-3 2-3-2-3 2-3-2-3 2V7a1 1 0 0 1 1-1z"/>
+                            <path d="M9 11h6M9 15h6M9 19h4"/>
+                        </svg>
+                        <span>Batch Tickets</span>
                     </button>
                 </nav>
 
@@ -448,6 +456,26 @@
                         </div>
                     </div>
 
+                    <!-- Tab: Batch Tickets -->
+                    <div class="pp-tab-panel" data-panel="batch-tickets" hidden>
+                        <div class="pp-bt-wrap">
+                            <div id="pp-bt-needs-save" class="pp-castings-hint" hidden>
+                                Save the project first to use Batch Tickets.
+                            </div>
+
+                            <div id="pp-bt-needs-color-log" class="pp-castings-hint" hidden>
+                                Create a color log for this project first — batch tickets scale ingredients from it.
+                            </div>
+
+                            <div id="pp-bt-no-castings" class="pp-castings-hint" hidden>
+                                No castings yet. Add a casting first.
+                            </div>
+
+                            <div class="pp-bt-pills" id="pp-bt-pills"></div>
+                            <div id="pp-bt-content"></div>
+                        </div>
+                    </div>
+
                     <!-- Tab: Optimizer Hours -->
                     <div class="pp-tab-panel" data-panel="optimizer" hidden>
                         <div class="pp-opt-wrap">
@@ -491,6 +519,6 @@
         <div id="pp-toast" class="pp-toast" hidden></div>
     </div>
 
-    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20260501-02"></script>
+    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20260501-11"></script>
 </body>
 </html>
