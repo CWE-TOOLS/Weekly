@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="src/styles/variables.css">
     <link rel="stylesheet" href="src/styles/base.css">
     <link rel="stylesheet" href="src/styles/buttons.css">
-    <link rel="stylesheet" href="src/styles/project-portal.css?v=20260430-43">
+    <link rel="stylesheet" href="src/styles/project-portal.css?v=20260501-01">
 
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 </head>
@@ -115,6 +115,16 @@
                             <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
                         </svg>
                         <span>Tracking</span>
+                    </button>
+                    <button class="pp-tab-btn" data-tab="color-log" type="button">
+                        <svg class="pp-tab-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="13.5" cy="6.5" r="2.5"/>
+                            <circle cx="17.5" cy="10.5" r="2.5"/>
+                            <circle cx="8.5" cy="7.5" r="2.5"/>
+                            <circle cx="6.5" cy="12.5" r="2.5"/>
+                            <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>
+                        </svg>
+                        <span>Color Log</span>
                     </button>
                 </nav>
 
@@ -291,6 +301,153 @@
                         </div>
                     </div>
 
+                    <!-- Tab: Color Log -->
+                    <div class="pp-tab-panel" data-panel="color-log" hidden>
+                        <div id="pp-cl-needs-save" class="pp-castings-hint" hidden>
+                            Save the project first to use Color Log.
+                        </div>
+
+                        <div class="pp-cl-toolbar" id="pp-cl-toolbar" hidden>
+                            <div class="pp-cl-toolbar-left">
+                                <label for="pp-cl-preset-select" class="pp-cl-toolbar-label">Load Standard Color:</label>
+                                <select id="pp-cl-preset-select" class="pp-cl-preset-select">
+                                    <option value="">— Choose color —</option>
+                                </select>
+                            </div>
+                            <div class="pp-cl-toolbar-right">
+                                <span id="pp-cl-save-status" class="pp-cl-save-status"></span>
+                                <button type="button" id="pp-cl-save-preset-btn" class="pp-cl-toolbar-btn">Save as Standard Color</button>
+                            </div>
+                        </div>
+
+                        <div class="pp-cl-wrap" id="pp-cl-wrap" hidden>
+                            <div class="pp-cl-paper">
+                                <!-- Header -->
+                                <div class="pp-cl-header">
+                                    <div>
+                                        <div class="pp-cl-title">COLOR LOG</div>
+                                        <div class="pp-cl-sub">Concreteworks East &mdash; Rev. 2025</div>
+                                    </div>
+                                    <div class="pp-cl-sample">
+                                        <span class="pp-cl-sample-label">Sample #:</span>
+                                        <input type="text" id="pp-cl-name" class="pp-cl-input pp-cl-input-lg" placeholder="Color Name">
+                                        <div class="pp-cl-sub" style="text-align:right;">* new standard master</div>
+                                    </div>
+                                </div>
+
+                                <!-- Info rows -->
+                                <div class="pp-cl-grid-2">
+                                    <div class="pp-cl-field"><span class="pp-cl-label">Temperature:</span><input type="text" id="pp-cl-temp" class="pp-cl-input"></div>
+                                    <div class="pp-cl-field"><span class="pp-cl-label">Project:</span><input type="text" id="pp-cl-project" class="pp-cl-input"></div>
+                                </div>
+                                <div class="pp-cl-grid-2">
+                                    <div class="pp-cl-field"><span class="pp-cl-label">Date:</span><input type="date" id="pp-cl-date" class="pp-cl-input"></div>
+                                    <div class="pp-cl-field"><span class="pp-cl-label">Made By:</span><input type="text" id="pp-cl-madeby" class="pp-cl-input"></div>
+                                </div>
+
+                                <!-- Standard / Custom -->
+                                <div class="pp-cl-std-row">
+                                    <div class="pp-cl-cb-tag">
+                                        <span class="pp-cl-tag" data-cl-std="true">STANDARD</span>
+                                        <span class="pp-cl-tag-box checked" id="pp-cl-std-box" data-cl-std="true"></span>
+                                        <span class="pp-cl-tag" data-cl-std="false" style="margin-left:30px;">CUSTOM</span>
+                                        <span class="pp-cl-tag-box" id="pp-cl-cust-box" data-cl-std="false"></span>
+                                    </div>
+                                </div>
+
+                                <!-- Cement Type -->
+                                <div class="pp-cl-cb-row">
+                                    <span class="pp-cl-label" style="font-weight:700;">Cement Type:</span>
+                                    <label class="pp-cl-cb"><input type="radio" name="pp-cl-cement" value="white" checked><span class="pp-cl-checkbox"></span> White Portland</label>
+                                    <label class="pp-cl-cb"><input type="radio" name="pp-cl-cement" value="gray"><span class="pp-cl-checkbox"></span> Gray Portland</label>
+                                    <label class="pp-cl-cb"><input type="radio" name="pp-cl-cement" value="other"><span class="pp-cl-checkbox"></span> Other</label>
+                                </div>
+
+                                <div class="pp-cl-divider"></div>
+
+                                <!-- Base Ingredients + Additives -->
+                                <div class="pp-cl-2col">
+                                    <div class="pp-cl-col-left">
+                                        <table class="pp-cl-ing-table" id="pp-cl-base-table">
+                                            <thead><tr><th>Ingredient</th><th style="width:25%;">Weight</th><th style="width:15%;">Unit</th><th style="width:20%;">Note</th><th class="pp-cl-col-action"></th></tr></thead>
+                                            <tbody></tbody>
+                                        </table>
+                                        <button class="pp-cl-btn-add" type="button" data-cl-add="base">+ Add Ingredient</button>
+                                    </div>
+                                    <div class="pp-cl-col-right">
+                                        <table class="pp-cl-ing-table" id="pp-cl-additives-table">
+                                            <thead><tr><th>Additive</th><th style="width:25%;">Amount</th><th style="width:15%;">Unit</th><th style="width:20%;">Note</th><th class="pp-cl-col-action"></th></tr></thead>
+                                            <tbody></tbody>
+                                        </table>
+                                        <button class="pp-cl-btn-add" type="button" data-cl-add="additive">+ Add Additive</button>
+                                    </div>
+                                </div>
+
+                                <!-- Cast Method -->
+                                <div class="pp-cl-cb-row pp-cl-cb-row-bordered">
+                                    <span class="pp-cl-label" style="font-weight:700;">Cast Method:</span>
+                                    <label class="pp-cl-cb"><input type="radio" name="pp-cl-cast" value="sprayUp" checked><span class="pp-cl-checkbox"></span> Spray Up</label>
+                                    <label class="pp-cl-cb"><input type="radio" name="pp-cl-cast" value="directCast"><span class="pp-cl-checkbox"></span> Direct Cast</label>
+                                    <label class="pp-cl-cb"><input type="radio" name="pp-cl-cast" value="other"><span class="pp-cl-checkbox"></span> Other</label>
+                                </div>
+
+                                <!-- Aggregates + Pigments -->
+                                <div class="pp-cl-2col">
+                                    <div class="pp-cl-col-left">
+                                        <div class="pp-cl-sect-label">Aggregates:</div>
+                                        <table class="pp-cl-ing-table" id="pp-cl-aggregates-table">
+                                            <thead><tr><th>Name</th><th style="width:25%;">Amount</th><th style="width:15%;">Unit</th><th class="pp-cl-col-action"></th></tr></thead>
+                                            <tbody></tbody>
+                                        </table>
+                                        <button class="pp-cl-btn-add" type="button" data-cl-add="aggregate">+ Add Aggregate</button>
+                                    </div>
+                                    <div class="pp-cl-col-right">
+                                        <div class="pp-cl-sect-label">Pigments:</div>
+                                        <table class="pp-cl-ing-table" id="pp-cl-pigments-table">
+                                            <thead><tr><th style="width:28%;">Pigment</th><th style="width:18%;">%</th><th style="width:20%;">Weight</th><th style="width:18%;">Unit</th><th class="pp-cl-col-action"></th></tr></thead>
+                                            <tbody></tbody>
+                                        </table>
+                                        <button class="pp-cl-btn-add" type="button" data-cl-add="pigment">+ Add Pigment</button>
+                                    </div>
+                                </div>
+
+                                <!-- Grout + Fill Coat -->
+                                <div class="pp-cl-2col">
+                                    <div class="pp-cl-col-left">
+                                        <div class="pp-cl-sect-label">Grout Type:</div>
+                                        <table class="pp-cl-ing-table" id="pp-cl-grout-table">
+                                            <thead><tr><th>Grout Name</th><th style="width:30%;">Ratio %</th><th class="pp-cl-col-action"></th></tr></thead>
+                                            <tbody></tbody>
+                                        </table>
+                                        <button class="pp-cl-btn-add" type="button" data-cl-add="grout">+ Add Grout</button>
+                                    </div>
+                                    <div class="pp-cl-col-right">
+                                        <div class="pp-cl-sect-label">Fill Coat:</div>
+                                        <table class="pp-cl-ing-table" id="pp-cl-fillcoat-table">
+                                            <thead><tr><th style="width:28%;">Fill Pigment</th><th style="width:18%;">%</th><th style="width:20%;">Weight</th><th style="width:18%;">Unit</th><th class="pp-cl-col-action"></th></tr></thead>
+                                            <tbody></tbody>
+                                        </table>
+                                        <button class="pp-cl-btn-add" type="button" data-cl-add="fillCoat">+ Add Fill Pigment</button>
+                                    </div>
+                                </div>
+
+                                <div class="pp-cl-divider"></div>
+
+                                <!-- Notes -->
+                                <div class="pp-cl-2col">
+                                    <div class="pp-cl-col-left">
+                                        <div class="pp-cl-sect-label">Finishing Notes:</div>
+                                        <textarea id="pp-cl-finishing-notes" class="pp-cl-textarea" rows="4"></textarea>
+                                    </div>
+                                    <div class="pp-cl-col-right">
+                                        <div class="pp-cl-sect-label">Sealing Notes:</div>
+                                        <textarea id="pp-cl-sealing-notes" class="pp-cl-textarea" rows="4"></textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Tab: Optimizer Hours -->
                     <div class="pp-tab-panel" data-panel="optimizer" hidden>
                         <div class="pp-opt-wrap">
@@ -334,6 +491,6 @@
         <div id="pp-toast" class="pp-toast" hidden></div>
     </div>
 
-    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20260430-42"></script>
+    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20260501-02"></script>
 </body>
 </html>

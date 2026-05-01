@@ -38,6 +38,12 @@ import {
     deleteComponent,
     setComponentsOrder
 } from '../../services/tracking-service.js';
+import {
+    loadColorLogForProject,
+    saveColorLogForProject,
+    loadPresets as loadColorLogPresets,
+    saveAsPreset as saveColorLogAsPreset
+} from '../../services/color-log-service.js';
 
 const FORM_FIELDS = [
     'project_number', 'project_name', 'status', 'pm', 'project_date', 'project_address',
@@ -58,6 +64,10 @@ let currentCastingPhases = new Map();      // castingId -> Array<phase row>
 let copiedPhases = null;                   // Array<{phase_name, hours, sort_order}> from a copy action
 let currentTrackExpanded = new Set();      // castingIds whose tracking sections are open
 let currentCastingComponents = new Map();  // castingId -> Array<component row>
+let currentColorLog = null;                // form-shaped record (id null = unsaved)
+let colorLogPresets = [];                  // cached preset rows
+let colorLogSaveTimer = null;              // debounce timer
+let colorLogLoadedFor = null;              // project_number we last loaded for
 
 function getPhasesFor(castingId) {
     return currentCastingPhases.get(castingId) || [];
@@ -85,10 +95,18 @@ function setProjectInUrl(projectNumber) {
 }
 
 async function showListView() {
+    // Flush any pending color-log save before leaving the form view.
+    if (colorLogSaveTimer) {
+        clearTimeout(colorLogSaveTimer);
+        colorLogSaveTimer = null;
+        try { await saveColorLogNow(); } catch (e) { /* error already logged */ }
+    }
     currentProjectNumber = null;
     document.getElementById('pp-list-view').hidden = false;
     document.getElementById('pp-form-view').hidden = true;
     setProjectInUrl(null);
+    colorLogLoadedFor = null;
+    currentColorLog = null;
     await refreshList();
 }
 
@@ -97,6 +115,11 @@ async function showFormView(projectNumber) {
     document.getElementById('pp-list-view').hidden = true;
     document.getElementById('pp-form-view').hidden = false;
     setProjectInUrl(projectNumber);
+
+    // Invalidate color-log cache so we reload for the new project on next tab activation.
+    colorLogLoadedFor = null;
+    currentColorLog = null;
+    if (colorLogSaveTimer) { clearTimeout(colorLogSaveTimer); colorLogSaveTimer = null; }
 
     let project = null;
     if (projectNumber) {
@@ -118,6 +141,11 @@ async function showFormView(projectNumber) {
     } else {
         currentCastings = [];
         renderCastings();
+    }
+
+    // If the user is already on the Color Log tab, refresh it for the new project.
+    if (currentTab === 'color-log') {
+        activateColorLogTab();
     }
 }
 
@@ -1268,6 +1296,368 @@ function showToast(msg, kind = 'success') {
     toastTimer = setTimeout(() => { el.hidden = true; }, 2500);
 }
 
+// ---------- Color Log (UI only — no DB yet) ----------
+
+const CL_UNIT_OPTIONS = ['lbs', 'oz', 'g', 'kg', 'ml', 'fl oz', 'gal'];
+
+const CL_TO_LBS = { lbs: 1, oz: 1/16, g: 1/453.592, kg: 2.20462, ml: 1/453.592, 'fl oz': 1/16, gal: 8.345 };
+const CL_FROM_LBS = { lbs: 1, oz: 16, g: 453.592, kg: 1/2.20462, ml: 453.592, 'fl oz': 16, gal: 1/8.345 };
+
+function createEmptyColorLog() {
+    return {
+        name: '',
+        date: '',
+        madeBy: '',
+        temperature: '',
+        project: '',
+        isStandard: true,
+        cementType: 'white',
+        castMethod: 'sprayUp',
+        baseIngredients: [],
+        additives: [],
+        aggregates: [],
+        pigments: [],
+        groutType: [],
+        fillCoat: [],
+        finishingNotes: '',
+        sealingNotes: ''
+    };
+}
+
+function clUnitSelect(selected) {
+    return `<select class="pp-cl-unit-select">${CL_UNIT_OPTIONS.map(u =>
+        `<option value="${u}"${u === selected ? ' selected' : ''}>${u}</option>`
+    ).join('')}</select>`;
+}
+
+function clRoundSig(num, decimals) {
+    return Math.round(num * Math.pow(10, decimals)) / Math.pow(10, decimals);
+}
+
+function clGetSandWeightLbs() {
+    const rows = document.querySelectorAll('#pp-cl-base-table tbody tr');
+    for (const tr of rows) {
+        const nameInput = tr.querySelector('input[data-cl-field="name"]');
+        const weightInput = tr.querySelector('input[data-cl-field="weight"]');
+        const unitSelect = tr.querySelector('select');
+        if (nameInput && nameInput.value.trim().toLowerCase() === 'sand' && weightInput) {
+            const val = parseFloat(weightInput.value);
+            if (isNaN(val)) return 0;
+            const unit = unitSelect ? unitSelect.value : 'lbs';
+            return val * (CL_TO_LBS[unit] || 1);
+        }
+    }
+    return 0;
+}
+
+function clRenderIngTable(tableId, items, type) {
+    const tbody = document.querySelector(`#${tableId} tbody`);
+    if (!tbody) return;
+    tbody.innerHTML = items.map((item, i) => `
+        <tr data-cl-type="${type}" data-cl-idx="${i}">
+            <td><input type="text" value="${escapeAttr(item.name || '')}" data-cl-field="name"></td>
+            <td><input type="number" step="any" value="${item.weight ?? item.amount ?? ''}" data-cl-field="weight"></td>
+            <td>${clUnitSelect(item.unit || 'lbs')}</td>
+            <td><input type="text" value="${escapeAttr(item.note || '')}" data-cl-field="note"></td>
+            <td class="pp-cl-col-action"><button type="button" class="pp-cl-btn-remove" data-cl-remove>&times;</button></td>
+        </tr>
+    `).join('');
+}
+
+function clRenderSimpleTable(tableId, items, type) {
+    const tbody = document.querySelector(`#${tableId} tbody`);
+    if (!tbody) return;
+    tbody.innerHTML = items.map((item, i) => `
+        <tr data-cl-type="${type}" data-cl-idx="${i}">
+            <td><input type="text" value="${escapeAttr(item.name || '')}" data-cl-field="name"></td>
+            <td><input type="number" step="any" value="${item.amount ?? ''}" data-cl-field="amount"></td>
+            <td>${clUnitSelect(item.unit || 'lbs')}</td>
+            <td class="pp-cl-col-action"><button type="button" class="pp-cl-btn-remove" data-cl-remove>&times;</button></td>
+        </tr>
+    `).join('');
+}
+
+function clRenderPigmentTable(tableId, items, type) {
+    const tbody = document.querySelector(`#${tableId} tbody`);
+    if (!tbody) return;
+    const sandLbs = clGetSandWeightLbs();
+    tbody.innerHTML = items.map((item, i) => {
+        const pct = item.pct ?? '';
+        const unit = item.unit || 'lbs';
+        const weightLbs = (pct !== '' && sandLbs > 0) ? sandLbs * pct / 100 : '';
+        const calcWeight = (weightLbs !== '') ? clRoundSig(weightLbs * (CL_FROM_LBS[unit] || 1), 4) : '';
+        return `
+        <tr data-cl-type="${type}" data-cl-idx="${i}">
+            <td><input type="text" value="${escapeAttr(item.name || '')}" data-cl-field="name"></td>
+            <td><div class="pp-cl-input-suffix"><input type="number" step="any" value="${pct}" data-cl-field="pct"><span class="pp-cl-suffix">%</span></div></td>
+            <td><input type="number" step="any" value="${calcWeight}" data-cl-field="qty" readonly style="background:#e2e8f0;cursor:not-allowed;" title="Auto-calculated from % of sand"></td>
+            <td>${clUnitSelect(unit)}</td>
+            <td class="pp-cl-col-action"><button type="button" class="pp-cl-btn-remove" data-cl-remove>&times;</button></td>
+        </tr>`;
+    }).join('');
+}
+
+function clRenderGroutTable(tableId, items, type) {
+    const tbody = document.querySelector(`#${tableId} tbody`);
+    if (!tbody) return;
+    tbody.innerHTML = items.map((item, i) => `
+        <tr data-cl-type="${type}" data-cl-idx="${i}">
+            <td><input type="text" value="${escapeAttr(item.name || '')}" data-cl-field="name"></td>
+            <td><input type="number" step="any" value="${item.ratio ?? ''}" data-cl-field="ratio"></td>
+            <td class="pp-cl-col-action"><button type="button" class="pp-cl-btn-remove" data-cl-remove>&times;</button></td>
+        </tr>
+    `).join('');
+}
+
+const CL_TYPE_KEY = {
+    base: 'baseIngredients',
+    additive: 'additives',
+    aggregate: 'aggregates',
+    pigment: 'pigments',
+    grout: 'groutType',
+    fillCoat: 'fillCoat',
+};
+
+const CL_TYPE_TABLE = {
+    base: 'pp-cl-base-table',
+    additive: 'pp-cl-additives-table',
+    aggregate: 'pp-cl-aggregates-table',
+    pigment: 'pp-cl-pigments-table',
+    grout: 'pp-cl-grout-table',
+    fillCoat: 'pp-cl-fillcoat-table',
+};
+
+function clRenderType(type) {
+    if (!currentColorLog) return;
+    const tableId = CL_TYPE_TABLE[type];
+    const items = currentColorLog[CL_TYPE_KEY[type]] || [];
+    if (type === 'base' || type === 'additive') clRenderIngTable(tableId, items, type);
+    else if (type === 'aggregate') clRenderSimpleTable(tableId, items, type);
+    else if (type === 'pigment' || type === 'fillCoat') clRenderPigmentTable(tableId, items, type);
+    else if (type === 'grout') clRenderGroutTable(tableId, items, type);
+}
+
+function clSetStandard(isStd) {
+    if (currentColorLog) currentColorLog.isStandard = !!isStd;
+    document.getElementById('pp-cl-std-box')?.classList.toggle('checked', !!isStd);
+    document.getElementById('pp-cl-cust-box')?.classList.toggle('checked', !isStd);
+}
+
+function clSetRadio(name, value) {
+    document.querySelectorAll(`input[name="${name}"]`).forEach(r => {
+        r.checked = (r.value === value);
+    });
+}
+
+function renderColorLog() {
+    if (!currentColorLog) currentColorLog = createEmptyColorLog();
+    const log = currentColorLog;
+
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v ?? ''; };
+    set('pp-cl-name', log.name);
+    set('pp-cl-temp', log.temperature);
+    set('pp-cl-project', log.project);
+    set('pp-cl-date', log.date);
+    set('pp-cl-madeby', log.madeBy);
+    set('pp-cl-finishing-notes', log.finishingNotes);
+    set('pp-cl-sealing-notes', log.sealingNotes);
+
+    clSetStandard(log.isStandard !== false);
+    clSetRadio('pp-cl-cement', log.cementType || 'white');
+    clSetRadio('pp-cl-cast', log.castMethod || 'sprayUp');
+
+    Object.keys(CL_TYPE_KEY).forEach(clRenderType);
+}
+
+function clHandleAdd(type) {
+    if (!currentColorLog) currentColorLog = createEmptyColorLog();
+    const key = CL_TYPE_KEY[type];
+    if (!key) return;
+    const list = currentColorLog[key];
+    if (type === 'base') list.push({ name: '', weight: '', unit: 'lbs', note: '' });
+    else if (type === 'additive') list.push({ name: '', amount: '', unit: 'oz', note: '' });
+    else if (type === 'aggregate') list.push({ name: '', amount: '', unit: 'lbs' });
+    else if (type === 'pigment' || type === 'fillCoat') list.push({ name: '', pct: '', qty: '', unit: 'lbs' });
+    else if (type === 'grout') list.push({ name: '', ratio: '' });
+    clRenderType(type);
+}
+
+function clHandleRemove(type, idx) {
+    if (!currentColorLog) return;
+    const key = CL_TYPE_KEY[type];
+    const list = currentColorLog[key];
+    if (!list || idx < 0 || idx >= list.length) return;
+    list.splice(idx, 1);
+    clRenderType(type);
+    // Pigment weights depend on sand presence; nothing else dynamic here.
+}
+
+function clHandleRowInputChange(tr, input) {
+    if (!currentColorLog) return;
+    const type = tr.dataset.clType;
+    const idx = parseInt(tr.dataset.clIdx, 10);
+    const field = input.dataset.clField;
+    const key = CL_TYPE_KEY[type];
+    if (!key || isNaN(idx)) return;
+    const item = currentColorLog[key]?.[idx];
+    if (!item) return;
+
+    if (field === 'name' || field === 'note') {
+        item[field] = input.value;
+    } else if (field === 'weight') {
+        item.weight = input.value === '' ? '' : parseFloat(input.value);
+    } else if (field === 'amount') {
+        item.amount = input.value === '' ? '' : parseFloat(input.value);
+    } else if (field === 'pct') {
+        item.pct = input.value === '' ? '' : parseFloat(input.value);
+    } else if (field === 'ratio') {
+        item.ratio = input.value === '' ? '' : parseFloat(input.value);
+    }
+
+    // If sand row weight/unit changed, recompute pigment + fill-coat weights.
+    if (type === 'base' && (field === 'name' || field === 'weight')) {
+        clRenderType('pigment');
+        clRenderType('fillCoat');
+    }
+}
+
+function clHandleRowUnitChange(tr, select) {
+    if (!currentColorLog) return;
+    const type = tr.dataset.clType;
+    const idx = parseInt(tr.dataset.clIdx, 10);
+    const key = CL_TYPE_KEY[type];
+    if (!key || isNaN(idx)) return;
+    const item = currentColorLog[key]?.[idx];
+    if (!item) return;
+    item.unit = select.value;
+    if (type === 'base') {
+        clRenderType('pigment');
+        clRenderType('fillCoat');
+    } else if (type === 'pigment' || type === 'fillCoat') {
+        clRenderType(type);
+    }
+}
+
+async function activateColorLogTab() {
+    const needsSave = document.getElementById('pp-cl-needs-save');
+    const toolbar   = document.getElementById('pp-cl-toolbar');
+    const wrap      = document.getElementById('pp-cl-wrap');
+
+    if (!currentProjectNumber) {
+        if (needsSave) needsSave.hidden = false;
+        if (toolbar) toolbar.hidden = true;
+        if (wrap) wrap.hidden = true;
+        return;
+    }
+
+    if (needsSave) needsSave.hidden = true;
+    if (toolbar) toolbar.hidden = false;
+    if (wrap) wrap.hidden = false;
+
+    if (colorLogLoadedFor !== currentProjectNumber) {
+        try {
+            const existing = await loadColorLogForProject(currentProjectNumber);
+            currentColorLog = existing || createEmptyColorLog();
+        } catch (err) {
+            logger.error('[color-log] load failed', err);
+            currentColorLog = createEmptyColorLog();
+            showToast('Failed to load color log', 'error');
+        }
+        colorLogLoadedFor = currentProjectNumber;
+        renderColorLog();
+        await refreshPresetPicker();
+    }
+}
+
+async function refreshPresetPicker() {
+    const sel = document.getElementById('pp-cl-preset-select');
+    if (!sel) return;
+    try {
+        colorLogPresets = await loadColorLogPresets();
+    } catch (err) {
+        logger.warn('[color-log] loadPresets failed', err);
+        colorLogPresets = [];
+    }
+    sel.innerHTML = '<option value="">— Choose preset —</option>' +
+        colorLogPresets.map(p =>
+            `<option value="${p.id}">${escapeHtml(p.presetName || '(unnamed)')}</option>`
+        ).join('');
+    sel.value = '';
+}
+
+function loadPresetIntoForm(presetId) {
+    const preset = colorLogPresets.find(p => p.id === presetId);
+    if (!preset || !currentColorLog) return;
+    // Copy preset fields into the project's log, preserving id/projectNumber.
+    const keepId = currentColorLog.id;
+    const keepProject = currentColorLog.projectNumber;
+    currentColorLog = {
+        ...preset,
+        id: keepId,
+        projectNumber: keepProject,
+        isPreset: false,
+        presetName: ''
+    };
+    renderColorLog();
+    scheduleColorLogSave();
+}
+
+function setColorLogStatus(state) {
+    const el = document.getElementById('pp-cl-save-status');
+    if (!el) return;
+    el.classList.remove('is-saving', 'is-saved', 'is-error');
+    if (state === 'saving') {
+        el.classList.add('is-saving');
+        el.textContent = 'Saving…';
+    } else if (state === 'saved') {
+        el.classList.add('is-saved');
+        el.textContent = 'Saved';
+    } else if (state === 'error') {
+        el.classList.add('is-error');
+        el.textContent = 'Save failed';
+    } else {
+        el.textContent = '';
+    }
+}
+
+function scheduleColorLogSave() {
+    if (!currentProjectNumber || !currentColorLog) return;
+    if (colorLogSaveTimer) clearTimeout(colorLogSaveTimer);
+    setColorLogStatus('saving');
+    colorLogSaveTimer = setTimeout(saveColorLogNow, 700);
+}
+
+async function saveColorLogNow() {
+    if (!currentProjectNumber || !currentColorLog) return;
+    try {
+        const saved = await saveColorLogForProject(currentProjectNumber, currentColorLog);
+        if (saved) {
+            // Preserve the id so subsequent saves are UPDATEs not INSERTs.
+            currentColorLog.id = saved.id;
+        }
+        setColorLogStatus('saved');
+        setTimeout(() => setColorLogStatus(''), 1500);
+    } catch (err) {
+        logger.error('[color-log] save failed', err);
+        setColorLogStatus('error');
+    }
+}
+
+async function handleSaveAsPresetClick() {
+    if (!currentColorLog) return;
+    const defaultName = currentColorLog.name || 'New Standard Color';
+    const presetName = window.prompt('Standard color name:', defaultName);
+    if (!presetName || !presetName.trim()) return;
+    try {
+        await saveColorLogAsPreset(presetName, currentColorLog);
+        showToast('Standard color saved', 'success');
+        await refreshPresetPicker();
+    } catch (err) {
+        logger.error('[color-log] saveAsPreset failed', err);
+        showToast('Failed to save standard color', 'error');
+    }
+}
+
 // ---------- Wire up ----------
 
 function wireEvents() {
@@ -1348,9 +1738,96 @@ function wireEvents() {
                 activateOptimizerTab();
             } else if (tab === 'tracking') {
                 activateTrackingTab();
+            } else if (tab === 'color-log') {
+                activateColorLogTab();
             }
         });
     });
+
+    // ----- Color Log: event delegation on its panel -----
+    const clPanel = document.querySelector('.pp-tab-panel[data-panel="color-log"]');
+    if (clPanel) {
+        clPanel.addEventListener('click', (e) => {
+            const addBtn = e.target.closest('[data-cl-add]');
+            if (addBtn) {
+                clHandleAdd(addBtn.dataset.clAdd);
+                scheduleColorLogSave();
+                return;
+            }
+
+            const removeBtn = e.target.closest('[data-cl-remove]');
+            if (removeBtn) {
+                const tr = removeBtn.closest('tr');
+                if (!tr) return;
+                clHandleRemove(tr.dataset.clType, parseInt(tr.dataset.clIdx, 10));
+                scheduleColorLogSave();
+                return;
+            }
+
+            const stdEl = e.target.closest('[data-cl-std]');
+            if (stdEl) {
+                clSetStandard(stdEl.dataset.clStd === 'true');
+                scheduleColorLogSave();
+                return;
+            }
+
+            if (e.target.id === 'pp-cl-save-preset-btn') {
+                handleSaveAsPresetClick();
+                return;
+            }
+        });
+
+        clPanel.addEventListener('input', (e) => {
+            const target = e.target;
+            if (!currentColorLog) return;
+            let touched = false;
+
+            // Top-level fields
+            if (target.id === 'pp-cl-name')           { currentColorLog.name = target.value; touched = true; }
+            else if (target.id === 'pp-cl-temp')      { currentColorLog.temperature = target.value; touched = true; }
+            else if (target.id === 'pp-cl-project')   { currentColorLog.project = target.value; touched = true; }
+            else if (target.id === 'pp-cl-date')      { currentColorLog.date = target.value; touched = true; }
+            else if (target.id === 'pp-cl-madeby')    { currentColorLog.madeBy = target.value; touched = true; }
+            else if (target.id === 'pp-cl-finishing-notes') { currentColorLog.finishingNotes = target.value; touched = true; }
+            else if (target.id === 'pp-cl-sealing-notes')   { currentColorLog.sealingNotes = target.value; touched = true; }
+            else {
+                const tr = target.closest('tr[data-cl-type]');
+                if (tr && target.matches('input[data-cl-field]')) {
+                    clHandleRowInputChange(tr, target);
+                    touched = true;
+                }
+            }
+            if (touched) scheduleColorLogSave();
+        });
+
+        clPanel.addEventListener('change', (e) => {
+            const target = e.target;
+            if (!currentColorLog) return;
+
+            if (target.id === 'pp-cl-preset-select') {
+                if (target.value) loadPresetIntoForm(target.value);
+                target.value = '';
+                return;
+            }
+
+            if (target.name === 'pp-cl-cement') {
+                currentColorLog.cementType = target.value;
+                scheduleColorLogSave();
+                return;
+            }
+            if (target.name === 'pp-cl-cast') {
+                currentColorLog.castMethod = target.value;
+                scheduleColorLogSave();
+                return;
+            }
+
+            const tr = target.closest('tr[data-cl-type]');
+            if (tr && target.tagName === 'SELECT') {
+                clHandleRowUnitChange(tr, target);
+                scheduleColorLogSave();
+            }
+        });
+    }
 
     // Optimizer: pills + prev/next nav
     document.getElementById('pp-opt-pills').addEventListener('click', (e) => {
