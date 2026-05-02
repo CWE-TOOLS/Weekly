@@ -55,6 +55,61 @@ html, body {
     font-weight: 600;
     color: #0f172a;
 }
+
+/* ---------- Folder Tabs (Manila folder look) ---------- */
+.pp-folder-tabs {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    margin-bottom: -13px; /* sit on top of header bottom border like folder tabs */
+    padding-left: 4px;
+}
+.pp-folder-tab {
+    position: relative;
+    padding: 8px 18px 10px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #64748b;
+    background: #e2e8f0;
+    border: 1px solid #cbd5e1;
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    user-select: none;
+    cursor: default;
+    box-shadow: inset 0 -2px 0 rgba(0,0,0,0.04);
+    transform: translateY(1px);
+    transition: background 0.15s, color 0.15s;
+}
+.pp-folder-tab-active {
+    color: #0f172a;
+    background: #ffffff;
+    border-color: #e2e8f0;
+    box-shadow: 0 -1px 2px rgba(0,0,0,0.04);
+    z-index: 2;
+    transform: translateY(0);
+    padding-top: 10px;
+    padding-bottom: 12px;
+}
+.pp-folder-tab-active::after {
+    /* hide bottom border of header behind active tab */
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -1px;
+    height: 2px;
+    background: #ffffff;
+}
+.pp-folder-tab-disabled {
+    color: #94a3b8;
+    background: #f1f5f9;
+    border-color: #e2e8f0;
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+.pp-folder-tab-disabled:hover {
+    background: #f1f5f9;
+}
 .pp-link-btn {
     color: #1d4ed8;
     text-decoration: none;
@@ -1394,6 +1449,98 @@ html, body {
     opacity: 0.95;
     box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
     cursor: grabbing;
+}
+
+/* ---------- New Project Modal ---------- */
+.pp-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 20px;
+}
+.pp-modal-backdrop[hidden] { display: none; }
+.pp-modal {
+    background: #ffffff;
+    border-radius: 10px;
+    width: 100%;
+    max-width: 440px;
+    box-shadow: 0 20px 50px rgba(15, 23, 42, 0.25);
+    overflow: hidden;
+    animation: pp-modal-in 0.15s ease-out;
+}
+@keyframes pp-modal-in {
+    from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.pp-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid #e2e8f0;
+}
+.pp-modal-header h2 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #0f172a;
+}
+.pp-modal-close {
+    background: transparent;
+    border: none;
+    font-size: 22px;
+    line-height: 1;
+    color: #64748b;
+    cursor: pointer;
+    padding: 0 4px;
+    border-radius: 4px;
+}
+.pp-modal-close:hover { background: #f1f5f9; color: #0f172a; }
+.pp-modal-body {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+.pp-modal .pp-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.pp-modal .pp-field-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.pp-modal .pp-field-req { color: #dc2626; }
+.pp-modal .pp-field input {
+    padding: 9px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font-size: 14px;
+    color: #0f172a;
+    background: #ffffff;
+}
+.pp-modal .pp-field input:focus {
+    outline: none;
+    border-color: #1d4ed8;
+    box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.15);
+}
+.pp-modal .pp-field-error {
+    font-size: 12px;
+    color: #dc2626;
+}
+.pp-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 4px;
 }
 
 /* ---------- Print ---------- */

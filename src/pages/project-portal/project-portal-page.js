@@ -55,6 +55,15 @@ import {
     roundSig,
     FROM_LBS
 } from '../../utils/batch-calc.js';
+import { fetchAllTasks } from '../../services/data-service.js';
+
+const STATUS_SORT_ORDER = {
+    'not approved': 0,
+    'pending': 1,
+    'approved': 2,
+    'on hold': 3,
+    'closed': 4
+};
 
 const FORM_FIELDS = [
     'project_number', 'project_name', 'status', 'pm', 'project_date', 'project_address',
@@ -130,7 +139,7 @@ async function showListView() {
     await refreshList();
 }
 
-async function showFormView(projectNumber) {
+async function showFormView(projectNumber, draftOverrides = null) {
     currentProjectNumber = projectNumber || null;
     document.getElementById('pp-list-view').hidden = true;
     document.getElementById('pp-form-view').hidden = false;
@@ -149,16 +158,21 @@ async function showFormView(projectNumber) {
     batchTicketSaveTimers.clear();
 
     let project = null;
+    let isExisting = false;
     if (projectNumber) {
         project = await loadProject(projectNumber);
+        isExisting = !!project;
     }
     if (!project) {
         project = createEmptyProject(projectNumber || '');
     }
+    if (draftOverrides && !isExisting) {
+        Object.assign(project, draftOverrides);
+    }
     populateForm(project);
 
-    document.getElementById('pp-f-project_number').readOnly = !!projectNumber;
-    document.getElementById('pp-delete-btn').hidden = !projectNumber;
+    document.getElementById('pp-f-project_number').readOnly = isExisting;
+    document.getElementById('pp-delete-btn').hidden = !isExisting;
 
     updateFormContext(project);
     setActiveTab(currentTab);
@@ -176,6 +190,70 @@ async function showFormView(projectNumber) {
     }
     if (currentTab === 'batch-tickets') {
         activateBatchTicketsTab();
+    }
+}
+
+function openNewProjectModal() {
+    const modal = document.getElementById('pp-new-modal');
+    const numInput = document.getElementById('pp-new-modal-num');
+    const nameInput = document.getElementById('pp-new-modal-name');
+    const errEl = document.getElementById('pp-new-modal-num-err');
+    numInput.value = '';
+    nameInput.value = '';
+    errEl.hidden = true;
+    errEl.textContent = '';
+    modal.hidden = false;
+    setTimeout(() => numInput.focus(), 0);
+}
+
+function closeNewProjectModal() {
+    document.getElementById('pp-new-modal').hidden = true;
+}
+
+async function handleCreateNewProject() {
+    const numInput = document.getElementById('pp-new-modal-num');
+    const nameInput = document.getElementById('pp-new-modal-name');
+    const errEl = document.getElementById('pp-new-modal-num-err');
+    const submitBtn = document.querySelector('#pp-new-modal-form button[type="submit"]');
+
+    const num = numInput.value.trim();
+    const name = nameInput.value.trim();
+
+    if (!num) {
+        errEl.textContent = 'Project # is required.';
+        errEl.hidden = false;
+        numInput.focus();
+        return;
+    }
+    const conflict = allProjectRows.some(p => String(p.project_number || '').trim() === num);
+    if (conflict) {
+        errEl.textContent = `Project # "${num}" already exists.`;
+        errEl.hidden = false;
+        numInput.focus();
+        return;
+    }
+
+    const draft = createEmptyProject(num);
+    draft.project_name = name;
+
+    submitBtn.disabled = true;
+    const originalLabel = submitBtn.textContent;
+    submitBtn.textContent = 'Creating...';
+    try {
+        const saved = await upsertProject(draft);
+        if (saved) {
+            allProjectRows = [saved, ...allProjectRows];
+        }
+        closeNewProjectModal();
+        showToast('Project created.');
+        showFormView(num);
+    } catch (err) {
+        logger.error('[project-portal] create new project failed:', err);
+        errEl.textContent = 'Create failed: ' + (err?.message || err);
+        errEl.hidden = false;
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalLabel;
     }
 }
 
@@ -203,7 +281,43 @@ function setActiveTab(tab) {
 // ---------- Data ----------
 
 async function loadAllData() {
-    allProjectRows = await loadAllProjects();
+    const [projects, tasks] = await Promise.all([
+        loadAllProjects(),
+        fetchAllTasks(true).catch(err => {
+            logger.warn('[project-portal] failed to fetch tasks for Opt. Ship Date:', err);
+            return [];
+        })
+    ]);
+    const shipDateByProject = buildShipDateMap(tasks);
+    allProjectRows = projects.map(p => ({
+        ...p,
+        opt_ship_date: shipDateByProject.get(String(p.project_number || '').trim()) || ''
+    }));
+}
+
+function buildShipDateMap(tasks) {
+    const out = new Map();
+    if (!Array.isArray(tasks)) return out;
+    for (const t of tasks) {
+        const num = String(t?.projectNumber || '').trim();
+        if (!num) continue;
+        const dept = String(t?.department || '').trim().toLowerCase();
+        if (!dept.startsWith('ship')) continue;
+        const date = String(t?.date || '').trim();
+        if (!date) continue;
+        const existing = out.get(num);
+        if (!existing || compareDateStrings(date, existing) < 0) {
+            out.set(num, date);
+        }
+    }
+    return out;
+}
+
+function compareDateStrings(a, b) {
+    const ta = Date.parse(a);
+    const tb = Date.parse(b);
+    if (!Number.isNaN(ta) && !Number.isNaN(tb)) return ta - tb;
+    return a.localeCompare(b);
 }
 
 async function refreshList() {
@@ -225,7 +339,14 @@ function renderList(searchQuery = '') {
         // Empty values always go to the end regardless of direction
         if (aVal === '' && bVal !== '') return 1;
         if (bVal === '' && aVal !== '') return -1;
-        const cmp = aVal.localeCompare(bVal, undefined, { numeric: true, sensitivity: 'base' });
+        let cmp;
+        if (col === 'status') {
+            const aRank = STATUS_SORT_ORDER[aVal] ?? 99;
+            const bRank = STATUS_SORT_ORDER[bVal] ?? 99;
+            cmp = aRank - bRank;
+        } else {
+            cmp = aVal.localeCompare(bVal, undefined, { numeric: true, sensitivity: 'base' });
+        }
         return listSort.direction === 'asc' ? cmp : -cmp;
     });
 
@@ -257,8 +378,8 @@ function renderList(searchQuery = '') {
                 <td>${escapeHtml(row.pm || '')}</td>
                 <td>${status}</td>
                 <td>${escapeHtml(row.estimator || '')}</td>
-                <td>${escapeHtml(row.architect || '')}</td>
                 <td>${escapeHtml(row.need_by_date || '')}</td>
+                <td>${escapeHtml(row.opt_ship_date || '')}</td>
             </tr>
         `;
     }).join('');
@@ -1698,9 +1819,27 @@ function wireEvents() {
         renderList(e.target.value);
     });
 
-    // List: new project
+    // List: new project (opens modal)
     document.getElementById('pp-new-btn').addEventListener('click', () => {
-        showFormView('');
+        openNewProjectModal();
+    });
+
+    // New Project modal: close handlers
+    document.getElementById('pp-new-modal-close').addEventListener('click', closeNewProjectModal);
+    document.getElementById('pp-new-modal-cancel').addEventListener('click', closeNewProjectModal);
+    document.getElementById('pp-new-modal').addEventListener('click', (e) => {
+        if (e.target.id === 'pp-new-modal') closeNewProjectModal();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !document.getElementById('pp-new-modal').hidden) {
+            closeNewProjectModal();
+        }
+    });
+
+    // New Project modal: submit
+    document.getElementById('pp-new-modal-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        handleCreateNewProject();
     });
 
     // List: entire row click (event delegation)

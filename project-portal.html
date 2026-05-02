@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="src/styles/variables.css">
     <link rel="stylesheet" href="src/styles/base.css">
     <link rel="stylesheet" href="src/styles/buttons.css">
-    <link rel="stylesheet" href="src/styles/project-portal.css?v=20260501-05">
+    <link rel="stylesheet" href="src/styles/project-portal.css?v=20260501-07">
 
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 </head>
@@ -27,7 +27,11 @@
                     </svg>
                     <span>Weekly Schedule</span>
                 </a>
-                <h1 class="pp-title">Project Portal</h1>
+                <div class="pp-folder-tabs" role="tablist" aria-label="Portal sections">
+                    <div class="pp-folder-tab pp-folder-tab-active" role="tab" aria-selected="true">Project Portal</div>
+                    <div class="pp-folder-tab pp-folder-tab-disabled" role="tab" aria-disabled="true" title="Coming soon">Shipping Log</div>
+                    <div class="pp-folder-tab pp-folder-tab-disabled" role="tab" aria-disabled="true" title="Coming soon">Spec. Vendor Log</div>
+                </div>
             </div>
             <div class="pp-header-right">
                 <a href="releasability.html" class="pp-link-btn">Releasability Board</a>
@@ -56,8 +60,8 @@
                             <th data-sort-key="pm" class="pp-sortable">PM</th>
                             <th data-sort-key="status" class="pp-sortable">Status</th>
                             <th data-sort-key="estimator" class="pp-sortable">Estimator</th>
-                            <th data-sort-key="architect" class="pp-sortable">Architect</th>
                             <th data-sort-key="need_by_date" class="pp-sortable">Need By</th>
+                            <th data-sort-key="opt_ship_date" class="pp-sortable">Opt. Ship Date</th>
                         </tr>
                     </thead>
                     <tbody id="pp-list-tbody">
@@ -515,10 +519,35 @@
             </div>
         </section>
 
+        <!-- New Project Modal -->
+        <div id="pp-new-modal" class="pp-modal-backdrop" hidden>
+            <div class="pp-modal" role="dialog" aria-modal="true" aria-labelledby="pp-new-modal-title">
+                <div class="pp-modal-header">
+                    <h2 id="pp-new-modal-title">New Project</h2>
+                    <button type="button" class="pp-modal-close" id="pp-new-modal-close" aria-label="Close">&times;</button>
+                </div>
+                <form id="pp-new-modal-form" class="pp-modal-body">
+                    <label class="pp-field">
+                        <span class="pp-field-label">Project # <span class="pp-field-req">*</span></span>
+                        <input type="text" id="pp-new-modal-num" required autocomplete="off" />
+                        <span class="pp-field-error" id="pp-new-modal-num-err" hidden></span>
+                    </label>
+                    <label class="pp-field">
+                        <span class="pp-field-label">Project Name</span>
+                        <input type="text" id="pp-new-modal-name" autocomplete="off" />
+                    </label>
+                    <div class="pp-modal-actions">
+                        <button type="button" class="pp-secondary-btn" id="pp-new-modal-cancel">Cancel</button>
+                        <button type="submit" class="pp-primary-btn">Create</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
         <!-- Toast -->
         <div id="pp-toast" class="pp-toast" hidden></div>
     </div>
 
-    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20260501-11"></script>
+    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20260501-15"></script>
 </body>
 </html>
