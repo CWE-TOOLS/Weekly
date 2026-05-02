@@ -28,6 +28,7 @@
 
 import { fetchTasks as fetchSheetsTasks } from './sheets-service.js';
 import { loadManualTasks, fetchTaskDescriptions } from './supabase-service.js';
+import { loadAllProjects } from './projects-service.js';
 import { parseDate } from '../utils/date-utils.js';
 import { setAllTasks, getAllTasks } from '../core/state.js';
 
@@ -99,10 +100,11 @@ export async function fetchAllTasks(suppressEvents = false) {
         debug.log('[Startup] Starting Supabase task descriptions fetch');
         debug.time('[Startup] Supabase task descriptions fetch');
 
-        const [sheetsTasks, manualTasks, taskDescriptions] = await Promise.all([
+        const [sheetsTasks, manualTasks, taskDescriptions, projects] = await Promise.all([
             fetchWithTimeout(fetchSheetsTasks(), 45000, 'Google Sheets'),
             fetchWithTimeout(loadManualTasks(), 15000, 'Supabase'),
-            fetchWithTimeout(fetchTaskDescriptions(), 15000, 'Supabase task descriptions')
+            fetchWithTimeout(fetchTaskDescriptions(), 15000, 'Supabase task descriptions'),
+            fetchWithTimeout(loadAllProjects(), 15000, 'Supabase projects')
         ]);
 
         debug.timeEnd('[Startup] Google Sheets fetch');
@@ -112,7 +114,7 @@ export async function fetchAllTasks(suppressEvents = false) {
 
         const fetchTime = (performance.now() - startTime).toFixed(0);
         logger.info(`✅ Parallel data fetch complete in ${fetchTime}ms`);
-        logger.info(`   Sheets: ${sheetsTasks.length} tasks, Supabase: ${manualTasks.length} tasks, Descriptions: ${taskDescriptions.size} entries`);
+        logger.info(`   Sheets: ${sheetsTasks.length} tasks, Supabase: ${manualTasks.length} tasks, Descriptions: ${taskDescriptions.size} entries, Projects: ${projects.length}`);
 
         // Merge tasks, with manual tasks taking precedence for same ID
         debug.log('[Startup] Starting task merge');
@@ -125,6 +127,9 @@ export async function fetchAllTasks(suppressEvents = false) {
         debug.time('[Startup] Description merge');
         mergeTaskDescriptions(allTasks, taskDescriptions);
         debug.timeEnd('[Startup] Description merge');
+
+        // Resolve project names from the projects table by project_number
+        enrichTasksWithProject(allTasks, projects);
 
         // Calculate day counts
         debug.log('[Startup] Starting day count calculation');
@@ -243,6 +248,38 @@ export function mergeTaskDescriptions(tasks, descriptionsMap) {
             })));
         }
     }
+}
+
+/**
+ * Resolve canonical project names from the Supabase `projects` table.
+ *
+ * For each task whose `projectNumber` (sheet column H) matches a row in
+ * `projects.project_number`, sets `task.resolvedProjectName` to
+ * `projects.project_name`. The original `task.project` (sheet name) is
+ * preserved so other lookups keyed on it (e.g. task_descriptions) keep working.
+ *
+ * @param {Array<Object>} tasks - All tasks (modified in-place)
+ * @param {Array<Object>} projects - Rows from the `projects` table
+ */
+export function enrichTasksWithProject(tasks, projects) {
+    const byNumber = new Map();
+    for (const p of projects || []) {
+        const num = String(p.project_number || '').trim();
+        if (num) byNumber.set(num, p);
+    }
+
+    let matched = 0;
+    for (const task of tasks) {
+        const num = String(task.projectNumber || '').trim();
+        if (!num) continue;
+        const project = byNumber.get(num);
+        if (project && project.project_name) {
+            task.resolvedProjectName = project.project_name;
+            matched++;
+        }
+    }
+
+    logger.info(`🔗 Project linking: ${matched} tasks matched to projects table (of ${tasks.length} total)`);
 }
 
 /**

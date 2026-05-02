@@ -42,11 +42,19 @@ export function createTaskCard(task, rowClass, isEditingUnlocked) {
         card.title = 'Click for options';
     }
 
-    // Task title
+    // Task title — prefer the canonical project name from the projects table when
+    // the task's project number resolved to one. Cast # renders on its own line.
     const titleDiv = document.createElement('div');
     titleDiv.className = 'task-title';
-    titleDiv.textContent = task.project;
+    titleDiv.textContent = task.resolvedProjectName || task.project;
     card.appendChild(titleDiv);
+
+    if (task.resolvedProjectName && task.castingNumber) {
+        const castDiv = document.createElement('div');
+        castDiv.className = 'task-cast-number';
+        castDiv.textContent = `Cast ${task.castingNumber}`;
+        card.appendChild(castDiv);
+    }
 
     // Project description
     const projectDescDiv = document.createElement('div');
