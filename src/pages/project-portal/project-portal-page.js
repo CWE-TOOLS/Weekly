@@ -57,6 +57,13 @@ import {
     FROM_LBS
 } from '../../utils/batch-calc.js';
 import { fetchAllTasks } from '../../services/data-service.js';
+import {
+    loadClassroomTasks,
+    createClassroomTask,
+    updateClassroomTask,
+    deleteClassroomTask,
+    setClassroomTasksOrder
+} from '../../services/classroom-tasks-service.js';
 
 const STATUS_SORT_ORDER = {
     'not approved': 0,
@@ -72,13 +79,18 @@ const FORM_FIELDS = [
     'contact_name', 'contact_phone', 'contact_company', 'contact_email',
     'site_contact', 'site_phone', 'delivery_address', 'site_restrictions',
     'need_by_date', 'production_start_date',
-    'scope_of_work', 'imperative_information'
+    'scope_of_work', 'imperative_information',
+    'classroom_1_notes', 'classroom_2_notes', 'classroom_3_notes', 'cr_general_notes'
 ];
 
 let allProjectRows = [];           // From Supabase
 let currentProjectNumber = null;     // null = list view; string = form view
 let listSort = { column: 'updated_at', direction: 'desc' };
 let currentTab = 'info';             // 'info' | 'castings' | 'optimizer' | 'tracking'
+let currentClassroom = '1';          // CR Notes sub-tab: '1' | '2' | '3'
+let currentClassroomTasks = [];      // all classroom tasks for current project (across all 3 classrooms)
+let classroomTaskSaveTimers = new Map(); // taskId -> debounce handle
+let classroomTasksSortables = { '1': null, '2': null, '3': null };
 let currentCastings = [];            // loaded for current project
 let currentOptCastingId = null;            // active casting in optimizer tab
 let currentCastingPhases = new Map();      // castingId -> Array<phase row>
@@ -183,9 +195,12 @@ async function showFormView(projectNumber, draftOverrides = null) {
 
     if (projectNumber) {
         await loadAndRenderCastings();
+        await loadAndRenderClassroomTasks();
     } else {
         currentCastings = [];
         renderCastings();
+        currentClassroomTasks = [];
+        renderClassroomTasksAll();
     }
 
     // If the user is already on the Color Log tab, refresh it for the new project.
@@ -278,12 +293,42 @@ function setActiveTab(tab) {
         panel.classList.toggle('pp-tab-panel-active', isActive);
         panel.hidden = !isActive;
     });
+    // CR Notes textareas can't measure scrollHeight while hidden, so size them
+    // once the panel becomes visible.
+    if (tab === 'cr-notes') {
+        // Make sure the active classroom sub-tab matches state, then size visible textareas.
+        setActiveClassroom(currentClassroom);
+    }
     const printBtn = document.getElementById('pp-print-btn');
     if (printBtn) {
         if (tab === 'batch-tickets') printBtn.textContent = 'Print Batch Tickets';
         else if (tab === 'color-log') printBtn.textContent = 'Print Color Log';
         else printBtn.textContent = 'Print';
     }
+}
+
+/**
+ * Switch which classroom panel is visible inside the CR Notes tab.
+ * @param {string} num - '1' | '2' | '3'
+ */
+function setActiveClassroom(num) {
+    const target = String(num);
+    currentClassroom = target;
+    document.querySelectorAll('.pp-cr-subtab').forEach(btn => {
+        const isActive = btn.dataset.classroom === target;
+        btn.classList.toggle('pp-cr-subtab-active', isActive);
+        btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
+    document.querySelectorAll('.pp-cr-classroom-panel').forEach(panel => {
+        const isActive = panel.dataset.classroomPanel === target;
+        panel.classList.toggle('pp-cr-classroom-panel-active', isActive);
+        panel.hidden = !isActive;
+    });
+    // Size the now-visible classroom textarea + the always-visible General Notes.
+    const activeTextarea = document.getElementById(`pp-f-classroom_${target}_notes`);
+    if (activeTextarea) autoGrowTextarea(activeTextarea);
+    const general = document.getElementById('pp-f-cr_general_notes');
+    if (general) autoGrowTextarea(general);
 }
 
 // ---------- Data ----------
@@ -330,7 +375,7 @@ function compareDateStrings(a, b) {
 
 async function refreshList() {
     const tbody = document.getElementById('pp-list-tbody');
-    tbody.innerHTML = '<tr><td colspan="7" class="pp-empty">Loading projects...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="pp-empty">Loading projects...</td></tr>';
 
     await loadAllData();
     renderList(document.getElementById('pp-search').value);
@@ -373,7 +418,7 @@ function renderList(searchQuery = '') {
     });
 
     if (filtered.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="pp-empty">No projects yet. Click "+ New Project" to get started.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="pp-empty">No projects yet. Click "+ New Project" to get started.</td></tr>';
         return;
     }
 
@@ -385,7 +430,6 @@ function renderList(searchQuery = '') {
                 <td>${escapeHtml(row.project_name || '')}</td>
                 <td>${escapeHtml(row.pm || '')}</td>
                 <td>${status}</td>
-                <td>${escapeHtml(row.estimator || '')}</td>
                 <td>${escapeHtml(row.need_by_date || '')}</td>
                 <td>${escapeHtml(row.opt_ship_date || '')}</td>
             </tr>
@@ -403,6 +447,18 @@ function populateForm(project) {
         el.value = (v === null || v === undefined) ? '' : v;
     }
     applyStatusColor();
+    // Resize CR Notes textareas to fit their loaded content.
+    document.querySelectorAll('.pp-cr-textarea').forEach(autoGrowTextarea);
+}
+
+/**
+ * Resize a textarea's height to fit its content.
+ * The CSS min-height keeps empty fields from collapsing.
+ */
+function autoGrowTextarea(el) {
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = el.scrollHeight + 'px';
 }
 
 function applyStatusColor() {
@@ -808,6 +864,225 @@ async function handleDeleteCasting(id) {
         showToast('Casting deleted.');
     } catch (err) {
         logger.error('[project-portal] delete casting failed:', err);
+        showToast('Delete failed: ' + (err.message || err), 'error');
+    }
+}
+
+// ---------- Classroom Tasks (CR Notes tab) ----------
+
+async function loadAndRenderClassroomTasks() {
+    if (!currentProjectNumber) {
+        currentClassroomTasks = [];
+        renderClassroomTasksAll();
+        return;
+    }
+    try {
+        currentClassroomTasks = await loadClassroomTasks(currentProjectNumber);
+    } catch (err) {
+        logger.error('[project-portal] loadClassroomTasks failed:', err);
+        currentClassroomTasks = [];
+    }
+    renderClassroomTasksAll();
+}
+
+function renderClassroomTasksAll() {
+    ['1', '2', '3'].forEach(num => renderClassroomTasks(num));
+}
+
+function renderClassroomTasks(num) {
+    const list = document.getElementById(`pp-cr-tasks-list-${num}`);
+    const empty = document.getElementById(`pp-cr-tasks-empty-${num}`);
+    const needsSave = document.getElementById(`pp-cr-tasks-needs-save-${num}`);
+    if (!list || !empty || !needsSave) return;
+
+    if (!currentProjectNumber) {
+        needsSave.hidden = false;
+        empty.hidden = true;
+        list.hidden = true;
+        list.innerHTML = '';
+        return;
+    }
+    needsSave.hidden = true;
+
+    const tasks = currentClassroomTasks
+        .filter(t => Number(t.classroom) === Number(num))
+        .sort((a, b) => {
+            const ao = a.sort_order ?? 0;
+            const bo = b.sort_order ?? 0;
+            if (ao !== bo) return ao - bo;
+            return (a.created_at || '').localeCompare(b.created_at || '');
+        });
+
+    if (tasks.length === 0) {
+        list.hidden = true;
+        empty.hidden = false;
+        list.innerHTML = '';
+        return;
+    }
+
+    list.hidden = false;
+    empty.hidden = true;
+    list.innerHTML = tasks.map(t => `
+        <div class="pp-cr-task-card${t.is_completed ? ' is-completed' : ''}" data-task-id="${escapeAttr(t.id)}">
+            <div class="pp-cr-task-grip" aria-hidden="true" title="Drag to reorder">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/>
+                    <circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/>
+                </svg>
+            </div>
+            <input type="checkbox" class="pp-cr-task-check" data-field="is_completed" ${t.is_completed ? 'checked' : ''} aria-label="Mark complete" />
+            <div class="pp-cr-task-desc">
+                <input type="text" class="pp-cr-task-desc-input" data-field="description" value="${escapeAttr(t.description || '')}" placeholder="Task description" />
+            </div>
+            <div class="pp-cr-task-assignee">
+                <input type="text" class="pp-cr-task-assignee-input" data-field="assignee" value="${escapeAttr(t.assignee || '')}" placeholder="Assignee" />
+            </div>
+            <div class="pp-cr-task-actions">
+                <button class="pp-row-btn pp-row-btn-delete" data-action="delete" type="button" aria-label="Delete task" title="Delete task">&times;</button>
+            </div>
+        </div>
+    `).join('');
+
+    ensureClassroomTasksSortable(num);
+}
+
+function ensureClassroomTasksSortable(num) {
+    const existing = classroomTasksSortables[num];
+    if (existing) {
+        try { existing.destroy(); } catch {}
+        classroomTasksSortables[num] = null;
+    }
+    if (typeof window.Sortable === 'undefined') return;
+    const list = document.getElementById(`pp-cr-tasks-list-${num}`);
+    if (!list) return;
+
+    classroomTasksSortables[num] = window.Sortable.create(list, {
+        animation: 180,
+        easing: 'cubic-bezier(0.22, 0.61, 0.36, 1)',
+        handle: '.pp-cr-task-grip',
+        draggable: '.pp-cr-task-card',
+        ghostClass: 'pp-cr-task-card-ghost',
+        chosenClass: 'pp-cr-task-card-chosen',
+        dragClass: 'pp-cr-task-card-drag',
+        forceFallback: true,
+        fallbackTolerance: 4,
+        scroll: true,
+        scrollSensitivity: 60,
+        scrollSpeed: 14,
+        onEnd: async (evt) => {
+            const oldIdx = evt.oldIndex;
+            const newIdx = evt.newIndex;
+            if (oldIdx === newIdx || oldIdx === undefined || newIdx === undefined) return;
+
+            // Reorder within this classroom only.
+            const inClassroom = currentClassroomTasks.filter(t => Number(t.classroom) === Number(num));
+            const others = currentClassroomTasks.filter(t => Number(t.classroom) !== Number(num));
+            const reordered = inClassroom.slice();
+            const [moved] = reordered.splice(oldIdx, 1);
+            reordered.splice(newIdx, 0, moved);
+            reordered.forEach((t, idx) => { t.sort_order = idx; });
+            currentClassroomTasks = [...others, ...reordered];
+
+            try {
+                await setClassroomTasksOrder(reordered.map(t => t.id));
+            } catch (err) {
+                logger.error('[project-portal] setClassroomTasksOrder failed:', err);
+                showToast('Reorder save failed: ' + (err.message || err), 'error');
+                await loadAndRenderClassroomTasks();
+            }
+        }
+    });
+}
+
+async function handleAddClassroomTaskClick(num) {
+    if (!currentProjectNumber) return;
+    const inClassroom = currentClassroomTasks.filter(t => Number(t.classroom) === Number(num));
+    const sortOrder = inClassroom.length > 0
+        ? Math.max(...inClassroom.map(t => t.sort_order ?? 0)) + 1
+        : 0;
+    try {
+        const created = await createClassroomTask({
+            project_number: currentProjectNumber,
+            classroom: Number(num),
+            description: '',
+            assignee: '',
+            is_completed: false,
+            sort_order: sortOrder
+        });
+        if (created) {
+            currentClassroomTasks.push(created);
+            renderClassroomTasks(num);
+            // Focus the new task's description input for immediate typing.
+            const card = document.querySelector(`.pp-cr-task-card[data-task-id="${created.id}"]`);
+            const descInput = card?.querySelector('input[data-field="description"]');
+            if (descInput) descInput.focus();
+        }
+    } catch (err) {
+        logger.error('[project-portal] add classroom task failed:', err);
+        showToast('Add task failed: ' + (err.message || err), 'error');
+    }
+}
+
+async function handleSaveClassroomTask(id) {
+    const card = document.querySelector(`.pp-cr-task-card[data-task-id="${id}"]`);
+    if (!card) return;
+    const descInput = card.querySelector('input[data-field="description"]');
+    const assigneeInput = card.querySelector('input[data-field="assignee"]');
+    const checkInput = card.querySelector('input[data-field="is_completed"]');
+    const fields = {
+        description: (descInput?.value || '').trim(),
+        assignee: (assigneeInput?.value || '').trim(),
+        is_completed: !!checkInput?.checked
+    };
+    try {
+        const updated = await updateClassroomTask(id, fields);
+        if (updated) {
+            const idx = currentClassroomTasks.findIndex(t => t.id === id);
+            if (idx !== -1) currentClassroomTasks[idx] = updated;
+        }
+    } catch (err) {
+        logger.error('[project-portal] save classroom task failed:', err);
+        showToast('Save failed: ' + (err.message || err), 'error');
+    }
+}
+
+function scheduleClassroomTaskSave(id) {
+    if (!id) return;
+    const prev = classroomTaskSaveTimers.get(id);
+    if (prev) clearTimeout(prev);
+    const t = setTimeout(() => handleSaveClassroomTask(id), 600);
+    classroomTaskSaveTimers.set(id, t);
+}
+
+async function handleToggleClassroomTaskComplete(id, checked) {
+    // Reflect immediately in DOM (strikethrough) for snappy feedback.
+    const card = document.querySelector(`.pp-cr-task-card[data-task-id="${id}"]`);
+    if (card) card.classList.toggle('is-completed', !!checked);
+    // Persist with no debounce — toggles are deliberate.
+    try {
+        const updated = await updateClassroomTask(id, { is_completed: !!checked });
+        if (updated) {
+            const idx = currentClassroomTasks.findIndex(t => t.id === id);
+            if (idx !== -1) currentClassroomTasks[idx] = updated;
+        }
+    } catch (err) {
+        logger.error('[project-portal] toggle classroom task failed:', err);
+        showToast('Save failed: ' + (err.message || err), 'error');
+    }
+}
+
+async function handleDeleteClassroomTask(id) {
+    const t = currentClassroomTasks.find(x => x.id === id);
+    if (!t) return;
+    const label = (t.description || '').trim() || 'this task';
+    if (!confirm(`Delete "${label}"?`)) return;
+    try {
+        await deleteClassroomTask(id);
+        currentClassroomTasks = currentClassroomTasks.filter(x => x.id !== id);
+        renderClassroomTasks(String(t.classroom));
+        showToast('Task deleted.');
+    } catch (err) {
+        logger.error('[project-portal] delete classroom task failed:', err);
         showToast('Delete failed: ' + (err.message || err), 'error');
     }
 }
@@ -2129,6 +2404,59 @@ function wireEvents() {
     if (formEl) {
         formEl.addEventListener('input', scheduleProjectInfoSave);
         formEl.addEventListener('change', scheduleProjectInfoSave);
+    }
+
+    // CR Notes panel: lives outside #pp-form, so it needs its own auto-save listener.
+    // Fields are still part of FORM_FIELDS, so populate/read pick them up.
+    const crNotesPanel = document.querySelector('.pp-tab-panel[data-panel="cr-notes"]');
+    if (crNotesPanel) {
+        crNotesPanel.addEventListener('input', (e) => {
+            // Classroom task inline edits route to the task save flow, not the project save.
+            const taskCard = e.target.closest('.pp-cr-task-card[data-task-id]');
+            if (taskCard && e.target.matches('input[data-field="description"], input[data-field="assignee"]')) {
+                scheduleClassroomTaskSave(taskCard.getAttribute('data-task-id'));
+                return;
+            }
+            // Auto-grow textareas as content is typed
+            if (e.target.classList.contains('pp-cr-textarea')) {
+                autoGrowTextarea(e.target);
+            }
+            scheduleProjectInfoSave();
+        });
+        crNotesPanel.addEventListener('change', (e) => {
+            // Checkbox toggle on a classroom task — immediate save, no debounce.
+            const taskCard = e.target.closest('.pp-cr-task-card[data-task-id]');
+            if (taskCard && e.target.matches('input[data-field="is_completed"]')) {
+                handleToggleClassroomTaskComplete(taskCard.getAttribute('data-task-id'), e.target.checked);
+                return;
+            }
+            scheduleProjectInfoSave();
+        });
+
+        // Classroom sub-tabs (1 / 2 / 3) — switch the visible classroom panel.
+        crNotesPanel.querySelectorAll('.pp-cr-subtab').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const num = btn.dataset.classroom;
+                if (num) setActiveClassroom(num);
+            });
+        });
+
+        // Classroom tasks: + Add Task buttons (one per classroom)
+        crNotesPanel.querySelectorAll('button[data-cr-add-task]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const num = btn.dataset.crAddTask;
+                if (num) handleAddClassroomTaskClick(num);
+            });
+        });
+
+        // Classroom tasks: row delete (event delegation across all 3 lists)
+        crNotesPanel.addEventListener('click', (e) => {
+            const btn = e.target.closest('button[data-action="delete"]');
+            if (!btn) return;
+            const card = btn.closest('.pp-cr-task-card[data-task-id]');
+            if (!card) return;
+            handleDeleteClassroomTask(card.getAttribute('data-task-id'));
+        });
     }
 
     // Form: delete

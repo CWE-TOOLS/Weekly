@@ -59,13 +59,12 @@
                             <th data-sort-key="project_name" class="pp-sortable">Project Name</th>
                             <th data-sort-key="pm" class="pp-sortable">PM</th>
                             <th data-sort-key="status" class="pp-sortable">Status</th>
-                            <th data-sort-key="estimator" class="pp-sortable">Estimator</th>
                             <th data-sort-key="need_by_date" class="pp-sortable">Need By</th>
-                            <th data-sort-key="opt_ship_date" class="pp-sortable">Opt. Ship Date</th>
+                            <th data-sort-key="opt_ship_date" class="pp-sortable">Optimizer Ship Date</th>
                         </tr>
                     </thead>
                     <tbody id="pp-list-tbody">
-                        <tr><td colspan="7" class="pp-empty">Loading projects...</td></tr>
+                        <tr><td colspan="6" class="pp-empty">Loading projects...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -137,6 +136,15 @@
                             <path d="M9 11h6M9 15h6M9 19h4"/>
                         </svg>
                         <span>Batch Tickets</span>
+                    </button>
+                    <button class="pp-tab-btn" data-tab="cr-notes" type="button">
+                        <svg class="pp-tab-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="4" width="18" height="14" rx="1"/>
+                            <line x1="3" y1="20" x2="21" y2="20"/>
+                            <line x1="7" y1="9" x2="13" y2="9"/>
+                            <line x1="7" y1="13" x2="11" y2="13"/>
+                        </svg>
+                        <span>CR Notes</span>
                     </button>
                 </nav>
 
@@ -517,6 +525,159 @@
                                     <span class="pp-opt-total-label">Grand Total</span>
                                     <span class="pp-opt-total-value"><strong id="pp-opt-grand-total">0</strong> hrs</span>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tab: CR Notes (Classroom Notes) -->
+                    <div class="pp-tab-panel" data-panel="cr-notes" hidden>
+                        <div class="pp-cr-wrap">
+                            <div class="pp-cr-header">
+                                <h2 class="pp-cr-title">Classroom Notes</h2>
+                                <p class="pp-muted pp-cr-sub">Switch between classrooms to capture per-classroom notes. General Notes are shared across all three.</p>
+                            </div>
+
+                            <!-- Classroom sub-tabs -->
+                            <div class="pp-cr-subtabs" role="tablist" aria-label="Classroom">
+                                <button type="button" class="pp-cr-subtab pp-cr-subtab-active" data-classroom="1" role="tab" aria-selected="true">
+                                    <span class="pp-cr-badge">1</span>
+                                    <span>Classroom 1</span>
+                                </button>
+                                <button type="button" class="pp-cr-subtab" data-classroom="2" role="tab" aria-selected="false">
+                                    <span class="pp-cr-badge">2</span>
+                                    <span>Classroom 2</span>
+                                </button>
+                                <button type="button" class="pp-cr-subtab" data-classroom="3" role="tab" aria-selected="false">
+                                    <span class="pp-cr-badge">3</span>
+                                    <span>Classroom 3</span>
+                                </button>
+                            </div>
+
+                            <!-- One classroom panel visible at a time -->
+                            <div class="pp-cr-classroom-panels">
+                                <div class="pp-cr-classroom-panel pp-cr-classroom-panel-active" data-classroom-panel="1">
+                                    <div class="pp-cr-agenda">
+                                        <div class="pp-cr-agenda-header">
+                                            <h3 class="pp-cr-agenda-title">Classroom 1 Agenda</h3>
+                                            <span class="pp-cr-agenda-meta">Standard kickoff checklist</span>
+                                        </div>
+                                        <ol class="pp-cr-agenda-list">
+                                            <li class="pp-cr-agenda-item"><span class="pp-cr-agenda-num">1</span><span class="pp-cr-agenda-text">Overview arch drawings and establish classification of project</span></li>
+                                            <li class="pp-cr-agenda-item"><span class="pp-cr-agenda-num">2</span><span class="pp-cr-agenda-text">Discuss sample, mix and finishing notes</span></li>
+                                            <li class="pp-cr-agenda-item"><span class="pp-cr-agenda-num">3</span><span class="pp-cr-agenda-text">Review batching ticket from Sales &mdash; confirm specialty aggregates</span></li>
+                                            <li class="pp-cr-agenda-item"><span class="pp-cr-agenda-num">4</span><span class="pp-cr-agenda-text">Review number of castings &mdash; confirm if casting layout is required</span></li>
+                                            <li class="pp-cr-agenda-item"><span class="pp-cr-agenda-num">5</span><span class="pp-cr-agenda-text">Introduce general project buildability (reuse or 1:1)</span></li>
+                                            <li class="pp-cr-agenda-item"><span class="pp-cr-agenda-num">6</span><span class="pp-cr-agenda-text">Review Optimizer hours</span></li>
+                                            <li class="pp-cr-agenda-item"><span class="pp-cr-agenda-num">7</span><span class="pp-cr-agenda-text">Review Sales Inflow Ticket &mdash; break out into phases</span></li>
+                                            <li class="pp-cr-agenda-item"><span class="pp-cr-agenda-num">8</span><span class="pp-cr-agenda-text">Discuss need for &ldquo;3D Drawings / Parts List&rdquo; <span class="pp-cr-agenda-tag">Review in Classroom 2</span></span></li>
+                                            <li class="pp-cr-agenda-item"><span class="pp-cr-agenda-num">9</span><span class="pp-cr-agenda-text">Confirm if 3D drawings for crates are needed</span></li>
+                                            <li class="pp-cr-agenda-item"><span class="pp-cr-agenda-num">10</span><span class="pp-cr-agenda-text">Confirm any specialty material or subs required</span></li>
+                                            <li class="pp-cr-agenda-item"><span class="pp-cr-agenda-num">11</span><span class="pp-cr-agenda-text">Review fabrication steps / rough draft tracking sheet</span></li>
+                                            <li class="pp-cr-agenda-item"><span class="pp-cr-agenda-num">12</span><span class="pp-cr-agenda-text">Type of shop drawings and need for additional tickets</span></li>
+                                        </ol>
+                                    </div>
+                                    <div class="pp-cr-tasks-wrap" data-classroom-tasks="1">
+                                        <div class="pp-cr-tasks-header">
+                                            <h3 class="pp-cr-tasks-title">Tasks</h3>
+                                        </div>
+                                        <div id="pp-cr-tasks-needs-save-1" class="pp-castings-hint" hidden>
+                                            Save the project first to start adding tasks.
+                                        </div>
+                                        <div id="pp-cr-tasks-empty-1" class="pp-cr-tasks-empty" hidden>
+                                            <p>No tasks yet.</p>
+                                        </div>
+                                        <div id="pp-cr-tasks-list-1" class="pp-cr-tasks-list" hidden></div>
+                                        <div class="pp-cr-tasks-add">
+                                            <button class="pp-add-btn" type="button" data-cr-add-task="1">+ Add Task</button>
+                                        </div>
+                                    </div>
+                                    <textarea id="pp-f-classroom_1_notes" class="pp-cr-textarea pp-cr-textarea--classroom" placeholder="Notes from Classroom 1…"></textarea>
+                                </div>
+                                <div class="pp-cr-classroom-panel" data-classroom-panel="2" hidden>
+                                    <div class="pp-cr-agenda">
+                                        <div class="pp-cr-agenda-header">
+                                            <h3 class="pp-cr-agenda-title">Classroom 2 Agenda</h3>
+                                            <span class="pp-cr-agenda-meta">Standard mid-project checklist</span>
+                                        </div>
+                                        <ol class="pp-cr-agenda-list">
+                                            <li class="pp-cr-agenda-item"><span class="pp-cr-agenda-num">1</span><span class="pp-cr-agenda-text">Review CWE shop drawings</span></li>
+                                            <li class="pp-cr-agenda-item"><span class="pp-cr-agenda-num">2</span><span class="pp-cr-agenda-text">Review 3D drawings and parts list</span></li>
+                                            <li class="pp-cr-agenda-item"><span class="pp-cr-agenda-num">3</span><span class="pp-cr-agenda-text">Review material usage and specialty PO&rsquo;s</span></li>
+                                            <li class="pp-cr-agenda-item"><span class="pp-cr-agenda-num">4</span><span class="pp-cr-agenda-text">Review phased Inflow tickets per casting</span></li>
+                                            <li class="pp-cr-agenda-item"><span class="pp-cr-agenda-num">5</span><span class="pp-cr-agenda-text">Review sample color and finish in depth so casting/finishing crew are educated</span></li>
+                                            <li class="pp-cr-agenda-item"><span class="pp-cr-agenda-num">6</span><span class="pp-cr-agenda-text">Review draft of tracking sheet &mdash; confirm accurate with team leaders</span></li>
+                                            <li class="pp-cr-agenda-item"><span class="pp-cr-agenda-num">7</span><span class="pp-cr-agenda-text">Make changes live to QA as required &mdash; use tracking sheet as template</span></li>
+                                            <li class="pp-cr-agenda-item"><span class="pp-cr-agenda-num">8</span><span class="pp-cr-agenda-text">Modify Optimizer hours per feedback from Team Leaders</span></li>
+                                            <li class="pp-cr-agenda-item"><span class="pp-cr-agenda-num">9</span><span class="pp-cr-agenda-text">Generate casting layout</span></li>
+                                            <li class="pp-cr-agenda-item"><span class="pp-cr-agenda-num">10</span><span class="pp-cr-agenda-text">Review 3D drawings of crates and sizes</span></li>
+                                            <li class="pp-cr-agenda-item"><span class="pp-cr-agenda-num">11</span><span class="pp-cr-agenda-text">Review batching tickets for each casting &mdash; include face and backup mix</span></li>
+                                            <li class="pp-cr-agenda-item"><span class="pp-cr-agenda-num">12</span><span class="pp-cr-agenda-text">Confirm if finishing layout is required &mdash; start rough draft</span></li>
+                                        </ol>
+                                    </div>
+                                    <div class="pp-cr-tasks-wrap" data-classroom-tasks="2">
+                                        <div class="pp-cr-tasks-header">
+                                            <h3 class="pp-cr-tasks-title">Tasks</h3>
+                                        </div>
+                                        <div id="pp-cr-tasks-needs-save-2" class="pp-castings-hint" hidden>
+                                            Save the project first to start adding tasks.
+                                        </div>
+                                        <div id="pp-cr-tasks-empty-2" class="pp-cr-tasks-empty" hidden>
+                                            <p>No tasks yet.</p>
+                                        </div>
+                                        <div id="pp-cr-tasks-list-2" class="pp-cr-tasks-list" hidden></div>
+                                        <div class="pp-cr-tasks-add">
+                                            <button class="pp-add-btn" type="button" data-cr-add-task="2">+ Add Task</button>
+                                        </div>
+                                    </div>
+                                    <textarea id="pp-f-classroom_2_notes" class="pp-cr-textarea pp-cr-textarea--classroom" placeholder="Notes from Classroom 2…"></textarea>
+                                </div>
+                                <div class="pp-cr-classroom-panel" data-classroom-panel="3" hidden>
+                                    <div class="pp-cr-agenda">
+                                        <div class="pp-cr-agenda-header">
+                                            <h3 class="pp-cr-agenda-title">Classroom 3 Agenda</h3>
+                                            <span class="pp-cr-agenda-meta">Standard pre-production checklist</span>
+                                        </div>
+                                        <ol class="pp-cr-agenda-list">
+                                            <li class="pp-cr-agenda-item"><span class="pp-cr-agenda-num">1</span><span class="pp-cr-agenda-text">Review shop folder checklist &mdash; all items to be complete before EOD</span></li>
+                                            <li class="pp-cr-agenda-item"><span class="pp-cr-agenda-num">2</span><span class="pp-cr-agenda-text">Review final production drawings / parts list &mdash; check for any missing details</span></li>
+                                            <li class="pp-cr-agenda-item"><span class="pp-cr-agenda-num">3</span><span class="pp-cr-agenda-text">Review final 3D drawings / parts list &mdash; confirm Cover Sheet is present with material totals needed</span></li>
+                                            <li class="pp-cr-agenda-item"><span class="pp-cr-agenda-num">4</span><span class="pp-cr-agenda-text">Review casting layout completed</span></li>
+                                            <li class="pp-cr-agenda-item"><span class="pp-cr-agenda-num">5</span><span class="pp-cr-agenda-text">Review all batching tickets &mdash; confirm complete and accurate</span></li>
+                                            <li class="pp-cr-agenda-item"><span class="pp-cr-agenda-num">6</span><span class="pp-cr-agenda-text">Confirm final QA is accurate and matches tracking sheet</span></li>
+                                            <li class="pp-cr-agenda-item"><span class="pp-cr-agenda-num">7</span><span class="pp-cr-agenda-text">Finalize Optimizer hours &mdash; confirmed based off feedback from Team Leaders</span></li>
+                                            <li class="pp-cr-agenda-item"><span class="pp-cr-agenda-num">8</span><span class="pp-cr-agenda-text">Confirm crate sizes and quantities for each project &mdash; complete in homework meeting on Wed <span class="pp-cr-agenda-tag">Homework</span></span></li>
+                                            <li class="pp-cr-agenda-item"><span class="pp-cr-agenda-num">9</span><span class="pp-cr-agenda-text">Review final tracking sheet &mdash; confirm accurate and cross-check against QA check points</span></li>
+                                        </ol>
+                                    </div>
+                                    <div class="pp-cr-tasks-wrap" data-classroom-tasks="3">
+                                        <div class="pp-cr-tasks-header">
+                                            <h3 class="pp-cr-tasks-title">Tasks</h3>
+                                        </div>
+                                        <div id="pp-cr-tasks-needs-save-3" class="pp-castings-hint" hidden>
+                                            Save the project first to start adding tasks.
+                                        </div>
+                                        <div id="pp-cr-tasks-empty-3" class="pp-cr-tasks-empty" hidden>
+                                            <p>No tasks yet.</p>
+                                        </div>
+                                        <div id="pp-cr-tasks-list-3" class="pp-cr-tasks-list" hidden></div>
+                                        <div class="pp-cr-tasks-add">
+                                            <button class="pp-add-btn" type="button" data-cr-add-task="3">+ Add Task</button>
+                                        </div>
+                                    </div>
+                                    <textarea id="pp-f-classroom_3_notes" class="pp-cr-textarea pp-cr-textarea--classroom" placeholder="Notes from Classroom 3…"></textarea>
+                                </div>
+                            </div>
+
+                            <!-- General Notes — always visible, shared across classrooms -->
+                            <div class="pp-cr-card pp-cr-card--general">
+                                <div class="pp-cr-card-header">
+                                    <svg class="pp-cr-card-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                                    </svg>
+                                    <h3 class="pp-cr-card-title">General Notes</h3>
+                                    <span class="pp-cr-card-meta">Shared across all classrooms</span>
+                                </div>
+                                <textarea id="pp-f-cr_general_notes" class="pp-cr-textarea" placeholder="General project-level notes…"></textarea>
                             </div>
                         </div>
                     </div>

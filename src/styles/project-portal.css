@@ -2590,3 +2590,489 @@ body.pp-printing .pp-tab-panel[data-panel="color-log"] { display: none !importan
 }
 
 body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !important; }
+
+/* ===================================
+   CR Notes (Classroom Notes) Tab
+   =================================== */
+
+.pp-cr-wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 24px 8px 40px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+/* Classroom sub-tabs (pill row) */
+.pp-cr-subtabs {
+    display: flex;
+    gap: 6px;
+    padding: 6px;
+    background: #f1f5f9;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    width: fit-content;
+}
+
+.pp-cr-subtab {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border: none;
+    background: transparent;
+    border-radius: 7px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #475569;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+    font-family: inherit;
+}
+
+.pp-cr-subtab:hover {
+    background: rgba(255, 255, 255, 0.6);
+    color: #1e293b;
+}
+
+.pp-cr-subtab-active,
+.pp-cr-subtab-active:hover {
+    background: #ffffff;
+    color: #0f172a;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 0 0 1px rgba(15, 23, 42, 0.05);
+}
+
+.pp-cr-subtab .pp-cr-badge {
+    width: 22px;
+    height: 22px;
+    font-size: 12px;
+    background: #cbd5e1;
+    color: #475569;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.pp-cr-subtab-active .pp-cr-badge {
+    background: var(--accent-primary, #4f46e5);
+    color: #ffffff;
+}
+
+/* Classroom panels — one visible at a time */
+.pp-cr-classroom-panels {
+    position: relative;
+}
+
+.pp-cr-classroom-panel[hidden] {
+    display: none;
+}
+
+.pp-cr-textarea--classroom {
+    min-height: 320px;
+    font-size: 15px;
+    line-height: 1.6;
+    padding: 14px 16px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.pp-cr-header {
+    margin-bottom: 4px;
+}
+
+.pp-cr-title {
+    margin: 0 0 4px 0;
+    font-size: 22px;
+    font-weight: 700;
+    color: #0f172a;
+    letter-spacing: -0.01em;
+}
+
+.pp-cr-sub {
+    margin: 0;
+    font-size: 13px;
+    color: #64748b;
+}
+
+.pp-cr-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 16px 18px 14px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.pp-cr-card:focus-within {
+    border-color: var(--accent-primary, #4f46e5);
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
+}
+
+.pp-cr-card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.pp-cr-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--accent-primary, #4f46e5);
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.pp-cr-card-icon {
+    width: 22px;
+    height: 22px;
+    color: var(--accent-primary, #4f46e5);
+    flex-shrink: 0;
+}
+
+.pp-cr-card-title {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: #1e293b;
+    letter-spacing: -0.005em;
+}
+
+.pp-cr-card-meta {
+    margin-left: auto;
+    font-size: 12px;
+    font-weight: 500;
+    color: #64748b;
+    background: #f1f5f9;
+    padding: 3px 10px;
+    border-radius: 999px;
+}
+
+.pp-cr-textarea {
+    width: 100%;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    background: #f8fafc;
+    padding: 10px 12px;
+    font-family: inherit;
+    font-size: 14px;
+    line-height: 1.55;
+    color: #0f172a;
+    resize: none;
+    overflow: hidden;
+    min-height: 96px;
+    outline: none;
+    transition: border-color 0.15s ease, background 0.15s ease;
+    box-sizing: border-box;
+}
+
+.pp-cr-textarea::placeholder {
+    color: #94a3b8;
+    font-style: italic;
+}
+
+.pp-cr-textarea:focus {
+    border-color: var(--accent-primary, #4f46e5);
+    background: #ffffff;
+}
+
+/* General notes — visually distinguished as the catch-all card */
+.pp-cr-card--general {
+    background: linear-gradient(180deg, #fafbff 0%, #f4f6ff 100%);
+    border-color: #d6dbf3;
+    margin-top: 6px;
+}
+
+.pp-cr-card--general .pp-cr-textarea {
+    background: #ffffff;
+    min-height: 140px;
+}
+
+/* ===================================
+   Classroom 1 Agenda (static reference checklist)
+   =================================== */
+
+.pp-cr-agenda {
+    background: linear-gradient(180deg, #fafbff 0%, #f4f6ff 100%);
+    border: 1px solid #d6dbf3;
+    border-radius: 10px;
+    padding: 14px 18px 16px;
+    margin-bottom: 16px;
+}
+
+.pp-cr-agenda-header {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #e0e4f5;
+}
+
+.pp-cr-agenda-title {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 700;
+    color: #1e293b;
+    letter-spacing: -0.005em;
+}
+
+.pp-cr-agenda-meta {
+    font-size: 11px;
+    font-weight: 500;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.pp-cr-agenda-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.pp-cr-agenda-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 5px 10px 5px 8px;
+    border-radius: 6px;
+    font-size: 13.5px;
+    line-height: 1.5;
+    color: #1e293b;
+    border-bottom: 1px solid rgba(214, 219, 243, 0.5);
+    transition: background 0.12s ease;
+}
+
+.pp-cr-agenda-item:last-child {
+    border-bottom: none;
+}
+
+.pp-cr-agenda-item:hover {
+    background: rgba(255, 255, 255, 0.7);
+}
+
+.pp-cr-agenda-num {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--accent-primary, #4f46e5);
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+    margin-top: 1px;
+}
+
+.pp-cr-agenda-text {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.pp-cr-agenda-tag {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 8px;
+    background: #e0e7ff;
+    color: #4338ca;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 999px;
+    vertical-align: 2px;
+    white-space: nowrap;
+}
+
+/* ===================================
+   Classroom Tasks (above each classroom textarea)
+   Mirrors the .pp-cast-card pattern
+   =================================== */
+
+.pp-cr-tasks-wrap {
+    margin-bottom: 14px;
+}
+
+.pp-cr-tasks-header {
+    margin-bottom: 8px;
+}
+
+.pp-cr-tasks-title {
+    margin: 0;
+    font-size: 12px;
+    font-weight: 600;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.pp-cr-tasks-empty {
+    padding: 18px;
+    color: #94a3b8;
+    text-align: center;
+    border: 1px dashed #e2e8f0;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    font-size: 13px;
+}
+.pp-cr-tasks-empty p { margin: 0; }
+
+.pp-cr-tasks-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.pp-cr-task-card {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px 6px 4px;
+    min-height: 44px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    transition: border-color 0.15s, box-shadow 0.15s, opacity 0.15s;
+}
+.pp-cr-task-card:hover {
+    border-color: #cbd5e1;
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
+}
+
+.pp-cr-task-grip {
+    flex: 0 0 auto;
+    width: 18px;
+    height: 28px;
+    color: #cbd5e1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: grab;
+    transition: color 0.15s;
+}
+.pp-cr-task-grip:hover { color: #64748b; }
+.pp-cr-task-grip svg { width: 16px; height: 16px; display: block; }
+.pp-cr-task-grip:active { cursor: grabbing; }
+
+.pp-cr-task-check {
+    flex: 0 0 auto;
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    cursor: pointer;
+    accent-color: var(--accent-primary, #4f46e5);
+}
+
+.pp-cr-task-desc {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.pp-cr-task-assignee {
+    flex: 0 0 180px;
+    min-width: 0;
+}
+
+.pp-cr-task-actions {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.pp-cr-task-desc-input,
+.pp-cr-task-assignee-input {
+    width: 100%;
+    padding: 4px 6px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    background: transparent;
+    font-size: 13px;
+    font-family: inherit;
+    line-height: 1.3;
+    color: #0f172a;
+}
+.pp-cr-task-assignee-input {
+    color: #475569;
+    font-size: 12px;
+}
+.pp-cr-task-desc-input:hover,
+.pp-cr-task-assignee-input:hover {
+    border-color: #cbd5e1;
+    background: #f8fafc;
+}
+.pp-cr-task-desc-input:focus,
+.pp-cr-task-assignee-input:focus {
+    outline: none;
+    border-color: #1d4ed8;
+    background: #ffffff;
+    box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.12);
+}
+
+/* Completed task — strikethrough + faded */
+.pp-cr-task-card.is-completed {
+    background: #f8fafc;
+}
+.pp-cr-task-card.is-completed .pp-cr-task-desc-input,
+.pp-cr-task-card.is-completed .pp-cr-task-assignee-input {
+    text-decoration: line-through;
+    color: #94a3b8;
+}
+
+.pp-cr-task-card .pp-row-btn-delete {
+    background: transparent;
+    border: none;
+    color: #cbd5e1;
+    width: 26px;
+    height: 26px;
+    border-radius: 4px;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: background 0.15s, color 0.15s, opacity 0.15s;
+    opacity: 0.6;
+}
+.pp-cr-task-card:hover .pp-row-btn-delete { opacity: 1; }
+.pp-cr-task-card .pp-row-btn-delete:hover {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+/* SortableJS drag visuals */
+.pp-cr-task-card-ghost {
+    opacity: 0.35;
+    background: #eff6ff;
+    border-color: #93c5fd;
+    box-shadow: none;
+}
+.pp-cr-task-card-ghost > * { visibility: hidden; }
+.pp-cr-task-card-chosen { cursor: grabbing; }
+.pp-cr-task-card-drag {
+    background: #ffffff;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
+    border-color: #cbd5e1;
+    cursor: grabbing;
+}
+
+.pp-cr-tasks-add {
+    margin-top: 4px;
+    margin-bottom: 4px;
+}

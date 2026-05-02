@@ -30,6 +30,10 @@ const PROJECT_COLUMNS = [
     'production_start_date',
     'scope_of_work',
     'imperative_information',
+    'classroom_1_notes',
+    'classroom_2_notes',
+    'classroom_3_notes',
+    'cr_general_notes',
     'created_at',
     'updated_at'
 ];
@@ -54,8 +58,21 @@ function sanitizeForDb(record) {
     return out;
 }
 
+// Slim column set for list/lookup callers. Excludes large free-text columns
+// (scope_of_work, imperative_information, classroom_*_notes, cr_general_notes)
+// so the list view and weekly-view enrichment don't pay to ship them.
+// Use loadProject(num) for the full record.
+const LIST_COLUMNS = [
+    'project_number',
+    'project_name',
+    'status',
+    'pm',
+    'need_by_date',
+    'updated_at'
+].join(', ');
+
 /**
- * Load all projects.
+ * Load all projects (slim list/lookup payload — no large text fields).
  * @returns {Promise<Array<Object>>}
  */
 export async function loadAllProjects() {
@@ -65,7 +82,7 @@ export async function loadAllProjects() {
     try {
         const { data, error } = await client
             .from(PROJECTS_TABLE)
-            .select('*')
+            .select(LIST_COLUMNS)
             .order('updated_at', { ascending: false });
 
         if (error) {
@@ -181,6 +198,10 @@ export function createEmptyProject(projectNumber = '') {
         need_by_date: '',
         production_start_date: '',
         scope_of_work: '',
-        imperative_information: ''
+        imperative_information: '',
+        classroom_1_notes: '',
+        classroom_2_notes: '',
+        classroom_3_notes: '',
+        cr_general_notes: ''
     };
 }
