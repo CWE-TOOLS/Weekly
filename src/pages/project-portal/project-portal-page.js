@@ -42,7 +42,8 @@ import {
     loadColorLogForProject,
     saveColorLogForProject,
     loadPresets as loadColorLogPresets,
-    saveAsPreset as saveColorLogAsPreset
+    saveAsPreset as saveColorLogAsPreset,
+    updatePreset as updateColorLogPreset
 } from '../../services/color-log-service.js';
 import {
     loadBatchTicketsForCastings,
@@ -92,6 +93,9 @@ let batchTickets = new Map();              // castingId -> form-shaped batch tic
 let batchTicketsLoadedFor = null;          // project_number we last bulk-loaded for
 let currentBatchCastingId = null;          // active casting in batch tickets tab
 let batchTicketSaveTimers = new Map();     // castingId -> debounce handle
+let projectInfoSaveTimer = null;           // debounce timer for project info form
+let castingSaveTimers = new Map();         // castingId -> debounce handle for castings tab
+let optimizerPhaseSaveTimers = new Map();  // phaseId -> debounce handle (hours / rename)
 
 function getPhasesFor(castingId) {
     return currentCastingPhases.get(castingId) || [];
@@ -275,7 +279,11 @@ function setActiveTab(tab) {
         panel.hidden = !isActive;
     });
     const printBtn = document.getElementById('pp-print-btn');
-    if (printBtn) printBtn.textContent = (tab === 'batch-tickets') ? 'Print Batch Tickets' : 'Print';
+    if (printBtn) {
+        if (tab === 'batch-tickets') printBtn.textContent = 'Print Batch Tickets';
+        else if (tab === 'color-log') printBtn.textContent = 'Print Color Log';
+        else printBtn.textContent = 'Print';
+    }
 }
 
 // ---------- Data ----------
@@ -416,13 +424,14 @@ function readForm() {
     return out;
 }
 
-async function handleSave() {
+async function handleSave({ silent = false } = {}) {
     const record = readForm();
     if (!record.project_number) {
-        showToast('Project # is required.', 'error');
+        if (!silent) showToast('Project # is required.', 'error');
         return;
     }
     try {
+        if (silent) setProjectInfoStatus('saving');
         const saved = await upsertProject(record);
         const wasNew = currentProjectNumber !== saved.project_number;
         currentProjectNumber = saved.project_number;
@@ -433,22 +442,73 @@ async function handleSave() {
         if (wasNew) {
             await loadAndRenderCastings();
         }
-        showToast('Saved.');
+        if (silent) {
+            setProjectInfoStatus('saved');
+            setTimeout(() => setProjectInfoStatus(''), 1500);
+        } else {
+            showToast('Saved.');
+        }
     } catch (err) {
         logger.error('[project-portal] save failed:', err);
-        showToast('Save failed: ' + (err.message || err), 'error');
+        if (silent) setProjectInfoStatus('error');
+        else showToast('Save failed: ' + (err.message || err), 'error');
     }
 }
 
-async function handleDelete() {
+function setProjectInfoStatus(state) {
+    const el = document.getElementById('pp-form-save-status');
+    if (!el) return;
+    if (state === 'saving') el.textContent = 'Saving…';
+    else if (state === 'saved') el.textContent = 'Saved';
+    else if (state === 'error') el.textContent = 'Save failed';
+    else el.textContent = '';
+}
+
+function scheduleProjectInfoSave() {
     if (!currentProjectNumber) return;
-    if (!confirm(`Delete project ${currentProjectNumber}? This cannot be undone.`)) return;
+    if (projectInfoSaveTimer) clearTimeout(projectInfoSaveTimer);
+    setProjectInfoStatus('saving');
+    projectInfoSaveTimer = setTimeout(() => handleSave({ silent: true }), 600);
+}
+
+function handleDelete() {
+    if (!currentProjectNumber) return;
+    openDeleteModal(currentProjectNumber);
+}
+
+function openDeleteModal(projectNumber) {
+    const modal = document.getElementById('pp-delete-modal');
+    const target = document.getElementById('pp-delete-modal-target');
+    const confirmTarget = document.getElementById('pp-delete-modal-confirm-target');
+    const input = document.getElementById('pp-delete-modal-input');
+    const btn = document.getElementById('pp-delete-modal-confirm');
+    if (!modal || !target || !input || !btn) return;
+    target.textContent = projectNumber;
+    confirmTarget.textContent = projectNumber;
+    input.value = '';
+    btn.disabled = true;
+    modal.hidden = false;
+    setTimeout(() => input.focus(), 0);
+}
+
+function closeDeleteModal() {
+    const modal = document.getElementById('pp-delete-modal');
+    if (modal) modal.hidden = true;
+}
+
+async function performDelete() {
+    if (!currentProjectNumber) return;
+    const btn = document.getElementById('pp-delete-modal-confirm');
+    if (btn) { btn.disabled = true; btn.textContent = 'Deleting…'; }
     try {
         await deleteProject(currentProjectNumber);
+        closeDeleteModal();
+        if (btn) btn.textContent = 'Delete project';
         showToast('Deleted.');
         await showListView();
     } catch (err) {
         logger.error('[project-portal] delete failed:', err);
+        if (btn) { btn.disabled = false; btn.textContent = 'Delete project'; }
         showToast('Delete failed: ' + (err.message || err), 'error');
     }
 }
@@ -520,7 +580,6 @@ function renderCastings() {
                 <input type="text" class="pp-cast-card-desc-input" data-field="description" value="${escapeAttr(c.description || '')}" placeholder="(no description)" />
             </div>
             <div class="pp-cast-card-actions">
-                <button class="pp-row-btn pp-row-btn-save" data-action="save" type="button">Save</button>
                 <button class="pp-row-btn pp-row-btn-delete" data-action="delete" type="button" aria-label="Delete casting" title="Delete casting">&times;</button>
             </div>
         </div>
@@ -709,23 +768,29 @@ async function handleSaveCasting(id) {
     const descInput = card.querySelector('input[data-field="description"]');
     const num = numInput.value.trim();
     const desc = descInput.value.trim();
-    if (!num) {
-        showToast('Casting # cannot be empty.', 'error');
-        numInput.focus();
-        return;
-    }
+    if (!num) return; // skip silently while empty; user is mid-edit
     try {
         const updated = await updateCasting(id, { casting_number: num, description: desc });
         if (updated) {
             const idx = currentCastings.findIndex(c => c.id === id);
             if (idx !== -1) currentCastings[idx] = updated;
         }
-        showToast('Casting saved.');
     } catch (err) {
         logger.error('[project-portal] save casting failed:', err);
-        const msg = (err.code === '23505') ? 'That casting # already exists.' : (err.message || 'Save failed');
-        showToast(msg, 'error');
+        if (err.code === '23505') {
+            // Conflict on casting_number — silent during typing; revert next render fixes it.
+            return;
+        }
+        showToast('Save failed: ' + (err.message || err), 'error');
     }
+}
+
+function scheduleCastingSave(id) {
+    if (!id) return;
+    const prev = castingSaveTimers.get(id);
+    if (prev) clearTimeout(prev);
+    const t = setTimeout(() => handleSaveCasting(id), 600);
+    castingSaveTimers.set(id, t);
 }
 
 async function handleDeleteCasting(id) {
@@ -1087,6 +1152,14 @@ async function handleDeletePhase(castingId, phaseId) {
         logger.error('[project-portal] deleteCastingPhase failed:', err);
         showToast('Delete task failed: ' + (err.message || err), 'error');
     }
+}
+
+function scheduleOptimizerHoursSave(castingId, phaseId, hoursStr) {
+    if (!phaseId) return;
+    const prev = optimizerPhaseSaveTimers.get(phaseId);
+    if (prev) clearTimeout(prev);
+    const t = setTimeout(() => handleSetHours(castingId, phaseId, hoursStr), 500);
+    optimizerPhaseSaveTimers.set(phaseId, t);
 }
 
 async function handleSetHours(castingId, phaseId, hoursStr) {
@@ -1602,9 +1675,18 @@ function clSetRadio(name, value) {
     });
 }
 
+function getCurrentProjectDisplay() {
+    const num = (currentProjectNumber || '').trim();
+    const name = (document.getElementById('pp-f-project_name')?.value || '').trim();
+    if (num && name) return `${num} — ${name}`;
+    return num || name || '';
+}
+
 function renderColorLog() {
     if (!currentColorLog) currentColorLog = createEmptyColorLog();
     const log = currentColorLog;
+    // Project field is always live — never user-edited. Sync in-memory copy too.
+    log.project = getCurrentProjectDisplay();
 
     const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v ?? ''; };
     set('pp-cl-name', log.name);
@@ -1672,6 +1754,26 @@ function clHandleRowInputChange(tr, input) {
         clRenderType('pigment');
         clRenderType('fillCoat');
     }
+
+    // If pct changed on a pigment / fillCoat row, recompute that row's qty inline
+    // (don't re-render — would steal focus from the active input).
+    if (field === 'pct' && (type === 'pigment' || type === 'fillCoat')) {
+        clRecomputeRowQty(tr, item);
+    }
+}
+
+function clRecomputeRowQty(tr, item) {
+    const qtyInput = tr.querySelector('input[data-cl-field="qty"]');
+    if (!qtyInput) return;
+    const sandLbs = clGetSandWeightLbs();
+    const pct = item.pct;
+    const unit = item.unit || 'lbs';
+    if (pct === '' || pct == null || isNaN(pct) || sandLbs <= 0) {
+        qtyInput.value = '';
+        return;
+    }
+    const weightLbs = sandLbs * Number(pct) / 100;
+    qtyInput.value = clRoundSig(weightLbs * (CL_FROM_LBS[unit] || 1), 4);
 }
 
 function clHandleRowUnitChange(tr, select) {
@@ -1719,6 +1821,14 @@ async function activateColorLogTab() {
         colorLogLoadedFor = currentProjectNumber;
         renderColorLog();
         await refreshPresetPicker();
+    } else if (currentColorLog) {
+        // Same project — refresh the project display in case the name changed.
+        const live = getCurrentProjectDisplay();
+        if (currentColorLog.project !== live) {
+            currentColorLog.project = live;
+            const el = document.getElementById('pp-cl-project');
+            if (el) el.value = live;
+        }
     }
 }
 
@@ -1796,18 +1906,117 @@ async function saveColorLogNow() {
     }
 }
 
-async function handleSaveAsPresetClick() {
+function toggleColorLogMenu() {
+    const btn = document.getElementById('pp-cl-menu-btn');
+    const list = document.getElementById('pp-cl-menu-list');
+    if (!btn || !list) return;
+    const open = !list.hidden;
+    if (open) closeColorLogMenu();
+    else {
+        list.hidden = false;
+        btn.setAttribute('aria-expanded', 'true');
+    }
+}
+
+function closeColorLogMenu() {
+    const btn = document.getElementById('pp-cl-menu-btn');
+    const list = document.getElementById('pp-cl-menu-list');
+    if (list && !list.hidden) list.hidden = true;
+    if (btn) btn.setAttribute('aria-expanded', 'false');
+}
+
+function handleSaveAsPresetClick() {
     if (!currentColorLog) return;
-    const defaultName = currentColorLog.name || 'New Standard Color';
-    const presetName = window.prompt('Standard color name:', defaultName);
-    if (!presetName || !presetName.trim()) return;
+    openPresetSaveModal();
+}
+
+function findPresetByName(name) {
+    const target = (name || '').trim().toLowerCase();
+    if (!target) return null;
+    return colorLogPresets.find(p =>
+        ((p.presetName || p.name || '').trim().toLowerCase()) === target
+    ) || null;
+}
+
+function openPresetSaveModal() {
+    const modal = document.getElementById('pp-cl-preset-modal');
+    const input = document.getElementById('pp-cl-preset-modal-name');
+    if (!modal || !input) return;
+    const defaultName = (currentColorLog?.name || '').trim() || 'New Standard Color';
+    input.value = defaultName;
+    modal.hidden = false;
+    updatePresetSaveModalState();
+    setTimeout(() => { input.focus(); input.select(); }, 0);
+}
+
+function closePresetSaveModal() {
+    const modal = document.getElementById('pp-cl-preset-modal');
+    if (modal) modal.hidden = true;
+}
+
+function updatePresetSaveModalState() {
+    const input = document.getElementById('pp-cl-preset-modal-name');
+    const hint = document.getElementById('pp-cl-preset-modal-hint');
+    const submit = document.getElementById('pp-cl-preset-modal-submit');
+    if (!input || !hint || !submit) return;
+
+    const trimmed = input.value.trim();
+    if (!trimmed) {
+        hint.hidden = true;
+        submit.disabled = true;
+        submit.textContent = 'Save';
+        submit.classList.remove('pp-danger-btn');
+        submit.classList.add('pp-primary-btn');
+        return;
+    }
+
+    const match = findPresetByName(trimmed);
+    submit.disabled = false;
+    if (match) {
+        hint.hidden = false;
+        hint.textContent = `A standard color named "${match.presetName || match.name}" already exists. Saving will override it.`;
+        hint.classList.add('pp-modal-hint-warn');
+        submit.textContent = 'Override';
+    } else {
+        hint.hidden = false;
+        hint.textContent = 'Will be saved as a new standard color.';
+        hint.classList.remove('pp-modal-hint-warn');
+        submit.textContent = 'Save';
+    }
+}
+
+async function handlePresetSaveSubmit() {
+    if (!currentColorLog) return;
+    const input = document.getElementById('pp-cl-preset-modal-name');
+    const submit = document.getElementById('pp-cl-preset-modal-submit');
+    if (!input || !submit) return;
+
+    const name = input.value.trim();
+    if (!name) return;
+
+    const match = findPresetByName(name);
+    submit.disabled = true;
+    const originalLabel = submit.textContent;
+    submit.textContent = match ? 'Overriding…' : 'Saving…';
+
     try {
-        await saveColorLogAsPreset(presetName, currentColorLog);
-        showToast('Standard color saved', 'success');
+        // Presets are project-agnostic — strip the project field so it stays
+        // empty in the library and gets refilled live when loaded into a project.
+        const presetForm = { ...currentColorLog, project: '' };
+        if (match) {
+            await updateColorLogPreset(match.id, presetForm, name);
+            showToast('Standard color updated', 'success');
+        } else {
+            await saveColorLogAsPreset(name, presetForm);
+            showToast('Standard color saved', 'success');
+        }
+        closePresetSaveModal();
         await refreshPresetPicker();
     } catch (err) {
         logger.error('[color-log] saveAsPreset failed', err);
         showToast('Failed to save standard color', 'error');
+        submit.disabled = false;
+        submit.textContent = originalLabel;
     }
 }
 
@@ -1842,6 +2051,51 @@ function wireEvents() {
         handleCreateNewProject();
     });
 
+    // Preset save modal: close handlers
+    document.getElementById('pp-cl-preset-modal-close').addEventListener('click', closePresetSaveModal);
+    document.getElementById('pp-cl-preset-modal-cancel').addEventListener('click', closePresetSaveModal);
+    document.getElementById('pp-cl-preset-modal').addEventListener('click', (e) => {
+        if (e.target.id === 'pp-cl-preset-modal') closePresetSaveModal();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !document.getElementById('pp-cl-preset-modal').hidden) {
+            closePresetSaveModal();
+        }
+    });
+    document.getElementById('pp-cl-preset-modal-name').addEventListener('input', updatePresetSaveModalState);
+    document.getElementById('pp-cl-preset-modal-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        handlePresetSaveSubmit();
+    });
+
+    // Delete Project modal: close handlers
+    document.getElementById('pp-delete-modal-close').addEventListener('click', closeDeleteModal);
+    document.getElementById('pp-delete-modal-cancel').addEventListener('click', closeDeleteModal);
+    document.getElementById('pp-delete-modal').addEventListener('click', (e) => {
+        if (e.target.id === 'pp-delete-modal') closeDeleteModal();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !document.getElementById('pp-delete-modal').hidden) {
+            closeDeleteModal();
+        }
+    });
+
+    // Delete Project modal: enable button only when input matches project number
+    const deleteInput = document.getElementById('pp-delete-modal-input');
+    deleteInput.addEventListener('input', () => {
+        const target = document.getElementById('pp-delete-modal-target')?.textContent || '';
+        const btn = document.getElementById('pp-delete-modal-confirm');
+        btn.disabled = (deleteInput.value.trim() !== target);
+    });
+
+    // Delete Project modal: submit
+    document.getElementById('pp-delete-modal-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const target = document.getElementById('pp-delete-modal-target')?.textContent || '';
+        if (deleteInput.value.trim() !== target) return;
+        performDelete();
+    });
+
     // List: entire row click (event delegation)
     document.getElementById('pp-list-tbody').addEventListener('click', (e) => {
         const tr = e.target.closest('tr[data-project-number]');
@@ -1870,11 +2124,12 @@ function wireEvents() {
         showListView();
     });
 
-    // Form: save
-    document.getElementById('pp-save-btn').addEventListener('click', (e) => {
-        e.preventDefault();
-        handleSave();
-    });
+    // Form: auto-save on input/change (debounced)
+    const formEl = document.getElementById('pp-form');
+    if (formEl) {
+        formEl.addEventListener('input', scheduleProjectInfoSave);
+        formEl.addEventListener('change', scheduleProjectInfoSave);
+    }
 
     // Form: delete
     document.getElementById('pp-delete-btn').addEventListener('click', (e) => {
@@ -1882,7 +2137,7 @@ function wireEvents() {
         handleDelete();
     });
 
-    // Form: print — on Batch Tickets tab, this prints the active casting's tickets instead.
+    // Form: print — Batch Tickets and Color Log tabs use dedicated print handlers.
     document.getElementById('pp-print-btn').addEventListener('click', (e) => {
         e.preventDefault();
         if (currentTab === 'batch-tickets') {
@@ -1890,13 +2145,17 @@ function wireEvents() {
             else showToast('Select a casting first', 'error');
             return;
         }
+        if (currentTab === 'color-log') {
+            handlePrintColorLog();
+            return;
+        }
         handlePrint();
     });
 
-    // Prevent enter-key submit
+    // Prevent enter-key submit; auto-save handles persistence.
     document.getElementById('pp-form').addEventListener('submit', (e) => {
         e.preventDefault();
-        handleSave();
+        scheduleProjectInfoSave();
     });
 
     // Status select: update color on change
@@ -1949,10 +2208,23 @@ function wireEvents() {
                 return;
             }
 
+            if (e.target.id === 'pp-cl-menu-btn' || e.target.closest('#pp-cl-menu-btn')) {
+                toggleColorLogMenu();
+                return;
+            }
+
             if (e.target.id === 'pp-cl-save-preset-btn') {
+                closeColorLogMenu();
                 handleSaveAsPresetClick();
                 return;
             }
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('#pp-cl-menu')) closeColorLogMenu();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeColorLogMenu();
         });
 
         clPanel.addEventListener('input', (e) => {
@@ -1963,7 +2235,6 @@ function wireEvents() {
             // Top-level fields
             if (target.id === 'pp-cl-name')           { currentColorLog.name = target.value; touched = true; }
             else if (target.id === 'pp-cl-temp')      { currentColorLog.temperature = target.value; touched = true; }
-            else if (target.id === 'pp-cl-project')   { currentColorLog.project = target.value; touched = true; }
             else if (target.id === 'pp-cl-date')      { currentColorLog.date = target.value; touched = true; }
             else if (target.id === 'pp-cl-madeby')    { currentColorLog.madeBy = target.value; touched = true; }
             else if (target.id === 'pp-cl-finishing-notes') { currentColorLog.finishingNotes = target.value; touched = true; }
@@ -2066,15 +2337,21 @@ function wireEvents() {
         if (!card) return;
         handleDeletePhase(card.dataset.castingId, card.dataset.phaseId);
     });
-    optColumns.addEventListener('change', (e) => {
+    optColumns.addEventListener('input', (e) => {
         const card = e.target.closest('.pp-opt-card[data-phase-id]');
         if (!card) return;
         const phaseId = card.dataset.phaseId;
         const castingId = card.dataset.castingId;
         if (e.target.matches('input[data-action="hours"]')) {
-            handleSetHours(castingId, phaseId, e.target.value);
-        } else if (e.target.matches('input[data-action="rename"]')) {
-            handleRenamePhase(castingId, phaseId, e.target.value);
+            scheduleOptimizerHoursSave(castingId, phaseId, e.target.value);
+        }
+    });
+    // Rename still commits on blur (full re-render would clobber active typing).
+    optColumns.addEventListener('change', (e) => {
+        const card = e.target.closest('.pp-opt-card[data-phase-id]');
+        if (!card) return;
+        if (e.target.matches('input[data-action="rename"]')) {
+            handleRenamePhase(card.dataset.castingId, card.dataset.phaseId, e.target.value);
         }
     });
     optColumns.addEventListener('keydown', (e) => {
@@ -2173,15 +2450,21 @@ function wireEvents() {
     document.getElementById('pp-cast-add-btn').addEventListener('click', handleAddCastingClick);
 
     // Castings: row actions (delegation)
-    document.getElementById('pp-castings-list').addEventListener('click', (e) => {
+    const castingsList = document.getElementById('pp-castings-list');
+    castingsList.addEventListener('click', (e) => {
         const btn = e.target.closest('button[data-action]');
         if (!btn) return;
         const card = btn.closest('.pp-cast-card[data-casting-id]');
         if (!card) return;
         const id = card.getAttribute('data-casting-id');
         const action = btn.dataset.action;
-        if (action === 'save') handleSaveCasting(id);
-        else if (action === 'delete') handleDeleteCasting(id);
+        if (action === 'delete') handleDeleteCasting(id);
+    });
+    castingsList.addEventListener('input', (e) => {
+        const card = e.target.closest('.pp-cast-card[data-casting-id]');
+        if (!card) return;
+        if (!e.target.matches('input[data-field]')) return;
+        scheduleCastingSave(card.getAttribute('data-casting-id'));
     });
 
     // Browser back/forward
@@ -2862,6 +3145,212 @@ function handlePrintBatchTickets(castingId) {
     `).join('');
 
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>Batch Tickets — ${escapeHtml(projectName)} — Cast ${escapeHtml(casting.casting_number || '')}</title><style>${BATCH_PRINT_CSS}</style></head><body>${pages}<script>window.addEventListener('load',()=>{setTimeout(()=>window.print(),200);});<\/script></body></html>`;
+
+    const w = window.open('', '_blank');
+    if (!w) {
+        showToast('Pop-up blocked — allow pop-ups for printing', 'error');
+        return;
+    }
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+}
+
+// ---------- Color Log Print ----------
+
+const COLOR_LOG_PRINT_CSS = `
+@page { size: letter portrait; margin: 0.3in 0.4in; }
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: 'Segoe UI', Arial, sans-serif; color:#000; font-size:11pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.page { page-break-after: always; }
+.page:last-child { page-break-after: auto; }
+h1 { font-size: 18pt; font-weight: 900; margin-bottom: 2pt; }
+.subtitle { font-size: 9pt; margin-bottom: 10pt; }
+.header-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; margin-bottom: 6pt; }
+.hrow { display: flex; align-items: baseline; padding: 3pt 0; border-bottom: 1px solid #000; }
+.hrow .hlabel { font-weight: 700; font-size: 10pt; min-width: 110pt; }
+.hrow .hval { flex:1; font-style: italic; font-size: 11pt; }
+.checkbox-row { display: flex; gap: 24pt; align-items: center; padding: 6pt 0; }
+.checkbox-row .cb { display: flex; align-items: center; gap: 4pt; font-size: 10pt; }
+.cb-box { width: 14pt; height: 14pt; border: 1.5px solid #000; display: inline-flex; align-items: center; justify-content: center; font-size: 11pt; background: #fff; color: #000; }
+.cb-box.checked::after { content: '\\2713'; font-weight: 900; color: #000; }
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+.col-left { padding-right: 12pt; }
+.col-right { padding-left: 12pt; border-left: 1px solid #ccc; }
+.sect-label { font-weight: 700; font-size: 10pt; padding: 6pt 0 3pt; border-bottom: 1px solid #000; margin-bottom: 2pt; }
+.ing-row { display: flex; align-items: baseline; padding: 2pt 0; }
+.ing-row .ilabel { font-size: 10pt; min-width: 90pt; }
+.ing-row .ival { flex:1; font-style: italic; font-size: 10pt; border-bottom: 1px solid #000; margin-left: 4pt; min-height: 12pt; }
+.notes-area { font-style: italic; font-size: 10pt; min-height: 40pt; padding: 2pt 0; white-space: pre-wrap; line-height: 1.5; }
+.std-custom { display: flex; gap: 30pt; align-items: center; padding: 8pt 0; justify-content: center; }
+.std-custom .tag { font-weight: 700; font-size: 11pt; letter-spacing: 1pt; }
+.std-custom .tag-box { width: 28pt; height: 22pt; border: 1.5px solid #000; display: inline-flex; align-items: center; justify-content: center; margin-left: 6pt; font-size: 14pt; font-weight: 900; }
+`;
+
+function buildColorLogPrintHtml(log, projectNumber, projectDisplay) {
+    const list = (key) => Array.isArray(log[key]) ? log[key] : [];
+    const isStd = log.isStandard !== false;
+    const cement = log.cementType || 'white';
+    const cast = log.castMethod || 'sprayUp';
+    const cb = (on) => `<span class="cb-box${on ? ' checked' : ''}"></span>`;
+
+    const findIng = (sourceKey, targetName) => {
+        const arr = list(sourceKey);
+        return arr.find(b => (b?.name || '').trim().toLowerCase() === targetName.toLowerCase());
+    };
+    const baseIngVal = (name) => {
+        const found = findIng('baseIngredients', name);
+        if (!found || found.weight === '' || found.weight == null) return '';
+        return `${found.weight} ${found.unit || 'lbs'}${found.note ? ' (' + found.note + ')' : ''}`;
+    };
+    const additiveVal = (name) => {
+        const found = findIng('additives', name);
+        if (!found || found.amount === '' || found.amount == null) return '';
+        return `${found.amount} ${found.unit || 'oz'}${found.note ? ' ' + found.note : ''}`;
+    };
+
+    // Pigments (4 fixed slots)
+    const slots = 4;
+    const pigList = list('pigments');
+    const pigRows = Array.from({ length: slots }, (_, i) => {
+        const p = pigList[i];
+        const pctTxt = p && p.pct !== '' && p.pct != null ? `${p.pct}%` : '';
+        return `<div class="ing-row"><span class="ilabel">Pigment 0${i + 1}</span><span class="ival">${escapeHtml(p ? (p.name || '') : '')}</span><span style="font-size:10pt;min-width:30pt;text-align:right;">Qty:</span><span class="ival" style="max-width:50pt;text-align:right;">${escapeHtml(pctTxt)}</span></div>`;
+    }).join('');
+
+    // Fill Coat (4 fixed slots)
+    const fillList = list('fillCoat');
+    const fillRows = Array.from({ length: slots }, (_, i) => {
+        const f = fillList[i];
+        const pctTxt = f && f.pct !== '' && f.pct != null ? `${f.pct}%` : '';
+        return `<div class="ing-row"><span class="ilabel">Fill Pigment 0${i + 1}</span><span class="ival">${escapeHtml(f ? (f.name || '') : '')}</span><span style="font-size:10pt;min-width:30pt;text-align:right;">Qty:</span><span class="ival" style="max-width:50pt;text-align:right;">${escapeHtml(pctTxt)}</span></div>`;
+    }).join('');
+
+    // Aggregates (4 fixed slots)
+    const aggList = list('aggregates');
+    const aggRows = Array.from({ length: slots }, (_, i) => {
+        const a = aggList[i];
+        const val = a ? `${a.name || ''}${a.amount ? ' ' + a.amount + ' ' + (a.unit || 'lbs') : ''}`.trim() : '';
+        return `<div class="ing-row"><span class="ilabel">Other Agg 0${i + 1}</span><span class="ival">${escapeHtml(val)}</span></div>`;
+    }).join('');
+
+    // Grout (3 slots: Antique White / Bright White / Other — fall back to user's row name)
+    const groutNames = ['Antique White', 'Bright White', 'Other'];
+    const groutList = list('groutType');
+    const groutRows = Array.from({ length: 3 }, (_, i) => {
+        // Prefer matching by name; if no match, fall back to positional
+        let g = groutList.find(x => (x?.name || '').trim().toLowerCase() === groutNames[i].toLowerCase());
+        if (!g) g = groutList[i];
+        const label = g?.name || groutNames[i];
+        const ratioTxt = g && g.ratio !== '' && g.ratio != null ? `${g.ratio}%` : '';
+        return `<div class="ing-row"><span class="ilabel">${escapeHtml(label)}</span><span class="ival">${escapeHtml(ratioTxt)}</span></div>`;
+    }).join('');
+
+    return `
+<div class="page">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+    <div><h1>COLOR LOG</h1><div class="subtitle">Concreteworks East - Rev. 2025</div></div>
+    <div style="text-align:right;">
+      <div class="hrow" style="border:none;"><span class="hlabel">Sample #:</span><span class="hval" style="font-size:14pt;font-weight:700;">${escapeHtml(log.name || '')}</span></div>
+      <div style="font-size:8pt;color:#666;">* new standard master</div>
+    </div>
+  </div>
+
+  <div class="header-grid">
+    <div class="hrow"><span class="hlabel">Tempature:</span><span class="hval">${escapeHtml(log.temperature || '')}</span></div>
+    <div class="hrow"><span class="hlabel">Project:</span><span class="hval">${escapeHtml(projectDisplay || log.project || projectNumber || '')}</span></div>
+    <div class="hrow"><span class="hlabel">Date:</span><span class="hval">${escapeHtml(log.date || '')}</span></div>
+    <div class="hrow"><span class="hlabel">Made By:</span><span class="hval">${escapeHtml(log.madeBy || '')}</span></div>
+  </div>
+
+  <div class="std-custom">
+    <div><span class="tag">STANDARD</span><span class="tag-box">${isStd ? '&#10003;' : ''}</span></div>
+    <div><span class="tag">CUSTOM</span><span class="tag-box">${!isStd ? '&#10003;' : ''}</span></div>
+  </div>
+
+  <div class="checkbox-row" style="border-bottom:1px solid #000;padding-bottom:6pt;">
+    <span style="font-weight:700;font-size:10pt;">Cement Type:</span>
+    <span class="cb">${cb(cement === 'white')} White Portland</span>
+    <span class="cb">${cb(cement === 'gray')} Gray Portland</span>
+    <span class="cb">${cb(cement === 'other')} Other</span>
+  </div>
+
+  <div class="two-col" style="margin:4pt 0;">
+    <div class="col-left">
+      <div class="ing-row"><span class="ilabel">Sand</span><span class="ival">${escapeHtml(baseIngVal('Sand'))}</span></div>
+      <div class="ing-row"><span class="ilabel">Portland</span><span class="ival">${escapeHtml(baseIngVal('Portland'))}</span></div>
+      <div class="ing-row"><span class="ilabel">Pozzotive</span><span class="ival">${escapeHtml(baseIngVal('Pozzotive'))}</span></div>
+      <div class="ing-row"><span class="ilabel">Forton</span><span class="ival">${escapeHtml(baseIngVal('Forton'))}</span></div>
+      <div class="ing-row"><span class="ilabel">Water</span><span class="ival">${escapeHtml(baseIngVal('Water'))}</span></div>
+    </div>
+    <div class="col-right">
+      <div class="ing-row"><span class="ilabel">ADVA</span><span class="ival">${escapeHtml(additiveVal('ADVA'))}</span></div>
+      <div class="ing-row"><span class="ilabel">Eclipse</span><span class="ival">${escapeHtml(additiveVal('Eclipse'))}</span></div>
+      <div class="ing-row"><span class="ilabel">Fibers</span><span class="ival">${escapeHtml(additiveVal('Fibers'))}</span></div>
+      <div class="ing-row" style="margin-top:4pt;border-bottom:none;"><span class="ilabel" style="font-weight:700;">Notes</span></div>
+      <div style="font-style:italic;font-size:10pt;min-height:20pt;"></div>
+    </div>
+  </div>
+
+  <div class="checkbox-row" style="border-top:1px solid #000;border-bottom:1px solid #000;padding:6pt 0;">
+    <span style="font-weight:700;font-size:10pt;">Cast Method:</span>
+    <span class="cb">${cb(cast === 'sprayUp')} Spray Up</span>
+    <span class="cb">${cb(cast === 'directCast')} Direct Cast</span>
+    <span class="cb">${cb(cast === 'other')} Other</span>
+  </div>
+
+  <div class="two-col" style="margin:4pt 0;">
+    <div class="col-left">
+      <div class="sect-label">Aggregrates:</div>
+      ${aggRows}
+    </div>
+    <div class="col-right">
+      <div class="sect-label">Pigments:</div>
+      ${pigRows}
+    </div>
+  </div>
+
+  <div class="two-col" style="margin:4pt 0;">
+    <div class="col-left">
+      <div class="sect-label">Grout Type:</div>
+      ${groutRows}
+    </div>
+    <div class="col-right">
+      <div class="sect-label">Fill Coat:</div>
+      ${fillRows}
+    </div>
+  </div>
+
+  <div class="two-col" style="margin-top:8pt;border-top:1px solid #000;padding-top:4pt;">
+    <div class="col-left">
+      <div class="sect-label">Finishing Notes:</div>
+      <div class="notes-area">${escapeHtml(log.finishingNotes || '')}</div>
+    </div>
+    <div class="col-right">
+      <div class="sect-label">Sealing Notes:</div>
+      <div class="notes-area">${escapeHtml(log.sealingNotes || '')}</div>
+    </div>
+  </div>
+</div>
+`;
+}
+
+function handlePrintColorLog() {
+    if (!currentColorLog) {
+        showToast('No color log to print', 'error');
+        return;
+    }
+    const log = currentColorLog;
+    const projectNumber = currentProjectNumber || '';
+    const projectName = document.getElementById('pp-f-project_name')?.value || '';
+    const titleParts = [
+        'Color Log',
+        log.name || '',
+        projectName || projectNumber
+    ].filter(Boolean).join(' — ');
+
+    const body = buildColorLogPrintHtml(log, projectNumber, getCurrentProjectDisplay());
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(titleParts)}</title><style>${COLOR_LOG_PRINT_CSS}</style></head><body>${body}<script>window.addEventListener('load',()=>{setTimeout(()=>window.print(),200);});<\/script></body></html>`;
 
     const w = window.open('', '_blank');
     if (!w) {

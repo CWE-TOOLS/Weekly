@@ -207,6 +207,41 @@ export async function saveAsPreset(presetName, formObj) {
 }
 
 /**
+ * Override an existing preset with the given form state. Keeps the same
+ * preset_name (rename via name arg if provided).
+ * @param {string} presetId
+ * @param {Object} formObj
+ * @param {string} [presetName] - if provided, also renames the preset
+ * @returns {Promise<Object>} the updated preset row, form-shaped
+ */
+export async function updatePreset(presetId, formObj, presetName) {
+    if (!presetId) throw new Error('presetId required');
+    const client = await getClient();
+    if (!client) throw new Error('Supabase client unavailable');
+
+    const payload = toDb(formObj);
+    payload.is_preset = true;
+    payload.project_number = null;
+    if (presetName !== undefined && presetName !== null) {
+        payload.preset_name = String(presetName).trim();
+    }
+
+    const { data, error } = await client
+        .from(TABLE)
+        .update(payload)
+        .eq('id', presetId)
+        .eq('is_preset', true)
+        .select()
+        .maybeSingle();
+
+    if (error) {
+        logger.error('[color-log] updatePreset error:', error);
+        throw error;
+    }
+    return rowToForm(data);
+}
+
+/**
  * Delete a preset by id.
  * @param {string} presetId
  * @returns {Promise<boolean>}

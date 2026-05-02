@@ -1543,6 +1543,58 @@ html, body {
     margin-top: 4px;
 }
 
+.pp-modal-header-danger {
+    background: #fef2f2;
+    border-bottom-color: #fecaca;
+}
+.pp-modal-header-danger h2 {
+    color: #b91c1c;
+}
+.pp-modal-warn {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: #475569;
+    padding: 12px 14px;
+    background: #fff7ed;
+    border: 1px solid #fed7aa;
+    border-radius: 6px;
+}
+.pp-modal-warn strong { color: #0f172a; }
+.pp-modal-hint {
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: #475569;
+    padding: 10px 12px;
+    border-radius: 6px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+}
+.pp-modal-hint.pp-modal-hint-warn {
+    background: #fff7ed;
+    border-color: #fed7aa;
+    color: #9a3412;
+}
+.pp-primary-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+.pp-modal .pp-field code {
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+    font-size: 12px;
+    color: #0f172a;
+    text-transform: none;
+    letter-spacing: 0;
+}
+.pp-danger-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 /* ---------- Print ---------- */
 @media print {
     .pp-header,
@@ -1639,6 +1691,66 @@ body.pp-printing .pp-tab-panel[data-panel="castings"] { display: none !important
 .pp-cl-toolbar-btn:hover {
     background: var(--accent-primary);
     color: #fff;
+}
+
+.pp-cl-menu {
+    position: relative;
+    display: inline-block;
+}
+
+.pp-cl-menu-btn {
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: 1px solid var(--border-primary);
+    background: #fff;
+    color: var(--text-secondary);
+    border-radius: 4px;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    font-family: inherit;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.pp-cl-menu-btn:hover,
+.pp-cl-menu-btn[aria-expanded="true"] {
+    background: var(--bg-secondary, #f3f4f6);
+    color: var(--text-primary);
+    border-color: var(--accent-primary);
+}
+
+.pp-cl-menu-list {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    min-width: 200px;
+    background: #fff;
+    border: 1px solid var(--border-primary);
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+    padding: 4px 0;
+    z-index: 100;
+}
+
+.pp-cl-menu-item {
+    display: block;
+    width: 100%;
+    padding: 8px 14px;
+    border: none;
+    background: transparent;
+    text-align: left;
+    font-size: 13px;
+    color: var(--text-primary);
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.pp-cl-menu-item:hover {
+    background: var(--bg-secondary, #f3f4f6);
 }
 
 .pp-cl-save-status {
@@ -1937,14 +2049,15 @@ body.pp-printing .pp-tab-panel[data-panel="castings"] { display: none !important
 
 .pp-cl-ing-table select {
     width: 100%;
-    min-width: 55px;
-    padding: 6px 4px;
+    min-width: 58px;
+    padding: 6px 14px 6px 4px;
     border: 1px solid var(--border-primary);
     border-radius: 4px;
     font-size: 12px;
     background: #fff;
     font-family: inherit;
     color: var(--text-primary);
+    text-overflow: clip;
 }
 
 .pp-cl-input-suffix {
@@ -1955,6 +2068,17 @@ body.pp-printing .pp-tab-panel[data-panel="castings"] { display: none !important
 
 .pp-cl-input-suffix input {
     padding-right: 20px !important;
+}
+
+/* Hide native number spinner arrows on the percent input (pigments / fill coat) */
+.pp-cl-ing-table input[data-cl-field="pct"]::-webkit-outer-spin-button,
+.pp-cl-ing-table input[data-cl-field="pct"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+.pp-cl-ing-table input[data-cl-field="pct"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
 }
 
 .pp-cl-input-suffix .pp-cl-suffix {

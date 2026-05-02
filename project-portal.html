@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="src/styles/variables.css">
     <link rel="stylesheet" href="src/styles/base.css">
     <link rel="stylesheet" href="src/styles/buttons.css">
-    <link rel="stylesheet" href="src/styles/project-portal.css?v=20260501-07">
+    <link rel="stylesheet" href="src/styles/project-portal.css?v=20260502-10">
 
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 </head>
@@ -80,9 +80,9 @@
                     <span id="pp-form-context-name"></span>
                 </div>
                 <div class="pp-form-actions">
+                    <span id="pp-form-save-status" class="pp-cl-save-status" aria-live="polite"></span>
                     <button id="pp-print-btn" class="pp-secondary-btn">Print</button>
                     <button id="pp-delete-btn" class="pp-danger-btn">Delete</button>
-                    <button id="pp-save-btn" class="pp-primary-btn">Save</button>
                 </div>
             </div>
 
@@ -328,7 +328,12 @@
                             </div>
                             <div class="pp-cl-toolbar-right">
                                 <span id="pp-cl-save-status" class="pp-cl-save-status"></span>
-                                <button type="button" id="pp-cl-save-preset-btn" class="pp-cl-toolbar-btn">Save as Standard Color</button>
+                                <div class="pp-cl-menu" id="pp-cl-menu">
+                                    <button type="button" id="pp-cl-menu-btn" class="pp-cl-menu-btn" aria-haspopup="true" aria-expanded="false" aria-label="More actions" title="More actions">&#x22EF;</button>
+                                    <div class="pp-cl-menu-list" id="pp-cl-menu-list" role="menu" hidden>
+                                        <button type="button" id="pp-cl-save-preset-btn" class="pp-cl-menu-item" role="menuitem">Save as Standard Color</button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -350,7 +355,7 @@
                                 <!-- Info rows -->
                                 <div class="pp-cl-grid-2">
                                     <div class="pp-cl-field"><span class="pp-cl-label">Temperature:</span><input type="text" id="pp-cl-temp" class="pp-cl-input"></div>
-                                    <div class="pp-cl-field"><span class="pp-cl-label">Project:</span><input type="text" id="pp-cl-project" class="pp-cl-input"></div>
+                                    <div class="pp-cl-field"><span class="pp-cl-label">Project:</span><input type="text" id="pp-cl-project" class="pp-cl-input" readonly title="Auto-filled from project info"></div>
                                 </div>
                                 <div class="pp-cl-grid-2">
                                     <div class="pp-cl-field"><span class="pp-cl-label">Date:</span><input type="date" id="pp-cl-date" class="pp-cl-input"></div>
@@ -381,14 +386,14 @@
                                 <div class="pp-cl-2col">
                                     <div class="pp-cl-col-left">
                                         <table class="pp-cl-ing-table" id="pp-cl-base-table">
-                                            <thead><tr><th>Ingredient</th><th style="width:25%;">Weight</th><th style="width:15%;">Unit</th><th style="width:20%;">Note</th><th class="pp-cl-col-action"></th></tr></thead>
+                                            <thead><tr><th>Ingredient</th><th style="width:20%;">Weight</th><th style="width:22%;">Unit</th><th style="width:20%;">Note</th><th class="pp-cl-col-action"></th></tr></thead>
                                             <tbody></tbody>
                                         </table>
                                         <button class="pp-cl-btn-add" type="button" data-cl-add="base">+ Add Ingredient</button>
                                     </div>
                                     <div class="pp-cl-col-right">
                                         <table class="pp-cl-ing-table" id="pp-cl-additives-table">
-                                            <thead><tr><th>Additive</th><th style="width:25%;">Amount</th><th style="width:15%;">Unit</th><th style="width:20%;">Note</th><th class="pp-cl-col-action"></th></tr></thead>
+                                            <thead><tr><th>Additive</th><th style="width:20%;">Amount</th><th style="width:22%;">Unit</th><th style="width:20%;">Note</th><th class="pp-cl-col-action"></th></tr></thead>
                                             <tbody></tbody>
                                         </table>
                                         <button class="pp-cl-btn-add" type="button" data-cl-add="additive">+ Add Additive</button>
@@ -408,7 +413,7 @@
                                     <div class="pp-cl-col-left">
                                         <div class="pp-cl-sect-label">Aggregates:</div>
                                         <table class="pp-cl-ing-table" id="pp-cl-aggregates-table">
-                                            <thead><tr><th>Name</th><th style="width:25%;">Amount</th><th style="width:15%;">Unit</th><th class="pp-cl-col-action"></th></tr></thead>
+                                            <thead><tr><th>Name</th><th style="width:30%;">Amount</th><th style="width:28%;">Unit</th><th class="pp-cl-col-action"></th></tr></thead>
                                             <tbody></tbody>
                                         </table>
                                         <button class="pp-cl-btn-add" type="button" data-cl-add="aggregate">+ Add Aggregate</button>
@@ -416,7 +421,7 @@
                                     <div class="pp-cl-col-right">
                                         <div class="pp-cl-sect-label">Pigments:</div>
                                         <table class="pp-cl-ing-table" id="pp-cl-pigments-table">
-                                            <thead><tr><th style="width:28%;">Pigment</th><th style="width:18%;">%</th><th style="width:20%;">Weight</th><th style="width:18%;">Unit</th><th class="pp-cl-col-action"></th></tr></thead>
+                                            <thead><tr><th style="width:22%;">Pigment</th><th style="width:20%;">%</th><th style="width:20%;">Weight</th><th style="width:24%;">Unit</th><th class="pp-cl-col-action"></th></tr></thead>
                                             <tbody></tbody>
                                         </table>
                                         <button class="pp-cl-btn-add" type="button" data-cl-add="pigment">+ Add Pigment</button>
@@ -436,7 +441,7 @@
                                     <div class="pp-cl-col-right">
                                         <div class="pp-cl-sect-label">Fill Coat:</div>
                                         <table class="pp-cl-ing-table" id="pp-cl-fillcoat-table">
-                                            <thead><tr><th style="width:28%;">Fill Pigment</th><th style="width:18%;">%</th><th style="width:20%;">Weight</th><th style="width:18%;">Unit</th><th class="pp-cl-col-action"></th></tr></thead>
+                                            <thead><tr><th style="width:22%;">Fill Pigment</th><th style="width:20%;">%</th><th style="width:20%;">Weight</th><th style="width:24%;">Unit</th><th class="pp-cl-col-action"></th></tr></thead>
                                             <tbody></tbody>
                                         </table>
                                         <button class="pp-cl-btn-add" type="button" data-cl-add="fillCoat">+ Add Fill Pigment</button>
@@ -544,10 +549,58 @@
             </div>
         </div>
 
+        <!-- Save Standard Color Modal -->
+        <div id="pp-cl-preset-modal" class="pp-modal-backdrop" hidden>
+            <div class="pp-modal" role="dialog" aria-modal="true" aria-labelledby="pp-cl-preset-modal-title">
+                <div class="pp-modal-header">
+                    <h2 id="pp-cl-preset-modal-title">Save as Standard Color</h2>
+                    <button type="button" class="pp-modal-close" id="pp-cl-preset-modal-close" aria-label="Close">&times;</button>
+                </div>
+                <form id="pp-cl-preset-modal-form" class="pp-modal-body">
+                    <label class="pp-field">
+                        <span class="pp-field-label">Standard color name <span class="pp-field-req">*</span></span>
+                        <input type="text" id="pp-cl-preset-modal-name" required autocomplete="off" />
+                    </label>
+                    <div id="pp-cl-preset-modal-hint" class="pp-modal-hint" hidden></div>
+                    <div class="pp-modal-actions">
+                        <button type="button" class="pp-secondary-btn" id="pp-cl-preset-modal-cancel">Cancel</button>
+                        <button type="submit" class="pp-primary-btn" id="pp-cl-preset-modal-submit" disabled>Save</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Delete Project Modal -->
+        <div id="pp-delete-modal" class="pp-modal-backdrop" hidden>
+            <div class="pp-modal" role="dialog" aria-modal="true" aria-labelledby="pp-delete-modal-title">
+                <div class="pp-modal-header pp-modal-header-danger">
+                    <h2 id="pp-delete-modal-title">Delete Project</h2>
+                    <button type="button" class="pp-modal-close" id="pp-delete-modal-close" aria-label="Close">&times;</button>
+                </div>
+                <form id="pp-delete-modal-form" class="pp-modal-body">
+                    <p class="pp-modal-warn">
+                        This will permanently delete project
+                        <strong id="pp-delete-modal-target"></strong>
+                        and all its castings, optimizer hours, tracking, color logs, and batch tickets.
+                        <br>
+                        <strong>This cannot be undone.</strong>
+                    </p>
+                    <label class="pp-field">
+                        <span class="pp-field-label">Type <code id="pp-delete-modal-confirm-target"></code> to confirm</span>
+                        <input type="text" id="pp-delete-modal-input" autocomplete="off" autocapitalize="off" spellcheck="false" />
+                    </label>
+                    <div class="pp-modal-actions">
+                        <button type="button" class="pp-secondary-btn" id="pp-delete-modal-cancel">Cancel</button>
+                        <button type="submit" class="pp-danger-btn" id="pp-delete-modal-confirm" disabled>Delete project</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
         <!-- Toast -->
         <div id="pp-toast" class="pp-toast" hidden></div>
     </div>
 
-    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20260501-15"></script>
+    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20260502-12"></script>
 </body>
 </html>
