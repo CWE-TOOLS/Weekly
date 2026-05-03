@@ -57,6 +57,7 @@ import {
     FROM_LBS
 } from '../../utils/batch-calc.js';
 import { fetchAllTasks } from '../../services/data-service.js';
+import { parseDate } from '../../utils/date-utils.js';
 import {
     loadClassroomTasks,
     createClassroomTask,
@@ -373,9 +374,20 @@ function compareDateStrings(a, b) {
     return a.localeCompare(b);
 }
 
+function formatListDate(value) {
+    const s = (value ?? '').toString().trim();
+    if (!s) return '';
+    const d = parseDate(s);
+    if (!d) return s;
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const yy = String(d.getFullYear()).slice(-2);
+    return `${mm}/${dd}/${yy}`;
+}
+
 async function refreshList() {
     const tbody = document.getElementById('pp-list-tbody');
-    tbody.innerHTML = '<tr><td colspan="6" class="pp-empty">Loading projects...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="pp-empty">Loading projects...</td></tr>';
 
     await loadAllData();
     renderList(document.getElementById('pp-search').value);
@@ -418,7 +430,7 @@ function renderList(searchQuery = '') {
     });
 
     if (filtered.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="pp-empty">No projects yet. Click "+ New Project" to get started.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="pp-empty">No projects yet. Click "+ New Project" to get started.</td></tr>';
         return;
     }
 
@@ -426,12 +438,13 @@ function renderList(searchQuery = '') {
         const status = row.status ? `<span class="pp-status-pill pp-status-${slug(row.status)}">${escapeHtml(row.status)}</span>` : '';
         return `
             <tr class="pp-row-clickable" data-project-number="${escapeAttr(row.project_number)}">
+                <td>${status}</td>
                 <td class="pp-cell-num"><strong>${escapeHtml(row.project_number)}</strong></td>
                 <td>${escapeHtml(row.project_name || '')}</td>
                 <td>${escapeHtml(row.pm || '')}</td>
-                <td>${status}</td>
-                <td>${escapeHtml(row.need_by_date || '')}</td>
-                <td>${escapeHtml(row.opt_ship_date || '')}</td>
+                <td>${escapeHtml(formatListDate(row.project_date))}</td>
+                <td>${escapeHtml(formatListDate(row.need_by_date))}</td>
+                <td>${escapeHtml(formatListDate(row.opt_ship_date))}</td>
             </tr>
         `;
     }).join('');

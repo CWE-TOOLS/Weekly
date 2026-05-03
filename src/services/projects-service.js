@@ -67,6 +67,7 @@ const LIST_COLUMNS = [
     'project_name',
     'status',
     'pm',
+    'project_date',
     'need_by_date',
     'updated_at'
 ].join(', ');
