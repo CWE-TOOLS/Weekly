@@ -121,6 +121,47 @@ export async function createComponent(castingId, fields = {}) {
 }
 
 /**
+ * Bulk-insert components for one casting in a single round-trip.
+ * @param {string} castingId
+ * @param {Array<{type?:string, width?:string, length?:string, panel_id?:string, color?:string, sealer?:string}>} items
+ * @returns {Promise<Array<Object>>} inserted rows in order
+ */
+export async function createComponentsBulk(castingId, items) {
+    if (!castingId) throw new Error('castingId required');
+    if (!Array.isArray(items) || items.length === 0) return [];
+    const client = await getClient();
+    if (!client) throw new Error('Supabase client unavailable');
+
+    const existing = await loadCastingComponents(castingId);
+    const startOrder = existing.length > 0
+        ? Math.max(...existing.map(c => c.sort_order || 0)) + 1
+        : 0;
+
+    const payload = items.map((item, idx) => ({
+        casting_id: castingId,
+        type: cleanText(item.type),
+        width: cleanText(item.width),
+        length: cleanText(item.length),
+        panel_id: cleanText(item.panel_id),
+        color: cleanText(item.color),
+        sealer: cleanText(item.sealer),
+        from_inventory: true,
+        sort_order: startOrder + idx
+    }));
+
+    const { data, error } = await client
+        .from(TABLE)
+        .insert(payload)
+        .select();
+
+    if (error) {
+        logger.error('[tracking] createComponentsBulk error:', error);
+        throw error;
+    }
+    return data || [];
+}
+
+/**
  * Update one or more fields on a component.
  * @param {string} componentId
  * @param {{type?:string, width?:string, length?:string, panel_id?:string, color?:string, sealer?:string}} fields
@@ -172,6 +213,28 @@ export async function deleteComponent(componentId) {
         throw error;
     }
     return true;
+}
+
+/**
+ * Delete all components for a casting in one round-trip.
+ * @param {string} castingId
+ * @returns {Promise<number>} count of rows the operation targeted (best-effort)
+ */
+export async function deleteAllComponentsForCasting(castingId) {
+    if (!castingId) return 0;
+    const client = await getClient();
+    if (!client) return 0;
+
+    const { error } = await client
+        .from(TABLE)
+        .delete()
+        .eq('casting_id', castingId);
+
+    if (error) {
+        logger.error('[tracking] deleteAllComponentsForCasting error:', error);
+        throw error;
+    }
+    return 1;
 }
 
 /**

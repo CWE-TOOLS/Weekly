@@ -34,10 +34,19 @@ import {
 import {
     loadAllComponentsForProject,
     createComponent,
+    createComponentsBulk,
     updateComponent,
     deleteComponent,
+    deleteAllComponentsForCasting,
     setComponentsOrder
 } from '../../services/tracking-service.js';
+import {
+    loadAllInventoryForProject,
+    createInventoryItem,
+    updateInventoryItem,
+    deleteInventoryItem,
+    setInventoryOrder
+} from '../../services/inventory-service.js';
 import {
     loadColorLogForProject,
     saveColorLogForProject,
@@ -98,6 +107,10 @@ let currentCastingPhases = new Map();      // castingId -> Array<phase row>
 let copiedPhases = null;                   // Array<{phase_name, hours, sort_order}> from a copy action
 let currentTrackExpanded = new Set();      // castingIds whose tracking sections are open
 let currentCastingComponents = new Map();  // castingId -> Array<component row>
+let currentCastInvExpanded = new Set();    // castingIds whose inventory sections are open (Castings tab)
+let currentCastingInventory = new Map();   // castingId -> Array<inventory row>
+let currentCastingInventoryLoadedFor = null; // project_number we last loaded inventory for
+let inventorySaveTimers = new Map();       // itemId -> debounce handle
 let currentColorLog = null;                // form-shaped record (id null = unsaved)
 let colorLogPresets = [];                  // cached preset rows
 let colorLogSaveTimer = null;              // debounce timer
@@ -595,6 +608,9 @@ function handlePrint() {
 async function loadAndRenderCastings() {
     if (!currentProjectNumber) {
         currentCastings = [];
+        currentCastingInventory = new Map();
+        currentCastInvExpanded = new Set();
+        currentCastingInventoryLoadedFor = null;
         renderCastings();
         return;
     }
@@ -604,7 +620,33 @@ async function loadAndRenderCastings() {
         logger.error('[project-portal] loadCastings failed:', err);
         currentCastings = [];
     }
+    await loadAllInventoryForCurrentProject();
     renderCastings();
+}
+
+async function loadAllInventoryForCurrentProject() {
+    const ids = currentCastings.map(c => c.id);
+    try {
+        currentCastingInventory = await loadAllInventoryForProject(ids);
+        currentCastingInventoryLoadedFor = currentProjectNumber;
+    } catch (err) {
+        logger.error('[project-portal] loadAllInventoryForProject failed:', err);
+        currentCastingInventory = new Map();
+        for (const id of ids) currentCastingInventory.set(id, []);
+    }
+    // Drop expanded ids that no longer exist
+    const validIds = new Set(ids);
+    for (const id of [...currentCastInvExpanded]) {
+        if (!validIds.has(id)) currentCastInvExpanded.delete(id);
+    }
+}
+
+function getInventoryFor(castingId) {
+    return currentCastingInventory.get(castingId) || [];
+}
+
+function setInventoryFor(castingId, items) {
+    currentCastingInventory.set(castingId, items);
 }
 
 function renderCastings() {
@@ -634,27 +676,105 @@ function renderCastings() {
 
     list.hidden = false;
     empty.hidden = true;
-    list.innerHTML = currentCastings.map(c => `
-        <div class="pp-cast-card" data-casting-id="${escapeAttr(c.id)}">
-            <div class="pp-cast-card-grip" aria-hidden="true" title="Drag to reorder">
+    list.innerHTML = currentCastings.map(c => renderCastingCard(c)).join('');
+
+    ensureCastingsSortable();
+    ensureInventorySortables();
+}
+
+function renderCastingCard(c) {
+    const isOpen = currentCastInvExpanded.has(c.id);
+    const items = getInventoryFor(c.id);
+    const totalQty = items.reduce((sum, it) => sum + (parseInt(it.quantity, 10) || 0), 0);
+    const countLabel = items.length === 0
+        ? '0 components'
+        : `${items.length} ${items.length === 1 ? 'type' : 'types'} · ${totalQty} pcs`;
+
+    return `
+        <div class="pp-cast-card${isOpen ? ' pp-cast-card-open' : ''}" data-casting-id="${escapeAttr(c.id)}">
+            <div class="pp-cast-card-header">
+                <button type="button" class="pp-cast-card-chevron" data-action="toggle-inventory" aria-expanded="${isOpen}" title="${isOpen ? 'Collapse inventory' : 'Expand inventory'}">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="9 18 15 12 9 6"/>
+                    </svg>
+                </button>
+                <div class="pp-cast-card-grip" aria-hidden="true" title="Drag to reorder">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/>
+                        <circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/>
+                    </svg>
+                </div>
+                <div class="pp-cast-card-num">
+                    <input type="text" class="pp-cast-card-num-input" data-field="casting_number" value="${escapeAttr(c.casting_number || '')}" />
+                </div>
+                <div class="pp-cast-card-desc">
+                    <input type="text" class="pp-cast-card-desc-input" data-field="description" value="${escapeAttr(c.description || '')}" placeholder="(no description)" />
+                </div>
+                <span class="pp-cast-card-count">${countLabel}</span>
+                <div class="pp-cast-card-actions">
+                    <button class="pp-row-btn pp-row-btn-delete" data-action="delete" type="button" aria-label="Delete casting" title="Delete casting">&times;</button>
+                </div>
+            </div>
+            ${isOpen ? renderInventoryBody(c, items) : ''}
+        </div>
+    `;
+}
+
+function renderInventoryBody(casting, items) {
+    const cardsHtml = items.length === 0
+        ? `<div class="pp-opt-cards-empty">No components yet. Add one below.</div>`
+        : items.map(item => renderInventoryRow(item, casting.id)).join('');
+
+    const headerRow = `
+        <div class="pp-inv-header-row" aria-hidden="true">
+            <div class="pp-inv-header-grip-spacer"></div>
+            <div class="pp-inv-header-fields">
+                <span class="pp-inv-header-qty">Qty</span>
+                <span>Type</span>
+                <span>Width</span>
+                <span>Length</span>
+                <span>Color</span>
+                <span>Sealer</span>
+                <span class="pp-inv-header-num">Cu Ft</span>
+                <span class="pp-inv-header-num">FF Sq Ft</span>
+            </div>
+            <div class="pp-inv-header-delete-spacer"></div>
+        </div>
+    `;
+
+    return `
+        <div class="pp-cast-card-body">
+            ${headerRow}
+            <div class="pp-inv-rows" data-casting-id="${escapeAttr(casting.id)}">
+                ${cardsHtml}
+            </div>
+            <button type="button" class="pp-add-btn pp-inv-add" data-action="add-inventory" data-casting-id="${escapeAttr(casting.id)}">+ Add Component</button>
+        </div>
+    `;
+}
+
+function renderInventoryRow(item, castingId) {
+    return `
+        <div class="pp-inv-row" data-inventory-id="${escapeAttr(item.id)}" data-casting-id="${escapeAttr(castingId)}">
+            <div class="pp-inv-row-grip" aria-hidden="true" title="Drag to reorder">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/>
                     <circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/>
                 </svg>
             </div>
-            <div class="pp-cast-card-num">
-                <input type="text" class="pp-cast-card-num-input" data-field="casting_number" value="${escapeAttr(c.casting_number || '')}" />
+            <div class="pp-inv-row-fields">
+                <input type="number" class="pp-inv-input pp-inv-input-qty" data-field="quantity" min="1" step="1" value="${escapeAttr(item.quantity ?? 1)}" />
+                <input type="text" class="pp-inv-input" data-field="type" placeholder="Type" value="${escapeAttr(item.type || '')}" />
+                <input type="text" class="pp-inv-input" data-field="width" placeholder="Width" value="${escapeAttr(item.width || '')}" />
+                <input type="text" class="pp-inv-input" data-field="length" placeholder="Length" value="${escapeAttr(item.length || '')}" />
+                <input type="text" class="pp-inv-input" data-field="color" placeholder="Color" value="${escapeAttr(item.color || '')}" />
+                <input type="text" class="pp-inv-input" data-field="sealer" placeholder="Sealer" value="${escapeAttr(item.sealer || '')}" />
+                <input type="number" class="pp-inv-input pp-inv-input-num" data-field="cu_ft" step="any" min="0" placeholder="0" value="${item.cu_ft == null ? '' : escapeAttr(item.cu_ft)}" />
+                <input type="number" class="pp-inv-input pp-inv-input-num" data-field="ff_sq_ft" step="any" min="0" placeholder="0" value="${item.ff_sq_ft == null ? '' : escapeAttr(item.ff_sq_ft)}" />
             </div>
-            <div class="pp-cast-card-desc">
-                <input type="text" class="pp-cast-card-desc-input" data-field="description" value="${escapeAttr(c.description || '')}" placeholder="(no description)" />
-            </div>
-            <div class="pp-cast-card-actions">
-                <button class="pp-row-btn pp-row-btn-delete" data-action="delete" type="button" aria-label="Delete casting" title="Delete casting">&times;</button>
-            </div>
+            <button class="pp-inv-row-delete" type="button" data-action="delete-inventory" aria-label="Delete component" title="Delete component">&times;</button>
         </div>
-    `).join('');
-
-    ensureCastingsSortable();
+    `;
 }
 
 let castingsSortable = null;
@@ -743,20 +863,23 @@ function handleAddCastingClick() {
     card.className = 'pp-cast-card pp-cast-card-draft';
     card.dataset.draft = 'true';
     card.innerHTML = `
-        <div class="pp-cast-card-grip" aria-hidden="true">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/>
-                <circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/>
-            </svg>
-        </div>
-        <div class="pp-cast-card-num">
-            <input type="text" class="pp-cast-card-num-input" data-field="casting_number" placeholder="Casting #" />
-        </div>
-        <div class="pp-cast-card-desc">
-            <input type="text" class="pp-cast-card-desc-input" data-field="description" placeholder="Description (optional)" />
-        </div>
-        <div class="pp-cast-card-actions">
-            <button class="pp-row-btn pp-row-btn-delete" data-action="cancel-draft" type="button" aria-label="Cancel">&times;</button>
+        <div class="pp-cast-card-header">
+            <span class="pp-cast-card-chevron-spacer" aria-hidden="true"></span>
+            <div class="pp-cast-card-grip" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/>
+                    <circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/>
+                </svg>
+            </div>
+            <div class="pp-cast-card-num">
+                <input type="text" class="pp-cast-card-num-input" data-field="casting_number" placeholder="Casting #" />
+            </div>
+            <div class="pp-cast-card-desc">
+                <input type="text" class="pp-cast-card-desc-input" data-field="description" placeholder="Description (optional)" />
+            </div>
+            <div class="pp-cast-card-actions">
+                <button class="pp-row-btn pp-row-btn-delete" data-action="cancel-draft" type="button" aria-label="Cancel">&times;</button>
+            </div>
         </div>
     `;
     list.appendChild(card);
@@ -869,6 +992,8 @@ async function handleDeleteCasting(id) {
     try {
         await deleteCasting(id);
         currentCastings = currentCastings.filter(x => x.id !== id);
+        currentCastInvExpanded.delete(id);
+        currentCastingInventory.delete(id);
         if (currentOptCastingId === id) {
             currentOptCastingId = currentCastings[0]?.id || null;
             currentOptHours = new Map();
@@ -879,6 +1004,167 @@ async function handleDeleteCasting(id) {
         logger.error('[project-portal] delete casting failed:', err);
         showToast('Delete failed: ' + (err.message || err), 'error');
     }
+}
+
+// ---------- Casting inventory (expand/collapse on Castings tab) ----------
+
+function handleToggleCastInventory(castingId) {
+    if (currentCastInvExpanded.has(castingId)) currentCastInvExpanded.delete(castingId);
+    else currentCastInvExpanded.add(castingId);
+    renderCastings();
+}
+
+async function handleAddInventoryItem(castingId) {
+    if (!currentProjectNumber || !castingId) return;
+    if (!currentCastInvExpanded.has(castingId)) currentCastInvExpanded.add(castingId);
+    try {
+        const created = await createInventoryItem(castingId, { quantity: 1 });
+        if (created) {
+            const list = getInventoryFor(castingId).slice();
+            list.push(created);
+            setInventoryFor(castingId, list);
+        }
+        renderCastings();
+        // Focus the type input on the newest row
+        const card = document.querySelector(`.pp-cast-card[data-casting-id="${castingId}"]`);
+        const last = card?.querySelector('.pp-inv-row:last-of-type input[data-field="type"]');
+        last?.focus();
+    } catch (err) {
+        logger.error('[project-portal] add inventory failed:', err);
+        showToast('Add component failed: ' + (err.message || err), 'error');
+    }
+}
+
+async function saveInventoryItem(itemId, castingId) {
+    const row = document.querySelector(`.pp-inv-row[data-inventory-id="${itemId}"]`);
+    if (!row) return;
+    const list = getInventoryFor(castingId);
+    const item = list.find(c => c.id === itemId);
+    if (!item) return;
+
+    const NUMERIC_FIELDS = new Set(['cu_ft', 'ff_sq_ft']);
+    const fields = {};
+    row.querySelectorAll('input[data-field]').forEach(input => {
+        const field = input.dataset.field;
+        if (field === 'quantity') {
+            const n = parseInt(input.value, 10);
+            fields.quantity = (Number.isFinite(n) && n >= 1) ? n : 1;
+        } else if (NUMERIC_FIELDS.has(field)) {
+            const raw = (input.value || '').trim();
+            if (raw === '') {
+                fields[field] = null;
+            } else {
+                const n = parseFloat(raw);
+                fields[field] = Number.isFinite(n) ? n : null;
+            }
+        } else {
+            const cleaned = (input.value || '').trim();
+            fields[field] = cleaned === '' ? null : cleaned;
+        }
+    });
+
+    // Diff against current state — skip the round-trip if nothing changed.
+    const changed = {};
+    for (const k of Object.keys(fields)) {
+        const cur = (item[k] === undefined || item[k] === '') ? null : item[k];
+        const next = (fields[k] === undefined || fields[k] === '') ? null : fields[k];
+        if (cur !== next) changed[k] = fields[k];
+    }
+    if (Object.keys(changed).length === 0) return;
+
+    try {
+        const updated = await updateInventoryItem(itemId, changed);
+        if (updated) Object.assign(item, updated);
+        else Object.assign(item, changed);
+        // Refresh the count label in the header without a full re-render.
+        updateCastingInventoryCount(castingId);
+    } catch (err) {
+        logger.error('[project-portal] updateInventoryItem failed:', err);
+        showToast('Save failed: ' + (err.message || err), 'error');
+    }
+}
+
+function scheduleInventorySave(itemId, castingId) {
+    if (!itemId) return;
+    const prev = inventorySaveTimers.get(itemId);
+    if (prev) clearTimeout(prev);
+    const t = setTimeout(() => {
+        inventorySaveTimers.delete(itemId);
+        saveInventoryItem(itemId, castingId);
+    }, 500);
+    inventorySaveTimers.set(itemId, t);
+}
+
+function updateCastingInventoryCount(castingId) {
+    const card = document.querySelector(`.pp-cast-card[data-casting-id="${castingId}"]`);
+    if (!card) return;
+    const countEl = card.querySelector('.pp-cast-card-count');
+    if (!countEl) return;
+    const items = getInventoryFor(castingId);
+    const totalQty = items.reduce((sum, it) => sum + (parseInt(it.quantity, 10) || 0), 0);
+    countEl.textContent = items.length === 0
+        ? '0 components'
+        : `${items.length} ${items.length === 1 ? 'type' : 'types'} · ${totalQty} pcs`;
+}
+
+async function handleDeleteInventoryItem(castingId, itemId) {
+    try {
+        // Cancel any pending debounced save for this item.
+        const t = inventorySaveTimers.get(itemId);
+        if (t) { clearTimeout(t); inventorySaveTimers.delete(itemId); }
+        await deleteInventoryItem(itemId);
+        const list = getInventoryFor(castingId).filter(c => c.id !== itemId);
+        setInventoryFor(castingId, list);
+        renderCastings();
+    } catch (err) {
+        logger.error('[project-portal] deleteInventoryItem failed:', err);
+        showToast('Delete failed: ' + (err.message || err), 'error');
+    }
+}
+
+let inventorySortables = [];
+
+function ensureInventorySortables() {
+    inventorySortables.forEach(s => { try { s.destroy(); } catch {} });
+    inventorySortables = [];
+    if (typeof window.Sortable === 'undefined') return;
+
+    document.querySelectorAll('#pp-castings-list .pp-cast-card-body .pp-inv-rows').forEach(el => {
+        const castingId = el.dataset.castingId;
+        if (!castingId) return;
+        const s = window.Sortable.create(el, {
+            animation: 180,
+            easing: 'cubic-bezier(0.22, 0.61, 0.36, 1)',
+            handle: '.pp-inv-row-grip',
+            draggable: '.pp-inv-row',
+            ghostClass: 'pp-inv-row-ghost',
+            chosenClass: 'pp-inv-row-chosen',
+            dragClass: 'pp-inv-row-drag',
+            forceFallback: true,
+            fallbackTolerance: 4,
+            scroll: true,
+            scrollSensitivity: 60,
+            scrollSpeed: 14,
+            onEnd: async (evt) => {
+                const oldIdx = evt.oldIndex;
+                const newIdx = evt.newIndex;
+                if (oldIdx === newIdx || oldIdx === undefined || newIdx === undefined) return;
+                const list = getInventoryFor(castingId).slice();
+                const [moved] = list.splice(oldIdx, 1);
+                list.splice(newIdx, 0, moved);
+                list.forEach((c, idx) => { c.sort_order = idx; });
+                setInventoryFor(castingId, list);
+                try {
+                    await setInventoryOrder(list.map(c => c.id));
+                } catch (err) {
+                    logger.error('[project-portal] setInventoryOrder failed:', err);
+                    showToast('Reorder save failed: ' + (err.message || err), 'error');
+                    renderCastings();
+                }
+            }
+        });
+        inventorySortables.push(s);
+    });
 }
 
 // ---------- Classroom Tasks (CR Notes tab) ----------
@@ -1623,10 +1909,9 @@ function renderTrackSection(casting) {
         <div class="pp-track-header-row" aria-hidden="true">
             <div class="pp-track-header-grip-spacer"></div>
             <div class="pp-track-header-fields">
-                <span>Type</span>
+                <span>Panel ID</span>
                 <span>Width</span>
                 <span>Length</span>
-                <span>Panel ID</span>
                 <span>Color</span>
                 <span>Sealer</span>
             </div>
@@ -1634,13 +1919,24 @@ function renderTrackSection(casting) {
         </div>
     `;
 
+    const inventoryItems = getInventoryFor(casting.id);
+    const inventoryQty = inventoryItems.reduce((sum, it) => sum + (parseInt(it.quantity, 10) || 0), 0);
+    const genDisabled = inventoryQty === 0;
+    const genTitle = genDisabled
+        ? 'No inventory yet — add items in the Castings tab first'
+        : `Append ${inventoryQty} ${inventoryQty === 1 ? 'panel' : 'panels'} from inventory`;
+
     const body = isOpen ? `
         <div class="pp-track-section-body">
             ${headerRow}
             <div class="pp-track-cards" data-casting-id="${escapeAttr(casting.id)}">
                 ${cardsHtml}
             </div>
-            <button type="button" class="pp-add-btn pp-track-add" data-action="add-component" data-casting-id="${escapeAttr(casting.id)}">+ Add Component</button>
+            <div class="pp-track-actions">
+                <button type="button" class="pp-add-btn pp-track-add" data-action="add-component" data-casting-id="${escapeAttr(casting.id)}">+ Add Component</button>
+                <button type="button" class="pp-add-btn pp-track-gen" data-action="generate-from-inventory" data-casting-id="${escapeAttr(casting.id)}" ${genDisabled ? 'disabled' : ''} title="${escapeAttr(genTitle)}">+ From Inventory${inventoryQty > 0 ? ` (${inventoryQty})` : ''}</button>
+                <button type="button" class="pp-add-btn pp-track-clear" data-action="delete-all-components" data-casting-id="${escapeAttr(casting.id)}" ${count === 0 ? 'disabled' : ''} title="${count === 0 ? 'No components to delete' : `Delete all ${count} components`}">Delete All${count > 0 ? ` (${count})` : ''}</button>
+            </div>
         </div>
     ` : '';
 
@@ -1663,8 +1959,12 @@ function renderTrackSection(casting) {
 }
 
 function renderTrackCard(comp, castingId) {
+    const locked = !!comp.from_inventory;
+    const lockAttr = locked ? 'readonly' : '';
+    const lockTitle = locked ? 'Synced from Castings inventory — edit there' : '';
+    const cardClass = locked ? 'pp-track-card pp-track-card-locked' : 'pp-track-card';
     return `
-        <div class="pp-track-card" data-component-id="${escapeAttr(comp.id)}" data-casting-id="${escapeAttr(castingId)}">
+        <div class="${cardClass}" data-component-id="${escapeAttr(comp.id)}" data-casting-id="${escapeAttr(castingId)}">
             <div class="pp-track-card-grip" aria-hidden="true" title="Drag to reorder">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/>
@@ -1672,12 +1972,11 @@ function renderTrackCard(comp, castingId) {
                 </svg>
             </div>
             <div class="pp-track-card-fields">
-                <input type="text" class="pp-track-input" data-field="type" placeholder="Type" value="${escapeAttr(comp.type || '')}" />
-                <input type="text" class="pp-track-input" data-field="width" placeholder="Width" value="${escapeAttr(comp.width || '')}" />
-                <input type="text" class="pp-track-input" data-field="length" placeholder="Length" value="${escapeAttr(comp.length || '')}" />
                 <input type="text" class="pp-track-input" data-field="panel_id" placeholder="Panel ID" value="${escapeAttr(comp.panel_id || '')}" />
-                <input type="text" class="pp-track-input" data-field="color" placeholder="Color" value="${escapeAttr(comp.color || '')}" />
-                <input type="text" class="pp-track-input" data-field="sealer" placeholder="Sealer" value="${escapeAttr(comp.sealer || '')}" />
+                <input type="text" class="pp-track-input" data-field="width" placeholder="Width" value="${escapeAttr(comp.width || '')}" ${lockAttr} title="${escapeAttr(lockTitle)}" />
+                <input type="text" class="pp-track-input" data-field="length" placeholder="Length" value="${escapeAttr(comp.length || '')}" ${lockAttr} title="${escapeAttr(lockTitle)}" />
+                <input type="text" class="pp-track-input" data-field="color" placeholder="Color" value="${escapeAttr(comp.color || '')}" ${lockAttr} title="${escapeAttr(lockTitle)}" />
+                <input type="text" class="pp-track-input" data-field="sealer" placeholder="Sealer" value="${escapeAttr(comp.sealer || '')}" ${lockAttr} title="${escapeAttr(lockTitle)}" />
             </div>
             <button class="pp-track-card-delete" type="button" data-action="delete-component" aria-label="Delete component" title="Delete component">&times;</button>
         </div>
@@ -1688,6 +1987,92 @@ function handleToggleTrackSection(castingId) {
     if (currentTrackExpanded.has(castingId)) currentTrackExpanded.delete(castingId);
     else currentTrackExpanded.add(castingId);
     renderTracking();
+}
+
+async function handleDeleteAllComponentsClick(castingId) {
+    if (!currentProjectNumber || !castingId) return;
+    const list = getComponentsFor(castingId);
+    if (list.length === 0) return;
+    const casting = currentCastings.find(c => c.id === castingId);
+    const label = casting ? `Cast ${casting.casting_number || ''}`.trim() : 'this casting';
+    if (!confirm(`Delete all ${list.length} components from ${label}? This cannot be undone.`)) return;
+    try {
+        await deleteAllComponentsForCasting(castingId);
+        setComponentsFor(castingId, []);
+        renderTracking();
+        showToast(`Deleted ${list.length} ${list.length === 1 ? 'component' : 'components'}.`);
+    } catch (err) {
+        logger.error('[project-portal] delete all components failed:', err);
+        showToast('Delete failed: ' + (err.message || err), 'error');
+    }
+}
+
+async function handleGenerateTrackingFromInventory(castingId) {
+    if (!currentProjectNumber || !castingId) return;
+    const inventory = getInventoryFor(castingId);
+    if (!inventory.length) return;
+
+    // Plan panel_id numbering per type. Continue from the highest existing
+    // panel_id of that type, preserving zero-pad width (min 2).
+    const existing = getComponentsFor(castingId);
+    const counters = new Map(); // type -> { next, padLen }
+    function getCounter(type) {
+        if (!type) return null;
+        if (counters.has(type)) return counters.get(type);
+        const escapedType = type.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const re = new RegExp(`^${escapedType}\\.(\\d+)$`);
+        let max = 0;
+        let padLen = 2;
+        for (const c of existing) {
+            const m = c.panel_id && c.panel_id.match(re);
+            if (m) {
+                const n = parseInt(m[1], 10);
+                if (n > max) max = n;
+                if (m[1].length > padLen) padLen = m[1].length;
+            }
+        }
+        const counter = { next: max + 1, padLen };
+        counters.set(type, counter);
+        return counter;
+    }
+
+    // Expand inventory rows into individual panel records.
+    const toCreate = [];
+    for (const inv of inventory) {
+        const qty = Math.max(1, parseInt(inv.quantity, 10) || 1);
+        const counter = getCounter(inv.type);
+        for (let i = 0; i < qty; i++) {
+            let panel_id = null;
+            if (counter) {
+                panel_id = `${inv.type}.${String(counter.next).padStart(counter.padLen, '0')}`;
+                counter.next += 1;
+            }
+            toCreate.push({
+                type: inv.type || null,
+                width: inv.width || null,
+                length: inv.length || null,
+                panel_id,
+                color: inv.color || null,
+                sealer: inv.sealer || null
+            });
+        }
+    }
+
+    if (toCreate.length === 0) return;
+
+    try {
+        const created = await createComponentsBulk(castingId, toCreate);
+        if (created && created.length) {
+            const list = getComponentsFor(castingId).slice();
+            list.push(...created);
+            setComponentsFor(castingId, list);
+        }
+        renderTracking();
+        showToast(`Added ${toCreate.length} ${toCreate.length === 1 ? 'panel' : 'panels'} from inventory.`);
+    } catch (err) {
+        logger.error('[project-portal] generate from inventory failed:', err);
+        showToast('Generate failed: ' + (err.message || err), 'error');
+    }
 }
 
 async function handleAddComponentClick(castingId) {
@@ -2724,6 +3109,16 @@ function wireEvents() {
             handleAddComponentClick(addBtn.dataset.castingId);
             return;
         }
+        const genBtn = e.target.closest('button[data-action="generate-from-inventory"]');
+        if (genBtn) {
+            handleGenerateTrackingFromInventory(genBtn.dataset.castingId);
+            return;
+        }
+        const clearBtn = e.target.closest('button[data-action="delete-all-components"]');
+        if (clearBtn) {
+            handleDeleteAllComponentsClick(clearBtn.dataset.castingId);
+            return;
+        }
         const delBtn = e.target.closest('button[data-action="delete-component"]');
         if (delBtn) {
             const card = delBtn.closest('.pp-track-card[data-component-id]');
@@ -2797,15 +3192,46 @@ function wireEvents() {
         if (!btn) return;
         const card = btn.closest('.pp-cast-card[data-casting-id]');
         if (!card) return;
-        const id = card.getAttribute('data-casting-id');
+        const castingId = card.getAttribute('data-casting-id');
         const action = btn.dataset.action;
-        if (action === 'delete') handleDeleteCasting(id);
+        if (action === 'delete') {
+            handleDeleteCasting(castingId);
+        } else if (action === 'toggle-inventory') {
+            handleToggleCastInventory(castingId);
+        } else if (action === 'add-inventory') {
+            handleAddInventoryItem(castingId);
+        } else if (action === 'delete-inventory') {
+            const row = btn.closest('.pp-inv-row[data-inventory-id]');
+            const itemId = row?.getAttribute('data-inventory-id');
+            if (itemId) handleDeleteInventoryItem(castingId, itemId);
+        }
     });
     castingsList.addEventListener('input', (e) => {
+        if (!e.target.matches('input[data-field]')) return;
+        const invRow = e.target.closest('.pp-inv-row[data-inventory-id]');
+        if (invRow) {
+            const itemId = invRow.getAttribute('data-inventory-id');
+            const castingId = invRow.getAttribute('data-casting-id');
+            scheduleInventorySave(itemId, castingId);
+            return;
+        }
         const card = e.target.closest('.pp-cast-card[data-casting-id]');
         if (!card) return;
-        if (!e.target.matches('input[data-field]')) return;
+        // Only trigger casting save for fields directly on the card header (not nested in body)
+        if (!e.target.closest('.pp-cast-card-header')) return;
         scheduleCastingSave(card.getAttribute('data-casting-id'));
+    });
+    // Flush inventory save immediately on blur so users see the count update without waiting.
+    castingsList.addEventListener('focusout', (e) => {
+        const invRow = e.target.closest('.pp-inv-row[data-inventory-id]');
+        if (!invRow) return;
+        if (!e.target.matches('input[data-field]')) return;
+        const itemId = invRow.getAttribute('data-inventory-id');
+        const castingId = invRow.getAttribute('data-casting-id');
+        const t = inventorySaveTimers.get(itemId);
+        if (t) clearTimeout(t);
+        inventorySaveTimers.delete(itemId);
+        saveInventoryItem(itemId, castingId);
     });
 
     // Browser back/forward
