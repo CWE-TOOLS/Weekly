@@ -19,7 +19,9 @@ const CACHE_CONFIG = {
     UPDATE_RETRY_DELAY_MS: 2000,           // Wait 2s before retrying if lock is held
     MAX_UPDATE_RETRIES: 3,                 // Max retries if cache update fails
     ENABLE_CACHE: true,                    // Master switch to enable/disable caching
-    BROADCAST_CHANNEL: 'sheets_cache_updates' // Real-time broadcast channel name
+    BROADCAST_CHANNEL: 'sheets_cache_updates', // Real-time broadcast channel name
+    LOCAL_STORAGE_TTL_MS: 90 * 1000,       // Browser-side cache TTL (skips Supabase round-trip on cross-page nav)
+    LOCAL_STORAGE_PREFIX: 'sheets_cache_'
 };
 
 // Client state
@@ -32,6 +34,47 @@ let clientId = generateClientId();
  */
 function generateClientId() {
     return `client-${Math.random().toString(36).substring(2, 9)}-${Date.now()}`;
+}
+
+/**
+ * Browser-side cache helpers — survive page reloads (cross-page navigation),
+ * unlike in-memory state. Sit in front of the Supabase cache layer to skip
+ * the Supabase round-trip when jumping between weekly view and project portal.
+ */
+function localStorageKeyFor(cacheKey) {
+    return `${CACHE_CONFIG.LOCAL_STORAGE_PREFIX}${cacheKey}`;
+}
+
+function readLocalCache(cacheKey) {
+    try {
+        const raw = localStorage.getItem(localStorageKeyFor(cacheKey));
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed.timestamp !== 'number' || !Array.isArray(parsed.data)) return null;
+        if (Date.now() - parsed.timestamp > CACHE_CONFIG.LOCAL_STORAGE_TTL_MS) return null;
+        return parsed.data;
+    } catch (err) {
+        return null;
+    }
+}
+
+function writeLocalCache(cacheKey, data) {
+    try {
+        localStorage.setItem(localStorageKeyFor(cacheKey), JSON.stringify({
+            data,
+            timestamp: Date.now()
+        }));
+    } catch (err) {
+        logger.warn(`[Cache:${cacheKey}] localStorage write failed:`, err);
+    }
+}
+
+function clearLocalCache(cacheKey) {
+    try {
+        localStorage.removeItem(localStorageKeyFor(cacheKey));
+    } catch (err) {
+        // ignore
+    }
 }
 
 /**
@@ -427,6 +470,11 @@ export async function setupCacheSubscription(onUpdate) {
             .channel(CACHE_CONFIG.BROADCAST_CHANNEL)
             .on('broadcast', { event: 'cache_updated' }, (payload) => {
                 logger.debug('[Cache] Received cache update broadcast:', payload);
+                // Invalidate local copy so the next read pulls fresh data
+                const broadcastedKey = payload && payload.payload && payload.payload.cache_key;
+                if (broadcastedKey) {
+                    clearLocalCache(broadcastedKey);
+                }
                 if (onUpdate) {
                     onUpdate(payload);
                 }
@@ -473,6 +521,25 @@ export function removeCacheSubscription() {
  * @returns {Promise<Array>} Data array
  */
 export async function loadFromCacheOrFetch(forceRefresh = false, cacheKey = 'primary', fetchFunction = null) {
+    // Hot path: localStorage check skips the Supabase round-trip entirely on cross-page nav
+    if (!forceRefresh && CACHE_CONFIG.ENABLE_CACHE) {
+        const localData = readLocalCache(cacheKey);
+        if (localData !== null) {
+            logger.info(`[Cache:${cacheKey}] ⚡ localStorage hit - ${localData.length} items (skipped Supabase)`);
+            return localData;
+        }
+    }
+
+    const result = await _loadFromCacheOrFetchImpl(forceRefresh, cacheKey, fetchFunction);
+
+    if (Array.isArray(result) && CACHE_CONFIG.ENABLE_CACHE) {
+        writeLocalCache(cacheKey, result);
+    }
+
+    return result;
+}
+
+async function _loadFromCacheOrFetchImpl(forceRefresh, cacheKey, fetchFunction) {
     const startTime = performance.now();
     logger.debug(`[Cache:${cacheKey}] loadFromCacheOrFetch() called (force: ${forceRefresh}, enabled: ${CACHE_CONFIG.ENABLE_CACHE})`);
 
@@ -645,6 +712,7 @@ export async function clearCache(cacheKey = 'primary') {
             return false;
         }
 
+        clearLocalCache(cacheKey);
         logger.info(`[Cache:${cacheKey}] ✅ Cache cleared`);
         return true;
     } catch (err) {
