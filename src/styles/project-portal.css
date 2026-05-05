@@ -203,7 +203,7 @@ html, body {
 }
 .pp-table th,
 .pp-table td {
-    text-align: left;
+    text-align: center;
     padding: 10px 14px;
     border-bottom: 1px solid #f1f5f9;
 }

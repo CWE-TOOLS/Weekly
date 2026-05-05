@@ -371,8 +371,10 @@ async function loadAllData() {
         })
     ]);
     const shipDateByProject = buildShipDateMap(tasks);
+    const startDateByProject = buildStartDateMap(tasks);
     allProjectRows = projects.map(p => ({
         ...p,
+        opt_start_date: startDateByProject.get(String(p.project_number || '').trim()) || '',
         opt_ship_date: shipDateByProject.get(String(p.project_number || '').trim()) || ''
     }));
 }
@@ -385,6 +387,22 @@ function buildShipDateMap(tasks) {
         if (!num) continue;
         const dept = String(t?.department || '').trim().toLowerCase();
         if (!dept.startsWith('ship')) continue;
+        const date = String(t?.date || '').trim();
+        if (!date) continue;
+        const existing = out.get(num);
+        if (!existing || compareDateStrings(date, existing) < 0) {
+            out.set(num, date);
+        }
+    }
+    return out;
+}
+
+function buildStartDateMap(tasks) {
+    const out = new Map();
+    if (!Array.isArray(tasks)) return out;
+    for (const t of tasks) {
+        const num = String(t?.projectNumber || '').trim();
+        if (!num) continue;
         const date = String(t?.date || '').trim();
         if (!date) continue;
         const existing = out.get(num);
@@ -415,7 +433,7 @@ function formatListDate(value) {
 
 async function refreshList() {
     const tbody = document.getElementById('pp-list-tbody');
-    tbody.innerHTML = '<tr><td colspan="7" class="pp-empty">Loading projects...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="pp-empty">Loading projects...</td></tr>';
 
     await loadAllData();
     renderList(document.getElementById('pp-search').value);
@@ -458,7 +476,7 @@ function renderList(searchQuery = '') {
     });
 
     if (filtered.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="pp-empty">No projects yet. Click "+ New Project" to get started.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="pp-empty">No projects yet. Click "+ New Project" to get started.</td></tr>';
         return;
     }
 
@@ -472,6 +490,7 @@ function renderList(searchQuery = '') {
                 <td>${escapeHtml(row.pm || '')}</td>
                 <td>${escapeHtml(formatListDate(row.project_date))}</td>
                 <td>${escapeHtml(formatListDate(row.need_by_date))}</td>
+                <td>${escapeHtml(formatListDate(row.opt_start_date))}</td>
                 <td>${escapeHtml(formatListDate(row.opt_ship_date))}</td>
             </tr>
         `;
