@@ -82,7 +82,7 @@ export async function loadAllInventoryForProject(castingIds) {
 /**
  * Insert a new inventory item under a casting.
  * @param {string} castingId
- * @param {{type?:string, width?:string, length?:string, color?:string, sealer?:string, quantity?:number, cu_ft?:number, ff_sq_ft?:number, sort_order?:number}} [fields]
+ * @param {{type?:string, width?:string, length?:string, color?:string, sealer?:string, quantity?:number, extras?:number, cu_ft?:number, ff_sq_ft?:number, sort_order?:number}} [fields]
  * @returns {Promise<Object>} inserted row
  */
 export async function createInventoryItem(castingId, fields = {}) {
@@ -106,6 +106,7 @@ export async function createInventoryItem(castingId, fields = {}) {
         color: cleanText(fields.color),
         sealer: cleanText(fields.sealer),
         quantity: cleanQty(fields.quantity, 1),
+        extras: cleanExtras(fields.extras),
         cu_ft: cleanNumber(fields.cu_ft),
         ff_sq_ft: cleanNumber(fields.ff_sq_ft),
         sort_order: order
@@ -127,7 +128,7 @@ export async function createInventoryItem(castingId, fields = {}) {
 /**
  * Update one or more fields on an inventory item.
  * @param {string} itemId
- * @param {{type?:string, width?:string, length?:string, color?:string, sealer?:string, quantity?:number, cu_ft?:number, ff_sq_ft?:number}} fields
+ * @param {{type?:string, width?:string, length?:string, color?:string, sealer?:string, quantity?:number, extras?:number, cu_ft?:number, ff_sq_ft?:number}} fields
  */
 export async function updateInventoryItem(itemId, fields) {
     if (!itemId) throw new Error('itemId required');
@@ -141,6 +142,7 @@ export async function updateInventoryItem(itemId, fields) {
     if (fields.color !== undefined) payload.color = cleanText(fields.color);
     if (fields.sealer !== undefined) payload.sealer = cleanText(fields.sealer);
     if (fields.quantity !== undefined) payload.quantity = cleanQty(fields.quantity, 1);
+    if (fields.extras !== undefined) payload.extras = cleanExtras(fields.extras);
     if (fields.cu_ft !== undefined) payload.cu_ft = cleanNumber(fields.cu_ft);
     if (fields.ff_sq_ft !== undefined) payload.ff_sq_ft = cleanNumber(fields.ff_sq_ft);
     if (Object.keys(payload).length === 0) return null;
@@ -206,6 +208,13 @@ function cleanQty(v, fallback) {
     if (v === undefined || v === null || v === '') return fallback;
     const n = parseInt(v, 10);
     if (!Number.isFinite(n) || n < 1) return fallback;
+    return n;
+}
+
+function cleanExtras(v) {
+    if (v === undefined || v === null || v === '') return 0;
+    const n = parseInt(v, 10);
+    if (!Number.isFinite(n) || n < 0) return 0;
     return n;
 }
 

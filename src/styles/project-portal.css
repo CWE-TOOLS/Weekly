@@ -551,7 +551,8 @@ html, body {
 }
 .pp-section textarea {
     margin-top: 6px;
-    resize: vertical;
+    resize: none;
+    overflow: hidden;
     min-height: 80px;
 }
 .pp-field input:focus,
@@ -805,7 +806,7 @@ html, body {
 .pp-inv-header-fields {
     flex: 1 1 auto;
     display: grid;
-    grid-template-columns: 0.45fr 1.2fr 0.6fr 0.6fr 0.8fr 0.8fr 0.6fr 0.7fr;
+    grid-template-columns: 0.45fr 0.45fr 1.2fr 0.6fr 0.6fr 0.8fr 0.6fr 0.7fr;
     gap: 6px;
 }
 .pp-inv-header-fields span {
@@ -856,7 +857,7 @@ html, body {
 .pp-inv-row-fields {
     flex: 1 1 auto;
     display: grid;
-    grid-template-columns: 0.45fr 1.2fr 0.6fr 0.6fr 0.8fr 0.8fr 0.6fr 0.7fr;
+    grid-template-columns: 0.45fr 0.45fr 1.2fr 0.6fr 0.6fr 0.8fr 0.6fr 0.7fr;
     gap: 6px;
 }
 .pp-inv-input {
@@ -1697,6 +1698,11 @@ html, body {
     cursor: grab;
     transition: color 0.15s;
 }
+.pp-track-card-grip-spacer {
+    flex: 0 0 auto;
+    width: 18px;
+    height: 1px;
+}
 .pp-track-card-grip:hover { color: #64748b; }
 .pp-track-card-grip svg { width: 16px; height: 16px; display: block; }
 .pp-track-card-grip:active { cursor: grabbing; }
@@ -1705,7 +1711,7 @@ html, body {
     flex: 1 1 auto;
     min-width: 0;
     display: grid;
-    grid-template-columns: 0.5fr 0.7fr 0.7fr 1fr 1fr;
+    grid-template-columns: 0.5fr 0.7fr 0.7fr 1fr;
     gap: 4px;
 }
 
@@ -1724,7 +1730,7 @@ html, body {
     flex: 1 1 auto;
     min-width: 0;
     display: grid;
-    grid-template-columns: 0.5fr 0.7fr 0.7fr 1fr 1fr;
+    grid-template-columns: 0.5fr 0.7fr 0.7fr 1fr;
     gap: 4px;
 }
 .pp-track-header-fields span {

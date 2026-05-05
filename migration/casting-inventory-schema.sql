@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS casting_inventory (
     color TEXT,
     sealer TEXT,
     quantity INTEGER NOT NULL DEFAULT 1,
+    extras INTEGER NOT NULL DEFAULT 0,
     cu_ft NUMERIC,
     ff_sq_ft NUMERIC,
 

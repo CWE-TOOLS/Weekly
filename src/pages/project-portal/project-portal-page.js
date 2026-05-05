@@ -33,12 +33,8 @@ import {
 } from '../../services/optimizer-hours-service.js';
 import {
     loadAllComponentsForProject,
-    createComponent,
     createComponentsBulk,
-    updateComponent,
-    deleteComponent,
-    deleteAllComponentsForCasting,
-    setComponentsOrder
+    deleteAllComponentsForCasting
 } from '../../services/tracking-service.js';
 import {
     loadAllInventoryForProject,
@@ -507,8 +503,8 @@ function populateForm(project) {
         el.value = (v === null || v === undefined) ? '' : v;
     }
     applyStatusColor();
-    // Resize all auto-growing textareas (CR Notes + tab-level notes) to fit their loaded content.
-    document.querySelectorAll('.pp-cr-textarea, .pp-tab-notes-textarea').forEach(autoGrowTextarea);
+    // Resize all auto-growing textareas (Project Info + CR Notes + tab-level notes) to fit their loaded content.
+    document.querySelectorAll('.pp-section textarea, .pp-cr-textarea, .pp-tab-notes-textarea').forEach(autoGrowTextarea);
     // Load tracking phases for this project (NULL/missing = use full default set).
     if (Array.isArray(project.tracking_phases)) {
         currentTrackingPhases = new Set(project.tracking_phases.filter(p => TRACKING_PHASES.includes(p)));
@@ -735,7 +731,7 @@ function renderCastings() {
 function renderCastingCard(c) {
     const isOpen = currentCastInvExpanded.has(c.id);
     const items = getInventoryFor(c.id);
-    const totalQty = items.reduce((sum, it) => sum + (parseInt(it.quantity, 10) || 0), 0);
+    const totalQty = items.reduce((sum, it) => sum + (parseInt(it.quantity, 10) || 0) + (parseInt(it.extras, 10) || 0), 0);
     const countLabel = items.length === 0
         ? '0 components'
         : `${items.length} ${items.length === 1 ? 'type' : 'types'} · ${totalQty} pcs`;
@@ -780,11 +776,11 @@ function renderInventoryBody(casting, items) {
             <div class="pp-inv-header-grip-spacer"></div>
             <div class="pp-inv-header-fields">
                 <span class="pp-inv-header-qty">Qty</span>
+                <span class="pp-inv-header-qty">Extras</span>
                 <span>Type</span>
                 <span>Width</span>
                 <span>Length</span>
                 <span>Color</span>
-                <span>Sealer</span>
                 <span class="pp-inv-header-num">Cu Ft</span>
                 <span class="pp-inv-header-num">FF Sq Ft</span>
             </div>
@@ -814,11 +810,11 @@ function renderInventoryRow(item, castingId) {
             </div>
             <div class="pp-inv-row-fields">
                 <input type="number" class="pp-inv-input pp-inv-input-qty" data-field="quantity" min="1" step="1" value="${escapeAttr(item.quantity ?? 1)}" />
+                <input type="number" class="pp-inv-input pp-inv-input-qty" data-field="extras" min="0" step="1" placeholder="0" value="${escapeAttr(item.extras ?? 0)}" />
                 <input type="text" class="pp-inv-input" data-field="type" placeholder="Type" value="${escapeAttr(item.type || '')}" />
                 <input type="text" class="pp-inv-input" data-field="width" placeholder="Width" value="${escapeAttr(item.width || '')}" />
                 <input type="text" class="pp-inv-input" data-field="length" placeholder="Length" value="${escapeAttr(item.length || '')}" />
                 <input type="text" class="pp-inv-input" data-field="color" placeholder="Color" value="${escapeAttr(item.color || '')}" />
-                <input type="text" class="pp-inv-input" data-field="sealer" placeholder="Sealer" value="${escapeAttr(item.sealer || '')}" />
                 <input type="number" class="pp-inv-input pp-inv-input-num" data-field="cu_ft" step="any" min="0" placeholder="0" value="${item.cu_ft == null ? '' : escapeAttr(item.cu_ft)}" />
                 <input type="number" class="pp-inv-input pp-inv-input-num" data-field="ff_sq_ft" step="any" min="0" placeholder="0" value="${item.ff_sq_ft == null ? '' : escapeAttr(item.ff_sq_ft)}" />
             </div>
@@ -868,6 +864,7 @@ function ensureCastingsSortable() {
 
             try {
                 await setCastingsOrder(currentCastings.map(c => c.id));
+                syncTrackingFromInventory();
             } catch (err) {
                 logger.error('[project-portal] setCastingsOrder failed:', err);
                 showToast('Reorder save failed: ' + (err.message || err), 'error');
@@ -1088,12 +1085,14 @@ async function handleDeleteCasting(id) {
         currentCastings = currentCastings.filter(x => x.id !== id);
         currentCastInvExpanded.delete(id);
         currentCastingInventory.delete(id);
+        currentCastingComponents.delete(id);
         if (currentOptCastingId === id) {
             currentOptCastingId = currentCastings[0]?.id || null;
             currentOptHours = new Map();
         }
         renderCastings();
         showToast('Casting deleted.');
+        syncTrackingFromInventory();
     } catch (err) {
         logger.error('[project-portal] delete casting failed:', err);
         showToast('Delete failed: ' + (err.message || err), 'error');
@@ -1123,6 +1122,7 @@ async function handleAddInventoryItem(castingId) {
         const card = document.querySelector(`.pp-cast-card[data-casting-id="${castingId}"]`);
         const last = card?.querySelector('.pp-inv-row:last-of-type input[data-field="type"]');
         last?.focus();
+        syncTrackingFromInventory();
     } catch (err) {
         logger.error('[project-portal] add inventory failed:', err);
         showToast('Add component failed: ' + (err.message || err), 'error');
@@ -1143,6 +1143,9 @@ async function saveInventoryItem(itemId, castingId) {
         if (field === 'quantity') {
             const n = parseInt(input.value, 10);
             fields.quantity = (Number.isFinite(n) && n >= 1) ? n : 1;
+        } else if (field === 'extras') {
+            const n = parseInt(input.value, 10);
+            fields.extras = (Number.isFinite(n) && n >= 0) ? n : 0;
         } else if (NUMERIC_FIELDS.has(field)) {
             const raw = (input.value || '').trim();
             if (raw === '') {
@@ -1172,6 +1175,7 @@ async function saveInventoryItem(itemId, castingId) {
         else Object.assign(item, changed);
         // Refresh the count label in the header without a full re-render.
         updateCastingInventoryCount(castingId);
+        syncTrackingFromInventory();
     } catch (err) {
         logger.error('[project-portal] updateInventoryItem failed:', err);
         showToast('Save failed: ' + (err.message || err), 'error');
@@ -1195,7 +1199,7 @@ function updateCastingInventoryCount(castingId) {
     const countEl = card.querySelector('.pp-cast-card-count');
     if (!countEl) return;
     const items = getInventoryFor(castingId);
-    const totalQty = items.reduce((sum, it) => sum + (parseInt(it.quantity, 10) || 0), 0);
+    const totalQty = items.reduce((sum, it) => sum + (parseInt(it.quantity, 10) || 0) + (parseInt(it.extras, 10) || 0), 0);
     countEl.textContent = items.length === 0
         ? '0 components'
         : `${items.length} ${items.length === 1 ? 'type' : 'types'} · ${totalQty} pcs`;
@@ -1210,6 +1214,7 @@ async function handleDeleteInventoryItem(castingId, itemId) {
         const list = getInventoryFor(castingId).filter(c => c.id !== itemId);
         setInventoryFor(castingId, list);
         renderCastings();
+        syncTrackingFromInventory();
     } catch (err) {
         logger.error('[project-portal] deleteInventoryItem failed:', err);
         showToast('Delete failed: ' + (err.message || err), 'error');
@@ -1250,6 +1255,7 @@ function ensureInventorySortables() {
                 setInventoryFor(castingId, list);
                 try {
                     await setInventoryOrder(list.map(c => c.id));
+                    syncTrackingFromInventory();
                 } catch (err) {
                     logger.error('[project-portal] setInventoryOrder failed:', err);
                     showToast('Reorder save failed: ' + (err.message || err), 'error');
@@ -1972,6 +1978,8 @@ async function activateTrackingTab() {
 
     await loadAllComponentsForCurrentProject();
     renderTracking();
+    // Defensive sync — covers external edits or out-of-band state.
+    syncTrackingFromInventory();
 }
 
 async function loadAllComponentsForCurrentProject() {
@@ -2023,7 +2031,6 @@ function renderTracking() {
     const list = document.getElementById('pp-track-list');
     if (!list) return;
     list.innerHTML = currentCastings.map(c => renderTrackSection(c)).join('');
-    ensureComponentSortables();
 }
 
 function renderTrackSection(casting) {
@@ -2033,7 +2040,7 @@ function renderTrackSection(casting) {
     const desc = casting.description ? `<span class="pp-track-section-desc">${escapeHtml(casting.description)}</span>` : '';
 
     const cardsHtml = count === 0
-        ? `<div class="pp-opt-cards-empty">No components yet. Add one below.</div>`
+        ? `<div class="pp-opt-cards-empty">No components — add inventory in the Castings tab.</div>`
         : components.map(comp => renderTrackCard(comp, casting.id)).join('');
 
     const headerRow = `
@@ -2044,29 +2051,15 @@ function renderTrackSection(casting) {
                 <span>Width</span>
                 <span>Length</span>
                 <span>Color</span>
-                <span>Sealer</span>
             </div>
-            <div class="pp-track-header-delete-spacer"></div>
         </div>
     `;
-
-    const inventoryItems = getInventoryFor(casting.id);
-    const inventoryQty = inventoryItems.reduce((sum, it) => sum + (parseInt(it.quantity, 10) || 0), 0);
-    const genDisabled = inventoryQty === 0;
-    const genTitle = genDisabled
-        ? 'No inventory yet — add items in the Castings tab first'
-        : `Append ${inventoryQty} ${inventoryQty === 1 ? 'panel' : 'panels'} from inventory`;
 
     const body = isOpen ? `
         <div class="pp-track-section-body">
             ${headerRow}
             <div class="pp-track-cards" data-casting-id="${escapeAttr(casting.id)}">
                 ${cardsHtml}
-            </div>
-            <div class="pp-track-actions">
-                <button type="button" class="pp-add-btn pp-track-add" data-action="add-component" data-casting-id="${escapeAttr(casting.id)}">+ Add Component</button>
-                <button type="button" class="pp-add-btn pp-track-gen" data-action="generate-from-inventory" data-casting-id="${escapeAttr(casting.id)}" ${genDisabled ? 'disabled' : ''} title="${escapeAttr(genTitle)}">+ From Inventory${inventoryQty > 0 ? ` (${inventoryQty})` : ''}</button>
-                <button type="button" class="pp-add-btn pp-track-clear" data-action="delete-all-components" data-casting-id="${escapeAttr(casting.id)}" ${count === 0 ? 'disabled' : ''} title="${count === 0 ? 'No components to delete' : `Delete all ${count} components`}">Delete All${count > 0 ? ` (${count})` : ''}</button>
             </div>
         </div>
     ` : '';
@@ -2100,26 +2093,16 @@ function renderTrackSection(casting) {
 }
 
 function renderTrackCard(comp, castingId) {
-    const locked = !!comp.from_inventory;
-    const lockAttr = locked ? 'readonly' : '';
-    const lockTitle = locked ? 'Synced from Castings inventory — edit there' : '';
-    const cardClass = locked ? 'pp-track-card pp-track-card-locked' : 'pp-track-card';
+    const lockTitle = 'Synced from Castings inventory — edit there';
     return `
-        <div class="${cardClass}" data-component-id="${escapeAttr(comp.id)}" data-casting-id="${escapeAttr(castingId)}">
-            <div class="pp-track-card-grip" aria-hidden="true" title="Drag to reorder">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/>
-                    <circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/>
-                </svg>
-            </div>
+        <div class="pp-track-card pp-track-card-locked" data-component-id="${escapeAttr(comp.id)}" data-casting-id="${escapeAttr(castingId)}">
+            <div class="pp-track-card-grip-spacer" aria-hidden="true"></div>
             <div class="pp-track-card-fields">
-                <input type="text" class="pp-track-input" data-field="panel_id" placeholder="Panel ID" value="${escapeAttr(comp.panel_id || '')}" />
-                <input type="text" class="pp-track-input" data-field="width" placeholder="Width" value="${escapeAttr(comp.width || '')}" ${lockAttr} title="${escapeAttr(lockTitle)}" />
-                <input type="text" class="pp-track-input" data-field="length" placeholder="Length" value="${escapeAttr(comp.length || '')}" ${lockAttr} title="${escapeAttr(lockTitle)}" />
-                <input type="text" class="pp-track-input" data-field="color" placeholder="Color" value="${escapeAttr(comp.color || '')}" ${lockAttr} title="${escapeAttr(lockTitle)}" />
-                <input type="text" class="pp-track-input" data-field="sealer" placeholder="Sealer" value="${escapeAttr(comp.sealer || '')}" ${lockAttr} title="${escapeAttr(lockTitle)}" />
+                <input type="text" class="pp-track-input" data-field="panel_id" value="${escapeAttr(comp.panel_id || '')}" readonly title="${escapeAttr(lockTitle)}" />
+                <input type="text" class="pp-track-input" data-field="width" value="${escapeAttr(comp.width || '')}" readonly title="${escapeAttr(lockTitle)}" />
+                <input type="text" class="pp-track-input" data-field="length" value="${escapeAttr(comp.length || '')}" readonly title="${escapeAttr(lockTitle)}" />
+                <input type="text" class="pp-track-input" data-field="color" value="${escapeAttr(comp.color || '')}" readonly title="${escapeAttr(lockTitle)}" />
             </div>
-            <button class="pp-track-card-delete" type="button" data-action="delete-component" aria-label="Delete component" title="Delete component">&times;</button>
         </div>
     `;
 }
@@ -2130,189 +2113,124 @@ function handleToggleTrackSection(castingId) {
     renderTracking();
 }
 
-async function handleDeleteAllComponentsClick(castingId) {
-    if (!currentProjectNumber || !castingId) return;
-    const list = getComponentsFor(castingId);
-    if (list.length === 0) return;
-    const casting = currentCastings.find(c => c.id === castingId);
-    const label = casting ? `Cast ${casting.casting_number || ''}`.trim() : 'this casting';
-    if (!confirm(`Delete all ${list.length} components from ${label}? This cannot be undone.`)) return;
+// Tracking is a read-only mirror of Castings inventory. Whenever inventory
+// mutates (add/edit/delete/reorder, casting reorder/delete), we re-derive
+// each casting's casting_components rows in project sort_order so panel_id
+// numbering stays globally consistent per type. Numbered panels come first
+// (e.g. A.01, A.02), then any "extras" as `${type}.EXTRA` rows.
+let syncInFlight = false;
+let syncPending = false;
+
+async function syncTrackingFromInventory() {
+    if (!currentProjectNumber) return;
+    if (syncInFlight) { syncPending = true; return; }
+    syncInFlight = true;
     try {
-        await deleteAllComponentsForCasting(castingId);
-        setComponentsFor(castingId, []);
-        renderTracking();
-        showToast(`Deleted ${list.length} ${list.length === 1 ? 'component' : 'components'}.`);
-    } catch (err) {
-        logger.error('[project-portal] delete all components failed:', err);
-        showToast('Delete failed: ' + (err.message || err), 'error');
+        do {
+            syncPending = false;
+            await runTrackingSync();
+        } while (syncPending);
+    } finally {
+        syncInFlight = false;
     }
 }
 
-async function handleGenerateTrackingFromInventory(castingId) {
-    if (!currentProjectNumber || !castingId) return;
-    const inventory = getInventoryFor(castingId);
-    if (!inventory.length) return;
+async function runTrackingSync() {
+    if (!currentProjectNumber || currentCastings.length === 0) return;
 
-    // Plan panel_id numbering per type GLOBALLY across the whole project so
-    // numbering continues across castings (Cast 1 has A.01–A.20 → Cast 2's
-    // first A becomes A.21). Preserves zero-pad width (min 2).
-    const projectComponents = [];
-    for (const list of currentCastingComponents.values()) {
-        if (Array.isArray(list)) projectComponents.push(...list);
+    if (currentCastingInventoryLoadedFor !== currentProjectNumber) {
+        await loadAllInventoryForCurrentProject();
     }
-    const counters = new Map(); // type -> { next, padLen }
-    function getCounter(type) {
+    if (currentCastingComponents.size === 0) {
+        await loadAllComponentsForCurrentProject();
+    }
+
+    const sortedCastings = currentCastings.slice().sort((a, b) =>
+        (a.sort_order ?? 0) - (b.sort_order ?? 0)
+    );
+
+    // Compute padLen per type from the project-wide qty total so all panel_ids
+    // for a given type share the same zero-pad width.
+    const typeTotals = new Map();
+    for (const casting of sortedCastings) {
+        for (const inv of getInventoryFor(casting.id)) {
+            if (!inv.type) continue;
+            const qty = Math.max(1, parseInt(inv.quantity, 10) || 1);
+            typeTotals.set(inv.type, (typeTotals.get(inv.type) || 0) + qty);
+        }
+    }
+    const padLenFor = (type) => Math.max(2, String(typeTotals.get(type) || 0).length);
+
+    // Per-type running counter across castings in sort order.
+    const counters = new Map();
+    const nextPanelId = (type) => {
         if (!type) return null;
-        if (counters.has(type)) return counters.get(type);
-        const escapedType = type.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const re = new RegExp(`^${escapedType}\\.(\\d+)$`);
-        let max = 0;
-        let padLen = 2;
-        for (const c of projectComponents) {
-            const m = c.panel_id && c.panel_id.match(re);
-            if (m) {
-                const n = parseInt(m[1], 10);
-                if (n > max) max = n;
-                if (m[1].length > padLen) padLen = m[1].length;
+        const next = (counters.get(type) || 0) + 1;
+        counters.set(type, next);
+        return `${type}.${String(next).padStart(padLenFor(type), '0')}`;
+    };
+
+    for (const casting of sortedCastings) {
+        const expected = [];
+        for (const inv of getInventoryFor(casting.id)) {
+            const qty = Math.max(1, parseInt(inv.quantity, 10) || 1);
+            const extras = Math.max(0, parseInt(inv.extras, 10) || 0);
+            for (let i = 0; i < qty; i++) {
+                expected.push({
+                    type: inv.type || null,
+                    width: inv.width || null,
+                    length: inv.length || null,
+                    panel_id: nextPanelId(inv.type),
+                    color: inv.color || null,
+                    sealer: inv.sealer || null
+                });
+            }
+            for (let i = 0; i < extras; i++) {
+                expected.push({
+                    type: inv.type || null,
+                    width: inv.width || null,
+                    length: inv.length || null,
+                    panel_id: inv.type ? `${inv.type}.EXTRA` : null,
+                    color: inv.color || null,
+                    sealer: inv.sealer || null
+                });
             }
         }
-        const counter = { next: max + 1, padLen };
-        counters.set(type, counter);
-        return counter;
-    }
 
-    // Expand inventory rows into individual panel records.
-    const toCreate = [];
-    for (const inv of inventory) {
-        const qty = Math.max(1, parseInt(inv.quantity, 10) || 1);
-        const counter = getCounter(inv.type);
-        for (let i = 0; i < qty; i++) {
-            let panel_id = null;
-            if (counter) {
-                panel_id = `${inv.type}.${String(counter.next).padStart(counter.padLen, '0')}`;
-                counter.next += 1;
+        const current = getComponentsFor(casting.id);
+        if (componentsMatchExpected(current, expected)) continue;
+
+        try {
+            await deleteAllComponentsForCasting(casting.id);
+            if (expected.length === 0) {
+                setComponentsFor(casting.id, []);
+            } else {
+                const created = await createComponentsBulk(casting.id, expected);
+                setComponentsFor(casting.id, created || []);
             }
-            toCreate.push({
-                type: inv.type || null,
-                width: inv.width || null,
-                length: inv.length || null,
-                panel_id,
-                color: inv.color || null,
-                sealer: inv.sealer || null
-            });
+        } catch (err) {
+            logger.error('[project-portal] sync tracking failed for casting', casting.id, err);
+            showToast('Tracking sync failed: ' + (err.message || err), 'error');
+            return;
         }
     }
 
-    if (toCreate.length === 0) return;
-
-    try {
-        const created = await createComponentsBulk(castingId, toCreate);
-        if (created && created.length) {
-            const list = getComponentsFor(castingId).slice();
-            list.push(...created);
-            setComponentsFor(castingId, list);
-        }
-        renderTracking();
-        showToast(`Added ${toCreate.length} ${toCreate.length === 1 ? 'panel' : 'panels'} from inventory.`);
-    } catch (err) {
-        logger.error('[project-portal] generate from inventory failed:', err);
-        showToast('Generate failed: ' + (err.message || err), 'error');
-    }
+    if (currentTab === 'tracking') renderTracking();
 }
 
-async function handleAddComponentClick(castingId) {
-    if (!currentProjectNumber || !castingId) return;
-    if (!currentTrackExpanded.has(castingId)) currentTrackExpanded.add(castingId);
-    try {
-        const created = await createComponent(castingId, {});
-        if (created) {
-            const list = getComponentsFor(castingId).slice();
-            list.push(created);
-            setComponentsFor(castingId, list);
-        }
-        renderTracking();
-        // Focus the first input on the newest card in this section
-        const section = document.querySelector(`.pp-track-section[data-casting-id="${castingId}"]`);
-        const last = section?.querySelector('.pp-track-card:last-of-type input[data-field="type"]');
-        last?.focus();
-    } catch (err) {
-        logger.error('[project-portal] add component failed:', err);
-        showToast('Add component failed: ' + (err.message || err), 'error');
+function componentsMatchExpected(current, expected) {
+    if (current.length !== expected.length) return false;
+    const norm = v => (v === undefined || v === '' ? null : v);
+    for (let i = 0; i < current.length; i++) {
+        const c = current[i], e = expected[i];
+        if (norm(c.panel_id) !== norm(e.panel_id)) return false;
+        if (norm(c.type) !== norm(e.type)) return false;
+        if (norm(c.width) !== norm(e.width)) return false;
+        if (norm(c.length) !== norm(e.length)) return false;
+        if (norm(c.color) !== norm(e.color)) return false;
+        if (norm(c.sealer) !== norm(e.sealer)) return false;
     }
-}
-
-async function handleUpdateComponent(componentId, castingId, field, value) {
-    const list = getComponentsFor(castingId);
-    const comp = list.find(c => c.id === componentId);
-    if (!comp) return;
-    const cleaned = (value || '').trim() === '' ? null : value.trim();
-    if ((comp[field] || null) === cleaned) return; // no change
-    try {
-        const updated = await updateComponent(componentId, { [field]: cleaned });
-        if (updated) Object.assign(comp, updated);
-        else comp[field] = cleaned;
-    } catch (err) {
-        logger.error('[project-portal] updateComponent failed:', err);
-        showToast('Save failed: ' + (err.message || err), 'error');
-    }
-}
-
-async function handleDeleteComponent(castingId, componentId) {
-    try {
-        await deleteComponent(componentId);
-        const list = getComponentsFor(castingId).filter(c => c.id !== componentId);
-        setComponentsFor(castingId, list);
-        renderTracking();
-    } catch (err) {
-        logger.error('[project-portal] deleteComponent failed:', err);
-        showToast('Delete failed: ' + (err.message || err), 'error');
-    }
-}
-
-// One SortableJS instance per expanded section
-let trackSortables = [];
-
-function ensureComponentSortables() {
-    trackSortables.forEach(s => { try { s.destroy(); } catch {} });
-    trackSortables = [];
-    if (typeof window.Sortable === 'undefined') return;
-
-    document.querySelectorAll('#pp-track-list .pp-track-section-body .pp-track-cards').forEach(el => {
-        const castingId = el.dataset.castingId;
-        if (!castingId) return;
-        const s = window.Sortable.create(el, {
-            animation: 180,
-            easing: 'cubic-bezier(0.22, 0.61, 0.36, 1)',
-            handle: '.pp-track-card-grip',
-            draggable: '.pp-track-card',
-            ghostClass: 'pp-track-card-ghost',
-            chosenClass: 'pp-track-card-chosen',
-            dragClass: 'pp-track-card-drag',
-            forceFallback: true,
-            fallbackTolerance: 4,
-            scroll: true,
-            scrollSensitivity: 60,
-            scrollSpeed: 14,
-            onEnd: async (evt) => {
-                const oldIdx = evt.oldIndex;
-                const newIdx = evt.newIndex;
-                if (oldIdx === newIdx || oldIdx === undefined || newIdx === undefined) return;
-                const list = getComponentsFor(castingId).slice();
-                const [moved] = list.splice(oldIdx, 1);
-                list.splice(newIdx, 0, moved);
-                list.forEach((c, idx) => { c.sort_order = idx; });
-                setComponentsFor(castingId, list);
-                try {
-                    await setComponentsOrder(list.map(c => c.id));
-                } catch (err) {
-                    logger.error('[project-portal] setComponentsOrder failed:', err);
-                    showToast('Reorder save failed: ' + (err.message || err), 'error');
-                    renderTracking();
-                }
-            }
-        });
-        trackSortables.push(s);
-    });
+    return true;
 }
 
 // ---------- Helpers ----------
@@ -2945,7 +2863,10 @@ function wireEvents() {
     // Form: auto-save on input/change (debounced)
     const formEl = document.getElementById('pp-form');
     if (formEl) {
-        formEl.addEventListener('input', scheduleProjectInfoSave);
+        formEl.addEventListener('input', (e) => {
+            if (e.target instanceof HTMLTextAreaElement) autoGrowTextarea(e.target);
+            scheduleProjectInfoSave();
+        });
         formEl.addEventListener('change', scheduleProjectInfoSave);
     }
 
@@ -3274,45 +3195,6 @@ function wireEvents() {
         if (printBtn) {
             const id = printBtn.dataset.castingId;
             if (id) handlePrintTracking(id);
-            return;
-        }
-        const addBtn = e.target.closest('button[data-action="add-component"]');
-        if (addBtn) {
-            handleAddComponentClick(addBtn.dataset.castingId);
-            return;
-        }
-        const genBtn = e.target.closest('button[data-action="generate-from-inventory"]');
-        if (genBtn) {
-            handleGenerateTrackingFromInventory(genBtn.dataset.castingId);
-            return;
-        }
-        const clearBtn = e.target.closest('button[data-action="delete-all-components"]');
-        if (clearBtn) {
-            handleDeleteAllComponentsClick(clearBtn.dataset.castingId);
-            return;
-        }
-        const delBtn = e.target.closest('button[data-action="delete-component"]');
-        if (delBtn) {
-            const card = delBtn.closest('.pp-track-card[data-component-id]');
-            if (!card) return;
-            handleDeleteComponent(card.dataset.castingId, card.dataset.componentId);
-        }
-    });
-    trackList?.addEventListener('change', (e) => {
-        const card = e.target.closest('.pp-track-card[data-component-id]');
-        if (!card) return;
-        if (!e.target.matches('input[data-field]')) return;
-        handleUpdateComponent(
-            card.dataset.componentId,
-            card.dataset.castingId,
-            e.target.dataset.field,
-            e.target.value
-        );
-    });
-    trackList?.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && e.target.matches('input[data-field]')) {
-            e.preventDefault();
-            e.target.blur();
         }
     });
 
