@@ -90,7 +90,8 @@ const FORM_FIELDS = [
     'site_contact', 'site_phone', 'delivery_address', 'site_restrictions',
     'need_by_date', 'production_start_date',
     'scope_of_work', 'imperative_information',
-    'classroom_1_notes', 'classroom_2_notes', 'classroom_3_notes', 'cr_general_notes'
+    'classroom_1_notes', 'classroom_2_notes', 'classroom_3_notes', 'cr_general_notes',
+    'castings_notes', 'optimizer_notes'
 ];
 
 let allProjectRows = [];           // From Supabase
@@ -473,8 +474,8 @@ function populateForm(project) {
         el.value = (v === null || v === undefined) ? '' : v;
     }
     applyStatusColor();
-    // Resize CR Notes textareas to fit their loaded content.
-    document.querySelectorAll('.pp-cr-textarea').forEach(autoGrowTextarea);
+    // Resize all auto-growing textareas (CR Notes + tab-level notes) to fit their loaded content.
+    document.querySelectorAll('.pp-cr-textarea, .pp-tab-notes-textarea').forEach(autoGrowTextarea);
 }
 
 /**
@@ -3180,6 +3181,16 @@ function wireEvents() {
             handleBatchAssignChange(currentBatchCastingId, idx, target.value);
             return;
         }
+    });
+
+    // Tab-level notes textareas (Castings + Optimizer) live outside #pp-form,
+    // so they need their own auto-save listener. Fields are still in FORM_FIELDS,
+    // so populate/read pick them up.
+    document.querySelectorAll('.pp-tab-notes-textarea').forEach(el => {
+        el.addEventListener('input', () => {
+            autoGrowTextarea(el);
+            scheduleProjectInfoSave();
+        });
     });
 
     // Castings: add

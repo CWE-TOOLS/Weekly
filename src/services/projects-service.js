@@ -34,6 +34,8 @@ const PROJECT_COLUMNS = [
     'classroom_2_notes',
     'classroom_3_notes',
     'cr_general_notes',
+    'castings_notes',
+    'optimizer_notes',
     'created_at',
     'updated_at'
 ];
@@ -203,6 +205,8 @@ export function createEmptyProject(projectNumber = '') {
         classroom_1_notes: '',
         classroom_2_notes: '',
         classroom_3_notes: '',
-        cr_general_notes: ''
+        cr_general_notes: '',
+        castings_notes: '',
+        optimizer_notes: ''
     };
 }
