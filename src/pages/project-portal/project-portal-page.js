@@ -114,6 +114,7 @@ let currentTrackingPhases = new Set(TRACKING_PHASES); // default: all phases tra
 // Tracks which project the phases above belong to, so switching projects resets defaults.
 let trackingPhasesProject = null;
 let currentCastInvExpanded = new Set();    // castingIds whose inventory sections are open (Castings tab)
+let castInvExpandedProject = null;         // tracks which project the expanded-set defaults have been seeded for
 let currentCastingInventory = new Map();   // castingId -> Array<inventory row>
 let currentCastingInventoryLoadedFor = null; // project_number we last loaded inventory for
 let inventorySaveTimers = new Map();       // itemId -> debounce handle
@@ -617,6 +618,7 @@ async function loadAndRenderCastings() {
         currentCastings = [];
         currentCastingInventory = new Map();
         currentCastInvExpanded = new Set();
+        castInvExpandedProject = null;
         currentCastingInventoryLoadedFor = null;
         renderCastings();
         return;
@@ -626,6 +628,13 @@ async function loadAndRenderCastings() {
     } catch (err) {
         logger.error('[project-portal] loadCastings failed:', err);
         currentCastings = [];
+    }
+    // First time visiting this project's Castings tab in this session:
+    // seed every casting as expanded. Subsequent re-renders within the same
+    // project preserve the user's collapse choices.
+    if (castInvExpandedProject !== currentProjectNumber) {
+        currentCastInvExpanded = new Set(currentCastings.map(c => c.id));
+        castInvExpandedProject = currentProjectNumber;
     }
     await loadAllInventoryForCurrentProject();
     renderCastings();
@@ -923,7 +932,10 @@ function handleAddCastingClick() {
                 casting_number: num,
                 description: desc
             });
-            if (created) currentCastings.push(created);
+            if (created) {
+                currentCastings.push(created);
+                currentCastInvExpanded.add(created.id);
+            }
             renderCastings();
             showToast('Casting added.');
         } catch (err) {
