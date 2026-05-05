@@ -312,6 +312,14 @@
                                 <p class="pp-muted pp-track-sub">Components produced in each casting. Lists are per-casting and independent.</p>
                             </div>
 
+                            <div id="pp-track-phases-bar" class="pp-track-phases-bar" hidden>
+                                <div class="pp-track-phases-hint">Click to toggle which phases appear on the tracking sheet.</div>
+                                <div class="pp-track-phases-row">
+                                    <span class="pp-track-phases-label">Track phases:</span>
+                                    <div id="pp-track-phases-chips" class="pp-track-phases-chips"></div>
+                                </div>
+                            </div>
+
                             <div id="pp-track-needs-save" class="pp-castings-hint" hidden>
                                 Save the project first to use Tracking.
                             </div>
@@ -769,10 +777,27 @@
             </div>
         </div>
 
+        <!-- Print Tracking Modal -->
+        <div id="pp-track-print-modal" class="pp-modal-backdrop" hidden>
+            <div class="pp-modal" role="dialog" aria-modal="true" aria-labelledby="pp-track-print-modal-title">
+                <div class="pp-modal-header">
+                    <h2 id="pp-track-print-modal-title">Print Tracking</h2>
+                    <button type="button" class="pp-modal-close" id="pp-track-print-modal-close" aria-label="Close">&times;</button>
+                </div>
+                <div class="pp-modal-body">
+                    <p class="pp-modal-hint">Select a casting to print its tracking sheet.</p>
+                    <div id="pp-track-print-modal-list" class="pp-track-print-list"></div>
+                    <div class="pp-modal-actions">
+                        <button type="button" class="pp-secondary-btn" id="pp-track-print-modal-cancel">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Toast -->
         <div id="pp-toast" class="pp-toast" hidden></div>
     </div>
 
-    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20260502-12"></script>
+    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20260504-11"></script>
 </body>
 </html>

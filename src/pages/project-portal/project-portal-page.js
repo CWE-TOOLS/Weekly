@@ -108,7 +108,14 @@ let currentCastingPhases = new Map();      // castingId -> Array<phase row>
 let copiedPhases = null;                   // Array<{phase_name, hours, sort_order}> from a copy action
 let currentTrackExpanded = new Set();      // castingIds whose tracking sections are open
 let currentCastingComponents = new Map();  // castingId -> Array<component row>
+// Production phases that can appear as columns on the tracking sheet.
+// Order here is the order they'll print in. Editable per project via the chip bar.
+const TRACKING_PHASES = ['MILL', 'FO', 'CAST', 'DEMOLD', 'FINISH', 'SEAL', 'STRIPS', 'DRILL', 'CRATE', 'FINAL', 'LOAD'];
+let currentTrackingPhases = new Set(TRACKING_PHASES); // default: all phases tracked
+// Tracks which project the phases above belong to, so switching projects resets defaults.
+let trackingPhasesProject = null;
 let currentCastInvExpanded = new Set();    // castingIds whose inventory sections are open (Castings tab)
+let castInvExpandedProject = null;         // tracks which project the expanded-set defaults have been seeded for
 let currentCastingInventory = new Map();   // castingId -> Array<inventory row>
 let currentCastingInventoryLoadedFor = null; // project_number we last loaded inventory for
 let inventorySaveTimers = new Map();       // itemId -> debounce handle
@@ -318,6 +325,7 @@ function setActiveTab(tab) {
     if (printBtn) {
         if (tab === 'batch-tickets') printBtn.textContent = 'Print Batch Tickets';
         else if (tab === 'color-log') printBtn.textContent = 'Print Color Log';
+        else if (tab === 'tracking') printBtn.textContent = 'Print Tracking';
         else printBtn.textContent = 'Print';
     }
 }
@@ -611,6 +619,7 @@ async function loadAndRenderCastings() {
         currentCastings = [];
         currentCastingInventory = new Map();
         currentCastInvExpanded = new Set();
+        castInvExpandedProject = null;
         currentCastingInventoryLoadedFor = null;
         renderCastings();
         return;
@@ -620,6 +629,13 @@ async function loadAndRenderCastings() {
     } catch (err) {
         logger.error('[project-portal] loadCastings failed:', err);
         currentCastings = [];
+    }
+    // First time visiting this project's Castings tab in this session:
+    // seed every casting as expanded. Subsequent re-renders within the same
+    // project preserve the user's collapse choices.
+    if (castInvExpandedProject !== currentProjectNumber) {
+        currentCastInvExpanded = new Set(currentCastings.map(c => c.id));
+        castInvExpandedProject = currentProjectNumber;
     }
     await loadAllInventoryForCurrentProject();
     renderCastings();
@@ -917,7 +933,10 @@ function handleAddCastingClick() {
                 casting_number: num,
                 description: desc
             });
-            if (created) currentCastings.push(created);
+            if (created) {
+                currentCastings.push(created);
+                currentCastInvExpanded.add(created.id);
+            }
             renderCastings();
             showToast('Casting added.');
         } catch (err) {
@@ -1852,9 +1871,12 @@ async function activateTrackingTab() {
         needsSave.hidden = false;
         noCastings.hidden = true;
         editor.hidden = true;
+        hideTrackingPhasesBar();
         return;
     }
     needsSave.hidden = true;
+    ensureTrackingPhasesForProject(currentProjectNumber);
+    renderTrackingPhasesBar();
 
     if (currentCastings.length === 0) {
         try { currentCastings = await loadCastings(currentProjectNumber); } catch (e) { /* ignore */ }
@@ -1886,6 +1908,39 @@ async function loadAllComponentsForCurrentProject() {
         logger.error('[project-portal] loadAllComponentsForProject failed:', err);
         currentCastingComponents = new Map();
         for (const id of ids) currentCastingComponents.set(id, []);
+    }
+}
+
+function renderTrackingPhasesBar() {
+    const bar = document.getElementById('pp-track-phases-bar');
+    const chips = document.getElementById('pp-track-phases-chips');
+    if (!bar || !chips) return;
+    chips.innerHTML = TRACKING_PHASES.map(p => {
+        const active = currentTrackingPhases.has(p);
+        return `<button type="button" class="pp-track-phase-chip${active ? ' pp-track-phase-active' : ''}" data-phase="${escapeAttr(p)}" aria-pressed="${active}" title="${active ? 'Click to remove' : 'Click to add'} ${escapeAttr(p)}">${escapeHtml(p)}</button>`;
+    }).join('');
+    bar.hidden = false;
+}
+
+function hideTrackingPhasesBar() {
+    const bar = document.getElementById('pp-track-phases-bar');
+    if (bar) bar.hidden = true;
+}
+
+function handleToggleTrackingPhase(phase) {
+    if (!phase || !TRACKING_PHASES.includes(phase)) return;
+    if (currentTrackingPhases.has(phase)) currentTrackingPhases.delete(phase);
+    else currentTrackingPhases.add(phase);
+    renderTrackingPhasesBar();
+    // TODO: persist to project record (e.g. projects.tracking_phases jsonb) once schema is added.
+}
+
+function ensureTrackingPhasesForProject(projectNumber) {
+    // When the user switches to a different project, reset to defaults.
+    // Once persistence lands, this is where we'd load saved phases for the project.
+    if (trackingPhasesProject !== projectNumber) {
+        currentTrackingPhases = new Set(TRACKING_PHASES);
+        trackingPhasesProject = projectNumber;
     }
 }
 
@@ -2864,7 +2919,7 @@ function wireEvents() {
         handleDelete();
     });
 
-    // Form: print — Batch Tickets and Color Log tabs use dedicated print handlers.
+    // Form: print — Batch Tickets, Color Log, and Tracking tabs use dedicated print handlers.
     document.getElementById('pp-print-btn').addEventListener('click', (e) => {
         e.preventDefault();
         if (currentTab === 'batch-tickets') {
@@ -2876,7 +2931,31 @@ function wireEvents() {
             handlePrintColorLog();
             return;
         }
+        if (currentTab === 'tracking') {
+            openTrackPrintModal();
+            return;
+        }
         handlePrint();
+    });
+
+    // Print Tracking modal: close handlers
+    document.getElementById('pp-track-print-modal-close').addEventListener('click', closeTrackPrintModal);
+    document.getElementById('pp-track-print-modal-cancel').addEventListener('click', closeTrackPrintModal);
+    document.getElementById('pp-track-print-modal').addEventListener('click', (e) => {
+        if (e.target.id === 'pp-track-print-modal') closeTrackPrintModal();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !document.getElementById('pp-track-print-modal').hidden) {
+            closeTrackPrintModal();
+        }
+    });
+    document.getElementById('pp-track-print-modal-list').addEventListener('click', (e) => {
+        const btn = e.target.closest('button[data-casting-id]');
+        if (!btn) return;
+        const id = btn.dataset.castingId;
+        if (!id) return;
+        closeTrackPrintModal();
+        handlePrintTracking(id);
     });
 
     // Prevent enter-key submit; auto-save handles persistence.
@@ -3149,6 +3228,13 @@ function wireEvents() {
     document.querySelector('[data-action="goto-castings-from-tracking"]')?.addEventListener('click', () => {
         setActiveTab('castings');
         if (currentProjectNumber) loadAndRenderCastings();
+    });
+
+    // Tracking: phase-picker chip toggles
+    document.getElementById('pp-track-phases-chips')?.addEventListener('click', (e) => {
+        const chip = e.target.closest('.pp-track-phase-chip');
+        if (!chip) return;
+        handleToggleTrackingPhase(chip.dataset.phase);
     });
 
     // Batch Tickets: pill bar (casting selector)
@@ -3808,6 +3894,173 @@ function rerenderBatchPreview(castingId) {
 function cssEscape(s) {
     if (window.CSS && typeof window.CSS.escape === 'function') return window.CSS.escape(s);
     return String(s).replace(/[^a-zA-Z0-9_-]/g, m => '\\' + m);
+}
+
+// ---------- Print Tracking ----------
+
+function openTrackPrintModal() {
+    const modal = document.getElementById('pp-track-print-modal');
+    const list = document.getElementById('pp-track-print-modal-list');
+    if (!modal || !list) return;
+
+    if (!currentCastings || currentCastings.length === 0) {
+        list.innerHTML = `<div class="pp-track-print-empty">No castings to print. Add a casting first.</div>`;
+    } else {
+        list.innerHTML = currentCastings.map(c => {
+            const components = getComponentsFor(c.id);
+            const count = components.length;
+            const num = c.casting_number || '(no #)';
+            const desc = c.description ? escapeHtml(c.description) : '';
+            const countLabel = `${count} ${count === 1 ? 'component' : 'components'}`;
+            return `
+                <button type="button" class="pp-track-print-option" data-casting-id="${escapeAttr(c.id)}">
+                    <span class="pp-track-print-option-num">Cast ${escapeHtml(num)}</span>
+                    <span class="pp-track-print-option-desc">${desc}</span>
+                    <span class="pp-track-print-option-count">${countLabel}</span>
+                </button>
+            `;
+        }).join('');
+    }
+
+    modal.hidden = false;
+}
+
+function closeTrackPrintModal() {
+    const modal = document.getElementById('pp-track-print-modal');
+    if (modal) modal.hidden = true;
+}
+
+const TRACK_PRINT_CSS = `
+/* 11x17 (tabloid) landscape: 17in wide x 11in tall.
+   Explicit dimensions used (rather than the 'tabloid landscape' keyword)
+   for the most consistent cross-browser behavior. */
+@page { size: 17in 11in; margin: 0.4in 0.5in; }
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: 'Segoe UI', Arial, sans-serif; color:#000; font-size:9pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.tp-header { border-bottom: 1.5pt solid #000; padding-bottom: 4pt; margin-bottom: 6pt; }
+.tp-line { font-size: 14pt; font-weight: 800; letter-spacing: 0.3pt; }
+.tp-line .tp-sep { margin: 0 8pt; color: #888; font-weight: 400; }
+table.tp-table { width: 100%; border-collapse: collapse; font-size: 9.5pt; table-layout: fixed; }
+table.tp-table th, table.tp-table td { border: 0.6pt solid #000; padding: 3pt 5pt; text-align: center; vertical-align: middle; word-wrap: break-word; }
+table.tp-table th { background: #f1f5f9; font-weight: 700; font-size: 9pt; letter-spacing: 0.4pt; padding: 4pt 5pt; }
+table.tp-table tbody td { height: 18pt; }
+/* Alternating row shading. Applied to <td> rather than <tr> for the most reliable
+   print rendering across browsers. Light gray that still shows on most printers. */
+table.tp-table tbody tr:nth-child(even) td { background: #eef2f7; }
+.tp-col-panel { font-weight: 700; text-align: left !important; }
+.tp-col-phase { font-size: 8.5pt; }
+.tp-empty { padding: 10pt; text-align: center; font-style: italic; color: #555; border: 0.6pt dashed #999; }
+@media print { .tp-no-print { display: none; } }
+`;
+
+function buildTrackPrintHtml(casting, components, projectNumber, projectName) {
+    const num = casting.casting_number || '';
+    const desc = casting.description || '';
+
+    // Phases come out in TRACKING_PHASES order, filtered by what's currently selected.
+    const selectedPhases = TRACKING_PHASES.filter(p => currentTrackingPhases.has(p));
+
+    // Column widths: Panel ID gets a fixed share; phase columns split the rest evenly.
+    // With table-layout:fixed, this ensures consistent column sizing on the printed page.
+    const panelIdPct = selectedPhases.length === 0 ? 100 : 16;
+    const phasePct = selectedPhases.length === 0 ? 0 : (100 - panelIdPct) / selectedPhases.length;
+
+    const headerCells = [
+        `<th class="tp-col-panel" style="width: ${panelIdPct}%;">Panel ID</th>`,
+        ...selectedPhases.map(p => `<th class="tp-col-phase" style="width: ${phasePct}%;">${escapeHtml(p)}</th>`)
+    ].join('');
+
+    const totalCols = 1 + selectedPhases.length;
+    const rows = components.length === 0
+        ? `<tr><td colspan="${totalCols}" class="tp-empty">No components recorded for this casting.</td></tr>`
+        : components.map(comp => {
+            const phaseCells = selectedPhases.map(() => `<td class="tp-col-phase"></td>`).join('');
+            return `
+                <tr>
+                    <td class="tp-col-panel">${escapeHtml(comp.panel_id || '')}</td>
+                    ${phaseCells}
+                </tr>
+            `;
+        }).join('');
+
+    // Single-line header: "Project 12345 Smith Residence | Cast 2 kitchen counter"
+    const projectLabel = [projectNumber, projectName].filter(Boolean).map(s => escapeHtml(s)).join(' ');
+    const castLabel = ['Cast', num, desc].filter(Boolean).map(s => escapeHtml(s)).join(' ');
+    const headerLine = [projectLabel, castLabel].filter(Boolean).join('<span class="tp-sep">|</span>');
+
+    return `<!doctype html><html><head><meta charset="utf-8"><title>Tracking — ${escapeHtml(projectNumber)} — Cast ${escapeHtml(num)}</title><style>${TRACK_PRINT_CSS}</style></head><body>
+        <div class="tp-header">
+            <div class="tp-line">${headerLine}</div>
+        </div>
+
+        <table class="tp-table">
+            <thead>
+                <tr>${headerCells}</tr>
+            </thead>
+            <tbody>${rows}</tbody>
+        </table>
+    </body></html>`;
+}
+
+function handlePrintTracking(castingId) {
+    if (!castingId) return;
+    const casting = currentCastings.find(c => c.id === castingId);
+    if (!casting) {
+        showToast('Casting not found', 'error');
+        return;
+    }
+    const components = getComponentsFor(castingId) || [];
+    const projectNumber = currentProjectNumber || '';
+    const projectName = document.getElementById('pp-f-project_name')?.value || '';
+    const html = buildTrackPrintHtml(casting, components, projectNumber, projectName);
+
+    // Remove any leftover iframe from a prior print attempt.
+    const prior = document.getElementById('pp-track-print-frame');
+    if (prior) prior.remove();
+
+    // Hidden iframe — kept off-screen rather than display:none so browsers
+    // reliably layout & print the contents.
+    const iframe = document.createElement('iframe');
+    iframe.id = 'pp-track-print-frame';
+    iframe.setAttribute('aria-hidden', 'true');
+    iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;';
+    document.body.appendChild(iframe);
+
+    let cleaned = false;
+    const cleanup = () => {
+        if (cleaned) return;
+        cleaned = true;
+        // Defer removal so the print dialog can finish reading the document.
+        setTimeout(() => { iframe.remove(); }, 500);
+    };
+
+    iframe.addEventListener('load', () => {
+        try {
+            const win = iframe.contentWindow;
+            // onafterprint fires whether the user printed or cancelled.
+            win.addEventListener('afterprint', cleanup);
+            win.focus();
+            win.print();
+        } catch (err) {
+            logger.error('[project-portal] print tracking failed:', err);
+            showToast('Print failed', 'error');
+            cleanup();
+        }
+        // Safety net: clean up after 60s even if afterprint never fires
+        // (some browsers/printers swallow the event).
+        setTimeout(cleanup, 60000);
+    }, { once: true });
+
+    // Write the HTML into the iframe document.
+    const doc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (!doc) {
+        showToast('Print failed — could not open frame', 'error');
+        iframe.remove();
+        return;
+    }
+    doc.open();
+    doc.write(html);
+    doc.close();
 }
 
 // ---------- Print ----------

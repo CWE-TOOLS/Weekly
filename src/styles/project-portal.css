@@ -1413,6 +1413,63 @@ html, body {
     box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
 }
 .pp-track-header { margin-bottom: 18px; }
+.pp-track-phases-bar {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 14px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    margin-bottom: 18px;
+}
+.pp-track-phases-hint {
+    color: #64748b;
+    font-size: 12px;
+    line-height: 1.3;
+}
+.pp-track-phases-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+.pp-track-phases-label {
+    font-weight: 600;
+    color: #334155;
+    font-size: 13px;
+    white-space: nowrap;
+}
+.pp-track-phases-chips {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.pp-track-phase-chip {
+    padding: 5px 11px;
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    color: #64748b;
+    border-radius: 999px;
+    cursor: pointer;
+    font: 600 11.5px/1 'Segoe UI', Arial, sans-serif;
+    letter-spacing: 0.4px;
+    transition: background 0.12s, border-color 0.12s, color 0.12s;
+    user-select: none;
+}
+.pp-track-phase-chip:hover {
+    border-color: #94a3b8;
+    color: #334155;
+}
+.pp-track-phase-chip.pp-track-phase-active {
+    background: #1e40af;
+    border-color: #1e40af;
+    color: #fff;
+}
+.pp-track-phase-chip.pp-track-phase-active:hover {
+    background: #1e3a8a;
+    border-color: #1e3a8a;
+}
 .pp-track-title {
     margin: 0 0 4px 0;
     font-size: 18px;
@@ -1842,6 +1899,61 @@ html, body {
     background: #fff7ed;
     border-color: #fed7aa;
     color: #9a3412;
+}
+.pp-track-print-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 50vh;
+    overflow-y: auto;
+    padding: 2px;
+}
+.pp-track-print-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    text-align: left;
+    padding: 10px 12px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    border-radius: 6px;
+    cursor: pointer;
+    font: inherit;
+    color: #0f172a;
+    transition: background 0.12s, border-color 0.12s;
+}
+.pp-track-print-option:hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+}
+.pp-track-print-option:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+.pp-track-print-option-num {
+    font-weight: 700;
+    color: #0f172a;
+    min-width: 56px;
+}
+.pp-track-print-option-desc {
+    flex: 1;
+    color: #475569;
+    font-size: 13px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.pp-track-print-option-count {
+    color: #64748b;
+    font-size: 12.5px;
+    white-space: nowrap;
+}
+.pp-track-print-empty {
+    padding: 12px;
+    color: #64748b;
+    font-style: italic;
+    text-align: center;
 }
 .pp-primary-btn:disabled {
     opacity: 0.5;
