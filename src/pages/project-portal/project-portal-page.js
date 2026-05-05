@@ -323,10 +323,15 @@ function setActiveTab(tab) {
     }
     const printBtn = document.getElementById('pp-print-btn');
     if (printBtn) {
-        if (tab === 'batch-tickets') printBtn.textContent = 'Print Batch Tickets';
-        else if (tab === 'color-log') printBtn.textContent = 'Print Color Log';
-        else if (tab === 'tracking') printBtn.textContent = 'Print Tracking';
-        else printBtn.textContent = 'Print';
+        // Tracking has per-casting print buttons in each section header — hide the global one.
+        if (tab === 'tracking') {
+            printBtn.hidden = true;
+        } else {
+            printBtn.hidden = false;
+            if (tab === 'batch-tickets') printBtn.textContent = 'Print Batch Tickets';
+            else if (tab === 'color-log') printBtn.textContent = 'Print Color Log';
+            else printBtn.textContent = 'Print';
+        }
     }
 }
 
@@ -484,6 +489,13 @@ function populateForm(project) {
     applyStatusColor();
     // Resize all auto-growing textareas (CR Notes + tab-level notes) to fit their loaded content.
     document.querySelectorAll('.pp-cr-textarea, .pp-tab-notes-textarea').forEach(autoGrowTextarea);
+    // Load tracking phases for this project (NULL/missing = use full default set).
+    if (Array.isArray(project.tracking_phases)) {
+        currentTrackingPhases = new Set(project.tracking_phases.filter(p => TRACKING_PHASES.includes(p)));
+    } else {
+        currentTrackingPhases = new Set(TRACKING_PHASES);
+    }
+    trackingPhasesProject = project.project_number || null;
 }
 
 /**
@@ -512,6 +524,7 @@ function readForm() {
         if (!el) continue;
         out[field] = el.value.trim();
     }
+    out.tracking_phases = [...currentTrackingPhases];
     return out;
 }
 
@@ -1932,12 +1945,13 @@ function handleToggleTrackingPhase(phase) {
     if (currentTrackingPhases.has(phase)) currentTrackingPhases.delete(phase);
     else currentTrackingPhases.add(phase);
     renderTrackingPhasesBar();
-    // TODO: persist to project record (e.g. projects.tracking_phases jsonb) once schema is added.
+    scheduleProjectInfoSave();
 }
 
 function ensureTrackingPhasesForProject(projectNumber) {
-    // When the user switches to a different project, reset to defaults.
-    // Once persistence lands, this is where we'd load saved phases for the project.
+    // populateForm() is the primary loader (reads project.tracking_phases on
+    // form-view entry). This is a safety net for direct tab activations
+    // before populateForm runs — fall back to the full default set.
     if (trackingPhasesProject !== projectNumber) {
         currentTrackingPhases = new Set(TRACKING_PHASES);
         trackingPhasesProject = projectNumber;
@@ -1998,17 +2012,27 @@ function renderTrackSection(casting) {
 
     return `
         <div class="pp-track-section${isOpen ? ' pp-track-section-open' : ''}" data-casting-id="${escapeAttr(casting.id)}">
-            <button type="button" class="pp-track-section-header" data-action="toggle-section" aria-expanded="${isOpen}">
-                <span class="pp-track-chevron" aria-hidden="true">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="9 18 15 12 9 6"/>
+            <div class="pp-track-section-header">
+                <button type="button" class="pp-track-section-toggle" data-action="toggle-section" aria-expanded="${isOpen}">
+                    <span class="pp-track-chevron" aria-hidden="true">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="9 18 15 12 9 6"/>
+                        </svg>
+                    </span>
+                    <span class="pp-track-section-label">Cast</span>
+                    <span class="pp-track-section-num">${escapeHtml(casting.casting_number || '')}</span>
+                    ${desc}
+                </button>
+                <button type="button" class="pp-track-section-print" data-action="print-tracking" data-casting-id="${escapeAttr(casting.id)}" ${count === 0 ? 'disabled' : ''} title="${count === 0 ? 'No components to print' : `Print tracking sheet for Cast ${casting.casting_number || ''}`}">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <polyline points="6 9 6 2 18 2 18 9"/>
+                        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+                        <rect x="6" y="14" width="12" height="8"/>
                     </svg>
-                </span>
-                <span class="pp-track-section-label">Cast</span>
-                <span class="pp-track-section-num">${escapeHtml(casting.casting_number || '')}</span>
-                ${desc}
+                    <span>Tracking</span>
+                </button>
                 <span class="pp-track-section-count">${count} ${count === 1 ? 'component' : 'components'}</span>
-            </button>
+            </div>
             ${body}
         </div>
     `;
@@ -2068,9 +2092,13 @@ async function handleGenerateTrackingFromInventory(castingId) {
     const inventory = getInventoryFor(castingId);
     if (!inventory.length) return;
 
-    // Plan panel_id numbering per type. Continue from the highest existing
-    // panel_id of that type, preserving zero-pad width (min 2).
-    const existing = getComponentsFor(castingId);
+    // Plan panel_id numbering per type GLOBALLY across the whole project so
+    // numbering continues across castings (Cast 1 has A.01–A.20 → Cast 2's
+    // first A becomes A.21). Preserves zero-pad width (min 2).
+    const projectComponents = [];
+    for (const list of currentCastingComponents.values()) {
+        if (Array.isArray(list)) projectComponents.push(...list);
+    }
     const counters = new Map(); // type -> { next, padLen }
     function getCounter(type) {
         if (!type) return null;
@@ -2079,7 +2107,7 @@ async function handleGenerateTrackingFromInventory(castingId) {
         const re = new RegExp(`^${escapedType}\\.(\\d+)$`);
         let max = 0;
         let padLen = 2;
-        for (const c of existing) {
+        for (const c of projectComponents) {
             const m = c.panel_id && c.panel_id.match(re);
             if (m) {
                 const n = parseInt(m[1], 10);
@@ -2931,10 +2959,7 @@ function wireEvents() {
             handlePrintColorLog();
             return;
         }
-        if (currentTab === 'tracking') {
-            openTrackPrintModal();
-            return;
-        }
+        // Tracking tab uses per-casting print buttons in each section header — no global handler.
         handlePrint();
     });
 
@@ -3182,6 +3207,12 @@ function wireEvents() {
         if (headerBtn) {
             const section = headerBtn.closest('.pp-track-section[data-casting-id]');
             if (section) handleToggleTrackSection(section.dataset.castingId);
+            return;
+        }
+        const printBtn = e.target.closest('button[data-action="print-tracking"]');
+        if (printBtn) {
+            const id = printBtn.dataset.castingId;
+            if (id) handlePrintTracking(id);
             return;
         }
         const addBtn = e.target.closest('button[data-action="add-component"]');
@@ -3930,25 +3961,31 @@ function closeTrackPrintModal() {
     if (modal) modal.hidden = true;
 }
 
+// Override the print-header label for specific phases. Anything not listed
+// here prints with its default phase name from TRACKING_PHASES.
+const TRACK_PRINT_PHASE_LABELS = {
+    LOAD: 'LOAD/CRATE #'
+};
+
 const TRACK_PRINT_CSS = `
 /* 11x17 (tabloid) landscape: 17in wide x 11in tall.
    Explicit dimensions used (rather than the 'tabloid landscape' keyword)
    for the most consistent cross-browser behavior. */
-@page { size: 17in 11in; margin: 0.4in 0.5in; }
+@page { size: 17in 11in; margin: 0.35in 0.45in; }
 * { margin:0; padding:0; box-sizing:border-box; }
-body { font-family: 'Segoe UI', Arial, sans-serif; color:#000; font-size:9pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-.tp-header { border-bottom: 1.5pt solid #000; padding-bottom: 4pt; margin-bottom: 6pt; }
-.tp-line { font-size: 14pt; font-weight: 800; letter-spacing: 0.3pt; }
-.tp-line .tp-sep { margin: 0 8pt; color: #888; font-weight: 400; }
-table.tp-table { width: 100%; border-collapse: collapse; font-size: 9.5pt; table-layout: fixed; }
-table.tp-table th, table.tp-table td { border: 0.6pt solid #000; padding: 3pt 5pt; text-align: center; vertical-align: middle; word-wrap: break-word; }
-table.tp-table th { background: #f1f5f9; font-weight: 700; font-size: 9pt; letter-spacing: 0.4pt; padding: 4pt 5pt; }
-table.tp-table tbody td { height: 18pt; }
+body { font-family: 'Segoe UI', Arial, sans-serif; color:#000; font-size:8pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.tp-header { border-bottom: 1.5pt solid #000; padding-bottom: 3pt; margin-bottom: 5pt; }
+.tp-line { font-size: 12pt; font-weight: 800; letter-spacing: 0.3pt; }
+.tp-line .tp-sep { margin: 0 7pt; color: #888; font-weight: 400; }
+table.tp-table { width: 100%; border-collapse: collapse; font-size: 8pt; table-layout: fixed; }
+table.tp-table th, table.tp-table td { border: 0.5pt solid #000; padding: 1.5pt 4pt; text-align: center; vertical-align: middle; word-wrap: break-word; }
+table.tp-table th { background: #f1f5f9; font-weight: 700; font-size: 7.5pt; letter-spacing: 0.3pt; padding: 2.5pt 4pt; }
+table.tp-table tbody td { height: 13pt; }
 /* Alternating row shading. Applied to <td> rather than <tr> for the most reliable
    print rendering across browsers. Light gray that still shows on most printers. */
 table.tp-table tbody tr:nth-child(even) td { background: #eef2f7; }
 .tp-col-panel { font-weight: 700; text-align: left !important; }
-.tp-col-phase { font-size: 8.5pt; }
+.tp-col-phase { font-size: 7.5pt; }
 .tp-empty { padding: 10pt; text-align: center; font-style: italic; color: #555; border: 0.6pt dashed #999; }
 @media print { .tp-no-print { display: none; } }
 `;
@@ -3967,7 +4004,7 @@ function buildTrackPrintHtml(casting, components, projectNumber, projectName) {
 
     const headerCells = [
         `<th class="tp-col-panel" style="width: ${panelIdPct}%;">Panel ID</th>`,
-        ...selectedPhases.map(p => `<th class="tp-col-phase" style="width: ${phasePct}%;">${escapeHtml(p)}</th>`)
+        ...selectedPhases.map(p => `<th class="tp-col-phase" style="width: ${phasePct}%;">${escapeHtml(TRACK_PRINT_PHASE_LABELS[p] || p)}</th>`)
     ].join('');
 
     const totalCols = 1 + selectedPhases.length;
