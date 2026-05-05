@@ -76,11 +76,12 @@ import {
 } from '../../services/classroom-tasks-service.js';
 
 const STATUS_SORT_ORDER = {
-    'not approved': 0,
-    'pending': 1,
+    'kicked off': 0,
+    'releasability': 1,
     'approved': 2,
-    'on hold': 3,
-    'closed': 4
+    'in production': 3,
+    'shipped': 4,
+    'closed out': 5
 };
 
 const FORM_FIELDS = [
@@ -91,7 +92,7 @@ const FORM_FIELDS = [
     'need_by_date', 'production_start_date',
     'scope_of_work', 'imperative_information',
     'classroom_1_notes', 'classroom_2_notes', 'classroom_3_notes', 'cr_general_notes',
-    'castings_notes', 'optimizer_notes'
+    'castings_notes', 'optimizer_notes', 'color_log_notes'
 ];
 
 let allProjectRows = [];           // From Supabase
@@ -511,7 +512,7 @@ function autoGrowTextarea(el) {
 function applyStatusColor() {
     const sel = document.getElementById('pp-f-status');
     if (!sel) return;
-    const states = ['pp-status-approved', 'pp-status-not-approved', 'pp-status-pending', 'pp-status-on-hold', 'pp-status-closed'];
+    const states = ['pp-status-kicked-off', 'pp-status-releasability', 'pp-status-approved', 'pp-status-in-production', 'pp-status-shipped', 'pp-status-closed-out'];
     sel.classList.remove(...states);
     const cls = `pp-status-${slug(sel.value)}`;
     if (states.includes(cls)) sel.classList.add(cls);
@@ -877,7 +878,7 @@ function suggestNextCastingNumber(castings) {
     return prefix + next;
 }
 
-function handleAddCastingClick() {
+async function handleAddCastingClick() {
     if (!currentProjectNumber) return;
     const list = document.getElementById('pp-castings-list');
     const empty = document.getElementById('pp-castings-empty');
@@ -885,6 +886,48 @@ function handleAddCastingClick() {
 
     // Cancel any existing draft
     list.querySelector('.pp-cast-card[data-draft="true"]')?.remove();
+
+    const addBtn = document.getElementById('pp-cast-add-btn');
+    const suggested = suggestNextCastingNumber(currentCastings);
+
+    // Fast path: when we have a valid auto-suggested number, create the
+    // casting immediately. This avoids a draft state where rapid second
+    // clicks could collide on the same suggested number.
+    if (suggested) {
+        if (currentCastings.some(c => (c.casting_number || '').toLowerCase() === suggested.toLowerCase())) {
+            // Suggestion already taken — fall through to manual draft input.
+        } else {
+            list.hidden = false;
+            empty.hidden = true;
+            if (addBtn) addBtn.disabled = true;
+            try {
+                const created = await createCasting({
+                    project_number: currentProjectNumber,
+                    casting_number: suggested,
+                    description: ''
+                });
+                if (created) {
+                    currentCastings.push(created);
+                    currentCastInvExpanded.add(created.id);
+                }
+                renderCastings();
+                showToast('Casting added.');
+                if (created) {
+                    const newCard = list.querySelector(`.pp-cast-card[data-casting-id="${created.id}"]`);
+                    const descInput = newCard?.querySelector('input[data-field="description"]');
+                    descInput?.focus();
+                }
+            } catch (err) {
+                logger.error('[project-portal] add casting failed:', err);
+                const msg = (err.code === '23505') ? 'That casting # already exists.' : (err.message || 'Add failed');
+                showToast(msg, 'error');
+                if (currentCastings.length === 0) renderCastings();
+            } finally {
+                if (addBtn) addBtn.disabled = false;
+            }
+            return;
+        }
+    }
 
     list.hidden = false;
     empty.hidden = true;
@@ -917,7 +960,6 @@ function handleAddCastingClick() {
     const numInput = card.querySelector('input[data-field="casting_number"]');
     const descInput = card.querySelector('input[data-field="description"]');
 
-    const suggested = suggestNextCastingNumber(currentCastings);
     if (suggested) {
         numInput.value = suggested;
     }

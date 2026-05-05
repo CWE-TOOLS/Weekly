@@ -288,26 +288,30 @@ html, body {
     color: #334155;
     text-transform: capitalize;
 }
+.pp-status-pill.pp-status-kicked-off {
+    background: #dbeafe;
+    color: #1e40af;
+}
+.pp-status-pill.pp-status-releasability {
+    background: #fef3c7;
+    color: #92400e;
+}
 .pp-status-pill.pp-status-approved,
 .pp-status-pill.pp-status-appoved /* tolerate sheet typo */ {
     background: #dcfce7;
     color: #166534;
 }
-.pp-status-pill.pp-status-not-approved {
-    background: #fee2e2;
-    color: #b91c1c;
+.pp-status-pill.pp-status-in-production {
+    background: #ede9fe;
+    color: #5b21b6;
 }
-.pp-status-pill.pp-status-pending {
-    background: #fef3c7;
-    color: #92400e;
+.pp-status-pill.pp-status-shipped {
+    background: #ccfbf1;
+    color: #0f766e;
 }
-.pp-status-pill.pp-status-on-hold {
-    background: #ffedd5;
-    color: #9a3412;
-}
-.pp-status-pill.pp-status-closed {
-    background: #e0e7ff;
-    color: #3730a3;
+.pp-status-pill.pp-status-closed-out {
+    background: #e2e8f0;
+    color: #334155;
 }
 
 /* Source tag */
@@ -459,30 +463,35 @@ html, body {
     transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 .pp-status-select option { background: #ffffff; color: #0f172a; }
+.pp-status-select.pp-status-kicked-off {
+    background: #dbeafe;
+    color: #1e40af;
+    border-color: #93c5fd;
+}
+.pp-status-select.pp-status-releasability {
+    background: #fef3c7;
+    color: #92400e;
+    border-color: #fcd34d;
+}
 .pp-status-select.pp-status-approved {
     background: #dcfce7;
     color: #166534;
     border-color: #86efac;
 }
-.pp-status-select.pp-status-not-approved {
-    background: #fee2e2;
-    color: #b91c1c;
-    border-color: #fca5a5;
+.pp-status-select.pp-status-in-production {
+    background: #ede9fe;
+    color: #5b21b6;
+    border-color: #c4b5fd;
 }
-.pp-status-select.pp-status-pending {
-    background: #fef3c7;
-    color: #92400e;
-    border-color: #fcd34d;
+.pp-status-select.pp-status-shipped {
+    background: #ccfbf1;
+    color: #0f766e;
+    border-color: #5eead4;
 }
-.pp-status-select.pp-status-on-hold {
-    background: #ffedd5;
-    color: #9a3412;
-    border-color: #fdba74;
-}
-.pp-status-select.pp-status-closed {
-    background: #e0e7ff;
-    color: #3730a3;
-    border-color: #a5b4fc;
+.pp-status-select.pp-status-closed-out {
+    background: #e2e8f0;
+    color: #334155;
+    border-color: #cbd5e1;
 }
 .pp-logo-mark {
     font-weight: 700;
@@ -2053,15 +2062,30 @@ body.pp-printing .pp-tab-panel[data-panel="castings"] { display: none !important
 /* ====== Color Log tab ====== */
 .pp-cl-toolbar {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
+    flex-direction: column;
+    align-items: stretch;
     gap: 12px;
     padding: 12px 16px;
     background: var(--surface-container);
     border: 1px solid var(--border-primary);
     border-radius: var(--border-radius-md);
-    margin: 0 16px;
+    width: 8.5in;
+    max-width: calc(100% - 32px);
+    margin: 0 auto;
     flex-wrap: wrap;
+}
+
+.pp-cl-toolbar-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.pp-cl-toolbar .pp-tab-notes {
+    margin-top: 0;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-primary);
 }
 
 .pp-cl-toolbar-left,

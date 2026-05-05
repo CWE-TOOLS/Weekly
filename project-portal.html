@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="src/styles/variables.css">
     <link rel="stylesheet" href="src/styles/base.css">
     <link rel="stylesheet" href="src/styles/buttons.css">
-    <link rel="stylesheet" href="src/styles/project-portal.css?v=20260502-10">
+    <link rel="stylesheet" href="src/styles/project-portal.css?v=20260505-14">
 
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 </head>
@@ -156,11 +156,12 @@
                 <!-- Status badge -->
                 <div class="pp-status-bar">
                     <select id="pp-f-status" name="status" class="pp-status-select">
-                        <option value="Pending">Pending</option>
+                        <option value="Kicked Off">Kicked Off</option>
+                        <option value="Releasability">Releasability</option>
                         <option value="Approved">Approved</option>
-                        <option value="Not Approved">Not Approved</option>
-                        <option value="On Hold">On Hold</option>
-                        <option value="Closed">Closed</option>
+                        <option value="In Production">In Production</option>
+                        <option value="Shipped">Shipped</option>
+                        <option value="Closed Out">Closed Out</option>
                     </select>
                     <label for="pp-f-pm" class="pp-pm-label">PM:</label>
                     <select id="pp-f-pm" name="pm" class="pp-pm-select">
@@ -283,6 +284,11 @@
                                 <p class="pp-muted pp-castings-sub">Manage castings for this project. Casting numbers are unique within the project.</p>
                             </div>
 
+                            <div class="pp-tab-notes" id="pp-castings-notes-wrap">
+                                <label class="pp-tab-notes-label" for="pp-f-castings_notes">Notes</label>
+                                <textarea id="pp-f-castings_notes" class="pp-tab-notes-textarea" placeholder="Notes for this project's castings…"></textarea>
+                            </div>
+
                             <div id="pp-castings-empty" class="pp-castings-empty" hidden>
                                 <p>No castings yet.</p>
                             </div>
@@ -295,11 +301,6 @@
 
                             <div id="pp-castings-needs-save" class="pp-castings-hint" hidden>
                                 Save the project first to start adding castings.
-                            </div>
-
-                            <div class="pp-tab-notes" id="pp-castings-notes-wrap">
-                                <label class="pp-tab-notes-label" for="pp-f-castings_notes">Notes</label>
-                                <textarea id="pp-f-castings_notes" class="pp-tab-notes-textarea" placeholder="Notes for this project's castings…"></textarea>
                             </div>
                         </div>
                     </div>
@@ -342,20 +343,27 @@
                         </div>
 
                         <div class="pp-cl-toolbar" id="pp-cl-toolbar" hidden>
-                            <div class="pp-cl-toolbar-left">
-                                <label for="pp-cl-preset-select" class="pp-cl-toolbar-label">Load Standard Color:</label>
-                                <select id="pp-cl-preset-select" class="pp-cl-preset-select">
-                                    <option value="">— Choose color —</option>
-                                </select>
-                            </div>
-                            <div class="pp-cl-toolbar-right">
-                                <span id="pp-cl-save-status" class="pp-cl-save-status"></span>
-                                <div class="pp-cl-menu" id="pp-cl-menu">
-                                    <button type="button" id="pp-cl-menu-btn" class="pp-cl-menu-btn" aria-haspopup="true" aria-expanded="false" aria-label="More actions" title="More actions">&#x22EF;</button>
-                                    <div class="pp-cl-menu-list" id="pp-cl-menu-list" role="menu" hidden>
-                                        <button type="button" id="pp-cl-save-preset-btn" class="pp-cl-menu-item" role="menuitem">Save as Standard Color</button>
+                            <div class="pp-cl-toolbar-row">
+                                <div class="pp-cl-toolbar-left">
+                                    <label for="pp-cl-preset-select" class="pp-cl-toolbar-label">Load Standard Color:</label>
+                                    <select id="pp-cl-preset-select" class="pp-cl-preset-select">
+                                        <option value="">— Choose color —</option>
+                                    </select>
+                                </div>
+                                <div class="pp-cl-toolbar-right">
+                                    <span id="pp-cl-save-status" class="pp-cl-save-status"></span>
+                                    <div class="pp-cl-menu" id="pp-cl-menu">
+                                        <button type="button" id="pp-cl-menu-btn" class="pp-cl-menu-btn" aria-haspopup="true" aria-expanded="false" aria-label="More actions" title="More actions">&#x22EF;</button>
+                                        <div class="pp-cl-menu-list" id="pp-cl-menu-list" role="menu" hidden>
+                                            <button type="button" id="pp-cl-save-preset-btn" class="pp-cl-menu-item" role="menuitem">Save as Standard Color</button>
+                                        </div>
                                     </div>
                                 </div>
+                            </div>
+
+                            <div class="pp-tab-notes" id="pp-color-log-notes-wrap">
+                                <label class="pp-tab-notes-label" for="pp-f-color_log_notes">Notes</label>
+                                <textarea id="pp-f-color_log_notes" class="pp-tab-notes-textarea" placeholder="Notes for this project's color log…"></textarea>
                             </div>
                         </div>
 
@@ -515,6 +523,11 @@
                                 <p class="pp-muted pp-opt-sub">Designate manhours per task for each casting. Tasks are shared across the project; hours are per casting.</p>
                             </div>
 
+                            <div class="pp-tab-notes" id="pp-optimizer-notes-wrap">
+                                <label class="pp-tab-notes-label" for="pp-f-optimizer_notes">Notes</label>
+                                <textarea id="pp-f-optimizer_notes" class="pp-tab-notes-textarea" placeholder="Notes for hours / optimization…"></textarea>
+                            </div>
+
                             <!-- Empty state: project not saved yet -->
                             <div id="pp-opt-needs-save" class="pp-castings-hint" hidden>
                                 Save the project first to use Optimizer Hours.
@@ -539,11 +552,6 @@
                                     <span class="pp-opt-total-label">Grand Total</span>
                                     <span class="pp-opt-total-value"><strong id="pp-opt-grand-total">0</strong> hrs</span>
                                 </div>
-                            </div>
-
-                            <div class="pp-tab-notes" id="pp-optimizer-notes-wrap">
-                                <label class="pp-tab-notes-label" for="pp-f-optimizer_notes">Notes</label>
-                                <textarea id="pp-f-optimizer_notes" class="pp-tab-notes-textarea" placeholder="Notes for hours / optimization…"></textarea>
                             </div>
                         </div>
                     </div>
@@ -798,6 +806,6 @@
         <div id="pp-toast" class="pp-toast" hidden></div>
     </div>
 
-    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20260504-11"></script>
+    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20260505-15"></script>
 </body>
 </html>

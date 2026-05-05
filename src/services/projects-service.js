@@ -36,6 +36,7 @@ const PROJECT_COLUMNS = [
     'cr_general_notes',
     'castings_notes',
     'optimizer_notes',
+    'color_log_notes',
     'tracking_phases',
     'created_at',
     'updated_at'
@@ -186,7 +187,7 @@ export function createEmptyProject(projectNumber = '') {
     return {
         project_number: projectNumber,
         project_name: '',
-        status: 'Pending',
+        status: 'Kicked Off',
         project_date: '',
         project_address: '',
         estimator: '',
@@ -209,6 +210,7 @@ export function createEmptyProject(projectNumber = '') {
         cr_general_notes: '',
         castings_notes: '',
         optimizer_notes: '',
+        color_log_notes: '',
         tracking_phases: null
     };
 }
