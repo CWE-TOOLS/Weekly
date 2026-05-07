@@ -1625,9 +1625,15 @@ html, body {
     font-family: inherit;
     color: inherit;
 }
-.pp-track-section-print {
+.pp-track-section-print-group {
     flex: 0 0 auto;
     margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.pp-track-section-print {
+    flex: 0 0 auto;
     display: inline-flex;
     align-items: center;
     gap: 5px;
@@ -1649,6 +1655,35 @@ html, body {
     color: #1e40af;
 }
 .pp-track-section-print:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: #f8fafc;
+    border-color: #e2e8f0;
+    color: #94a3b8;
+}
+.pp-track-section-stickers {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    background: #fff7ed;
+    border: 1px solid #fed7aa;
+    border-radius: 6px;
+    color: #c2410c;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.pp-track-section-stickers svg { width: 13px; height: 13px; display: block; }
+.pp-track-section-stickers:hover:not(:disabled) {
+    background: #ffedd5;
+    border-color: #fdba74;
+    color: #9a3412;
+}
+.pp-track-section-stickers:disabled {
     opacity: 0.5;
     cursor: not-allowed;
     background: #f8fafc;

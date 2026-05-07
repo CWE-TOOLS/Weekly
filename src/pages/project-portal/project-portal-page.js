@@ -2163,14 +2163,24 @@ function renderTrackSection(casting) {
                     <span class="pp-track-section-num">${escapeHtml(casting.casting_number || '')}</span>
                     ${desc}
                 </button>
-                <button type="button" class="pp-track-section-print" data-action="print-tracking" data-casting-id="${escapeAttr(casting.id)}" ${count === 0 ? 'disabled' : ''} title="${count === 0 ? 'No components to print' : `Print tracking sheet for Cast ${casting.casting_number || ''}`}">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <polyline points="6 9 6 2 18 2 18 9"/>
-                        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
-                        <rect x="6" y="14" width="12" height="8"/>
-                    </svg>
-                    <span>Tracking</span>
-                </button>
+                <div class="pp-track-section-print-group">
+                    <button type="button" class="pp-track-section-stickers" data-action="print-stickers" data-casting-id="${escapeAttr(casting.id)}" ${count === 0 ? 'disabled' : ''} title="${count === 0 ? 'No panels to label' : `Print panel labels for Cast ${casting.casting_number || ''}`}">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <polyline points="6 9 6 2 18 2 18 9"/>
+                            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+                            <rect x="6" y="14" width="12" height="8"/>
+                        </svg>
+                        <span>Stickers</span>
+                    </button>
+                    <button type="button" class="pp-track-section-print" data-action="print-tracking" data-casting-id="${escapeAttr(casting.id)}" ${count === 0 ? 'disabled' : ''} title="${count === 0 ? 'No components to print' : `Print tracking sheet for Cast ${casting.casting_number || ''}`}">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <polyline points="6 9 6 2 18 2 18 9"/>
+                            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+                            <rect x="6" y="14" width="12" height="8"/>
+                        </svg>
+                        <span>Tracking</span>
+                    </button>
+                </div>
                 <span class="pp-track-section-count">${count} ${count === 1 ? 'component' : 'components'}</span>
             </div>
             ${body}
@@ -3322,6 +3332,12 @@ function wireEvents() {
         if (printBtn) {
             const id = printBtn.dataset.castingId;
             if (id) handlePrintTracking(id);
+            return;
+        }
+        const stickerBtn = e.target.closest('button[data-action="print-stickers"]');
+        if (stickerBtn) {
+            const id = stickerBtn.dataset.castingId;
+            if (id) handlePrintStickers(id);
         }
     });
 
@@ -4159,6 +4175,268 @@ function handlePrintTracking(castingId) {
     }, { once: true });
 
     // Write the HTML into the iframe document.
+    const doc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (!doc) {
+        showToast('Print failed — could not open frame', 'error');
+        iframe.remove();
+        return;
+    }
+    doc.open();
+    doc.write(html);
+    doc.close();
+}
+
+// ---------- Print Panel Stickers ----------
+// 4in x 1in stickers — one title sticker per casting (project + cast# + inventory
+// summary by type + total count) followed by one sticker per panel (panel_id big
+// in the middle, color on the rotated right strip). Print pipeline mirrors
+// handlePrintTracking: hidden iframe + window.print().
+
+const STICKER_PRINT_CSS = `
+@page { size: 4in 0.75in; margin: 0; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', Arial, sans-serif; color: #000; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.sticker {
+    width: 4in;
+    height: 0.75in;
+    overflow: hidden;
+    page-break-after: always;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+.sticker:last-child { page-break-after: auto; }
+.sticker-title-top {
+    font-weight: bold;
+    letter-spacing: 0.05em;
+    text-align: center;
+    width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 11pt;
+    padding: 0.05in;
+    border-bottom: 1px solid #ccc;
+}
+.sticker-top {
+    flex: 0;
+    text-align: left;
+    padding: 0.05in;
+    font-weight: bold;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid #ccc;
+}
+.sticker-content {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+    margin-right: 0.4in;
+}
+.sticker-bottom {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    font-size: 34pt;
+    font-weight: bold;
+    padding-left: 0.05in;
+    padding-bottom: 0.02in;
+    line-height: 1;
+    overflow: hidden;
+    white-space: nowrap;
+}
+.sticker-finish {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    font-size: 12pt;
+    text-align: center;
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 0.4in;
+    padding: 0 0.05in;
+    border-left: 1px solid #ccc;
+    height: 100%;
+    box-sizing: border-box;
+    z-index: 10;
+    overflow: hidden;
+    white-space: nowrap;
+}
+.sticker-inventory {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    font-size: 8pt;
+    padding: 0.05in;
+    flex: 1;
+    line-height: 1;
+    overflow: hidden;
+}
+.sticker-inventory p {
+    margin: 0 0.1in 0 0;
+    white-space: nowrap;
+}
+`;
+
+// Inline auto-shrink: matches the original sticker maker's adjustFontSize so the
+// inventory line fits when there are many types. Runs inside the iframe doc.
+const STICKER_PRINT_AUTOFIT_JS = `
+(function() {
+    document.querySelectorAll('.sticker-inventory').forEach(container => {
+        const items = Array.from(container.querySelectorAll('p'));
+        if (items.length === 0) return;
+        let size = 8;
+        const apply = () => items.forEach(it => it.style.fontSize = size + 'pt');
+        apply();
+        while ((container.scrollHeight > container.clientHeight || container.scrollWidth > container.clientWidth) && size > 4) {
+            size -= 0.5;
+            apply();
+        }
+    });
+    document.querySelectorAll('.sticker-finish').forEach(finish => {
+        let size = 12;
+        finish.style.fontSize = size + 'pt';
+        while ((finish.scrollHeight > finish.clientHeight || finish.scrollWidth > finish.clientWidth) && size > 6) {
+            size -= 0.5;
+            finish.style.fontSize = size + 'pt';
+        }
+    });
+    document.querySelectorAll('.sticker-bottom').forEach(bottom => {
+        let size = 34;
+        bottom.style.fontSize = size + 'pt';
+        while ((bottom.scrollWidth > bottom.clientWidth || bottom.scrollHeight > bottom.clientHeight) && size > 10) {
+            size -= 1;
+            bottom.style.fontSize = size + 'pt';
+        }
+    });
+})();
+`;
+
+function formatStickerCasting(num) {
+    const trimmed = String(num || '').trim();
+    if (trimmed === '') return 'CASTING';
+    const m = trimmed.match(/^(?:cast)?\s*#?\s*(\d+)$/i);
+    if (m) return `Cast#${m[1]}`;
+    return trimmed;
+}
+
+function buildStickerPrintHtml(casting, components, projectName) {
+    const cleanProject = (projectName || '').trim().replace(/\s*\n\s*/g, ' ') || 'PROJECT NAME';
+    const castLabel = formatStickerCasting(casting.casting_number);
+    const headerText = `${cleanProject} : ${castLabel}`;
+
+    // Inventory summary: group by type, count panels per type.
+    // Format mirrors the original sticker maker: "{type} - ({n}pcs)".
+    const counts = new Map();
+    for (const c of components) {
+        const t = (c.type || '').trim() || '?';
+        counts.set(t, (counts.get(t) || 0) + 1);
+    }
+    const inventoryItems = Array.from(counts.entries())
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([t, n]) => `<p>${escapeHtml(t)} - (${n}pcs)</p>`);
+    inventoryItems.push(`<p>(${components.length}) Pieces Total</p>`);
+
+    // Color comes from the project-level Color Log title (one per project).
+    const stickerColor = (currentColorLog?.name || '').trim();
+
+    const titleSticker = `
+        <div class="sticker">
+            <div class="sticker-title-top">${escapeHtml(headerText)}</div>
+            <div class="sticker-content">
+                <div class="sticker-inventory">
+                    ${inventoryItems.join('')}
+                </div>
+            </div>
+            <div class="sticker-finish">${escapeHtml(stickerColor)}</div>
+        </div>
+    `;
+
+    // Reverse panel order so when stickers exit the printer in stack-fed order,
+    // the title sticker ends up on top of the pile.
+    const panelStickers = [...components].reverse().map(c => {
+        const panel = (c.panel_id || '').trim();
+        return `
+            <div class="sticker">
+                <div class="sticker-top">${escapeHtml(headerText)}</div>
+                <div class="sticker-content">
+                    <div class="sticker-bottom">${escapeHtml(panel)}</div>
+                </div>
+                <div class="sticker-finish">${escapeHtml(stickerColor)}</div>
+            </div>
+        `;
+    }).join('');
+
+    return `<!doctype html><html><head><meta charset="utf-8"><title>Stickers — ${escapeHtml(cleanProject)} — ${escapeHtml(castLabel)}</title><style>${STICKER_PRINT_CSS}</style></head><body>
+        ${panelStickers}
+        ${titleSticker}
+        <script>${STICKER_PRINT_AUTOFIT_JS}<\/script>
+    </body></html>`;
+}
+
+async function handlePrintStickers(castingId) {
+    if (!castingId) return;
+    const casting = currentCastings.find(c => c.id === castingId);
+    if (!casting) {
+        showToast('Casting not found', 'error');
+        return;
+    }
+    const components = getComponentsFor(castingId) || [];
+    if (components.length === 0) {
+        showToast('No panels to label', 'error');
+        return;
+    }
+
+    // Sticker color comes from the project's Color Log title. Load it lazily if
+    // the user hasn't visited the Color Log tab yet.
+    if (!currentColorLog && currentProjectNumber) {
+        try {
+            const existing = await loadColorLogForProject(currentProjectNumber);
+            currentColorLog = existing || createEmptyColorLog();
+        } catch (err) {
+            logger.error('[project-portal] color-log load failed for stickers:', err);
+            currentColorLog = createEmptyColorLog();
+        }
+    }
+
+    const projectName = document.getElementById('pp-f-project_name')?.value || '';
+    const html = buildStickerPrintHtml(casting, components, projectName);
+
+    const prior = document.getElementById('pp-track-sticker-frame');
+    if (prior) prior.remove();
+
+    const iframe = document.createElement('iframe');
+    iframe.id = 'pp-track-sticker-frame';
+    iframe.setAttribute('aria-hidden', 'true');
+    iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;';
+    document.body.appendChild(iframe);
+
+    let cleaned = false;
+    const cleanup = () => {
+        if (cleaned) return;
+        cleaned = true;
+        setTimeout(() => { iframe.remove(); }, 500);
+    };
+
+    iframe.addEventListener('load', () => {
+        try {
+            const win = iframe.contentWindow;
+            win.addEventListener('afterprint', cleanup);
+            win.focus();
+            win.print();
+        } catch (err) {
+            logger.error('[project-portal] print stickers failed:', err);
+            showToast('Print failed', 'error');
+            cleanup();
+        }
+        setTimeout(cleanup, 60000);
+    }, { once: true });
+
     const doc = iframe.contentDocument || iframe.contentWindow?.document;
     if (!doc) {
         showToast('Print failed — could not open frame', 'error');
