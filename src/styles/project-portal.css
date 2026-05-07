@@ -784,6 +784,34 @@ html, body {
     background: #fee2e2;
     color: #b91c1c;
 }
+.pp-cast-card .pp-row-btn-icon {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    width: 26px;
+    height: 26px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: background 0.15s, color 0.15s, opacity 0.15s;
+    opacity: 0.6;
+}
+.pp-cast-card .pp-row-btn-icon svg {
+    width: 14px;
+    height: 14px;
+}
+.pp-cast-card:hover .pp-row-btn-icon { opacity: 1; }
+.pp-cast-card .pp-row-btn-icon:hover:not(:disabled) {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+.pp-cast-card .pp-row-btn-icon:disabled {
+    opacity: 0.25;
+    cursor: not-allowed;
+}
 
 /* Sortable.js drag visuals for casting cards */
 .pp-cast-card-ghost {

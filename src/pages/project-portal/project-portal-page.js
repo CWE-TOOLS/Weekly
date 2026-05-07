@@ -144,6 +144,7 @@ let castInvExpandedProject = null;         // tracks which project the expanded-
 let currentCastingInventory = new Map();   // castingId -> Array<inventory row>
 let currentCastingInventoryLoadedFor = null; // project_number we last loaded inventory for
 let inventorySaveTimers = new Map();       // itemId -> debounce handle
+let copiedComponents = null;               // Array<{type,width,length,color,sealer,quantity,extras,cu_ft,ff_sq_ft}> from a copy action
 let currentColorLog = null;                // form-shaped record (id null = unsaved)
 let colorLogPresets = [];                  // cached preset rows
 let colorLogSaveTimer = null;              // debounce timer
@@ -814,6 +815,8 @@ function renderCastingCard(c) {
     const countLabel = items.length === 0
         ? '0 components'
         : `${items.length} ${items.length === 1 ? 'type' : 'types'} · ${totalQty} pcs`;
+    const hasComponentClipboard = Array.isArray(copiedComponents) && copiedComponents.length > 0;
+    const copyDisabled = items.length === 0;
 
     return `
         <div class="pp-cast-card${isOpen ? ' pp-cast-card-open' : ''}" data-casting-id="${escapeAttr(c.id)}">
@@ -837,6 +840,18 @@ function renderCastingCard(c) {
                 </div>
                 <span class="pp-cast-card-count">${countLabel}</span>
                 <div class="pp-cast-card-actions">
+                    <button class="pp-row-btn pp-row-btn-icon" data-action="copy-components" type="button" ${copyDisabled ? 'disabled' : ''} aria-label="Copy components" title="Copy components">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                        </svg>
+                    </button>
+                    <button class="pp-row-btn pp-row-btn-icon" data-action="paste-components" type="button" ${hasComponentClipboard ? '' : 'disabled'} aria-label="Paste components" title="Paste components">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+                            <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+                        </svg>
+                    </button>
                     <button class="pp-row-btn pp-row-btn-delete" data-action="delete" type="button" aria-label="Delete casting" title="Delete casting">&times;</button>
                 </div>
             </div>
@@ -2050,6 +2065,52 @@ async function handlePasteHours(targetCastingId) {
         showToast(`Pasted into Cast ${target?.casting_number || ''}.`);
     } catch (err) {
         logger.error('[project-portal] paste tasks failed:', err);
+        showToast('Paste failed: ' + (err.message || err), 'error');
+    }
+}
+
+function handleCopyComponents(castingId) {
+    const items = getInventoryFor(castingId);
+    if (items.length === 0) return;
+    copiedComponents = items.map(it => ({
+        type: it.type,
+        width: it.width,
+        length: it.length,
+        color: it.color,
+        sealer: it.sealer,
+        quantity: it.quantity,
+        extras: it.extras,
+        cu_ft: it.cu_ft,
+        ff_sq_ft: it.ff_sq_ft
+    }));
+    const casting = currentCastings.find(c => c.id === castingId);
+    const n = copiedComponents.length;
+    showToast(`Copied ${n} component${n === 1 ? '' : 's'} from Cast ${casting?.casting_number || ''}.`);
+    renderCastings();
+}
+
+async function handlePasteComponents(targetCastingId) {
+    if (!Array.isArray(copiedComponents) || copiedComponents.length === 0) return;
+    if (!targetCastingId) return;
+    if (!currentCastInvExpanded.has(targetCastingId)) currentCastInvExpanded.add(targetCastingId);
+    try {
+        const existing = getInventoryFor(targetCastingId);
+        const baseOrder = existing.length > 0
+            ? Math.max(...existing.map(c => c.sort_order || 0)) + 1
+            : 0;
+        const inserted = await Promise.all(copiedComponents.map((src, idx) =>
+            createInventoryItem(targetCastingId, { ...src, sort_order: baseOrder + idx })
+        ));
+        const list = existing.slice();
+        for (const row of inserted) if (row) list.push(row);
+        setInventoryFor(targetCastingId, list);
+        renderCastings();
+        const target = currentCastings.find(c => c.id === targetCastingId);
+        const n = inserted.filter(Boolean).length;
+        showToast(`Pasted ${n} component${n === 1 ? '' : 's'} into Cast ${target?.casting_number || ''}.`);
+        syncTrackingFromInventory();
+    } catch (err) {
+        logger.error('[project-portal] paste components failed:', err);
         showToast('Paste failed: ' + (err.message || err), 'error');
     }
 }
@@ -3812,6 +3873,10 @@ function wireEvents() {
             handleToggleCastInventory(castingId);
         } else if (action === 'add-inventory') {
             handleAddInventoryItem(castingId);
+        } else if (action === 'copy-components') {
+            if (!btn.disabled) handleCopyComponents(castingId);
+        } else if (action === 'paste-components') {
+            if (!btn.disabled) handlePasteComponents(castingId);
         } else if (action === 'delete-inventory') {
             const row = btn.closest('.pp-inv-row[data-inventory-id]');
             const itemId = row?.getAttribute('data-inventory-id');
