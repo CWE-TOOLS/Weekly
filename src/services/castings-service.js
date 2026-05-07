@@ -73,6 +73,9 @@ export async function createCasting(casting) {
         description: casting.description ? casting.description.trim() : null,
         sort_order: sortOrder
     };
+    if (casting.phase_id !== undefined) {
+        payload.phase_id = casting.phase_id || null;
+    }
 
     const { data, error } = await client
         .from(CASTINGS_TABLE)

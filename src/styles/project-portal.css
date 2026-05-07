@@ -355,6 +355,27 @@ html, body {
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+.pp-phase-switcher {
+    margin-left: 4px;
+    padding: 4px 8px;
+    border: 1px solid #1d4ed8;
+    border-radius: 999px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 12px;
+    font-family: inherit;
+    font-weight: 700;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+.pp-phase-switcher:hover {
+    background: #dbeafe;
+}
+.pp-phase-switcher:focus {
+    outline: none;
+    border-color: #1e40af;
+    box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.2);
+}
 .pp-form-actions { display: flex; gap: 10px; flex-shrink: 0; }
 
 /* Form shell: sidebar + content */
@@ -3868,6 +3889,138 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
     margin-top: 4px;
     margin-bottom: 4px;
 }
+
+/* ---------- Phases section (Project Info) ---------- */
+.pp-phases-section .pp-section-title {
+    margin-bottom: 8px;
+}
+.pp-phases-disabled p,
+.pp-phases-enabled .pp-muted {
+    margin: 0 0 8px 0;
+    font-size: 12px;
+}
+.pp-phases-enable-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 16px;
+    border: 1px solid #1d4ed8;
+    border-radius: 6px;
+    background: #1d4ed8;
+    color: #ffffff;
+    font-size: 13px;
+    font-family: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    width: auto;
+}
+.pp-phases-enable-btn:hover { background: #1e40af; border-color: #1e40af; }
+.pp-phases-enable-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.pp-phases-warn-note {
+    margin: 6px 0 0 0;
+    font-size: 11px;
+    color: #b45309;
+    font-style: italic;
+}
+.pp-phases-status {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+.pp-phases-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: #dcfce7;
+    color: #15803d;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+}
+.pp-phases-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+.pp-phases-empty {
+    padding: 14px;
+    text-align: center;
+    color: #64748b;
+    font-size: 12px;
+    border: 1px dashed #cbd5e1;
+    border-radius: 6px;
+    background: #f8fafc;
+}
+.pp-phase-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 6px;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+}
+.pp-phase-grip {
+    color: #94a3b8;
+    cursor: grab;
+    font-size: 12px;
+    user-select: none;
+    line-height: 1;
+}
+.pp-phase-name {
+    flex: 1;
+    padding: 4px 6px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: inherit;
+    color: #0f172a;
+    background: transparent;
+    box-sizing: border-box;
+}
+.pp-phase-name:hover {
+    border-color: #cbd5e1;
+    background: #f8fafc;
+}
+.pp-phase-name:focus {
+    outline: none;
+    border-color: #1d4ed8;
+    background: #ffffff;
+    box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.12);
+}
+.pp-phase-delete {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid #fca5a5;
+    border-radius: 6px;
+    background: #fef2f2;
+    color: #b91c1c;
+    font-size: 16px;
+    line-height: 1;
+    font-weight: 700;
+    cursor: pointer;
+}
+.pp-phase-delete:hover { background: #fee2e2; }
+.pp-phases-add-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 12px;
+    border: 1px solid #1d4ed8;
+    border-radius: 6px;
+    background: #1d4ed8;
+    color: #ffffff;
+    font-size: 12px;
+    font-family: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    width: auto;
+}
+.pp-phases-add-btn:hover { background: #1e40af; border-color: #1e40af; }
+.pp-phases-add-btn svg { width: 14px; height: 14px; }
 
 /* ---------- Shipping tab ---------- */
 .pp-ship-wrap {

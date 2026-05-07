@@ -79,6 +79,7 @@
                 <div class="pp-form-context">
                     <span id="pp-form-context-num"></span>
                     <span id="pp-form-context-name"></span>
+                    <select id="pp-phase-switcher" class="pp-phase-switcher" hidden aria-label="Active phase"></select>
                 </div>
                 <div class="pp-form-actions">
                     <span id="pp-form-save-status" class="pp-cl-save-status" aria-live="polite"></span>
@@ -277,10 +278,32 @@
                     <textarea id="pp-f-imperative_information" name="imperative_information" rows="4"></textarea>
                 </div>
 
-                <!-- Phases (placeholder for future) -->
-                <div class="pp-section pp-full pp-phases-placeholder">
+                <!-- Phases -->
+                <div class="pp-section pp-full pp-phases-section">
                     <h3 class="pp-section-title pp-section-title--full">Phases</h3>
-                    <p class="pp-muted">Phase tracking will be added in a future update.</p>
+
+                    <div id="pp-phases-disabled-state" class="pp-phases-disabled">
+                        <p class="pp-muted">Split this project into phases (e.g. building wings, delivery waves) so castings, tracking, shipping, and optimizer hours each get a per-phase view. Color Log and Cover stay project-wide.</p>
+                        <button type="button" id="pp-phases-enable-btn" class="pp-phases-enable-btn">
+                            Enable Phases
+                        </button>
+                        <p class="pp-phases-warn-note">This is a one-way switch — once enabled, phases stay on for this project.</p>
+                    </div>
+
+                    <div id="pp-phases-enabled-state" class="pp-phases-enabled" hidden>
+                        <div class="pp-phases-status">
+                            <span class="pp-phases-badge">Phases Enabled</span>
+                            <span class="pp-muted">Use the phase tabs at the top of Castings, Tracking, Shipping, Optimizer Hours, and Batch Tickets to switch between phases.</span>
+                        </div>
+                        <div id="pp-phases-list" class="pp-phases-list"></div>
+                        <button type="button" id="pp-phases-add-btn" class="pp-phases-add-btn">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <line x1="12" y1="5" x2="12" y2="19"/>
+                                <line x1="5" y1="12" x2="19" y2="12"/>
+                            </svg>
+                            <span>Add Phase</span>
+                        </button>
+                    </div>
                 </div>
                         </form>
                     </div>

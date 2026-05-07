@@ -85,6 +85,9 @@ export async function createCrate(projectNumber, fields = {}) {
         notes: cleanText(fields.notes),
         sort_order: nextOrder
     };
+    if (fields.phase_id !== undefined) {
+        payload.phase_id = fields.phase_id || null;
+    }
 
     const { data, error } = await client
         .from(CRATES_TABLE)

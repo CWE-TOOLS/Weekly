@@ -47,6 +47,15 @@ import {
     setComponentsCrateBulk
 } from '../../services/shipping-service.js';
 import {
+    loadPhasesForProject,
+    enablePhasesForProject,
+    createPhase,
+    renamePhase,
+    deletePhase,
+    setPhasesOrder,
+    getPhaseUsageCounts
+} from '../../services/phases-service.js';
+import {
     loadAllInventoryForProject,
     createInventoryItem,
     updateInventoryItem,
@@ -119,6 +128,11 @@ let currentCrates = [];                    // project_crates rows for current pr
 let cratesLoadedFor = null;                // project_number we last loaded crates for
 let crateSaveTimers = new Map();           // crateId -> debounce handle (per-field saves)
 let selectedComponentIds = new Set();      // tracking-tab multi-select for bulk crate assign
+let currentPhasesEnabled = false;          // mirrors projects.phases_enabled for the active project
+let currentPhases = [];                    // project_phases rows (ordered) for active project
+let phasesLoadedFor = null;                // project_number we last loaded phases for
+let phaseRenameSaveTimers = new Map();     // phaseId -> debounce handle for rename
+let currentPhaseId = null;                 // active phase for filtering across tabs (null = no phase / phases off)
 // Production phases that can appear as columns on the tracking sheet.
 // Order here is the order they'll print in. Editable per project via the chip bar.
 const TRACKING_PHASES = ['MILL', 'FO', 'CAST', 'DEMOLD', 'FINISH', 'SEAL', 'STRIPS', 'DRILL', 'CRATE', 'FINAL', 'LOAD'];
@@ -214,6 +228,13 @@ async function showFormView(projectNumber, draftOverrides = null) {
     for (const t of crateSaveTimers.values()) clearTimeout(t);
     crateSaveTimers.clear();
 
+    // Invalidate phases cache.
+    phasesLoadedFor = null;
+    currentPhases = [];
+    currentPhasesEnabled = false;
+    for (const t of phaseRenameSaveTimers.values()) clearTimeout(t);
+    phaseRenameSaveTimers.clear();
+
     let project = null;
     let isExisting = false;
     if (projectNumber) {
@@ -227,6 +248,24 @@ async function showFormView(projectNumber, draftOverrides = null) {
         Object.assign(project, draftOverrides);
     }
     populateForm(project);
+
+    currentPhasesEnabled = !!project.phases_enabled;
+    if (isExisting && currentPhasesEnabled) {
+        try {
+            currentPhases = await loadPhasesForProject(project.project_number);
+            phasesLoadedFor = project.project_number;
+        } catch (err) {
+            logger.error('[project-portal] loadPhasesForProject failed:', err);
+            currentPhases = [];
+        }
+    } else {
+        currentPhases = [];
+        phasesLoadedFor = null;
+    }
+    currentPhaseId = null;
+    ensureValidCurrentPhase();
+    renderPhasesSection();
+    renderPhaseSwitcher();
 
     document.getElementById('pp-f-project_number').readOnly = isExisting;
     document.getElementById('pp-delete-btn').hidden = !isExisting;
@@ -728,6 +767,12 @@ function setInventoryFor(castingId, items) {
     currentCastingInventory.set(castingId, items);
 }
 
+function getCastingsForActivePhase() {
+    if (!currentPhasesEnabled) return currentCastings;
+    if (!currentPhaseId) return [];
+    return currentCastings.filter(c => c.phase_id === currentPhaseId);
+}
+
 function renderCastings() {
     const list = document.getElementById('pp-castings-list');
     const empty = document.getElementById('pp-castings-empty');
@@ -746,7 +791,8 @@ function renderCastings() {
         return;
     }
 
-    if (currentCastings.length === 0) {
+    const visible = getCastingsForActivePhase();
+    if (visible.length === 0) {
         list.hidden = true;
         empty.hidden = false;
         list.innerHTML = '';
@@ -755,7 +801,7 @@ function renderCastings() {
 
     list.hidden = false;
     empty.hidden = true;
-    list.innerHTML = currentCastings.map(c => renderCastingCard(c)).join('');
+    list.innerHTML = visible.map(c => renderCastingCard(c)).join('');
 
     ensureCastingsSortable();
     ensureInventorySortables();
@@ -937,13 +983,16 @@ async function handleAddCastingClick() {
     list.querySelector('.pp-cast-card[data-draft="true"]')?.remove();
 
     const addBtn = document.getElementById('pp-cast-add-btn');
-    const suggested = suggestNextCastingNumber(currentCastings);
+    // Suggestion + duplicate-check scope to the active phase when phases are on,
+    // so each phase has its own 1, 2, 3... counter.
+    const phaseScoped = getCastingsForActivePhase();
+    const suggested = suggestNextCastingNumber(phaseScoped);
 
     // Fast path: when we have a valid auto-suggested number, create the
     // casting immediately. This avoids a draft state where rapid second
     // clicks could collide on the same suggested number.
     if (suggested) {
-        if (currentCastings.some(c => (c.casting_number || '').toLowerCase() === suggested.toLowerCase())) {
+        if (phaseScoped.some(c => (c.casting_number || '').toLowerCase() === suggested.toLowerCase())) {
             // Suggestion already taken — fall through to manual draft input.
         } else {
             list.hidden = false;
@@ -953,7 +1002,8 @@ async function handleAddCastingClick() {
                 const created = await createCasting({
                     project_number: currentProjectNumber,
                     casting_number: suggested,
-                    description: ''
+                    description: '',
+                    phase_id: currentPhasesEnabled ? currentPhaseId : null
                 });
                 if (created) {
                     currentCastings.push(created);
@@ -1026,8 +1076,8 @@ async function handleAddCastingClick() {
             if (currentCastings.length === 0) renderCastings();
             return;
         }
-        if (currentCastings.some(c => (c.casting_number || '').toLowerCase() === num.toLowerCase())) {
-            showToast('That casting # already exists for this project.', 'error');
+        if (getCastingsForActivePhase().some(c => (c.casting_number || '').toLowerCase() === num.toLowerCase())) {
+            showToast(currentPhasesEnabled ? 'That casting # already exists in this phase.' : 'That casting # already exists for this project.', 'error');
             numInput.focus();
             return;
         }
@@ -1035,7 +1085,8 @@ async function handleAddCastingClick() {
             const created = await createCasting({
                 project_number: currentProjectNumber,
                 casting_number: num,
-                description: desc
+                description: desc,
+                phase_id: currentPhasesEnabled ? currentPhaseId : null
             });
             if (created) {
                 currentCastings.push(created);
@@ -1538,7 +1589,8 @@ async function activateOptimizerTab() {
         try { currentCastings = await loadCastings(currentProjectNumber); } catch (e) { /* ignore */ }
     }
 
-    if (currentCastings.length === 0) {
+    const phaseScoped = getCastingsForActivePhase();
+    if (phaseScoped.length === 0) {
         noCastings.hidden = false;
         editor.hidden = true;
         return;
@@ -1546,8 +1598,8 @@ async function activateOptimizerTab() {
     noCastings.hidden = true;
     editor.hidden = false;
 
-    if (!currentOptCastingId || !currentCastings.find(c => c.id === currentOptCastingId)) {
-        currentOptCastingId = currentCastings[0].id;
+    if (!currentOptCastingId || !phaseScoped.find(c => c.id === currentOptCastingId)) {
+        currentOptCastingId = phaseScoped[0].id;
     }
     await loadAllPhasesForProject();
     renderOptimizer();
@@ -1599,23 +1651,25 @@ function renderOptimizer() {
 }
 
 function getVisibleCastings() {
-    const total = currentCastings.length;
+    const list = getCastingsForActivePhase();
+    const total = list.length;
     if (total === 0) return [];
-    const activeIdx = currentCastings.findIndex(c => c.id === currentOptCastingId);
-    if (total <= 3) return currentCastings.slice();
-    if (activeIdx <= 0) return currentCastings.slice(0, 3);
-    if (activeIdx >= total - 1) return currentCastings.slice(total - 3);
-    return currentCastings.slice(activeIdx - 1, activeIdx + 2);
+    const activeIdx = list.findIndex(c => c.id === currentOptCastingId);
+    if (total <= 3) return list.slice();
+    if (activeIdx <= 0) return list.slice(0, 3);
+    if (activeIdx >= total - 1) return list.slice(total - 3);
+    return list.slice(activeIdx - 1, activeIdx + 2);
 }
 
 function renderOptPills() {
     const wrap = document.getElementById('pp-opt-pills');
     if (!wrap) return;
 
-    const total = currentCastings.length;
+    const list = getCastingsForActivePhase();
+    const total = list.length;
     if (total === 0) { wrap.innerHTML = ''; return; }
 
-    const activeIdx = currentCastings.findIndex(c => c.id === currentOptCastingId);
+    const activeIdx = list.findIndex(c => c.id === currentOptCastingId);
     const visible = getVisibleCastings();
     const canPrev = activeIdx > 0;
     const canNext = activeIdx >= 0 && activeIdx < total - 1;
@@ -2135,10 +2189,18 @@ async function handleTrackingCrateSelect(componentId, crateNumber) {
         return;
     }
 
-    let crate = currentCrates.find(c => String(c.crate_number || '') === num);
+    // Within a phased project, crate # is unique per phase — look up only
+    // crates in the active phase, and create new ones tagged to it.
+    const phaseScopedCrates = currentPhasesEnabled
+        ? currentCrates.filter(c => c.phase_id === currentPhaseId)
+        : currentCrates;
+    let crate = phaseScopedCrates.find(c => String(c.crate_number || '') === num);
     if (!crate) {
         try {
-            crate = await createCrate(currentProjectNumber, { crate_number: num });
+            crate = await createCrate(currentProjectNumber, {
+                crate_number: num,
+                phase_id: currentPhasesEnabled ? currentPhaseId : null
+            });
             if (crate) currentCrates.push(crate);
         } catch (err) {
             logger.error('[project-portal] createCrate failed:', err);
@@ -2220,7 +2282,7 @@ function renderTracking() {
     const list = document.getElementById('pp-track-list');
     if (!list) return;
     pruneSelectedComponentIds();
-    list.innerHTML = currentCastings.map(c => renderTrackSection(c)).join('');
+    list.innerHTML = getCastingsForActivePhase().map(c => renderTrackSection(c)).join('');
     // <input> doesn't have an :indeterminate attribute, so set it via JS.
     list.querySelectorAll('.pp-track-select-all[data-indeterminate="true"]').forEach(cb => {
         cb.indeterminate = true;
@@ -2283,10 +2345,16 @@ async function applyBulkCrate(value) {
 
     let crateId = null;
     if (value && value !== '__clear__') {
-        let crate = currentCrates.find(c => String(c.crate_number || '') === value);
+        const phaseScopedCrates = currentPhasesEnabled
+            ? currentCrates.filter(c => c.phase_id === currentPhaseId)
+            : currentCrates;
+        let crate = phaseScopedCrates.find(c => String(c.crate_number || '') === value);
         if (!crate) {
             try {
-                crate = await createCrate(currentProjectNumber, { crate_number: value });
+                crate = await createCrate(currentProjectNumber, {
+                    crate_number: value,
+                    phase_id: currentPhasesEnabled ? currentPhaseId : null
+                });
                 if (crate) currentCrates.push(crate);
             } catch (err) {
                 logger.error('[project-portal] bulk createCrate failed:', err);
@@ -3453,11 +3521,12 @@ function wireEvents() {
         if (navBtn) {
             if (navBtn.disabled) return;
             const action = navBtn.dataset.action;
-            const idx = currentCastings.findIndex(c => c.id === currentOptCastingId);
+            const list = getCastingsForActivePhase();
+            const idx = list.findIndex(c => c.id === currentOptCastingId);
             if (idx === -1) return;
             const newIdx = action === 'prev' ? idx - 1 : idx + 1;
-            if (newIdx < 0 || newIdx >= currentCastings.length) return;
-            handleSelectOptCasting(currentCastings[newIdx].id);
+            if (newIdx < 0 || newIdx >= list.length) return;
+            handleSelectOptCasting(list[newIdx].id);
             return;
         }
         const pillBtn = e.target.closest('button[data-casting-id]');
@@ -3611,6 +3680,32 @@ function wireEvents() {
     document.querySelector('[data-action="goto-castings-from-tracking"]')?.addEventListener('click', () => {
         setActiveTab('castings');
         if (currentProjectNumber) loadAndRenderCastings();
+    });
+
+    // Global phase switcher in the title bar
+    document.getElementById('pp-phase-switcher')?.addEventListener('change', (e) => {
+        handlePhaseSwitch(e.target.value);
+    });
+
+    // Project Info: Phases enable button + add button + list interactions.
+    document.getElementById('pp-phases-enable-btn')?.addEventListener('click', handleEnablePhases);
+    document.getElementById('pp-phases-add-btn')?.addEventListener('click', handleAddProjectPhase);
+    const phasesList = document.getElementById('pp-phases-list');
+    phasesList?.addEventListener('click', (e) => {
+        const delBtn = e.target.closest('button[data-action="phase-delete"]');
+        if (delBtn) {
+            const id = delBtn.dataset.phaseId;
+            if (id) handleDeleteProjectPhase(id);
+        }
+    });
+    phasesList?.addEventListener('input', (e) => {
+        const input = e.target.closest('input[data-action="phase-rename"]');
+        if (!input) return;
+        const row = input.closest('.pp-phase-row[data-phase-id]');
+        if (!row) return;
+        scheduleProjectPhaseRename(row.dataset.phaseId, input.value);
+        const phase = currentPhases.find(p => p.id === row.dataset.phaseId);
+        if (phase) phase.phase_name = input.value;
     });
 
     // Shipping: per-crate event delegation (clicks)
@@ -3824,8 +3919,9 @@ async function activateBatchTicketsTab() {
     }
     if (needsCL) needsCL.hidden = true;
 
-    // No castings → tell them to add one.
-    if (!currentCastings || currentCastings.length === 0) {
+    // No castings (in the active phase, when phases on) → tell them to add one.
+    const phaseScoped = getCastingsForActivePhase();
+    if (!phaseScoped || phaseScoped.length === 0) {
         if (noCastings) noCastings.hidden = false;
         if (pills) pills.innerHTML = '';
         content.innerHTML = '';
@@ -3849,9 +3945,9 @@ async function activateBatchTicketsTab() {
         }
     }
 
-    // Default active casting: the first one if not already chosen, or fall back if the previous active is gone.
-    if (!currentBatchCastingId || !currentCastings.some(c => c.id === currentBatchCastingId)) {
-        currentBatchCastingId = currentCastings[0]?.id || null;
+    // Default active casting: first in active phase if not chosen or fell out of scope.
+    if (!currentBatchCastingId || !phaseScoped.some(c => c.id === currentBatchCastingId)) {
+        currentBatchCastingId = phaseScoped[0]?.id || null;
     }
 
     renderBatchTickets();
@@ -3865,8 +3961,9 @@ function renderBatchTickets() {
 function renderBatchTicketsPills() {
     const pills = document.getElementById('pp-bt-pills');
     if (!pills) return;
-    if (!currentCastings.length) { pills.innerHTML = ''; return; }
-    pills.innerHTML = currentCastings.map(c => {
+    const list = getCastingsForActivePhase();
+    if (!list.length) { pills.innerHTML = ''; return; }
+    pills.innerHTML = list.map(c => {
         const active = c.id === currentBatchCastingId ? ' pp-bt-pill-active' : '';
         const date = c.casting_date ? `<span class="pp-bt-pill-date">${escapeHtml(c.casting_date)}</span>` : '';
         return `<button type="button" class="pp-bt-pill${active}" data-bt-pill data-casting-id="${escapeAttr(c.id)}">${escapeHtml(c.casting_number || '')}${date}</button>`;
@@ -4323,10 +4420,11 @@ function openTrackPrintModal() {
     const list = document.getElementById('pp-track-print-modal-list');
     if (!modal || !list) return;
 
-    if (!currentCastings || currentCastings.length === 0) {
+    const phaseScoped = getCastingsForActivePhase();
+    if (!phaseScoped || phaseScoped.length === 0) {
         list.innerHTML = `<div class="pp-track-print-empty">No castings to print. Add a casting first.</div>`;
     } else {
-        list.innerHTML = currentCastings.map(c => {
+        list.innerHTML = phaseScoped.map(c => {
             const components = getComponentsFor(c.id);
             const count = components.length;
             const num = c.casting_number || '(no #)';
@@ -4348,6 +4446,217 @@ function openTrackPrintModal() {
 function closeTrackPrintModal() {
     const modal = document.getElementById('pp-track-print-modal');
     if (modal) modal.hidden = true;
+}
+
+// ---------- Phases (project-level toggle + editor on Info tab) ----------
+
+function renderPhaseSwitcher() {
+    const sel = document.getElementById('pp-phase-switcher');
+    if (!sel) return;
+    if (!currentPhasesEnabled || currentPhases.length === 0) {
+        sel.hidden = true;
+        sel.innerHTML = '';
+        return;
+    }
+    sel.innerHTML = currentPhases.map(p =>
+        `<option value="${escapeAttr(p.id)}"${p.id === currentPhaseId ? ' selected' : ''}>${escapeHtml(p.phase_name || '')}</option>`
+    ).join('');
+    sel.hidden = false;
+}
+
+function ensureValidCurrentPhase() {
+    // After phases reload or change, make sure currentPhaseId points at a real phase.
+    if (!currentPhasesEnabled) {
+        currentPhaseId = null;
+        return;
+    }
+    if (currentPhases.length === 0) {
+        currentPhaseId = null;
+        return;
+    }
+    if (!currentPhaseId || !currentPhases.some(p => p.id === currentPhaseId)) {
+        currentPhaseId = currentPhases[0].id;
+    }
+}
+
+function handlePhaseSwitch(phaseId) {
+    if (!phaseId || phaseId === currentPhaseId) return;
+    currentPhaseId = phaseId;
+    // Re-render the active phase-scoped tab so it reflects the new phase.
+    if (currentTab === 'castings') {
+        renderCastings();
+    } else if (currentTab === 'tracking') {
+        // Active tracking selection may now be on a casting from another phase.
+        selectedComponentIds.clear();
+        renderTracking();
+    } else if (currentTab === 'shipping') {
+        renderShipping();
+    } else if (currentTab === 'optimizer') {
+        // Reset active casting if it's no longer in this phase.
+        const phaseScoped = getCastingsForActivePhase();
+        if (!currentOptCastingId || !phaseScoped.some(c => c.id === currentOptCastingId)) {
+            currentOptCastingId = phaseScoped[0]?.id || null;
+        }
+        renderOptimizer();
+    } else if (currentTab === 'batch-tickets') {
+        const phaseScoped = getCastingsForActivePhase();
+        if (!currentBatchCastingId || !phaseScoped.some(c => c.id === currentBatchCastingId)) {
+            currentBatchCastingId = phaseScoped[0]?.id || null;
+        }
+        renderBatchTickets();
+    }
+}
+
+function renderPhasesSection() {
+    const disabledState = document.getElementById('pp-phases-disabled-state');
+    const enabledState = document.getElementById('pp-phases-enabled-state');
+    const enableBtn = document.getElementById('pp-phases-enable-btn');
+    if (!disabledState || !enabledState) return;
+
+    if (!currentProjectNumber) {
+        // List view / unsaved project — hide both sub-states.
+        disabledState.hidden = true;
+        enabledState.hidden = true;
+        return;
+    }
+
+    if (!currentPhasesEnabled) {
+        disabledState.hidden = false;
+        enabledState.hidden = true;
+        if (enableBtn) enableBtn.disabled = false;
+        return;
+    }
+
+    disabledState.hidden = true;
+    enabledState.hidden = false;
+
+    const list = document.getElementById('pp-phases-list');
+    if (!list) return;
+    list.innerHTML = currentPhases.length === 0
+        ? `<div class="pp-phases-empty">No phases. Click <strong>Add Phase</strong> below.</div>`
+        : currentPhases.map(p => renderPhaseRow(p)).join('');
+}
+
+function renderPhaseRow(phase) {
+    return `
+        <div class="pp-phase-row" data-phase-id="${escapeAttr(phase.id)}">
+            <span class="pp-phase-grip" aria-hidden="true">⋮⋮</span>
+            <input type="text" class="pp-phase-name" data-action="phase-rename" value="${escapeAttr(phase.phase_name || '')}" />
+            <button type="button" class="pp-phase-delete" data-action="phase-delete" data-phase-id="${escapeAttr(phase.id)}" title="Delete phase">×</button>
+        </div>
+    `;
+}
+
+async function handleEnablePhases() {
+    if (!currentProjectNumber) {
+        showToast('Save the project first.', 'error');
+        return;
+    }
+    const enableBtn = document.getElementById('pp-phases-enable-btn');
+    const ok = window.confirm(
+        'Enable phases for this project?\n\n' +
+        'All existing castings and crates will be moved into "Phase 1". ' +
+        'Once enabled, phases stay on for this project — this can\'t be undone.'
+    );
+    if (!ok) return;
+    if (enableBtn) enableBtn.disabled = true;
+    try {
+        const result = await enablePhasesForProject(currentProjectNumber);
+        currentPhasesEnabled = !!result.enabled;
+        currentPhases = result.phases || [];
+        phasesLoadedFor = currentProjectNumber;
+        ensureValidCurrentPhase();
+        // Tag every loaded casting/crate locally so the in-memory state matches
+        // what enablePhasesForProject just wrote to the DB. Avoids a reload.
+        const phaseId = currentPhases[0]?.id || null;
+        if (phaseId) {
+            for (const c of currentCastings) if (!c.phase_id) c.phase_id = phaseId;
+            for (const c of currentCrates) if (!c.phase_id) c.phase_id = phaseId;
+        }
+        renderPhasesSection();
+        renderPhaseSwitcher();
+        showToast('Phases enabled — Phase 1 created.', 'success');
+    } catch (err) {
+        logger.error('[project-portal] enablePhasesForProject failed:', err);
+        showToast('Failed to enable phases. See console.', 'error');
+        if (enableBtn) enableBtn.disabled = false;
+    }
+}
+
+async function handleAddProjectPhase() {
+    if (!currentProjectNumber || !currentPhasesEnabled) return;
+    try {
+        const newPhase = await createPhase(currentProjectNumber, {});
+        if (newPhase) {
+            currentPhases.push(newPhase);
+            renderPhasesSection();
+            renderPhaseSwitcher();
+        }
+    } catch (err) {
+        logger.error('[project-portal] createPhase failed:', err);
+        showToast('Failed to add phase.', 'error');
+    }
+}
+
+function scheduleProjectPhaseRename(phaseId, name) {
+    if (!phaseId) return;
+    if (phaseRenameSaveTimers.has(phaseId)) clearTimeout(phaseRenameSaveTimers.get(phaseId));
+    const handle = setTimeout(async () => {
+        phaseRenameSaveTimers.delete(phaseId);
+        try {
+            const trimmed = (name || '').trim();
+            if (!trimmed) return;
+            const updated = await renamePhase(phaseId, trimmed);
+            if (updated) {
+                const idx = currentPhases.findIndex(p => p.id === phaseId);
+                if (idx >= 0) currentPhases[idx] = { ...currentPhases[idx], ...updated };
+            }
+        } catch (err) {
+            logger.error('[project-portal] renamePhase failed:', err);
+        }
+    }, 350);
+    phaseRenameSaveTimers.set(phaseId, handle);
+}
+
+async function handleDeleteProjectPhase(phaseId) {
+    if (!phaseId) return;
+    const phase = currentPhases.find(p => p.id === phaseId);
+    if (!phase) return;
+
+    let usage;
+    try {
+        usage = await getPhaseUsageCounts(phaseId);
+    } catch (err) {
+        logger.error('[project-portal] getPhaseUsageCounts failed:', err);
+        showToast('Could not check phase contents.', 'error');
+        return;
+    }
+    const totalRefs = (usage.castings || 0) + (usage.crates || 0);
+    if (totalRefs > 0) {
+        const parts = [];
+        if (usage.castings) parts.push(`${usage.castings} ${usage.castings === 1 ? 'casting' : 'castings'}`);
+        if (usage.crates) parts.push(`${usage.crates} ${usage.crates === 1 ? 'crate' : 'crates'}`);
+        showToast(`Cannot delete "${phase.phase_name}" — it still has ${parts.join(' and ')}. Move them to another phase first.`, 'error');
+        return;
+    }
+    if (currentPhases.length <= 1) {
+        showToast('Cannot delete the last phase.', 'error');
+        return;
+    }
+    if (!window.confirm(`Delete "${phase.phase_name}"?`)) return;
+    try {
+        await deletePhase(phaseId);
+        currentPhases = currentPhases.filter(p => p.id !== phaseId);
+        if (currentPhaseId === phaseId) {
+            currentPhaseId = null;
+            ensureValidCurrentPhase();
+        }
+        renderPhasesSection();
+        renderPhaseSwitcher();
+    } catch (err) {
+        logger.error('[project-portal] deletePhase failed:', err);
+        showToast('Failed to delete phase.', 'error');
+    }
 }
 
 // ---------- Shipping (crate-based packing lists) ----------
@@ -4375,19 +4684,27 @@ async function activateShippingTab() {
     renderShipping();
 }
 
+function getCratesForActivePhase() {
+    if (!currentPhasesEnabled) return currentCrates;
+    if (!currentPhaseId) return [];
+    return currentCrates.filter(c => c.phase_id === currentPhaseId);
+}
+
 function renderShipping() {
     const list = document.getElementById('pp-ship-list');
     if (!list) return;
 
-    if (currentCrates.length === 0) {
+    const visibleCrates = getCratesForActivePhase();
+    if (visibleCrates.length === 0) {
         list.innerHTML = `<div class="pp-ship-empty">No crates yet. Pick a crate # on the <strong>Tracking</strong> tab to start a packing list.</div>`;
         return;
     }
 
-    // Build a map crateId -> ordered components (across all castings).
+    // Build a map crateId -> ordered components (across all visible castings).
+    const visibleCastings = getCastingsForActivePhase();
     const membersByCrate = new Map();
-    for (const crate of currentCrates) membersByCrate.set(crate.id, []);
-    for (const casting of currentCastings) {
+    for (const crate of visibleCrates) membersByCrate.set(crate.id, []);
+    for (const casting of visibleCastings) {
         const comps = getComponentsFor(casting.id);
         for (const comp of comps) {
             if (comp.crate_id && membersByCrate.has(comp.crate_id)) {
@@ -4396,7 +4713,7 @@ function renderShipping() {
         }
     }
 
-    list.innerHTML = currentCrates.map(crate => renderCrateCard(crate, membersByCrate.get(crate.id) || [])).join('');
+    list.innerHTML = visibleCrates.map(crate => renderCrateCard(crate, membersByCrate.get(crate.id) || [])).join('');
 }
 
 function renderCrateCard(crate, members) {
@@ -4552,9 +4869,13 @@ function buildTrackPrintHtml(casting, components, projectNumber, projectName) {
             `;
         }).join('');
 
-    // Single-line header: "Project 12345 Smith Residence | Cast 2 kitchen counter"
+    // Single-line header: "Project 12345 Smith Residence | Phase 2 · Cast 2 kitchen counter"
+    const phaseName = currentPhasesEnabled
+        ? (currentPhases.find(p => p.id === casting.phase_id)?.phase_name || '')
+        : '';
     const projectLabel = [projectNumber, projectName].filter(Boolean).map(s => escapeHtml(s)).join(' ');
-    const castLabel = ['Cast', num, desc].filter(Boolean).map(s => escapeHtml(s)).join(' ');
+    const castParts = ['Cast', num, desc].filter(Boolean).map(s => escapeHtml(s)).join(' ');
+    const castLabel = phaseName ? `${escapeHtml(phaseName)} · ${castParts}` : castParts;
     const headerLine = [projectLabel, castLabel].filter(Boolean).join('<span class="tp-sep">|</span>');
 
     return `<!doctype html><html><head><meta charset="utf-8"><title>Tracking — ${escapeHtml(projectNumber)} — Cast ${escapeHtml(num)}</title><style>${TRACK_PRINT_CSS}</style></head><body>
@@ -4774,7 +5095,12 @@ function formatStickerCasting(num) {
 function buildStickerPrintHtml(casting, components, projectName) {
     const cleanProject = (projectName || '').trim().replace(/\s*\n\s*/g, ' ') || 'PROJECT NAME';
     const castLabel = formatStickerCasting(casting.casting_number);
-    const headerText = `${cleanProject} : ${castLabel}`;
+    const phaseName = currentPhasesEnabled
+        ? (currentPhases.find(p => p.id === casting.phase_id)?.phase_name || '')
+        : '';
+    const headerText = phaseName
+        ? `${cleanProject} : ${phaseName} · ${castLabel}`
+        : `${cleanProject} : ${castLabel}`;
 
     // Inventory summary: group by type, count panels per type.
     // Format mirrors the original sticker maker: "{type} - ({n}pcs)".
@@ -5164,6 +5490,9 @@ function buildPackingListHtml(crate, members, project) {
     const proj = project || {};
     const colorTitle = (currentColorLog?.name || '').trim();
     const memberCount = members.length;
+    const phaseName = currentPhasesEnabled
+        ? (currentPhases.find(p => p.id === crate.phase_id)?.phase_name || '')
+        : '';
 
     const rows = members.length === 0
         ? `<tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:8pt;">No panels assigned to this crate.</td></tr>`
@@ -5189,6 +5518,7 @@ function buildPackingListHtml(crate, members, project) {
         <div class="pk-meta">
             <div class="pk-meta-row"><span class="pk-label">Project #:</span><span class="pk-value">${escapeHtml(proj.project_number || '')}</span></div>
             <div class="pk-meta-row"><span class="pk-label">Project Name:</span><span class="pk-value">${escapeHtml(proj.project_name || '')}</span></div>
+            ${phaseName ? `<div class="pk-meta-row"><span class="pk-label">Phase:</span><span class="pk-value">${escapeHtml(phaseName)}</span></div>` : ''}
             <div class="pk-meta-row"><span class="pk-label">Color:</span><span class="pk-value">${escapeHtml(colorTitle || '')}</span></div>
             <div class="pk-meta-row"><span class="pk-label">Panel Count:</span><span class="pk-value">${memberCount}</span></div>
             <div class="pk-meta-row"><span class="pk-label">Weight:</span><span class="pk-value">${escapeHtml(crate.weight || '')}</span></div>
@@ -5324,10 +5654,11 @@ function openOptPrintModal() {
     const list = document.getElementById('pp-opt-print-modal-list');
     if (!modal || !list) return;
 
-    if (!currentCastings || currentCastings.length === 0) {
+    const phaseScoped = getCastingsForActivePhase();
+    if (!phaseScoped || phaseScoped.length === 0) {
         list.innerHTML = `<div class="pp-track-print-empty">No castings to print. Add a casting first.</div>`;
     } else {
-        list.innerHTML = currentCastings.map(c => {
+        list.innerHTML = phaseScoped.map(c => {
             const phases = getPhasesFor(c.id);
             const total = phases.reduce((s, p) => s + (typeof p.hours === 'number' ? p.hours : 0), 0);
             const num = c.casting_number || '(no #)';
@@ -5388,7 +5719,11 @@ table.op-table tbody tr:nth-child(even) td { background: #f8fafc; }
 function buildOptPrintPage(casting, phases, projectNumber, projectName) {
     const num = casting.casting_number || '';
     const castDesc = casting.description || '';
+    const phaseName = currentPhasesEnabled
+        ? (currentPhases.find(p => p.id === casting.phase_id)?.phase_name || '')
+        : '';
     const projectLabel = [projectNumber, projectName].filter(Boolean).map(s => escapeHtml(s)).join(' — ');
+    const castLabel = phaseName ? `${escapeHtml(phaseName)} &middot; Cast ${escapeHtml(num)}` : `Cast ${escapeHtml(num)}`;
 
     const total = phases.reduce((s, p) => s + (typeof p.hours === 'number' ? p.hours : 0), 0);
 
@@ -5420,7 +5755,7 @@ function buildOptPrintPage(casting, phases, projectNumber, projectName) {
         <section class="op-page">
             <header class="op-header">
                 <div class="op-project">${projectLabel}</div>
-                <div class="op-cast">Cast ${escapeHtml(num)}</div>
+                <div class="op-cast">${castLabel}</div>
                 ${castDesc ? `<div class="op-cast-desc">${escapeHtml(castDesc)}</div>` : ''}
             </header>
             <div class="op-section-title">Optimizer Hours</div>
