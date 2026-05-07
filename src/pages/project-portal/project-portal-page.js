@@ -5121,7 +5121,16 @@ function handlePrintCoverPage() {
 // ---------- Print Packing List (per crate) ----------
 
 const PACKING_PRINT_CSS = `
-@page { size: letter portrait; margin: 0.5in; }
+@page {
+    size: letter portrait;
+    margin: 0.5in;
+    @bottom-right {
+        content: "Page " counter(page) " of " counter(pages);
+        font-family: 'Segoe UI', Arial, sans-serif;
+        font-size: 9pt;
+        color: #475569;
+    }
+}
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: 'Segoe UI', Arial, sans-serif; color: #000; font-size: 10pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; line-height: 1.35; }
 .pk-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12pt; padding-bottom: 6pt; border-bottom: 2pt solid #000; }
