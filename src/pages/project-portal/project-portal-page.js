@@ -128,6 +128,7 @@ let currentCrates = [];                    // project_crates rows for current pr
 let cratesLoadedFor = null;                // project_number we last loaded crates for
 let crateSaveTimers = new Map();           // crateId -> debounce handle (per-field saves)
 let selectedComponentIds = new Set();      // tracking-tab multi-select for bulk crate assign
+let lastTrackSelectionAnchor = null;       // last component_id single-clicked in Tracking (for shift-click range select)
 let currentPhasesEnabled = false;          // mirrors projects.phases_enabled for the active project
 let currentPhases = [];                    // project_phases rows (ordered) for active project
 let phasesLoadedFor = null;                // project_number we last loaded phases for
@@ -370,6 +371,7 @@ function setActiveTab(tab) {
         const bar = document.getElementById('pp-track-bulk-bar');
         if (bar) bar.hidden = true;
     }
+    if (currentTab === 'tracking' && tab !== 'tracking') lastTrackSelectionAnchor = null;
     currentTab = tab;
     document.querySelectorAll('.pp-tab-btn').forEach(btn => {
         btn.classList.toggle('pp-tab-active', btn.dataset.tab === tab);
@@ -2244,6 +2246,11 @@ function getComponentCount(crateId) {
 // fly so it shows up on the Shipping tab automatically.
 async function handleTrackingCrateSelect(componentId, crateNumber) {
     if (!componentId) return;
+    // If the row is part of a multi-row selection, treat it as a bulk assign for every selected row.
+    if (selectedComponentIds.has(componentId) && selectedComponentIds.size > 1) {
+        await applyBulkCrate(crateNumber || '');
+        return;
+    }
     const num = (crateNumber || '').trim();
     if (!num) {
         await assignComponentToCrate(componentId, null);
@@ -3680,7 +3687,50 @@ function wireEvents() {
 
     // Tracking: accordion list (delegation)
     const trackList = document.getElementById('pp-track-list');
+    // Suppress browser text-selection on shift+click of a card (selection happens at mousedown,
+    // not click, so we have to intercept it here).
+    trackList?.addEventListener('mousedown', (e) => {
+        if (!e.shiftKey) return;
+        const card = e.target.closest('.pp-track-card[data-component-id]');
+        if (!card) return;
+        if (e.target.closest('select') || e.target.closest('input[type="text"]')) return;
+        e.preventDefault();
+    });
     trackList?.addEventListener('click', (e) => {
+        // Click anywhere on a panel card to toggle selection (skip the crate select).
+        const card = e.target.closest('.pp-track-card[data-component-id]');
+        if (card && !e.target.closest('select')) {
+            const componentId = card.dataset.componentId;
+            if (!componentId) return;
+            // Suppress native checkbox toggle / text selection / dropdown bubbling — we drive everything from selectedComponentIds.
+            e.preventDefault();
+            // Clear any lingering text selection from prior interactions.
+            const sel = window.getSelection?.();
+            if (sel && sel.rangeCount > 0) sel.removeAllRanges();
+
+            if (e.shiftKey && lastTrackSelectionAnchor && lastTrackSelectionAnchor !== componentId) {
+                const cards = trackList.querySelectorAll('.pp-track-card[data-component-id]');
+                const orderedIds = Array.from(cards).map(c => c.getAttribute('data-component-id'));
+                const anchorIdx = orderedIds.indexOf(lastTrackSelectionAnchor);
+                const targetIdx = orderedIds.indexOf(componentId);
+                if (anchorIdx >= 0 && targetIdx >= 0) {
+                    const [start, end] = anchorIdx <= targetIdx ? [anchorIdx, targetIdx] : [targetIdx, anchorIdx];
+                    // Shift-click is purely additive — selects every row in the range.
+                    for (let i = start; i <= end; i++) selectedComponentIds.add(orderedIds[i]);
+                    lastTrackSelectionAnchor = componentId;
+                    renderTracking();
+                    return;
+                }
+            }
+
+            // Plain click: toggle this row's selection and set it as the new anchor.
+            if (selectedComponentIds.has(componentId)) selectedComponentIds.delete(componentId);
+            else selectedComponentIds.add(componentId);
+            lastTrackSelectionAnchor = componentId;
+            renderTracking();
+            return;
+        }
+
         const headerBtn = e.target.closest('button[data-action="toggle-section"]');
         if (headerBtn) {
             const section = headerBtn.closest('.pp-track-section[data-casting-id]');
