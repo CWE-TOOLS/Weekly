@@ -1236,10 +1236,7 @@ html, body {
 .pp-opt-card {
     position: relative;
     display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 8px 6px 4px;
-    min-height: 44px;
+    flex-direction: column;
     background: #ffffff;
     border: 1px solid #e2e8f0;
     border-radius: 8px;
@@ -1248,6 +1245,13 @@ html, body {
 .pp-opt-card:hover {
     border-color: #cbd5e1;
     box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
+}
+.pp-opt-card-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px 6px 4px;
+    min-height: 44px;
 }
 .pp-opt-card-grip {
     flex: 0 0 auto;
@@ -1369,6 +1373,91 @@ html, body {
 .pp-opt-card-delete:hover {
     background: #fee2e2;
     color: #b91c1c;
+}
+
+/* Description chevron toggle on each phase card */
+.pp-opt-card-desc-toggle {
+    background: transparent;
+    border: none;
+    color: #cbd5e1;
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: background 0.15s, color 0.15s;
+}
+.pp-opt-card-desc-toggle:hover {
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+.pp-opt-card-desc-chev {
+    width: 14px;
+    height: 14px;
+    transition: transform 0.18s ease;
+}
+.pp-opt-card-expanded .pp-opt-card-desc-chev {
+    transform: rotate(180deg);
+}
+/* Filled chevron when the phase has notes — visible at a glance */
+.pp-opt-card-has-desc .pp-opt-card-desc-toggle {
+    color: #1d4ed8;
+}
+.pp-opt-card-has-desc .pp-opt-card-desc-toggle::before {
+    content: "";
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #1d4ed8;
+    transform: translate(8px, -8px);
+    pointer-events: none;
+}
+.pp-opt-card-desc-toggle { position: relative; }
+
+/* Collapsible description row */
+.pp-opt-card-desc-wrap {
+    display: none;
+    padding: 0 10px 8px 10px;
+}
+.pp-opt-card-expanded > .pp-opt-card-desc-wrap {
+    display: block;
+}
+.pp-opt-card-desc {
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 36px;
+    padding: 6px 8px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    background: #f8fafc;
+    font-family: inherit;
+    font-size: 12.5px;
+    line-height: 1.4;
+    color: #1e293b;
+    resize: none;
+    overflow: hidden;
+}
+.pp-opt-card-desc:focus {
+    outline: none;
+    border-color: #1d4ed8;
+    background: #ffffff;
+    box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.12);
+}
+.pp-opt-card-desc-readonly {
+    min-height: 0;
+    background: transparent;
+    border: none;
+    padding: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.pp-opt-card-desc-empty {
+    color: #94a3b8;
+    font-style: italic;
 }
 
 .pp-opt-total-card {
@@ -2009,6 +2098,67 @@ html, body {
     color: #64748b;
     font-style: italic;
     text-align: center;
+}
+
+/* Print Optimizer modal: checkbox list */
+.pp-opt-print-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 4px 0 8px 0;
+    font-size: 12.5px;
+}
+.pp-opt-print-toolbar-sep {
+    color: #cbd5e1;
+}
+.pp-opt-print-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 50vh;
+    overflow-y: auto;
+    padding: 2px;
+}
+.pp-opt-print-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    border-radius: 6px;
+    cursor: pointer;
+    color: #0f172a;
+    transition: background 0.12s, border-color 0.12s;
+}
+.pp-opt-print-row:hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+}
+.pp-opt-print-checkbox {
+    width: 16px;
+    height: 16px;
+    accent-color: #1d4ed8;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+.pp-opt-print-row-num {
+    font-weight: 700;
+    color: #0f172a;
+    min-width: 60px;
+}
+.pp-opt-print-row-desc {
+    flex: 1;
+    color: #475569;
+    font-size: 13px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.pp-opt-print-row-count {
+    color: #64748b;
+    font-size: 12.5px;
+    white-space: nowrap;
 }
 .pp-primary-btn:disabled {
     opacity: 0.5;

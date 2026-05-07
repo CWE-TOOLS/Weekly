@@ -2,7 +2,7 @@
  * Optimizer Hours Service
  * Per-casting phase/task list with hours.
  *
- * Schema: casting_phases (id, casting_id FK, phase_name, hours, sort_order)
+ * Schema: casting_phases (id, casting_id FK, phase_name, hours, sort_order, description)
  * Each casting owns its own phase list — phases can differ across castings.
  *
  * @module services/optimizer-hours-service
@@ -213,6 +213,32 @@ export async function setCastingPhaseHours(phaseId, hours) {
 }
 
 /**
+ * Update description (free-text notes) for a single phase row.
+ * @param {string} phaseId
+ * @param {string} description
+ */
+export async function setCastingPhaseDescription(phaseId, description) {
+    if (!phaseId) throw new Error('phaseId required');
+    const value = (description == null) ? '' : String(description);
+
+    const client = await getClient();
+    if (!client) throw new Error('Supabase client unavailable');
+
+    const { data, error } = await client
+        .from(PHASES_TABLE)
+        .update({ description: value })
+        .eq('id', phaseId)
+        .select()
+        .maybeSingle();
+
+    if (error) {
+        logger.error('[optimizer-hours] setCastingPhaseDescription error:', error);
+        throw error;
+    }
+    return data;
+}
+
+/**
  * Update sort_order for a list of phase ids in the order given.
  * @param {string[]} phaseIdsInOrder
  */
@@ -259,7 +285,8 @@ export async function replaceCastingPhases(castingId, phases) {
         casting_id: castingId,
         phase_name: (p.phase_name || '').trim(),
         hours: Math.max(0, Math.floor(Number(p.hours) || 0)),
-        sort_order: (typeof p.sort_order === 'number') ? p.sort_order : idx
+        sort_order: (typeof p.sort_order === 'number') ? p.sort_order : idx,
+        description: (p.description == null) ? '' : String(p.description)
     })).filter(r => r.phase_name);
 
     if (rows.length === 0) return [];

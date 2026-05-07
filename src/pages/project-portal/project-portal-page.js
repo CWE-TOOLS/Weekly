@@ -27,6 +27,7 @@ import {
     renameCastingPhase,
     deleteCastingPhase,
     setCastingPhaseHours,
+    setCastingPhaseDescription,
     setCastingPhaseOrder,
     replaceCastingPhases,
     seedDefaultPhasesForCasting
@@ -102,7 +103,7 @@ let classroomTasksSortables = { '1': null, '2': null, '3': null };
 let currentCastings = [];            // loaded for current project
 let currentOptCastingId = null;            // active casting in optimizer tab
 let currentCastingPhases = new Map();      // castingId -> Array<phase row>
-let copiedPhases = null;                   // Array<{phase_name, hours, sort_order}> from a copy action
+let copiedPhases = null;                   // Array<{phase_name, hours, sort_order, description}> from a copy action
 let currentTrackExpanded = new Set();      // castingIds whose tracking sections are open
 let currentCastingComponents = new Map();  // castingId -> Array<component row>
 // Production phases that can appear as columns on the tracking sheet.
@@ -127,6 +128,8 @@ let batchTicketSaveTimers = new Map();     // castingId -> debounce handle
 let projectInfoSaveTimer = null;           // debounce timer for project info form
 let castingSaveTimers = new Map();         // castingId -> debounce handle for castings tab
 let optimizerPhaseSaveTimers = new Map();  // phaseId -> debounce handle (hours / rename)
+let optimizerDescSaveTimers = new Map();   // phaseId -> debounce handle (description)
+let currentOptDescExpanded = new Set();    // phaseIds whose description editor is open
 
 function getPhasesFor(castingId) {
     return currentCastingPhases.get(castingId) || [];
@@ -327,6 +330,7 @@ function setActiveTab(tab) {
             printBtn.hidden = false;
             if (tab === 'batch-tickets') printBtn.textContent = 'Print Batch Tickets';
             else if (tab === 'color-log') printBtn.textContent = 'Print Color Log';
+            else if (tab === 'optimizer') printBtn.textContent = 'Print Optimizer';
             else printBtn.textContent = 'Print';
         }
     }
@@ -1542,6 +1546,16 @@ async function loadAllPhasesForProject() {
             }
         }));
     }
+
+    // Auto-expand any phase card that already has a description so notes
+    // are never hidden behind a chevron on a fresh load. Replace the Set
+    // outright (rather than union) so it resets when switching projects.
+    currentOptDescExpanded = new Set();
+    for (const phases of currentCastingPhases.values()) {
+        for (const p of phases) {
+            if ((p.description || '').trim()) currentOptDescExpanded.add(p.id);
+        }
+    }
 }
 
 function renderOptimizer() {
@@ -1549,6 +1563,10 @@ function renderOptimizer() {
     renderOptColumns();
     renderOptTotals();
     ensurePhaseSortable();
+    // Size the visible description textareas to fit their content. Hidden
+    // (collapsed) cards have display:none so scrollHeight reads 0 — those
+    // are sized on toggle-open instead.
+    document.querySelectorAll('.pp-opt-card-expanded textarea[data-action="description"]').forEach(autoGrowTextarea);
 }
 
 function getVisibleCastings() {
@@ -1607,6 +1625,12 @@ function renderOptColumn(casting) {
     } else {
         cardsHtml = phases.map(p => {
             const value = (p.hours === undefined || p.hours === null) ? '' : String(p.hours);
+            const description = (p.description == null) ? '' : String(p.description);
+            const hasDesc = description.trim().length > 0;
+            const isExpanded = currentOptDescExpanded.has(p.id);
+            const cardCls = `pp-opt-card${isExpanded ? ' pp-opt-card-expanded' : ''}${hasDesc ? ' pp-opt-card-has-desc' : ''}`;
+            const toggleLabel = isExpanded ? 'Hide description' : (hasDesc ? 'Show description' : 'Add description');
+            // Drag grip stays gated to the active column — SortableJS attaches to one column at a time.
             const grip = isActive ? `
                 <div class="pp-opt-card-grip" aria-hidden="true" title="Drag to reorder">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1614,21 +1638,27 @@ function renderOptColumn(casting) {
                         <circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/>
                     </svg>
                 </div>` : '';
-            const nameField = isActive
-                ? `<input type="text" class="pp-opt-card-name" data-action="rename" value="${escapeAttr(p.phase_name)}" />`
-                : `<span class="pp-opt-card-name pp-opt-card-name-readonly">${escapeHtml(p.phase_name)}</span>`;
-            const deleteBtn = isActive
-                ? `<button class="pp-opt-card-delete" type="button" data-action="delete-phase" aria-label="Delete task" title="Delete task">&times;</button>`
-                : '';
+            const nameField = `<input type="text" class="pp-opt-card-name" data-action="rename" value="${escapeAttr(p.phase_name)}" />`;
+            const toggleBtn = `<button class="pp-opt-card-desc-toggle" type="button" data-action="toggle-desc" aria-label="${escapeAttr(toggleLabel)}" title="${escapeAttr(toggleLabel)}" aria-expanded="${isExpanded ? 'true' : 'false'}">
+                <svg class="pp-opt-card-desc-chev" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="6 9 12 15 18 9"/>
+                </svg>
+            </button>`;
+            const deleteBtn = `<button class="pp-opt-card-delete" type="button" data-action="delete-phase" aria-label="Delete task" title="Delete task">&times;</button>`;
+            const descField = `<textarea class="pp-opt-card-desc" data-action="description" rows="3" placeholder="Add notes for this task…">${escapeHtml(description)}</textarea>`;
             return `
-                <div class="pp-opt-card" data-phase-id="${escapeAttr(p.id)}" data-casting-id="${escapeAttr(casting.id)}">
-                    ${grip}
-                    <div class="pp-opt-card-left">${nameField}</div>
-                    <div class="pp-opt-card-right">
-                        <input type="number" min="0" step="1" class="pp-opt-card-hours" data-action="hours" value="${escapeAttr(value)}" placeholder="0" />
-                        <span class="pp-opt-card-hours-label">hrs</span>
-                        ${deleteBtn}
+                <div class="${cardCls}" data-phase-id="${escapeAttr(p.id)}" data-casting-id="${escapeAttr(casting.id)}">
+                    <div class="pp-opt-card-row">
+                        ${grip}
+                        <div class="pp-opt-card-left">${nameField}</div>
+                        <div class="pp-opt-card-right">
+                            <input type="number" min="0" step="1" class="pp-opt-card-hours" data-action="hours" value="${escapeAttr(value)}" placeholder="0" />
+                            <span class="pp-opt-card-hours-label">hrs</span>
+                            ${toggleBtn}
+                            ${deleteBtn}
+                        </div>
                     </div>
+                    <div class="pp-opt-card-desc-wrap">${descField}</div>
                 </div>
             `;
         }).join('');
@@ -1714,19 +1744,21 @@ function handleAddPhaseClick() {
     draft.className = 'pp-opt-card pp-opt-card-draft';
     draft.dataset.draft = 'true';
     draft.innerHTML = `
-        <div class="pp-opt-card-grip" aria-hidden="true">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/>
-                <circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/>
-            </svg>
-        </div>
-        <div class="pp-opt-card-left">
-            <input type="text" class="pp-opt-card-name" placeholder="Task name" />
-        </div>
-        <div class="pp-opt-card-right">
-            <input type="number" class="pp-opt-card-hours" placeholder="0" disabled />
-            <span class="pp-opt-card-hours-label">hrs</span>
-            <button class="pp-opt-card-delete" type="button" aria-label="Cancel">&times;</button>
+        <div class="pp-opt-card-row">
+            <div class="pp-opt-card-grip" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/>
+                    <circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/>
+                </svg>
+            </div>
+            <div class="pp-opt-card-left">
+                <input type="text" class="pp-opt-card-name" placeholder="Task name" />
+            </div>
+            <div class="pp-opt-card-right">
+                <input type="number" class="pp-opt-card-hours" placeholder="0" disabled />
+                <span class="pp-opt-card-hours-label">hrs</span>
+                <button class="pp-opt-card-delete" type="button" aria-label="Cancel">&times;</button>
+            </div>
         </div>
     `;
     cards.appendChild(draft);
@@ -1850,6 +1882,59 @@ async function handleSetHours(castingId, phaseId, hoursStr) {
     }
 }
 
+function scheduleOptimizerDescriptionSave(castingId, phaseId, descStr) {
+    if (!phaseId) return;
+    const prev = optimizerDescSaveTimers.get(phaseId);
+    if (prev) clearTimeout(prev);
+    const t = setTimeout(() => handleSetDescription(castingId, phaseId, descStr), 500);
+    optimizerDescSaveTimers.set(phaseId, t);
+}
+
+async function handleSetDescription(castingId, phaseId, descStr) {
+    if (!castingId || !phaseId) return;
+    const desc = (descStr == null) ? '' : String(descStr);
+    const phase = findPhaseById(castingId, phaseId);
+    const wasFlagged = !!(phase && (phase.description || '').trim());
+    const isFlagged = !!desc.trim();
+    try {
+        const updated = await setCastingPhaseDescription(phaseId, desc);
+        if (phase) phase.description = updated ? updated.description : desc;
+        // Toggle the "has description" flag on the card without clobbering the
+        // open textarea (avoid full re-render so the user's caret stays put).
+        if (wasFlagged !== isFlagged) {
+            const cardEl = document.querySelector(`.pp-opt-card[data-phase-id="${CSS.escape(phaseId)}"]`);
+            if (cardEl) cardEl.classList.toggle('pp-opt-card-has-desc', isFlagged);
+        }
+    } catch (err) {
+        logger.error('[project-portal] setCastingPhaseDescription failed:', err);
+        showToast('Save notes failed: ' + (err.message || err), 'error');
+    }
+}
+
+function handleToggleDescription(phaseId) {
+    if (!phaseId) return;
+    const cardEl = document.querySelector(`.pp-opt-card[data-phase-id="${CSS.escape(phaseId)}"]`);
+    if (!cardEl) return;
+    const isOpen = currentOptDescExpanded.has(phaseId);
+    if (isOpen) {
+        currentOptDescExpanded.delete(phaseId);
+        cardEl.classList.remove('pp-opt-card-expanded');
+    } else {
+        currentOptDescExpanded.add(phaseId);
+        cardEl.classList.add('pp-opt-card-expanded');
+        // Focus and size the textarea once the row has expanded.
+        const ta = cardEl.querySelector('textarea[data-action="description"]');
+        if (ta) {
+            autoGrowTextarea(ta);
+            ta.focus();
+            const len = ta.value.length;
+            try { ta.setSelectionRange(len, len); } catch {}
+        }
+    }
+    const btn = cardEl.querySelector('button[data-action="toggle-desc"]');
+    if (btn) btn.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
+}
+
 async function handleSelectOptCasting(castingId) {
     if (castingId === currentOptCastingId) return;
     currentOptCastingId = castingId;
@@ -1861,7 +1946,8 @@ function handleCopyHours(castingId) {
     copiedPhases = phases.map(p => ({
         phase_name: p.phase_name,
         hours: p.hours,
-        sort_order: p.sort_order
+        sort_order: p.sort_order,
+        description: p.description || ''
     }));
     const casting = currentCastings.find(c => c.id === castingId);
     showToast(`Copied tasks from Cast ${casting?.casting_number || ''}.`);
@@ -2929,7 +3015,7 @@ function wireEvents() {
         handleDelete();
     });
 
-    // Form: print — Batch Tickets, Color Log, and Tracking tabs use dedicated print handlers.
+    // Form: print — Batch Tickets, Color Log, Optimizer, and Tracking tabs use dedicated print handlers.
     document.getElementById('pp-print-btn').addEventListener('click', (e) => {
         e.preventDefault();
         if (currentTab === 'batch-tickets') {
@@ -2939,6 +3025,10 @@ function wireEvents() {
         }
         if (currentTab === 'color-log') {
             handlePrintColorLog();
+            return;
+        }
+        if (currentTab === 'optimizer') {
+            openOptPrintModal();
             return;
         }
         // Tracking tab uses per-casting print buttons in each section header — no global handler.
@@ -2963,6 +3053,33 @@ function wireEvents() {
         if (!id) return;
         closeTrackPrintModal();
         handlePrintTracking(id);
+    });
+
+    // Print Optimizer modal: close + actions
+    document.getElementById('pp-opt-print-modal-close').addEventListener('click', closeOptPrintModal);
+    document.getElementById('pp-opt-print-modal-cancel').addEventListener('click', closeOptPrintModal);
+    document.getElementById('pp-opt-print-modal').addEventListener('click', (e) => {
+        if (e.target.id === 'pp-opt-print-modal') closeOptPrintModal();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !document.getElementById('pp-opt-print-modal').hidden) {
+            closeOptPrintModal();
+        }
+    });
+    document.getElementById('pp-opt-print-select-all').addEventListener('click', () => setOptPrintAllChecked(true));
+    document.getElementById('pp-opt-print-select-none').addEventListener('click', () => setOptPrintAllChecked(false));
+    document.getElementById('pp-opt-print-modal-print').addEventListener('click', () => {
+        const ids = Array.from(document.querySelectorAll('#pp-opt-print-modal-list .pp-opt-print-checkbox:checked'))
+            .map(cb => cb.dataset.castingId)
+            .filter(Boolean);
+        if (ids.length === 0) {
+            showToast('Select at least one casting to print.', 'error');
+            return;
+        }
+        // Preserve project sort order (currentCastings is already sorted on load).
+        const sortedIds = currentCastings.map(c => c.id).filter(id => ids.includes(id));
+        closeOptPrintModal();
+        handlePrintOptimizer(sortedIds);
     });
 
     // Prevent enter-key submit; auto-save handles persistence.
@@ -3144,6 +3261,13 @@ function wireEvents() {
             handleSelectOptCasting(headerBtn.dataset.castingId);
             return;
         }
+        // Description toggle (chevron) on a phase card
+        const toggleBtn = e.target.closest('button[data-action="toggle-desc"]');
+        if (toggleBtn) {
+            const card = toggleBtn.closest('.pp-opt-card[data-phase-id]');
+            if (card) handleToggleDescription(card.dataset.phaseId);
+            return;
+        }
         const btn = e.target.closest('button[data-action="delete-phase"]');
         if (!btn) return;
         const card = btn.closest('.pp-opt-card[data-phase-id]');
@@ -3157,6 +3281,9 @@ function wireEvents() {
         const castingId = card.dataset.castingId;
         if (e.target.matches('input[data-action="hours"]')) {
             scheduleOptimizerHoursSave(castingId, phaseId, e.target.value);
+        } else if (e.target.matches('textarea[data-action="description"]')) {
+            autoGrowTextarea(e.target);
+            scheduleOptimizerDescriptionSave(castingId, phaseId, e.target.value);
         }
     });
     // Rename still commits on blur (full re-render would clobber active typing).
@@ -4032,6 +4159,194 @@ function handlePrintTracking(castingId) {
     }, { once: true });
 
     // Write the HTML into the iframe document.
+    const doc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (!doc) {
+        showToast('Print failed — could not open frame', 'error');
+        iframe.remove();
+        return;
+    }
+    doc.open();
+    doc.write(html);
+    doc.close();
+}
+
+// ---------- Print Optimizer Hours ----------
+
+function openOptPrintModal() {
+    const modal = document.getElementById('pp-opt-print-modal');
+    const list = document.getElementById('pp-opt-print-modal-list');
+    if (!modal || !list) return;
+
+    if (!currentCastings || currentCastings.length === 0) {
+        list.innerHTML = `<div class="pp-track-print-empty">No castings to print. Add a casting first.</div>`;
+    } else {
+        list.innerHTML = currentCastings.map(c => {
+            const phases = getPhasesFor(c.id);
+            const total = phases.reduce((s, p) => s + (typeof p.hours === 'number' ? p.hours : 0), 0);
+            const num = c.casting_number || '(no #)';
+            const desc = c.description ? escapeHtml(c.description) : '';
+            const totalLabel = `${total} hr${total === 1 ? '' : 's'} · ${phases.length} task${phases.length === 1 ? '' : 's'}`;
+            return `
+                <label class="pp-opt-print-row">
+                    <input type="checkbox" class="pp-opt-print-checkbox" data-casting-id="${escapeAttr(c.id)}" checked />
+                    <span class="pp-opt-print-row-num">Cast ${escapeHtml(num)}</span>
+                    <span class="pp-opt-print-row-desc">${desc}</span>
+                    <span class="pp-opt-print-row-count">${totalLabel}</span>
+                </label>
+            `;
+        }).join('');
+    }
+
+    modal.hidden = false;
+}
+
+function closeOptPrintModal() {
+    const modal = document.getElementById('pp-opt-print-modal');
+    if (modal) modal.hidden = true;
+}
+
+function setOptPrintAllChecked(checked) {
+    const boxes = document.querySelectorAll('#pp-opt-print-modal-list .pp-opt-print-checkbox');
+    boxes.forEach(cb => { cb.checked = !!checked; });
+}
+
+const OPT_PRINT_CSS = `
+/* Letter portrait: 8.5in x 11in. Generous margins for binder-friendly layout. */
+@page { size: letter portrait; margin: 0.5in; }
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { background:#fff; }
+body { font-family: 'Segoe UI', Arial, sans-serif; color:#0f172a; font-size: 10pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.op-page { page-break-after: always; padding-bottom: 6pt; }
+.op-page:last-child { page-break-after: auto; }
+.op-header { border-bottom: 1.5pt solid #000; padding-bottom: 6pt; margin-bottom: 10pt; }
+.op-project { font-size: 10.5pt; font-weight: 600; color: #475569; letter-spacing: 0.2pt; text-transform: uppercase; }
+.op-cast { font-size: 18pt; font-weight: 800; margin-top: 2pt; color: #0f172a; }
+.op-cast-desc { font-size: 11pt; font-weight: 500; color: #475569; margin-top: 1pt; }
+.op-section-title { font-size: 9pt; font-weight: 700; letter-spacing: 0.5pt; text-transform: uppercase; color: #334155; margin-bottom: 4pt; }
+table.op-table { width: 100%; border-collapse: collapse; font-size: 10pt; table-layout: fixed; }
+table.op-table th, table.op-table td { border: 0.5pt solid #94a3b8; padding: 4pt 6pt; vertical-align: top; }
+table.op-table th { background: #f1f5f9; font-weight: 700; font-size: 8.5pt; letter-spacing: 0.4pt; text-transform: uppercase; color: #334155; text-align: left; }
+table.op-table td.op-c-num { text-align: center; font-weight: 600; color: #64748b; width: 7%; }
+table.op-table td.op-c-task { font-weight: 700; width: 26%; }
+table.op-table td.op-c-hours { text-align: center; font-weight: 700; width: 12%; }
+table.op-table td.op-c-notes { color: #1e293b; white-space: pre-wrap; word-wrap: break-word; }
+table.op-table tbody tr:nth-child(even) td { background: #f8fafc; }
+.op-total-row td { border-top: 1.5pt solid #000; background: #fff !important; font-size: 11pt; font-weight: 800; }
+.op-total-row td.op-c-task { color: #0f172a; }
+.op-total-row td.op-c-hours { background: #e2e8f0 !important; color: #0f172a; }
+.op-empty { padding: 16pt; text-align: center; font-style: italic; color: #64748b; border: 0.5pt dashed #94a3b8; }
+.op-foot { margin-top: 8pt; font-size: 8pt; color: #94a3b8; text-align: right; }
+`;
+
+function buildOptPrintPage(casting, phases, projectNumber, projectName) {
+    const num = casting.casting_number || '';
+    const castDesc = casting.description || '';
+    const projectLabel = [projectNumber, projectName].filter(Boolean).map(s => escapeHtml(s)).join(' — ');
+
+    const total = phases.reduce((s, p) => s + (typeof p.hours === 'number' ? p.hours : 0), 0);
+
+    const rows = phases.length === 0
+        ? `<tr><td class="op-empty" colspan="4">No tasks recorded for this casting.</td></tr>`
+        : phases.map((p, idx) => {
+            const hours = (typeof p.hours === 'number') ? p.hours : 0;
+            const desc = (p.description || '').trim();
+            return `
+                <tr>
+                    <td class="op-c-num">${idx + 1}</td>
+                    <td class="op-c-task">${escapeHtml(p.phase_name || '')}</td>
+                    <td class="op-c-hours">${hours}</td>
+                    <td class="op-c-notes">${escapeHtml(desc)}</td>
+                </tr>
+            `;
+        }).join('');
+
+    const totalRow = phases.length === 0 ? '' : `
+        <tr class="op-total-row">
+            <td class="op-c-num"></td>
+            <td class="op-c-task">Total</td>
+            <td class="op-c-hours">${total}</td>
+            <td class="op-c-notes"></td>
+        </tr>
+    `;
+
+    return `
+        <section class="op-page">
+            <header class="op-header">
+                <div class="op-project">${projectLabel}</div>
+                <div class="op-cast">Cast ${escapeHtml(num)}</div>
+                ${castDesc ? `<div class="op-cast-desc">${escapeHtml(castDesc)}</div>` : ''}
+            </header>
+            <div class="op-section-title">Optimizer Hours</div>
+            <table class="op-table">
+                <thead>
+                    <tr>
+                        <th class="op-c-num" style="width:7%;">#</th>
+                        <th class="op-c-task" style="width:26%;">Task</th>
+                        <th class="op-c-hours" style="width:12%;">Hours</th>
+                        <th class="op-c-notes">Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rows}
+                    ${totalRow}
+                </tbody>
+            </table>
+        </section>
+    `;
+}
+
+function buildOptPrintHtml(castings, projectNumber, projectName) {
+    const pages = castings.map(c => buildOptPrintPage(c, getPhasesFor(c.id), projectNumber, projectName)).join('');
+    return `<!doctype html><html><head><meta charset="utf-8"><title>Optimizer Hours — ${escapeHtml(projectNumber)}</title><style>${OPT_PRINT_CSS}</style></head><body>${pages}</body></html>`;
+}
+
+function handlePrintOptimizer(castingIds) {
+    if (!Array.isArray(castingIds) || castingIds.length === 0) {
+        showToast('Select at least one casting to print.', 'error');
+        return;
+    }
+    const selected = castingIds
+        .map(id => currentCastings.find(c => c.id === id))
+        .filter(Boolean);
+    if (selected.length === 0) {
+        showToast('No matching castings found.', 'error');
+        return;
+    }
+
+    const projectNumber = currentProjectNumber || '';
+    const projectName = document.getElementById('pp-f-project_name')?.value || '';
+    const html = buildOptPrintHtml(selected, projectNumber, projectName);
+
+    const prior = document.getElementById('pp-opt-print-frame');
+    if (prior) prior.remove();
+
+    const iframe = document.createElement('iframe');
+    iframe.id = 'pp-opt-print-frame';
+    iframe.setAttribute('aria-hidden', 'true');
+    iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;';
+    document.body.appendChild(iframe);
+
+    let cleaned = false;
+    const cleanup = () => {
+        if (cleaned) return;
+        cleaned = true;
+        setTimeout(() => { iframe.remove(); }, 500);
+    };
+
+    iframe.addEventListener('load', () => {
+        try {
+            const win = iframe.contentWindow;
+            win.addEventListener('afterprint', cleanup);
+            win.focus();
+            win.print();
+        } catch (err) {
+            logger.error('[project-portal] print optimizer failed:', err);
+            showToast('Print failed', 'error');
+            cleanup();
+        }
+        setTimeout(cleanup, 60000);
+    }, { once: true });
+
     const doc = iframe.contentDocument || iframe.contentWindow?.document;
     if (!doc) {
         showToast('Print failed — could not open frame', 'error');

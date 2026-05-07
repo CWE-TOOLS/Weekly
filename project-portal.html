@@ -803,6 +803,29 @@
             </div>
         </div>
 
+        <!-- Print Optimizer Modal -->
+        <div id="pp-opt-print-modal" class="pp-modal-backdrop" hidden>
+            <div class="pp-modal" role="dialog" aria-modal="true" aria-labelledby="pp-opt-print-modal-title">
+                <div class="pp-modal-header">
+                    <h2 id="pp-opt-print-modal-title">Print Optimizer Hours</h2>
+                    <button type="button" class="pp-modal-close" id="pp-opt-print-modal-close" aria-label="Close">&times;</button>
+                </div>
+                <div class="pp-modal-body">
+                    <p class="pp-modal-hint">Select which castings to print. One casting per letter-sized page.</p>
+                    <div class="pp-opt-print-toolbar">
+                        <button type="button" class="pp-link-btn" id="pp-opt-print-select-all">Select all</button>
+                        <span class="pp-opt-print-toolbar-sep">·</span>
+                        <button type="button" class="pp-link-btn" id="pp-opt-print-select-none">Select none</button>
+                    </div>
+                    <div id="pp-opt-print-modal-list" class="pp-opt-print-list"></div>
+                    <div class="pp-modal-actions">
+                        <button type="button" class="pp-secondary-btn" id="pp-opt-print-modal-cancel">Cancel</button>
+                        <button type="button" class="pp-primary-btn" id="pp-opt-print-modal-print">Print</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Toast -->
         <div id="pp-toast" class="pp-toast" hidden></div>
     </div>
