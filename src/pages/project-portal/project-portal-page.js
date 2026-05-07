@@ -331,6 +331,7 @@ function setActiveTab(tab) {
             if (tab === 'batch-tickets') printBtn.textContent = 'Print Batch Tickets';
             else if (tab === 'color-log') printBtn.textContent = 'Print Color Log';
             else if (tab === 'optimizer') printBtn.textContent = 'Print Optimizer';
+            else if (tab === 'info') printBtn.textContent = 'Print Cover';
             else printBtn.textContent = 'Print';
         }
     }
@@ -3041,6 +3042,10 @@ function wireEvents() {
             openOptPrintModal();
             return;
         }
+        if (currentTab === 'info') {
+            handlePrintCoverPage();
+            return;
+        }
         // Tracking tab uses per-casting print buttons in each section header — no global handler.
         handlePrint();
     });
@@ -4431,6 +4436,230 @@ async function handlePrintStickers(castingId) {
             win.print();
         } catch (err) {
             logger.error('[project-portal] print stickers failed:', err);
+            showToast('Print failed', 'error');
+            cleanup();
+        }
+        setTimeout(cleanup, 60000);
+    }, { once: true });
+
+    const doc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (!doc) {
+        showToast('Print failed — could not open frame', 'error');
+        iframe.remove();
+        return;
+    }
+    doc.open();
+    doc.write(html);
+    doc.close();
+}
+
+// ---------- Print Project Cover Page ----------
+// Letter portrait one-pager mirroring the legacy "Full Scope" cover sheet:
+// status pill + CWE wordmark in a header row, two-column meta block, two
+// contact-info columns, then full-width Scope of Work and Imperative
+// Information sections.
+
+const COVER_PRINT_CSS = `
+@page { size: letter portrait; margin: 0.5in; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', Arial, sans-serif; color: #000; font-size: 10pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; line-height: 1.35; }
+.cv-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14pt; }
+.cv-status {
+    display: inline-block;
+    padding: 4pt 14pt;
+    border-radius: 999px;
+    font-size: 10pt;
+    font-weight: 700;
+    letter-spacing: 0.3pt;
+    background: #b91c1c; color: #fff;
+}
+.cv-status.cv-status-kicked-off  { background: #1e40af; color: #fff; }
+.cv-status.cv-status-releasability { background: #b45309; color: #fff; }
+.cv-status.cv-status-approved      { background: #166534; color: #fff; }
+.cv-status.cv-status-in-production { background: #5b21b6; color: #fff; }
+.cv-status.cv-status-shipped       { background: #0f766e; color: #fff; }
+.cv-status.cv-status-closed-out    { background: #475569; color: #fff; }
+.cv-brand { font-size: 22pt; font-weight: 800; letter-spacing: 1pt; }
+.cv-meta { display: flex; gap: 24pt; margin-bottom: 8pt; }
+.cv-meta-col { flex: 1; display: grid; grid-template-columns: 12em 1fr; row-gap: 3pt; column-gap: 6pt; }
+.cv-meta-col .cv-label { color: #000; }
+.cv-meta-col .cv-value { font-weight: 700; }
+.cv-meta-col .cv-value.cv-multiline { white-space: pre-wrap; }
+.cv-contact-row { display: flex; gap: 24pt; margin-top: 6pt; }
+.cv-contact { flex: 1; }
+.cv-section-bar {
+    background: #e5e7eb;
+    color: #000;
+    text-align: left;
+    padding: 3pt 8pt;
+    font-size: 10pt;
+    font-weight: 600;
+    margin-bottom: 4pt;
+}
+.cv-contact .cv-section-bar { text-align: left; }
+.cv-contact-grid { display: grid; grid-template-columns: 9em 1fr; row-gap: 3pt; column-gap: 6pt; padding: 0 2pt; }
+.cv-contact-grid .cv-label { color: #000; }
+.cv-contact-grid .cv-value { font-weight: 700; word-break: break-word; }
+.cv-contact-grid .cv-value.cv-link { color: #1d4ed8; }
+.cv-dates { display: flex; gap: 24pt; margin: 10pt 0 14pt 0; }
+.cv-dates .cv-date-cell { flex: 1; display: flex; gap: 8pt; align-items: baseline; }
+.cv-dates .cv-label { width: 9em; }
+.cv-dates .cv-value { font-weight: 700; }
+.cv-fullbar { background: #e5e7eb; text-align: center; padding: 4pt 8pt; font-size: 10pt; font-weight: 600; }
+.cv-fullbar-content { padding: 8pt 8pt; min-height: 36pt; white-space: pre-wrap; text-align: center; }
+.cv-fullbar-content.cv-empty { color: #6b7280; font-style: italic; }
+.cv-section { margin-bottom: 10pt; }
+`;
+
+function statusSlug(value) {
+    return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+function formatCoverDate(raw) {
+    const v = String(raw || '').trim();
+    if (!v) return '';
+    // ISO yyyy-mm-dd → m/d/yyyy
+    const iso = v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (iso) return `${parseInt(iso[2], 10)}/${parseInt(iso[3], 10)}/${iso[1]}`;
+    return v;
+}
+
+function readCoverFields() {
+    const get = id => (document.getElementById(id)?.value || '').trim();
+    return {
+        status: get('pp-f-status'),
+        pm: get('pp-f-pm'),
+        project_name: get('pp-f-project_name'),
+        project_number: get('pp-f-project_number'),
+        project_date: formatCoverDate(get('pp-f-project_date')),
+        project_address: get('pp-f-project_address'),
+        estimator: get('pp-f-estimator'),
+        architect: get('pp-f-architect'),
+        contact_name: get('pp-f-contact_name'),
+        contact_phone: get('pp-f-contact_phone'),
+        contact_company: get('pp-f-contact_company'),
+        contact_email: get('pp-f-contact_email'),
+        site_contact: get('pp-f-site_contact'),
+        site_phone: get('pp-f-site_phone'),
+        delivery_address: get('pp-f-delivery_address'),
+        site_restrictions: get('pp-f-site_restrictions'),
+        need_by_date: get('pp-f-need_by_date'),
+        production_start_date: get('pp-f-production_start_date'),
+        scope_of_work: get('pp-f-scope_of_work'),
+        imperative_information: get('pp-f-imperative_information')
+    };
+}
+
+function buildCoverPrintHtml(f) {
+    const statusCls = f.status ? `cv-status-${statusSlug(f.status)}` : '';
+    const statusText = f.status || 'No Status';
+    const emailHtml = f.contact_email ? `<a class="cv-link" href="mailto:${escapeAttr(f.contact_email)}">${escapeHtml(f.contact_email)}</a>` : '';
+    const projectAddrLines = f.project_address ? escapeHtml(f.project_address).replace(/\n/g, '<br>') : '';
+    const deliveryAddrLines = f.delivery_address ? escapeHtml(f.delivery_address).replace(/\n/g, '<br>') : '';
+
+    const scopeBody = f.scope_of_work
+        ? `<div class="cv-fullbar-content">${escapeHtml(f.scope_of_work)}</div>`
+        : `<div class="cv-fullbar-content cv-empty">—</div>`;
+    const impBody = f.imperative_information
+        ? `<div class="cv-fullbar-content">${escapeHtml(f.imperative_information)}</div>`
+        : `<div class="cv-fullbar-content cv-empty">—</div>`;
+
+    return `<!doctype html><html><head><meta charset="utf-8"><title>Cover — ${escapeHtml(f.project_number || '')} ${escapeHtml(f.project_name || '')}</title><style>${COVER_PRINT_CSS}</style></head><body>
+        <div class="cv-header">
+            <span class="cv-status ${statusCls}">${escapeHtml(statusText)}</span>
+            <span class="cv-brand">CWE</span>
+        </div>
+
+        <div class="cv-meta">
+            <div class="cv-meta-col">
+                <span class="cv-label">Project Name:</span><span class="cv-value">${escapeHtml(f.project_name)}</span>
+                <span class="cv-label">Project #:</span><span class="cv-value">${escapeHtml(f.project_number)}</span>
+                <span class="cv-label">PM:</span><span class="cv-value">${escapeHtml(f.pm)}</span>
+                <span class="cv-label">Estimator/Sales Manager:</span><span class="cv-value">${escapeHtml(f.estimator)}</span>
+                <span class="cv-label">Architect:</span><span class="cv-value">${escapeHtml(f.architect)}</span>
+            </div>
+            <div class="cv-meta-col">
+                <span class="cv-label">Date:</span><span class="cv-value">${escapeHtml(f.project_date)}</span>
+                <span class="cv-label">Project Address:</span><span class="cv-value cv-multiline">${projectAddrLines}</span>
+            </div>
+        </div>
+
+        <div class="cv-contact-row">
+            <div class="cv-contact">
+                <div class="cv-section-bar">Main Contact Information</div>
+                <div class="cv-contact-grid">
+                    <span class="cv-label">Name:</span><span class="cv-value">${escapeHtml(f.contact_name)}</span>
+                    <span class="cv-label">Phone:</span><span class="cv-value">${escapeHtml(f.contact_phone)}</span>
+                    <span class="cv-label">Company Name:</span><span class="cv-value">${escapeHtml(f.contact_company)}</span>
+                    <span class="cv-label">Email Address:</span><span class="cv-value">${emailHtml}</span>
+                </div>
+            </div>
+            <div class="cv-contact">
+                <div class="cv-section-bar">Delivery Information</div>
+                <div class="cv-contact-grid">
+                    <span class="cv-label">Site Contact:</span><span class="cv-value">${escapeHtml(f.site_contact)}</span>
+                    <span class="cv-label">Phone:</span><span class="cv-value">${escapeHtml(f.site_phone)}</span>
+                    <span class="cv-label">Delivery Address:</span><span class="cv-value cv-multiline">${deliveryAddrLines}</span>
+                    <span class="cv-label">Site Restrictions:</span><span class="cv-value">${escapeHtml(f.site_restrictions)}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="cv-dates">
+            <div class="cv-date-cell">
+                <span class="cv-label">Need By Date:</span>
+                <span class="cv-value">${escapeHtml(f.need_by_date)}</span>
+            </div>
+            <div class="cv-date-cell">
+                <span class="cv-label">Production Start Date:</span>
+                <span class="cv-value">${escapeHtml(f.production_start_date)}</span>
+            </div>
+        </div>
+
+        <div class="cv-section">
+            <div class="cv-fullbar">Scope of Work</div>
+            ${scopeBody}
+        </div>
+
+        <div class="cv-section">
+            <div class="cv-fullbar">Imperative Information</div>
+            ${impBody}
+        </div>
+    </body></html>`;
+}
+
+function handlePrintCoverPage() {
+    if (!currentProjectNumber) {
+        showToast('Save the project first', 'error');
+        return;
+    }
+    const fields = readCoverFields();
+    const html = buildCoverPrintHtml(fields);
+
+    const prior = document.getElementById('pp-cover-print-frame');
+    if (prior) prior.remove();
+
+    const iframe = document.createElement('iframe');
+    iframe.id = 'pp-cover-print-frame';
+    iframe.setAttribute('aria-hidden', 'true');
+    iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;';
+    document.body.appendChild(iframe);
+
+    let cleaned = false;
+    const cleanup = () => {
+        if (cleaned) return;
+        cleaned = true;
+        setTimeout(() => { iframe.remove(); }, 500);
+    };
+
+    iframe.addEventListener('load', () => {
+        try {
+            const win = iframe.contentWindow;
+            win.addEventListener('afterprint', cleanup);
+            win.focus();
+            win.print();
+        } catch (err) {
+            logger.error('[project-portal] print cover failed:', err);
             showToast('Print failed', 'error');
             cleanup();
         }
