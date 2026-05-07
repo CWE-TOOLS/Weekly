@@ -38,6 +38,15 @@ import {
     deleteAllComponentsForCasting
 } from '../../services/tracking-service.js';
 import {
+    loadCratesForProject,
+    createCrate,
+    updateCrate,
+    deleteCrate,
+    setCratesOrder,
+    setComponentCrate,
+    setComponentsCrateBulk
+} from '../../services/shipping-service.js';
+import {
     loadAllInventoryForProject,
     createInventoryItem,
     updateInventoryItem,
@@ -95,7 +104,7 @@ const FORM_FIELDS = [
 let allProjectRows = [];           // From Supabase
 let currentProjectNumber = null;     // null = list view; string = form view
 let listSort = { column: 'updated_at', direction: 'desc' };
-let currentTab = 'info';             // 'info' | 'castings' | 'optimizer' | 'tracking'
+let currentTab = 'info';             // 'info' | 'castings' | 'optimizer' | 'tracking' | 'shipping'
 let currentClassroom = '1';          // CR Notes sub-tab: '1' | '2' | '3'
 let currentClassroomTasks = [];      // all classroom tasks for current project (across all 3 classrooms)
 let classroomTaskSaveTimers = new Map(); // taskId -> debounce handle
@@ -106,6 +115,10 @@ let currentCastingPhases = new Map();      // castingId -> Array<phase row>
 let copiedPhases = null;                   // Array<{phase_name, hours, sort_order, description}> from a copy action
 let currentTrackExpanded = new Set();      // castingIds whose tracking sections are open
 let currentCastingComponents = new Map();  // castingId -> Array<component row>
+let currentCrates = [];                    // project_crates rows for current project (ordered)
+let cratesLoadedFor = null;                // project_number we last loaded crates for
+let crateSaveTimers = new Map();           // crateId -> debounce handle (per-field saves)
+let selectedComponentIds = new Set();      // tracking-tab multi-select for bulk crate assign
 // Production phases that can appear as columns on the tracking sheet.
 // Order here is the order they'll print in. Editable per project via the chip bar.
 const TRACKING_PHASES = ['MILL', 'FO', 'CAST', 'DEMOLD', 'FINISH', 'SEAL', 'STRIPS', 'DRILL', 'CRATE', 'FINAL', 'LOAD'];
@@ -194,6 +207,12 @@ async function showFormView(projectNumber, draftOverrides = null) {
     currentBatchCastingId = null;
     for (const t of batchTicketSaveTimers.values()) clearTimeout(t);
     batchTicketSaveTimers.clear();
+
+    // Invalidate shipping/crates cache.
+    cratesLoadedFor = null;
+    currentCrates = [];
+    for (const t of crateSaveTimers.values()) clearTimeout(t);
+    crateSaveTimers.clear();
 
     let project = null;
     let isExisting = false;
@@ -306,6 +325,11 @@ function updateFormContext(project) {
 }
 
 function setActiveTab(tab) {
+    if (currentTab === 'tracking' && tab !== 'tracking' && selectedComponentIds.size > 0) {
+        selectedComponentIds.clear();
+        const bar = document.getElementById('pp-track-bulk-bar');
+        if (bar) bar.hidden = true;
+    }
     currentTab = tab;
     document.querySelectorAll('.pp-tab-btn').forEach(btn => {
         btn.classList.toggle('pp-tab-active', btn.dataset.tab === tab);
@@ -323,8 +347,8 @@ function setActiveTab(tab) {
     }
     const printBtn = document.getElementById('pp-print-btn');
     if (printBtn) {
-        // Tracking has per-casting print buttons in each section header — hide the global one.
-        if (tab === 'tracking') {
+        // Tracking + Shipping have per-row print buttons — hide the global one.
+        if (tab === 'tracking' || tab === 'shipping') {
             printBtn.hidden = true;
         } else {
             printBtn.hidden = false;
@@ -334,6 +358,10 @@ function setActiveTab(tab) {
             else if (tab === 'info') printBtn.textContent = 'Print Cover';
             else printBtn.textContent = 'Print';
         }
+    }
+
+    if (tab === 'shipping' && currentProjectNumber) {
+        activateShippingTab();
     }
 }
 
@@ -2063,10 +2091,84 @@ async function activateTrackingTab() {
         if (!validIds.has(id)) currentTrackExpanded.delete(id);
     }
 
-    await loadAllComponentsForCurrentProject();
+    await Promise.all([
+        loadAllComponentsForCurrentProject(),
+        ensureCratesLoaded()
+    ]);
     renderTracking();
     // Defensive sync — covers external edits or out-of-band state.
     syncTrackingFromInventory();
+}
+
+async function ensureCratesLoaded() {
+    if (!currentProjectNumber) {
+        currentCrates = [];
+        cratesLoadedFor = null;
+        return;
+    }
+    if (cratesLoadedFor === currentProjectNumber) return;
+    try {
+        currentCrates = await loadCratesForProject(currentProjectNumber);
+        cratesLoadedFor = currentProjectNumber;
+    } catch (err) {
+        logger.error('[project-portal] loadCratesForProject failed:', err);
+        currentCrates = [];
+    }
+}
+
+function getComponentCount(crateId) {
+    let n = 0;
+    for (const list of currentCastingComponents.values()) {
+        for (const comp of list) if (comp.crate_id === crateId) n += 1;
+    }
+    return n;
+}
+
+// Pick-by-number flow: tracking row dropdown chooses a 1–20 crate#. We
+// look up the crate locally; if it doesn't exist yet, we create it on the
+// fly so it shows up on the Shipping tab automatically.
+async function handleTrackingCrateSelect(componentId, crateNumber) {
+    if (!componentId) return;
+    const num = (crateNumber || '').trim();
+    if (!num) {
+        await assignComponentToCrate(componentId, null);
+        return;
+    }
+
+    let crate = currentCrates.find(c => String(c.crate_number || '') === num);
+    if (!crate) {
+        try {
+            crate = await createCrate(currentProjectNumber, { crate_number: num });
+            if (crate) currentCrates.push(crate);
+        } catch (err) {
+            logger.error('[project-portal] createCrate failed:', err);
+            return;
+        }
+    }
+    if (crate) await assignComponentToCrate(componentId, crate.id);
+}
+
+async function assignComponentToCrate(componentId, crateId) {
+    if (!componentId) return;
+    // Locate the component row in our local map and update it.
+    let target = null;
+    for (const list of currentCastingComponents.values()) {
+        const found = list.find(c => c.id === componentId);
+        if (found) { target = found; break; }
+    }
+    if (!target) return;
+    const prev = target.crate_id || null;
+    target.crate_id = crateId || null;
+    renderTracking();
+    if (currentTab === 'shipping') renderShipping();
+    try {
+        await setComponentCrate(componentId, crateId);
+    } catch (err) {
+        logger.error('[project-portal] setComponentCrate failed:', err);
+        target.crate_id = prev;
+        renderTracking();
+        if (currentTab === 'shipping') renderShipping();
+    }
 }
 
 async function loadAllComponentsForCurrentProject() {
@@ -2117,7 +2219,110 @@ function ensureTrackingPhasesForProject(projectNumber) {
 function renderTracking() {
     const list = document.getElementById('pp-track-list');
     if (!list) return;
+    pruneSelectedComponentIds();
     list.innerHTML = currentCastings.map(c => renderTrackSection(c)).join('');
+    // <input> doesn't have an :indeterminate attribute, so set it via JS.
+    list.querySelectorAll('.pp-track-select-all[data-indeterminate="true"]').forEach(cb => {
+        cb.indeterminate = true;
+    });
+    renderTrackingBulkBar();
+}
+
+function pruneSelectedComponentIds() {
+    if (selectedComponentIds.size === 0) return;
+    const validIds = new Set();
+    for (const list of currentCastingComponents.values()) {
+        for (const comp of list) validIds.add(comp.id);
+    }
+    for (const id of [...selectedComponentIds]) {
+        if (!validIds.has(id)) selectedComponentIds.delete(id);
+    }
+}
+
+function renderTrackingBulkBar() {
+    const bar = document.getElementById('pp-track-bulk-bar');
+    if (!bar) return;
+    const count = selectedComponentIds.size;
+    if (count === 0) {
+        bar.hidden = true;
+        return;
+    }
+    const options = ['<option value="">— Set crate # —</option>', '<option value="__clear__">Clear assignment</option>']
+        .concat(CRATE_NUMBER_OPTIONS.map(n => `<option value="${escapeAttr(n)}">Crate #${escapeHtml(n)}</option>`))
+        .join('');
+    bar.innerHTML = `
+        <div class="pp-track-bulk-inner">
+            <span class="pp-track-bulk-count">${count} ${count === 1 ? 'panel' : 'panels'} selected</span>
+            <select id="pp-track-bulk-select" class="pp-track-bulk-select" aria-label="Bulk crate assignment">${options}</select>
+            <button type="button" class="pp-track-bulk-clear" data-action="track-bulk-clear">Clear selection</button>
+        </div>
+    `;
+    bar.hidden = false;
+}
+
+function toggleSelectComponent(componentId, selected) {
+    if (!componentId) return;
+    if (selected) selectedComponentIds.add(componentId);
+    else selectedComponentIds.delete(componentId);
+    renderTracking();
+}
+
+function toggleSelectAllInCasting(castingId, selected) {
+    if (!castingId) return;
+    const components = getComponentsFor(castingId);
+    for (const comp of components) {
+        if (selected) selectedComponentIds.add(comp.id);
+        else selectedComponentIds.delete(comp.id);
+    }
+    renderTracking();
+}
+
+async function applyBulkCrate(value) {
+    if (selectedComponentIds.size === 0) return;
+    const ids = [...selectedComponentIds];
+
+    let crateId = null;
+    if (value && value !== '__clear__') {
+        let crate = currentCrates.find(c => String(c.crate_number || '') === value);
+        if (!crate) {
+            try {
+                crate = await createCrate(currentProjectNumber, { crate_number: value });
+                if (crate) currentCrates.push(crate);
+            } catch (err) {
+                logger.error('[project-portal] bulk createCrate failed:', err);
+                return;
+            }
+        }
+        crateId = crate?.id || null;
+    }
+
+    // Optimistic local update so the UI snaps immediately.
+    const prevById = new Map();
+    for (const list of currentCastingComponents.values()) {
+        for (const comp of list) {
+            if (selectedComponentIds.has(comp.id)) {
+                prevById.set(comp.id, comp.crate_id || null);
+                comp.crate_id = crateId;
+            }
+        }
+    }
+    selectedComponentIds.clear();
+    renderTracking();
+    if (currentTab === 'shipping') renderShipping();
+
+    try {
+        await setComponentsCrateBulk(ids, crateId);
+    } catch (err) {
+        logger.error('[project-portal] setComponentsCrateBulk failed:', err);
+        // Roll back local state
+        for (const list of currentCastingComponents.values()) {
+            for (const comp of list) {
+                if (prevById.has(comp.id)) comp.crate_id = prevById.get(comp.id);
+            }
+        }
+        renderTracking();
+        if (currentTab === 'shipping') renderShipping();
+    }
 }
 
 function renderTrackSection(casting) {
@@ -2130,14 +2335,20 @@ function renderTrackSection(casting) {
         ? `<div class="pp-opt-cards-empty">No components — add inventory in the Castings tab.</div>`
         : components.map(comp => renderTrackCard(comp, casting.id)).join('');
 
+    const allIds = components.map(c => c.id);
+    const allSelected = count > 0 && allIds.every(id => selectedComponentIds.has(id));
+    const someSelected = !allSelected && allIds.some(id => selectedComponentIds.has(id));
     const headerRow = `
-        <div class="pp-track-header-row" aria-hidden="true">
-            <div class="pp-track-header-grip-spacer"></div>
-            <div class="pp-track-header-fields">
+        <div class="pp-track-header-row">
+            <div class="pp-track-header-grip-spacer">
+                <input type="checkbox" class="pp-track-select-all" data-action="track-select-all-casting" data-casting-id="${escapeAttr(casting.id)}" ${allSelected ? 'checked' : ''} ${someSelected ? 'data-indeterminate="true"' : ''} aria-label="Select all in this cast" title="Select all in this cast" ${count === 0 ? 'disabled' : ''} />
+            </div>
+            <div class="pp-track-header-fields" aria-hidden="true">
                 <span>Panel ID</span>
                 <span>Width</span>
                 <span>Length</span>
                 <span>Color</span>
+                <span>Crate #</span>
             </div>
         </div>
     `;
@@ -2189,16 +2400,29 @@ function renderTrackSection(casting) {
     `;
 }
 
+const CRATE_NUMBER_OPTIONS = Array.from({ length: 20 }, (_, i) => String(i + 1));
+
 function renderTrackCard(comp, castingId) {
     const lockTitle = 'Synced from Castings inventory — edit there';
+    const crate = comp.crate_id ? currentCrates.find(c => c.id === comp.crate_id) : null;
+    const currentNum = crate ? String(crate.crate_number || '') : '';
+    const options = ['<option value="">—</option>']
+        .concat(CRATE_NUMBER_OPTIONS.map(n =>
+            `<option value="${escapeAttr(n)}"${n === currentNum ? ' selected' : ''}>${escapeHtml(n)}</option>`
+        ))
+        .join('');
+    const isSelected = selectedComponentIds.has(comp.id);
     return `
-        <div class="pp-track-card pp-track-card-locked" data-component-id="${escapeAttr(comp.id)}" data-casting-id="${escapeAttr(castingId)}">
-            <div class="pp-track-card-grip-spacer" aria-hidden="true"></div>
+        <div class="pp-track-card pp-track-card-locked${isSelected ? ' pp-track-card-selected' : ''}" data-component-id="${escapeAttr(comp.id)}" data-casting-id="${escapeAttr(castingId)}">
+            <div class="pp-track-card-grip-spacer">
+                <input type="checkbox" class="pp-track-row-select" data-action="track-row-select" data-component-id="${escapeAttr(comp.id)}" ${isSelected ? 'checked' : ''} aria-label="Select this panel" />
+            </div>
             <div class="pp-track-card-fields">
                 <input type="text" class="pp-track-input" data-field="panel_id" value="${escapeAttr(comp.panel_id || '')}" readonly title="${escapeAttr(lockTitle)}" />
                 <input type="text" class="pp-track-input" data-field="width" value="${escapeAttr(comp.width || '')}" readonly title="${escapeAttr(lockTitle)}" />
                 <input type="text" class="pp-track-input" data-field="length" value="${escapeAttr(comp.length || '')}" readonly title="${escapeAttr(lockTitle)}" />
                 <input type="text" class="pp-track-input" data-field="color" value="${escapeAttr(comp.color || '')}" readonly title="${escapeAttr(lockTitle)}" />
+                <select class="pp-track-crate-select${currentNum ? ' pp-track-crate-set' : ''}" data-action="track-crate-select" data-component-id="${escapeAttr(comp.id)}" title="Assign this panel to a crate">${options}</select>
             </div>
         </div>
     `;
@@ -3345,11 +3569,85 @@ function wireEvents() {
             if (id) handlePrintStickers(id);
         }
     });
+    trackList?.addEventListener('change', (e) => {
+        const sel = e.target.closest('select[data-action="track-crate-select"]');
+        if (sel) {
+            const id = sel.dataset.componentId;
+            if (id) handleTrackingCrateSelect(id, sel.value);
+            return;
+        }
+        const rowCb = e.target.closest('input[data-action="track-row-select"]');
+        if (rowCb) {
+            const id = rowCb.dataset.componentId;
+            if (id) toggleSelectComponent(id, rowCb.checked);
+            return;
+        }
+        const allCb = e.target.closest('input[data-action="track-select-all-casting"]');
+        if (allCb) {
+            const castingId = allCb.dataset.castingId;
+            if (castingId) toggleSelectAllInCasting(castingId, allCb.checked);
+        }
+    });
+
+    // Tracking: bulk-action toolbar
+    const bulkBar = document.getElementById('pp-track-bulk-bar');
+    bulkBar?.addEventListener('change', (e) => {
+        const sel = e.target.closest('#pp-track-bulk-select');
+        if (sel && sel.value) {
+            const value = sel.value;
+            // Reset the dropdown back to placeholder so the user can re-apply.
+            sel.value = '';
+            applyBulkCrate(value);
+        }
+    });
+    bulkBar?.addEventListener('click', (e) => {
+        if (e.target.closest('[data-action="track-bulk-clear"]')) {
+            selectedComponentIds.clear();
+            renderTracking();
+        }
+    });
 
     // Tracking: "go to castings" link in empty state
     document.querySelector('[data-action="goto-castings-from-tracking"]')?.addEventListener('click', () => {
         setActiveTab('castings');
         if (currentProjectNumber) loadAndRenderCastings();
+    });
+
+    // Shipping: per-crate event delegation (clicks)
+    const shipList = document.getElementById('pp-ship-list');
+    shipList?.addEventListener('click', async (e) => {
+        const printBtn = e.target.closest('button[data-action="ship-print"]');
+        if (printBtn) {
+            const id = printBtn.dataset.crateId;
+            if (id) handlePrintPackingList(id);
+            return;
+        }
+        const delBtn = e.target.closest('button[data-action="ship-delete"]');
+        if (delBtn) {
+            const id = delBtn.dataset.crateId;
+            if (id) handleDeleteCrate(id);
+            return;
+        }
+        const unassignBtn = e.target.closest('button[data-action="ship-unassign"]');
+        if (unassignBtn) {
+            const componentId = unassignBtn.dataset.componentId;
+            if (componentId) await assignComponentToCrate(componentId, null);
+        }
+    });
+
+    // Shipping: per-crate field edits (input)
+    shipList?.addEventListener('input', (e) => {
+        const target = e.target;
+        if (!(target instanceof HTMLInputElement)) return;
+        const card = target.closest('.pp-ship-crate[data-crate-id]');
+        if (!card) return;
+        const crateId = card.dataset.crateId;
+        const field = target.dataset.field;
+        if (!crateId || !field) return;
+        scheduleCrateSave(crateId, { [field]: target.value });
+        // Reflect crate_number locally so the Tracking picker label updates immediately on next render.
+        const crate = currentCrates.find(c => c.id === crateId);
+        if (crate) crate[field] = target.value;
     });
 
     // Tracking: phase-picker chip toggles
@@ -4052,6 +4350,149 @@ function closeTrackPrintModal() {
     if (modal) modal.hidden = true;
 }
 
+// ---------- Shipping (crate-based packing lists) ----------
+
+async function activateShippingTab() {
+    const needsSave = document.getElementById('pp-ship-needs-save');
+    const list = document.getElementById('pp-ship-list');
+    if (!list) return;
+
+    if (!currentProjectNumber) {
+        if (needsSave) needsSave.hidden = false;
+        list.innerHTML = '';
+        return;
+    }
+    if (needsSave) needsSave.hidden = true;
+
+    // Make sure castings + components are loaded (member display depends on them).
+    if (currentCastings.length === 0) {
+        try { currentCastings = await loadCastings(currentProjectNumber); } catch (e) { /* ignore */ }
+    }
+    await Promise.all([
+        loadAllComponentsForCurrentProject(),
+        ensureCratesLoaded()
+    ]);
+    renderShipping();
+}
+
+function renderShipping() {
+    const list = document.getElementById('pp-ship-list');
+    if (!list) return;
+
+    if (currentCrates.length === 0) {
+        list.innerHTML = `<div class="pp-ship-empty">No crates yet. Pick a crate # on the <strong>Tracking</strong> tab to start a packing list.</div>`;
+        return;
+    }
+
+    // Build a map crateId -> ordered components (across all castings).
+    const membersByCrate = new Map();
+    for (const crate of currentCrates) membersByCrate.set(crate.id, []);
+    for (const casting of currentCastings) {
+        const comps = getComponentsFor(casting.id);
+        for (const comp of comps) {
+            if (comp.crate_id && membersByCrate.has(comp.crate_id)) {
+                membersByCrate.get(comp.crate_id).push({ comp, casting });
+            }
+        }
+    }
+
+    list.innerHTML = currentCrates.map(crate => renderCrateCard(crate, membersByCrate.get(crate.id) || [])).join('');
+}
+
+function renderCrateCard(crate, members) {
+    const memberRows = members.length === 0
+        ? `<div class="pp-ship-crate-empty">No panels assigned.</div>`
+        : members.map(({ comp, casting }) => `
+            <div class="pp-ship-crate-member">
+                <span class="pp-ship-member-panel">${escapeHtml(comp.panel_id || '—')}</span>
+                <span class="pp-ship-member-meta">${escapeHtml(casting.casting_number ? `Cast ${casting.casting_number}` : '')}</span>
+                <span class="pp-ship-member-meta">${escapeHtml([comp.width, comp.length].filter(Boolean).join(' × '))}</span>
+                <span class="pp-ship-member-meta">${escapeHtml(comp.color || '')}</span>
+                <button type="button" class="pp-ship-member-remove" data-action="ship-unassign" data-component-id="${escapeAttr(comp.id)}" title="Remove from this crate">×</button>
+            </div>
+        `).join('');
+
+    const memberCount = members.length;
+
+    return `
+        <div class="pp-ship-crate" data-crate-id="${escapeAttr(crate.id)}">
+            <div class="pp-ship-crate-header">
+                <span class="pp-ship-crate-num-label">Crate&nbsp;#</span>
+                <input type="text" class="pp-ship-crate-num" data-field="crate_number" value="${escapeAttr(crate.crate_number || '')}" />
+                <span class="pp-ship-crate-count">${memberCount} ${memberCount === 1 ? 'panel' : 'panels'}</span>
+                <div class="pp-ship-crate-actions">
+                    <button type="button" class="pp-ship-print-btn" data-action="ship-print" data-crate-id="${escapeAttr(crate.id)}" ${memberCount === 0 ? 'disabled' : ''} title="${memberCount === 0 ? 'Assign panels first' : 'Print packing list'}">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <polyline points="6 9 6 2 18 2 18 9"/>
+                            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+                            <rect x="6" y="14" width="12" height="8"/>
+                        </svg>
+                        <span>Packing List</span>
+                    </button>
+                    <button type="button" class="pp-ship-delete-btn" data-action="ship-delete" data-crate-id="${escapeAttr(crate.id)}" title="Delete crate (panels become unassigned)">×</button>
+                </div>
+            </div>
+            <div class="pp-ship-crate-meta-row">
+                <label class="pp-ship-crate-field">
+                    <span>Weight</span>
+                    <input type="text" data-field="weight" value="${escapeAttr(crate.weight || '')}" placeholder="e.g. 1,250 lbs" />
+                </label>
+                <label class="pp-ship-crate-field">
+                    <span>Dimensions</span>
+                    <input type="text" data-field="dimensions" value="${escapeAttr(crate.dimensions || '')}" placeholder="e.g. 96 × 48 × 30 in" />
+                </label>
+                <label class="pp-ship-crate-field pp-ship-crate-notes">
+                    <span>Notes</span>
+                    <input type="text" data-field="notes" value="${escapeAttr(crate.notes || '')}" placeholder="Handling notes, fragile, etc." />
+                </label>
+            </div>
+            <div class="pp-ship-crate-members">
+                ${memberRows}
+            </div>
+        </div>
+    `;
+}
+
+function scheduleCrateSave(crateId, fields) {
+    if (!crateId) return;
+    if (crateSaveTimers.has(crateId)) clearTimeout(crateSaveTimers.get(crateId));
+    const handle = setTimeout(async () => {
+        crateSaveTimers.delete(crateId);
+        try {
+            const updated = await updateCrate(crateId, fields);
+            if (updated) {
+                const idx = currentCrates.findIndex(c => c.id === crateId);
+                if (idx >= 0) currentCrates[idx] = { ...currentCrates[idx], ...updated };
+            }
+        } catch (err) {
+            logger.error('[project-portal] updateCrate failed:', err);
+        }
+    }, 350);
+    crateSaveTimers.set(crateId, handle);
+}
+
+async function handleDeleteCrate(crateId) {
+    if (!crateId) return;
+    const crate = currentCrates.find(c => c.id === crateId);
+    if (!crate) return;
+    const memberCount = getComponentCount(crateId);
+    const msg = memberCount === 0
+        ? `Delete crate #${crate.crate_number || ''}?`
+        : `Delete crate #${crate.crate_number || ''}? ${memberCount} ${memberCount === 1 ? 'panel' : 'panels'} will be unassigned.`;
+    if (!window.confirm(msg)) return;
+    try {
+        await deleteCrate(crateId);
+        currentCrates = currentCrates.filter(c => c.id !== crateId);
+        // Locally clear crate_id on any components that pointed here.
+        for (const list of currentCastingComponents.values()) {
+            for (const comp of list) if (comp.crate_id === crateId) comp.crate_id = null;
+        }
+        renderShipping();
+    } catch (err) {
+        logger.error('[project-portal] deleteCrate failed:', err);
+    }
+}
+
 // Override the print-header label for specific phases. Anything not listed
 // here prints with its default phase name from TRACKING_PHASES.
 const TRACK_PRINT_PHASE_LABELS = {
@@ -4660,6 +5101,196 @@ function handlePrintCoverPage() {
             win.print();
         } catch (err) {
             logger.error('[project-portal] print cover failed:', err);
+            showToast('Print failed', 'error');
+            cleanup();
+        }
+        setTimeout(cleanup, 60000);
+    }, { once: true });
+
+    const doc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (!doc) {
+        showToast('Print failed — could not open frame', 'error');
+        iframe.remove();
+        return;
+    }
+    doc.open();
+    doc.write(html);
+    doc.close();
+}
+
+// ---------- Print Packing List (per crate) ----------
+
+const PACKING_PRINT_CSS = `
+@page { size: letter portrait; margin: 0.5in; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', Arial, sans-serif; color: #000; font-size: 10pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; line-height: 1.35; }
+.pk-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12pt; padding-bottom: 6pt; border-bottom: 2pt solid #000; }
+.pk-title { font-size: 18pt; font-weight: 800; letter-spacing: 0.5pt; }
+.pk-crate-num { font-size: 22pt; font-weight: 800; color: #b91c1c; }
+.pk-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 4pt 16pt; margin-bottom: 14pt; }
+.pk-meta-row { display: grid; grid-template-columns: 9em 1fr; column-gap: 6pt; }
+.pk-meta-row .pk-label { color: #475569; font-weight: 600; }
+.pk-meta-row .pk-value { font-weight: 700; }
+.pk-section-bar { background: #e5e7eb; padding: 4pt 8pt; font-size: 11pt; font-weight: 700; margin-bottom: 6pt; border: 1pt solid #cbd5e1; }
+table.pk-table { width: 100%; border-collapse: collapse; margin-bottom: 14pt; }
+table.pk-table th, table.pk-table td { border: 1pt solid #94a3b8; padding: 4pt 6pt; font-size: 10pt; vertical-align: middle; }
+table.pk-table th { background: #f1f5f9; font-weight: 700; text-align: left; }
+table.pk-table td.pk-num { text-align: center; font-weight: 700; }
+table.pk-table td.pk-checkbox { text-align: center; width: 0.5in; }
+.pk-notes-block { margin-top: 12pt; }
+.pk-notes-box { border: 1pt solid #94a3b8; min-height: 0.6in; padding: 6pt; font-size: 10pt; white-space: pre-wrap; }
+.pk-signature-row { display: grid; grid-template-columns: 1fr 1fr; gap: 24pt; margin-top: 18pt; }
+.pk-sig-block { display: flex; flex-direction: column; gap: 2pt; }
+.pk-sig-line { border-bottom: 1pt solid #000; height: 28pt; }
+.pk-sig-label { font-size: 9pt; color: #475569; font-weight: 600; }
+.pk-footer { margin-top: 18pt; text-align: center; font-size: 9pt; color: #64748b; }
+@media print {
+    .pk-header { page-break-after: avoid; }
+    table.pk-table { page-break-inside: auto; }
+    table.pk-table tr { page-break-inside: avoid; page-break-after: auto; }
+}
+`;
+
+function buildPackingListHtml(crate, members, project) {
+    const proj = project || {};
+    const colorTitle = (currentColorLog?.name || '').trim();
+    const memberCount = members.length;
+
+    const rows = members.length === 0
+        ? `<tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:8pt;">No panels assigned to this crate.</td></tr>`
+        : members.map(({ comp, casting }, i) => {
+            const dim = [comp.width, comp.length].filter(Boolean).join(' × ');
+            return `<tr>
+                <td class="pk-num">${i + 1}</td>
+                <td><strong>${escapeHtml(comp.panel_id || '')}</strong></td>
+                <td>${escapeHtml(casting?.casting_number ? `Cast ${casting.casting_number}` : '')}</td>
+                <td>${escapeHtml(comp.type || '')}</td>
+                <td>${escapeHtml(dim)}</td>
+                <td>${escapeHtml(comp.color || colorTitle || '')}</td>
+                <td class="pk-checkbox">☐</td>
+            </tr>`;
+        }).join('');
+
+    return `<!doctype html><html><head><meta charset="utf-8"><title>Packing List — Crate ${escapeHtml(crate.crate_number || '')} — ${escapeHtml(proj.project_number || '')}</title><style>${PACKING_PRINT_CSS}</style></head><body>
+        <div class="pk-header">
+            <div class="pk-title">PACKING LIST</div>
+            <div class="pk-crate-num">CRATE #${escapeHtml(crate.crate_number || '—')}</div>
+        </div>
+
+        <div class="pk-meta">
+            <div class="pk-meta-row"><span class="pk-label">Project #:</span><span class="pk-value">${escapeHtml(proj.project_number || '')}</span></div>
+            <div class="pk-meta-row"><span class="pk-label">Project Name:</span><span class="pk-value">${escapeHtml(proj.project_name || '')}</span></div>
+            <div class="pk-meta-row"><span class="pk-label">Color:</span><span class="pk-value">${escapeHtml(colorTitle || '')}</span></div>
+            <div class="pk-meta-row"><span class="pk-label">Panel Count:</span><span class="pk-value">${memberCount}</span></div>
+            <div class="pk-meta-row"><span class="pk-label">Weight:</span><span class="pk-value">${escapeHtml(crate.weight || '')}</span></div>
+            <div class="pk-meta-row"><span class="pk-label">Dimensions:</span><span class="pk-value">${escapeHtml(crate.dimensions || '')}</span></div>
+            <div class="pk-meta-row"><span class="pk-label">Delivery Address:</span><span class="pk-value">${escapeHtml(proj.delivery_address || '')}</span></div>
+            <div class="pk-meta-row"><span class="pk-label">Date:</span><span class="pk-value">${escapeHtml(formatPackingDate(new Date()))}</span></div>
+        </div>
+
+        <div class="pk-section-bar">Panels in this crate</div>
+        <table class="pk-table">
+            <thead>
+                <tr>
+                    <th style="width:0.4in;">#</th>
+                    <th>Panel ID</th>
+                    <th>Cast</th>
+                    <th>Type</th>
+                    <th>Size (W × L)</th>
+                    <th>Color</th>
+                    <th style="width:0.5in;text-align:center;">✓</th>
+                </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+        </table>
+
+        ${crate.notes ? `<div class="pk-notes-block">
+            <div class="pk-section-bar">Notes</div>
+            <div class="pk-notes-box">${escapeHtml(crate.notes)}</div>
+        </div>` : ''}
+
+        <div class="pk-signature-row">
+            <div class="pk-sig-block">
+                <div class="pk-sig-line"></div>
+                <div class="pk-sig-label">Packed by (signature / date)</div>
+            </div>
+            <div class="pk-sig-block">
+                <div class="pk-sig-line"></div>
+                <div class="pk-sig-label">Received by (signature / date)</div>
+            </div>
+        </div>
+
+        <div class="pk-footer">Crate ${escapeHtml(crate.crate_number || '')} · Project ${escapeHtml(proj.project_number || '')} · ${memberCount} ${memberCount === 1 ? 'panel' : 'panels'}</div>
+    </body></html>`;
+}
+
+function formatPackingDate(d) {
+    if (!(d instanceof Date) || isNaN(d.getTime())) return '';
+    return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
+}
+
+async function handlePrintPackingList(crateId) {
+    if (!currentProjectNumber) {
+        showToast('Save the project first', 'error');
+        return;
+    }
+    const crate = currentCrates.find(c => c.id === crateId);
+    if (!crate) return;
+
+    // Lazily load color log if the user hasn't visited that tab.
+    if (!currentColorLog && currentProjectNumber) {
+        try {
+            const existing = await loadColorLogForProject(currentProjectNumber);
+            currentColorLog = existing || createEmptyColorLog();
+        } catch (err) {
+            logger.error('[project-portal] color-log load failed for packing list:', err);
+            currentColorLog = createEmptyColorLog();
+        }
+    }
+
+    // Gather members across all castings, ordered by casting sort_order then panel.
+    const members = [];
+    for (const casting of currentCastings) {
+        const comps = getComponentsFor(casting.id);
+        for (const comp of comps) {
+            if (comp.crate_id === crateId) members.push({ comp, casting });
+        }
+    }
+
+    let project = null;
+    try {
+        project = await loadProject(currentProjectNumber);
+    } catch (err) {
+        logger.warn('[project-portal] loadProject for packing list failed:', err);
+    }
+    if (!project) project = { project_number: currentProjectNumber };
+
+    const html = buildPackingListHtml(crate, members, project);
+
+    const prior = document.getElementById('pp-packing-print-frame');
+    if (prior) prior.remove();
+
+    const iframe = document.createElement('iframe');
+    iframe.id = 'pp-packing-print-frame';
+    iframe.setAttribute('aria-hidden', 'true');
+    iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;';
+    document.body.appendChild(iframe);
+
+    let cleaned = false;
+    const cleanup = () => {
+        if (cleaned) return;
+        cleaned = true;
+        setTimeout(() => { iframe.remove(); }, 500);
+    };
+
+    iframe.addEventListener('load', () => {
+        try {
+            const win = iframe.contentWindow;
+            win.addEventListener('afterprint', cleanup);
+            win.focus();
+            win.print();
+        } catch (err) {
+            logger.error('[project-portal] print packing list failed:', err);
             showToast('Print failed', 'error');
             cleanup();
         }
