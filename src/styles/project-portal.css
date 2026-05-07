@@ -561,6 +561,7 @@ html, body {
     font-weight: 500;
 }
 .pp-field input,
+.pp-field textarea,
 .pp-section textarea {
     padding: 6px 10px;
     border: 1px solid #cbd5e1;
@@ -576,7 +577,15 @@ html, body {
     overflow: hidden;
     min-height: 80px;
 }
+.pp-field textarea {
+    margin-top: 0;
+    min-height: 48px;
+    resize: none;
+    overflow: hidden;
+    line-height: 1.4;
+}
 .pp-field input:focus,
+.pp-field textarea:focus,
 .pp-section textarea:focus {
     outline: none;
     border-color: #1d4ed8;
@@ -2405,12 +2414,14 @@ html, body {
         padding: 4px 18px 4px 10px;
     }
     .pp-field input,
+    .pp-field textarea,
     .pp-section textarea {
         border: none;
         background: transparent;
         padding: 2px 0;
     }
     .pp-section textarea { resize: none; }
+    .pp-field textarea { resize: none; min-height: 0; }
 }
 
 body.pp-printing #pp-list-view { display: none !important; }

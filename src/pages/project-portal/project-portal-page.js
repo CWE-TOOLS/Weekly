@@ -5588,7 +5588,7 @@ function buildPackingListHtml(crate, members, project) {
             <div class="pk-meta-row"><span class="pk-label">Panel Count:</span><span class="pk-value">${memberCount}</span></div>
             <div class="pk-meta-row"><span class="pk-label">Weight:</span><span class="pk-value">${escapeHtml(crate.weight || '')}</span></div>
             <div class="pk-meta-row"><span class="pk-label">Dimensions:</span><span class="pk-value">${escapeHtml(crate.dimensions || '')}</span></div>
-            <div class="pk-meta-row"><span class="pk-label">Delivery Address:</span><span class="pk-value">${escapeHtml(proj.delivery_address || '')}</span></div>
+            <div class="pk-meta-row"><span class="pk-label">Delivery Address:</span><span class="pk-value">${proj.delivery_address ? escapeHtml(proj.delivery_address).replace(/\n/g, '<br>') : ''}</span></div>
             <div class="pk-meta-row"><span class="pk-label">Date:</span><span class="pk-value">${escapeHtml(formatPackingDate(new Date()))}</span></div>
         </div>
 
