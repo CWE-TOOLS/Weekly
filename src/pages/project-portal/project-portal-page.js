@@ -115,7 +115,7 @@ const FORM_FIELDS = [
 
 let allProjectRows = [];           // From Supabase
 let currentProjectNumber = null;     // null = list view; string = form view
-let listSort = { column: 'updated_at', direction: 'desc' };
+let listSort = { column: 'status', direction: 'asc' };
 let currentTab = 'info';             // 'info' | 'castings' | 'optimizer' | 'tracking' | 'shipping'
 let currentClassroom = '1';          // CR Notes sub-tab: '1' | '2' | '3'
 let currentClassroomTasks = [];      // all classroom tasks for current project (across all 3 classrooms)
