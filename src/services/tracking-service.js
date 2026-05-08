@@ -238,6 +238,51 @@ export async function deleteAllComponentsForCasting(castingId) {
 }
 
 /**
+ * Mark a component produced or not. Treated as a fast, single-field write.
+ * @param {string} componentId
+ * @param {boolean} produced
+ */
+export async function setComponentProduced(componentId, produced) {
+    if (!componentId) throw new Error('componentId required');
+    const client = await getClient();
+    if (!client) throw new Error('Supabase client unavailable');
+
+    const { data, error } = await client
+        .from(TABLE)
+        .update({ produced: !!produced })
+        .eq('id', componentId)
+        .select()
+        .maybeSingle();
+
+    if (error) {
+        logger.error('[tracking] setComponentProduced error:', error);
+        throw error;
+    }
+    return data;
+}
+
+/**
+ * Bulk mark many components produced (or not) in a single round-trip.
+ * @param {string[]} componentIds
+ * @param {boolean} produced
+ */
+export async function setComponentsProducedBulk(componentIds, produced) {
+    if (!Array.isArray(componentIds) || componentIds.length === 0) return;
+    const client = await getClient();
+    if (!client) throw new Error('Supabase client unavailable');
+
+    const { error } = await client
+        .from(TABLE)
+        .update({ produced: !!produced })
+        .in('id', componentIds);
+
+    if (error) {
+        logger.error('[tracking] setComponentsProducedBulk error:', error);
+        throw error;
+    }
+}
+
+/**
  * Update sort_order for a list of component ids in the order given.
  * @param {string[]} idsInOrder
  */

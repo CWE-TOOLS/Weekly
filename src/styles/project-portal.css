@@ -1900,8 +1900,29 @@ html, body {
     flex: 1 1 auto;
     min-width: 0;
     display: grid;
-    grid-template-columns: 0.5fr 0.7fr 0.7fr 1fr 0.5fr;
+    grid-template-columns: 70px 0.5fr 0.7fr 0.7fr 1fr 0.5fr;
     gap: 4px;
+    align-items: center;
+}
+.pp-track-produced-cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+.pp-track-produced {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: #16a34a;
+    margin: 0;
+}
+.pp-track-card-produced {
+    background: #f0fdf4;
+    border-color: #bbf7d0;
+}
+.pp-track-card-produced:hover {
+    border-color: #86efac;
 }
 
 /* Field-name header row inside each expanded section, aligned to card columns */
@@ -1919,7 +1940,7 @@ html, body {
     flex: 1 1 auto;
     min-width: 0;
     display: grid;
-    grid-template-columns: 0.5fr 0.7fr 0.7fr 1fr 0.5fr;
+    grid-template-columns: 70px 0.5fr 0.7fr 0.7fr 1fr 0.5fr;
     gap: 4px;
 }
 .pp-track-header-fields span {
@@ -2054,6 +2075,34 @@ html, body {
     background: #1e293b;
     color: #ffffff;
     border-color: #334155;
+}
+.pp-track-bulk-btn {
+    padding: 5px 10px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    font-size: 12px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s;
+}
+.pp-track-bulk-btn-complete {
+    background: #16a34a;
+    color: #ffffff;
+    border-color: #15803d;
+}
+.pp-track-bulk-btn-complete:hover {
+    background: #15803d;
+}
+.pp-track-bulk-btn-incomplete {
+    background: transparent;
+    color: #cbd5e1;
+    border-color: #475569;
+}
+.pp-track-bulk-btn-incomplete:hover {
+    background: #1e293b;
+    color: #ffffff;
+    border-color: #64748b;
 }
 
 /* Crate# dropdown on Tracking row */
@@ -3274,6 +3323,64 @@ body.pp-printing .pp-tab-panel[data-panel="color-log"] { display: none !importan
     flex-direction: column;
     gap: 12px;
     margin-top: 4px;
+}
+
+/* =====================================================================
+   Mix Day Totals panel — sits between assign table and batch tickets.
+   Ported from Batchin Calc / index.html.
+   ===================================================================== */
+.pp-bt-totals-panel {
+    background: #fff;
+    border: 2px solid var(--accent-primary, #4f46e5);
+    border-radius: 6px;
+    padding: 14px 18px;
+    margin: 14px 0 4px;
+}
+.pp-bt-totals-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent-primary, #4f46e5);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 10px;
+}
+.pp-bt-totals-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.pp-bt-totals-table th {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #64748b;
+    padding: 6px 10px;
+    text-align: left;
+    border-bottom: 2px solid #e2e8f0;
+}
+.pp-bt-totals-table th.pp-bt-totals-num {
+    text-align: right;
+}
+.pp-bt-totals-table td {
+    padding: 6px 10px;
+    font-size: 13px;
+    border-bottom: 1px solid #f1f5f9;
+    color: #0f172a;
+}
+.pp-bt-totals-table td.pp-bt-totals-num {
+    text-align: right;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+.pp-bt-totals-table .pp-bt-totals-cat-row td {
+    font-weight: 700;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--accent-primary, #4f46e5);
+    padding-top: 12px;
+    border-bottom: 1.5px solid var(--accent-primary, #4f46e5);
+    background: #f8fafc;
 }
 
 /* =====================================================================

@@ -35,7 +35,9 @@ import {
 import {
     loadAllComponentsForProject,
     createComponentsBulk,
-    deleteAllComponentsForCasting
+    deleteAllComponentsForCasting,
+    setComponentProduced,
+    setComponentsProducedBulk
 } from '../../services/tracking-service.js';
 import {
     loadCratesForProject,
@@ -2278,6 +2280,32 @@ async function handleTrackingCrateSelect(componentId, crateNumber) {
     if (crate) await assignComponentToCrate(componentId, crate.id);
 }
 
+async function handleProducedToggle(componentId, produced) {
+    if (!componentId) return;
+    // If the row is part of a multi-row selection, apply the toggle to every selected row.
+    if (selectedComponentIds.has(componentId) && selectedComponentIds.size > 1) {
+        await applyBulkProduced(!!produced);
+        return;
+    }
+    let target = null;
+    for (const list of currentCastingComponents.values()) {
+        const found = list.find(c => c.id === componentId);
+        if (found) { target = found; break; }
+    }
+    if (!target) return;
+    const prev = !!target.produced;
+    target.produced = !!produced;
+    renderTracking();
+    try {
+        await setComponentProduced(componentId, !!produced);
+    } catch (err) {
+        logger.error('[project-portal] setComponentProduced failed:', err);
+        target.produced = prev;
+        renderTracking();
+        showToast('Could not save produced flag — check connection.', 'error');
+    }
+}
+
 async function assignComponentToCrate(componentId, crateId) {
     if (!componentId) return;
     // Locate the component row in our local map and update it.
@@ -2384,6 +2412,8 @@ function renderTrackingBulkBar() {
         <div class="pp-track-bulk-inner">
             <span class="pp-track-bulk-count">${count} ${count === 1 ? 'panel' : 'panels'} selected</span>
             <select id="pp-track-bulk-select" class="pp-track-bulk-select" aria-label="Bulk crate assignment">${options}</select>
+            <button type="button" class="pp-track-bulk-btn pp-track-bulk-btn-complete" data-action="track-bulk-complete">Mark Complete</button>
+            <button type="button" class="pp-track-bulk-btn pp-track-bulk-btn-incomplete" data-action="track-bulk-incomplete">Mark Incomplete</button>
             <button type="button" class="pp-track-bulk-clear" data-action="track-bulk-clear">Clear selection</button>
         </div>
     `;
@@ -2405,6 +2435,36 @@ function toggleSelectAllInCasting(castingId, selected) {
         else selectedComponentIds.delete(comp.id);
     }
     renderTracking();
+}
+
+async function applyBulkProduced(produced) {
+    if (selectedComponentIds.size === 0) return;
+    const ids = [...selectedComponentIds];
+
+    const prevById = new Map();
+    for (const list of currentCastingComponents.values()) {
+        for (const comp of list) {
+            if (selectedComponentIds.has(comp.id)) {
+                prevById.set(comp.id, !!comp.produced);
+                comp.produced = !!produced;
+            }
+        }
+    }
+    selectedComponentIds.clear();
+    renderTracking();
+
+    try {
+        await setComponentsProducedBulk(ids, !!produced);
+    } catch (err) {
+        logger.error('[project-portal] setComponentsProducedBulk failed:', err);
+        for (const list of currentCastingComponents.values()) {
+            for (const comp of list) {
+                if (prevById.has(comp.id)) comp.produced = prevById.get(comp.id);
+            }
+        }
+        renderTracking();
+        showToast('Could not save produced flags — check connection.', 'error');
+    }
 }
 
 async function applyBulkCrate(value) {
@@ -2480,6 +2540,7 @@ function renderTrackSection(casting) {
                 <input type="checkbox" class="pp-track-select-all" data-action="track-select-all-casting" data-casting-id="${escapeAttr(casting.id)}" ${allSelected ? 'checked' : ''} ${someSelected ? 'data-indeterminate="true"' : ''} aria-label="Select all in this cast" title="Select all in this cast" ${count === 0 ? 'disabled' : ''} />
             </div>
             <div class="pp-track-header-fields" aria-hidden="true">
+                <span>Complete</span>
                 <span>Panel ID</span>
                 <span>Width</span>
                 <span>Length</span>
@@ -2548,12 +2609,16 @@ function renderTrackCard(comp, castingId) {
         ))
         .join('');
     const isSelected = selectedComponentIds.has(comp.id);
+    const isProduced = !!comp.produced;
     return `
-        <div class="pp-track-card pp-track-card-locked${isSelected ? ' pp-track-card-selected' : ''}" data-component-id="${escapeAttr(comp.id)}" data-casting-id="${escapeAttr(castingId)}">
+        <div class="pp-track-card pp-track-card-locked${isSelected ? ' pp-track-card-selected' : ''}${isProduced ? ' pp-track-card-produced' : ''}" data-component-id="${escapeAttr(comp.id)}" data-casting-id="${escapeAttr(castingId)}">
             <div class="pp-track-card-grip-spacer">
                 <input type="checkbox" class="pp-track-row-select" data-action="track-row-select" data-component-id="${escapeAttr(comp.id)}" ${isSelected ? 'checked' : ''} aria-label="Select this panel" />
             </div>
             <div class="pp-track-card-fields">
+                <label class="pp-track-produced-cell" title="Mark this panel as complete">
+                    <input type="checkbox" class="pp-track-produced" data-action="track-produced-toggle" data-component-id="${escapeAttr(comp.id)}" ${isProduced ? 'checked' : ''} aria-label="Mark as complete" />
+                </label>
                 <input type="text" class="pp-track-input" data-field="panel_id" value="${escapeAttr(comp.panel_id || '')}" readonly title="${escapeAttr(lockTitle)}" />
                 <input type="text" class="pp-track-input" data-field="width" value="${escapeAttr(comp.width || '')}" readonly title="${escapeAttr(lockTitle)}" />
                 <input type="text" class="pp-track-input" data-field="length" value="${escapeAttr(comp.length || '')}" readonly title="${escapeAttr(lockTitle)}" />
@@ -3697,6 +3762,9 @@ function wireEvents() {
         e.preventDefault();
     });
     trackList?.addEventListener('click', (e) => {
+        // Produced checkbox — handled by its own change handler; let it through without
+        // our card-click intercept that would otherwise hijack the toggle.
+        if (e.target.closest('input[data-action="track-produced-toggle"]')) return;
         // Click anywhere on a panel card to toggle selection (skip the crate select).
         const card = e.target.closest('.pp-track-card[data-component-id]');
         if (card && !e.target.closest('select')) {
@@ -3756,6 +3824,12 @@ function wireEvents() {
             if (id) handleTrackingCrateSelect(id, sel.value);
             return;
         }
+        const producedCb = e.target.closest('input[data-action="track-produced-toggle"]');
+        if (producedCb) {
+            const id = producedCb.dataset.componentId;
+            if (id) handleProducedToggle(id, producedCb.checked);
+            return;
+        }
         const rowCb = e.target.closest('input[data-action="track-row-select"]');
         if (rowCb) {
             const id = rowCb.dataset.componentId;
@@ -3784,6 +3858,14 @@ function wireEvents() {
         if (e.target.closest('[data-action="track-bulk-clear"]')) {
             selectedComponentIds.clear();
             renderTracking();
+            return;
+        }
+        if (e.target.closest('[data-action="track-bulk-complete"]')) {
+            applyBulkProduced(true);
+            return;
+        }
+        if (e.target.closest('[data-action="track-bulk-incomplete"]')) {
+            applyBulkProduced(false);
         }
     });
 
@@ -4174,11 +4256,13 @@ function renderBatchPreview(casting, ticket) {
 
     const sectionHeader = renderBatchSectionHeader(plan);
     const assign = renderBatchAssignTable(plan);
+    const totalsPanel = renderBatchTotals(plan, currentColorLog);
     const tickets = renderBatchTicketCards(casting, ticket, plan);
 
     return `
         ${sectionHeader}
         ${assign}
+        ${totalsPanel}
         <div class="pp-bt-tickets">${tickets}</div>
         <div class="pp-bt-print-hint">Use <strong>Print Batch Tickets</strong> in the top bar to print these.</div>
     `;
@@ -4231,6 +4315,132 @@ function renderBatchAssignTable(plan) {
     `;
 }
 
+/**
+ * Mix Day Totals — sums every ingredient across all batches in the plan,
+ * applying the same per-batch overrides used on the tickets:
+ *   - Sand split into "Sand - Bulk (Cowbay)" for Spray Up backup batches
+ *   - Fibers replaced by Cemfill for Spray Up backup batches and ALL Direct Cast batches
+ *   - Pigments multiplied by (1 - reduction%) on FINAL Back Up batches
+ * Matches the totals table from Batchin Calc/index.html.
+ */
+function renderBatchTotals(plan, log) {
+    if (!plan?.batches?.length) return '';
+    const pigReductionPct = FINAL_BACKUP_PIG_REDUCTION_PCT;
+    const isDirectCast = log?.castMethod === 'directCast';
+
+    const totals = {};
+    const orderKeys = [];
+    const addTotal = (key, name, qty, unit, category) => {
+        if (qty === '-' || qty === '' || qty == null || isNaN(qty)) return;
+        const k = key + '__' + unit;
+        if (!totals[k]) {
+            totals[k] = { name, total: 0, unit, category };
+            orderKeys.push(k);
+        }
+        totals[k].total += parseFloat(qty);
+    };
+
+    // Pre-seed base ingredient ordering, inserting bulk sand right after sand.
+    const hasBulkSand = !isDirectCast && plan.batches.some(b => b.type === 'firstBackUp' || b.type === 'finalBackUp');
+    for (const ing of (log?.baseIngredients || [])) {
+        if (!ing?.name) continue;
+        const unit = ing.unit || 'lbs';
+        const k = ing.name + '__' + unit;
+        if (!totals[k]) {
+            totals[k] = { name: ing.name + (ing.note ? ' (' + ing.note + ')' : ''), total: 0, unit, category: 'dry' };
+            orderKeys.push(k);
+        }
+        if ((ing.name || '').trim().toLowerCase() === 'sand' && hasBulkSand) {
+            const bk = 'Sand_bulk__' + unit;
+            if (!totals[bk]) {
+                totals[bk] = { name: 'Sand - Bulk (Cowbay)', total: 0, unit, category: 'dry' };
+                orderKeys.push(bk);
+            }
+        }
+    }
+
+    plan.batches.forEach(b => {
+        const { batchSandLbs, scaleFactor, type: batchType } = b;
+        const pigMultiplier = batchType === 'finalBackUp' ? (1 - pigReductionPct / 100) : 1;
+        const isBackup = batchType === 'firstBackUp' || batchType === 'finalBackUp';
+
+        // Base ingredients — split sand into Bulk Sand for sprayUp backup batches.
+        for (const ing of (log?.baseIngredients || [])) {
+            if (!ing?.weight || !ing?.name) continue;
+            const w = Number(ing.weight) * scaleFactor;
+            if ((ing.name || '').trim().toLowerCase() === 'sand' && !isDirectCast && isBackup) {
+                addTotal('Sand_bulk', 'Sand - Bulk (Cowbay)', roundSig(w, 4), ing.unit || 'lbs', 'dry');
+            } else {
+                addTotal(ing.name, ing.name + (ing.note ? ' (' + ing.note + ')' : ''), roundSig(w, 4), ing.unit || 'lbs', 'dry');
+            }
+        }
+
+        // Fibers override:
+        //   - Spray Up backup batches → Cemfill 18 lbs/250 lbs sand
+        //   - Direct Cast (all batches) → Cemfill 18 lbs/250 lbs sand
+        const cemfillOverride = isBackup || (isDirectCast && batchType === 'face');
+        if (cemfillOverride) {
+            const fibersLbs = 18 * (batchSandLbs / 250);
+            addTotal('Fibers_override', 'Fibers - Cemfill', roundSig(fibersLbs, 4), 'lbs', 'dry');
+        } else {
+            const fib = (log?.additives || []).find(a => /fiber|fibre/i.test(a?.name || ''));
+            const fibAmt = fib?.weight ?? fib?.amount;
+            if (fib && fibAmt !== '' && fibAmt != null && !isNaN(Number(fibAmt))) {
+                addTotal('Fibers', 'Fibers' + (fib.note ? ' (' + fib.note + ')' : ''), roundSig(Number(fibAmt) * scaleFactor, 4), fib.unit || 'g', 'additive');
+            }
+        }
+
+        // Pigments
+        (log?.pigments || []).forEach(pig => {
+            if (!pig || pig.pct === '' || pig.pct == null) return;
+            const effectivePct = Number(pig.pct) * pigMultiplier;
+            const weightLbs = batchSandLbs * effectivePct / 100;
+            const unit = pig.unit || 'lbs';
+            const converted = weightLbs * (FROM_LBS[unit] || 1);
+            const label = (pig.name || '') + ' (' + roundSig(effectivePct, 2) + '%)';
+            addTotal('pig_' + (pig.name || '_'), label, roundSig(converted, 4), unit, 'pigment');
+        });
+
+        // Additives (skip fibers — handled above)
+        for (const add of (log?.additives || [])) {
+            if (!add?.name) continue;
+            if (/fiber|fibre/i.test(add.name)) continue;
+            const amt = add.weight ?? add.amount;
+            if (amt === '' || amt == null || isNaN(Number(amt))) continue;
+            const a = Number(amt) * scaleFactor;
+            addTotal(add.name, add.name + (add.note ? ' (' + add.note + ')' : ''), roundSig(a, 4), add.unit || 'oz', 'additive');
+        }
+    });
+
+    const categories = [
+        { key: 'dry', label: 'Dry Batch' },
+        { key: 'pigment', label: 'Pigments' },
+        { key: 'additive', label: 'Additives' },
+    ];
+
+    let rows = '';
+    for (const cat of categories) {
+        const items = orderKeys.map(k => totals[k]).filter(t => t && t.category === cat.key && t.total > 0);
+        if (items.length === 0) continue;
+        rows += `<tr class="pp-bt-totals-cat-row"><td colspan="3">${escapeHtml(cat.label)}</td></tr>`;
+        for (const item of items) {
+            rows += `<tr><td>${escapeHtml(item.name)}</td><td class="pp-bt-totals-num">${roundSig(item.total, 2)}</td><td>${escapeHtml(item.unit)}</td></tr>`;
+        }
+    }
+
+    if (!rows) return '';
+
+    return `
+        <div class="pp-bt-totals-panel">
+            <div class="pp-bt-totals-title">Mix Day Totals — All Batches</div>
+            <table class="pp-bt-totals-table">
+                <thead><tr><th>Material</th><th class="pp-bt-totals-num">Total Qty</th><th>Unit</th></tr></thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>
+    `;
+}
+
 function renderBatchTicketCards(casting, ticket, plan) {
     const projectName = document.getElementById('pp-f-project_name')?.value || '';
     const sampleName = currentColorLog?.name || '';
@@ -4276,8 +4486,12 @@ function renderBatchTicketCard({
     };
     const scaleAdd = (name) => {
         const f = findAdd(name);
-        if (!f || !f.amount) return { qty: '-', unit: f?.unit || 'oz', type: f?.note || '' };
-        return { qty: roundSig(Number(f.amount) * scaleFactor, 2), unit: f.unit || 'oz', type: f.note || '' };
+        // Additives are stored as `weight` in the color log UI; legacy rows may use `amount`.
+        const amt = f?.weight ?? f?.amount;
+        if (!f || amt === '' || amt == null || isNaN(Number(amt))) {
+            return { qty: '-', unit: f?.unit || 'oz', type: f?.note || '' };
+        }
+        return { qty: roundSig(Number(amt) * scaleFactor, 2), unit: f.unit || 'oz', type: f.note || '' };
     };
 
     const portland = scaleBase('Portland');
@@ -4296,9 +4510,21 @@ function renderBatchTicketCard({
         aggRows = `<tr><td class="bt-label">Aggregate:</td><td class="bt-type">TYPE:</td><td class="bt-qty-label">QTY:</td><td class="bt-qty">-</td><td class="bt-unit">lbs</td></tr>`;
     }
 
-    let fibers = scaleAdd('Fibers');
-    if (batchType === 'firstBackUp' || batchType === 'finalBackUp') {
-        // Backup batches: 18 lbs fibers per 250 lbs sand (Cemfill).
+    // Tolerant lookup so "Fiber" / "Fibers" / "fibre" all match.
+    const fiberSrc = (colorLog?.additives || []).find(i => /fiber|fibre/i.test(i?.name || ''));
+    const fiberAmt = fiberSrc?.weight ?? fiberSrc?.amount;
+    let fibers;
+    if (fiberSrc && fiberAmt !== '' && fiberAmt != null && !isNaN(Number(fiberAmt))) {
+        fibers = { qty: roundSig(Number(fiberAmt) * scaleFactor, 2), unit: fiberSrc.unit || 'oz', type: fiberSrc.note || '' };
+    } else {
+        fibers = { qty: '-', unit: fiberSrc?.unit || 'oz', type: fiberSrc?.note || '' };
+    }
+    // Cemfill override:
+    //   - Spray Up: First Back Up & FINAL Back Up
+    //   - Direct Cast: ALL batches (Face Mix + FINAL Back Up)
+    const overrideToCemfill = (batchType === 'firstBackUp' || batchType === 'finalBackUp')
+        || (castMethod === 'directCast' && batchType === 'face');
+    if (overrideToCemfill) {
         fibers = { qty: roundSig(18 * (batchSandLbs / 250), 2), unit: 'lbs', type: 'Cemfill' };
     }
 
