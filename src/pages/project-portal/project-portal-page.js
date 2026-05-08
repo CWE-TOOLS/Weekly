@@ -129,6 +129,8 @@ let currentCastingComponents = new Map();  // castingId -> Array<component row>
 let currentCrates = [];                    // project_crates rows for current project (ordered)
 let cratesLoadedFor = null;                // project_number we last loaded crates for
 let crateSaveTimers = new Map();           // crateId -> debounce handle (per-field saves)
+let currentShipExpanded = new Set();       // crateIds whose body is expanded on Shipping tab
+let shipQtyModeGlobal = false;             // when true, all crate cards + packing lists render as type×qty rollups
 let selectedComponentIds = new Set();      // tracking-tab multi-select for bulk crate assign
 let lastTrackSelectionAnchor = null;       // last component_id single-clicked in Tracking (for shift-click range select)
 let currentPhasesEnabled = false;          // mirrors projects.phases_enabled for the active project
@@ -231,6 +233,8 @@ async function showFormView(projectNumber, draftOverrides = null) {
     currentCrates = [];
     for (const t of crateSaveTimers.values()) clearTimeout(t);
     crateSaveTimers.clear();
+    currentShipExpanded.clear();
+    shipQtyModeGlobal = false;
 
     // Invalidate phases cache.
     phasesLoadedFor = null;
@@ -3904,6 +3908,17 @@ function wireEvents() {
     // Shipping: per-crate event delegation (clicks)
     const shipList = document.getElementById('pp-ship-list');
     shipList?.addEventListener('click', async (e) => {
+        const expandBtn = e.target.closest('button[data-action="ship-toggle-expand"]');
+        if (expandBtn) {
+            const card = expandBtn.closest('.pp-ship-crate[data-crate-id]');
+            const id = card?.dataset.crateId;
+            if (id) {
+                if (currentShipExpanded.has(id)) currentShipExpanded.delete(id);
+                else currentShipExpanded.add(id);
+                renderShipping();
+            }
+            return;
+        }
         const printBtn = e.target.closest('button[data-action="ship-print"]');
         if (printBtn) {
             const id = printBtn.dataset.crateId;
@@ -3921,6 +3936,12 @@ function wireEvents() {
             const componentId = unassignBtn.dataset.componentId;
             if (componentId) await assignComponentToCrate(componentId, null);
         }
+    });
+
+    // Shipping: global "list as quantities" checkbox — re-renders all crate cards.
+    document.getElementById('pp-ship-qty-mode')?.addEventListener('change', (e) => {
+        shipQtyModeGlobal = !!e.target.checked;
+        renderShipping();
     });
 
     // Shipping: per-crate field edits (input)
@@ -5014,6 +5035,12 @@ async function activateShippingTab() {
     }
     if (needsSave) needsSave.hidden = true;
 
+    // Default to all crates collapsed each time the user opens this tab.
+    // Qty-vs-list view choice persists for the session.
+    currentShipExpanded.clear();
+    const qtyCheckbox = document.getElementById('pp-ship-qty-mode');
+    if (qtyCheckbox) qtyCheckbox.checked = shipQtyModeGlobal;
+
     // Make sure castings + components are loaded (member display depends on them).
     if (currentCastings.length === 0) {
         try { currentCastings = await loadCastings(currentProjectNumber); } catch (e) { /* ignore */ }
@@ -5058,23 +5085,31 @@ function renderShipping() {
 }
 
 function renderCrateCard(crate, members) {
-    const memberRows = members.length === 0
-        ? `<div class="pp-ship-crate-empty">No panels assigned.</div>`
-        : members.map(({ comp, casting }) => `
-            <div class="pp-ship-crate-member">
-                <span class="pp-ship-member-panel">${escapeHtml(comp.panel_id || '—')}</span>
-                <span class="pp-ship-member-meta">${escapeHtml(casting.casting_number ? `Cast ${casting.casting_number}` : '')}</span>
-                <span class="pp-ship-member-meta">${escapeHtml([comp.width, comp.length].filter(Boolean).join(' × '))}</span>
-                <span class="pp-ship-member-meta">${escapeHtml(comp.color || '')}</span>
-                <button type="button" class="pp-ship-member-remove" data-action="ship-unassign" data-component-id="${escapeAttr(comp.id)}" title="Remove from this crate">×</button>
-            </div>
-        `).join('');
-
+    const isOpen = currentShipExpanded.has(crate.id);
     const memberCount = members.length;
 
+    const memberRows = members.length === 0
+        ? `<div class="pp-ship-crate-empty">No panels assigned.</div>`
+        : shipQtyModeGlobal
+            ? renderCrateQtyRollup(members)
+            : members.map(({ comp, casting }) => `
+                <div class="pp-ship-crate-member">
+                    <span class="pp-ship-member-panel">${escapeHtml(comp.panel_id || '—')}</span>
+                    <span class="pp-ship-member-meta">${escapeHtml(casting.casting_number ? `Cast ${casting.casting_number}` : '')}</span>
+                    <span class="pp-ship-member-meta">${escapeHtml([comp.width, comp.length].filter(Boolean).join(' × '))}</span>
+                    <span class="pp-ship-member-meta">${escapeHtml(comp.color || '')}</span>
+                    <button type="button" class="pp-ship-member-remove" data-action="ship-unassign" data-component-id="${escapeAttr(comp.id)}" title="Remove from this crate">×</button>
+                </div>
+            `).join('');
+
     return `
-        <div class="pp-ship-crate" data-crate-id="${escapeAttr(crate.id)}">
+        <div class="pp-ship-crate${isOpen ? ' pp-ship-crate-open' : ''}" data-crate-id="${escapeAttr(crate.id)}">
             <div class="pp-ship-crate-header">
+                <button type="button" class="pp-ship-crate-chevron" data-action="ship-toggle-expand" aria-expanded="${isOpen}" title="${isOpen ? 'Collapse' : 'Expand'}">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <polyline points="9 18 15 12 9 6"/>
+                    </svg>
+                </button>
                 <span class="pp-ship-crate-num-label">Crate&nbsp;#</span>
                 <input type="text" class="pp-ship-crate-num" data-field="crate_number" value="${escapeAttr(crate.crate_number || '')}" />
                 <span class="pp-ship-crate-count">${memberCount} ${memberCount === 1 ? 'panel' : 'panels'}</span>
@@ -5090,25 +5125,54 @@ function renderCrateCard(crate, members) {
                     <button type="button" class="pp-ship-delete-btn" data-action="ship-delete" data-crate-id="${escapeAttr(crate.id)}" title="Delete crate (panels become unassigned)">×</button>
                 </div>
             </div>
-            <div class="pp-ship-crate-meta-row">
-                <label class="pp-ship-crate-field">
-                    <span>Weight</span>
-                    <input type="text" data-field="weight" value="${escapeAttr(crate.weight || '')}" placeholder="e.g. 1,250 lbs" />
-                </label>
-                <label class="pp-ship-crate-field">
-                    <span>Dimensions</span>
-                    <input type="text" data-field="dimensions" value="${escapeAttr(crate.dimensions || '')}" placeholder="e.g. 96 × 48 × 30 in" />
-                </label>
-                <label class="pp-ship-crate-field pp-ship-crate-notes">
-                    <span>Notes</span>
-                    <input type="text" data-field="notes" value="${escapeAttr(crate.notes || '')}" placeholder="Handling notes, fragile, etc." />
-                </label>
-            </div>
-            <div class="pp-ship-crate-members">
-                ${memberRows}
+            <div class="pp-ship-crate-body">
+                <div class="pp-ship-crate-meta-row">
+                    <label class="pp-ship-crate-field">
+                        <span>Weight</span>
+                        <input type="text" data-field="weight" value="${escapeAttr(crate.weight || '')}" placeholder="e.g. 1,250 lbs" />
+                    </label>
+                    <label class="pp-ship-crate-field">
+                        <span>Dimensions</span>
+                        <input type="text" data-field="dimensions" value="${escapeAttr(crate.dimensions || '')}" placeholder="e.g. 96 × 48 × 30 in" />
+                    </label>
+                    <label class="pp-ship-crate-field pp-ship-crate-notes">
+                        <span>Notes</span>
+                        <input type="text" data-field="notes" value="${escapeAttr(crate.notes || '')}" placeholder="Handling notes, fragile, etc." />
+                    </label>
+                </div>
+                <div class="pp-ship-crate-members">
+                    ${memberRows}
+                </div>
             </div>
         </div>
     `;
+}
+
+function renderCrateQtyRollup(members) {
+    // Aggregate by (type, width, length, color, sealer) so each unique panel
+    // spec collapses to one row with a count.
+    const buckets = new Map();
+    for (const { comp } of members) {
+        const key = [comp.type || '', comp.width || '', comp.length || '', comp.color || '', comp.sealer || ''].join('||');
+        if (!buckets.has(key)) {
+            buckets.set(key, { type: comp.type || '', width: comp.width || '', length: comp.length || '', color: comp.color || '', count: 0 });
+        }
+        buckets.get(key).count++;
+    }
+    // Sort by type then dimensions for stable display.
+    const rows = [...buckets.values()].sort((a, b) =>
+        (a.type || '').localeCompare(b.type || '') ||
+        (a.length || '').localeCompare(b.length || '') ||
+        (a.width || '').localeCompare(b.width || '')
+    );
+    return rows.map(r => `
+        <div class="pp-ship-crate-member pp-ship-crate-member-qty">
+            <span class="pp-ship-member-panel">${escapeHtml(r.type || '—')}</span>
+            <span class="pp-ship-member-qty">× ${r.count}</span>
+            <span class="pp-ship-member-meta">${escapeHtml([r.width, r.length].filter(Boolean).join(' × '))}</span>
+            <span class="pp-ship-member-meta">${escapeHtml(r.color || '')}</span>
+        </div>
+    `).join('');
 }
 
 function scheduleCrateSave(crateId, fields) {
@@ -5835,9 +5899,37 @@ function buildPackingListHtml(crate, members, project) {
         ? (currentPhases.find(p => p.id === crate.phase_id)?.phase_name || '')
         : '';
 
-    const rows = members.length === 0
-        ? `<tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:8pt;">No panels assigned to this crate.</td></tr>`
-        : members.map(({ comp, casting }, i) => {
+    const qtyMode = shipQtyModeGlobal;
+
+    let rows;
+    if (members.length === 0) {
+        rows = `<tr><td colspan="${qtyMode ? 5 : 7}" style="text-align:center;color:#94a3b8;padding:8pt;">No panels assigned to this crate.</td></tr>`;
+    } else if (qtyMode) {
+        const buckets = new Map();
+        for (const { comp } of members) {
+            const key = [comp.type || '', comp.width || '', comp.length || '', comp.color || colorTitle || ''].join('||');
+            if (!buckets.has(key)) {
+                buckets.set(key, { type: comp.type || '', width: comp.width || '', length: comp.length || '', color: comp.color || colorTitle || '', count: 0 });
+            }
+            buckets.get(key).count++;
+        }
+        const aggregated = [...buckets.values()].sort((a, b) =>
+            (a.type || '').localeCompare(b.type || '') ||
+            (a.length || '').localeCompare(b.length || '') ||
+            (a.width || '').localeCompare(b.width || '')
+        );
+        rows = aggregated.map((r, i) => {
+            const dim = [r.width, r.length].filter(Boolean).join(' × ');
+            return `<tr>
+                <td class="pk-num">${i + 1}</td>
+                <td><strong>${escapeHtml(r.type)}</strong></td>
+                <td>${escapeHtml(dim)}</td>
+                <td>${escapeHtml(r.color)}</td>
+                <td class="pk-num">${r.count}</td>
+            </tr>`;
+        }).join('');
+    } else {
+        rows = members.map(({ comp, casting }, i) => {
             const dim = [comp.width, comp.length].filter(Boolean).join(' × ');
             return `<tr>
                 <td class="pk-num">${i + 1}</td>
@@ -5849,6 +5941,7 @@ function buildPackingListHtml(crate, members, project) {
                 <td class="pk-checkbox">☐</td>
             </tr>`;
         }).join('');
+    }
 
     return `<!doctype html><html><head><meta charset="utf-8"><title>Packing List — Crate ${escapeHtml(crate.crate_number || '')} — ${escapeHtml(proj.project_number || '')}</title><style>${PACKING_PRINT_CSS}</style></head><body>
         <div class="pk-header">
@@ -5868,10 +5961,16 @@ function buildPackingListHtml(crate, members, project) {
             <div class="pk-meta-row"><span class="pk-label">Date:</span><span class="pk-value">${escapeHtml(formatPackingDate(new Date()))}</span></div>
         </div>
 
-        <div class="pk-section-bar">Panels in this crate</div>
+        <div class="pk-section-bar">${qtyMode ? 'Panel quantities in this crate' : 'Panels in this crate'}</div>
         <table class="pk-table">
             <thead>
-                <tr>
+                ${qtyMode ? `<tr>
+                    <th style="width:0.4in;">#</th>
+                    <th>Type</th>
+                    <th>Size (W × L)</th>
+                    <th>Color</th>
+                    <th style="width:0.6in;text-align:center;">Qty</th>
+                </tr>` : `<tr>
                     <th style="width:0.4in;">#</th>
                     <th>Panel ID</th>
                     <th>Cast</th>
@@ -5879,7 +5978,7 @@ function buildPackingListHtml(crate, members, project) {
                     <th>Size (W × L)</th>
                     <th>Color</th>
                     <th style="width:0.5in;text-align:center;">✓</th>
-                </tr>
+                </tr>`}
             </thead>
             <tbody>${rows}</tbody>
         </table>
