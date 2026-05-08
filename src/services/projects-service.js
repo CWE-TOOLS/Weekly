@@ -38,6 +38,7 @@ const PROJECT_COLUMNS = [
     'optimizer_notes',
     'color_log_notes',
     'tracking_phases',
+    'ship_qty_mode',
     'created_at',
     'updated_at'
 ];
@@ -155,6 +156,28 @@ export async function upsertProject(project) {
         throw error;
     }
     return data;
+}
+
+/**
+ * Targeted update: persist the Shipping tab "List as quantities" toggle.
+ * Lightweight write — avoids round-tripping the full project record.
+ * @param {string} projectNumber
+ * @param {boolean} value
+ */
+export async function setProjectShipQtyMode(projectNumber, value) {
+    if (!projectNumber) return;
+    const client = await getClient();
+    if (!client) throw new Error('Supabase client unavailable');
+
+    const { error } = await client
+        .from(PROJECTS_TABLE)
+        .update({ ship_qty_mode: !!value })
+        .eq('project_number', projectNumber);
+
+    if (error) {
+        logger.error('[projects-service] setProjectShipQtyMode error:', error);
+        throw error;
+    }
 }
 
 /**

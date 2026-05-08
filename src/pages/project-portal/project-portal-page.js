@@ -11,7 +11,8 @@ import {
     loadProject,
     upsertProject,
     deleteProject,
-    createEmptyProject
+    createEmptyProject,
+    setProjectShipQtyMode
 } from '../../services/projects-service.js';
 import {
     loadCastings,
@@ -258,6 +259,7 @@ async function showFormView(projectNumber, draftOverrides = null) {
     populateForm(project);
 
     currentPhasesEnabled = !!project.phases_enabled;
+    shipQtyModeGlobal = !!project.ship_qty_mode;
     if (isExisting && currentPhasesEnabled) {
         try {
             currentPhases = await loadPhasesForProject(project.project_number);
@@ -3938,10 +3940,19 @@ function wireEvents() {
         }
     });
 
-    // Shipping: global "list as quantities" checkbox — re-renders all crate cards.
-    document.getElementById('pp-ship-qty-mode')?.addEventListener('change', (e) => {
+    // Shipping: global "list as quantities" checkbox — re-renders all crate
+    // cards and persists the choice on the project record.
+    document.getElementById('pp-ship-qty-mode')?.addEventListener('change', async (e) => {
         shipQtyModeGlobal = !!e.target.checked;
         renderShipping();
+        if (currentProjectNumber) {
+            try {
+                await setProjectShipQtyMode(currentProjectNumber, shipQtyModeGlobal);
+            } catch (err) {
+                logger.error('[project-portal] setProjectShipQtyMode failed:', err);
+                showToast('Could not save Shipping toggle — check connection.', 'error');
+            }
+        }
     });
 
     // Shipping: per-crate field edits (input)
@@ -5900,10 +5911,17 @@ function buildPackingListHtml(crate, members, project) {
         : '';
 
     const qtyMode = shipQtyModeGlobal;
+    // Drop the Size column entirely if no panel in this crate has any
+    // width/length data — keeps the printed list from showing an empty col.
+    const hasDims = members.some(({ comp }) => comp.width || comp.length);
+
+    const colCount = qtyMode
+        ? (hasDims ? 5 : 4)
+        : (hasDims ? 7 : 6);
 
     let rows;
     if (members.length === 0) {
-        rows = `<tr><td colspan="${qtyMode ? 5 : 7}" style="text-align:center;color:#94a3b8;padding:8pt;">No panels assigned to this crate.</td></tr>`;
+        rows = `<tr><td colspan="${colCount}" style="text-align:center;color:#94a3b8;padding:8pt;">No panels assigned to this crate.</td></tr>`;
     } else if (qtyMode) {
         const buckets = new Map();
         for (const { comp } of members) {
@@ -5923,7 +5941,7 @@ function buildPackingListHtml(crate, members, project) {
             return `<tr>
                 <td class="pk-num">${i + 1}</td>
                 <td><strong>${escapeHtml(r.type)}</strong></td>
-                <td>${escapeHtml(dim)}</td>
+                ${hasDims ? `<td>${escapeHtml(dim)}</td>` : ''}
                 <td>${escapeHtml(r.color)}</td>
                 <td class="pk-num">${r.count}</td>
             </tr>`;
@@ -5936,7 +5954,7 @@ function buildPackingListHtml(crate, members, project) {
                 <td><strong>${escapeHtml(comp.panel_id || '')}</strong></td>
                 <td>${escapeHtml(casting?.casting_number ? `Cast ${casting.casting_number}` : '')}</td>
                 <td>${escapeHtml(comp.type || '')}</td>
-                <td>${escapeHtml(dim)}</td>
+                ${hasDims ? `<td>${escapeHtml(dim)}</td>` : ''}
                 <td>${escapeHtml(comp.color || colorTitle || '')}</td>
                 <td class="pk-checkbox">☐</td>
             </tr>`;
@@ -5967,7 +5985,7 @@ function buildPackingListHtml(crate, members, project) {
                 ${qtyMode ? `<tr>
                     <th style="width:0.4in;">#</th>
                     <th>Type</th>
-                    <th>Size (W × L)</th>
+                    ${hasDims ? `<th>Size (W × L)</th>` : ''}
                     <th>Color</th>
                     <th style="width:0.6in;text-align:center;">Qty</th>
                 </tr>` : `<tr>
@@ -5975,7 +5993,7 @@ function buildPackingListHtml(crate, members, project) {
                     <th>Panel ID</th>
                     <th>Cast</th>
                     <th>Type</th>
-                    <th>Size (W × L)</th>
+                    ${hasDims ? `<th>Size (W × L)</th>` : ''}
                     <th>Color</th>
                     <th style="width:0.5in;text-align:center;">✓</th>
                 </tr>`}
