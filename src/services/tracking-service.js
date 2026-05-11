@@ -103,6 +103,7 @@ export async function createComponent(castingId, fields = {}) {
         length: cleanText(fields.length),
         panel_id: cleanText(fields.panel_id),
         color: cleanText(fields.color),
+        color_log_id: cleanUuid(fields.color_log_id),
         sealer: cleanText(fields.sealer),
         sort_order: order
     };
@@ -144,6 +145,7 @@ export async function createComponentsBulk(castingId, items) {
         length: cleanText(item.length),
         panel_id: cleanText(item.panel_id),
         color: cleanText(item.color),
+        color_log_id: cleanUuid(item.color_log_id),
         sealer: cleanText(item.sealer),
         from_inventory: true,
         sort_order: startOrder + idx
@@ -177,6 +179,7 @@ export async function updateComponent(componentId, fields) {
     if (fields.length !== undefined) payload.length = cleanText(fields.length);
     if (fields.panel_id !== undefined) payload.panel_id = cleanText(fields.panel_id);
     if (fields.color !== undefined) payload.color = cleanText(fields.color);
+    if (fields.color_log_id !== undefined) payload.color_log_id = cleanUuid(fields.color_log_id);
     if (fields.sealer !== undefined) payload.sealer = cleanText(fields.sealer);
     if (Object.keys(payload).length === 0) return null;
 
@@ -302,4 +305,9 @@ function cleanText(v) {
     if (v === undefined || v === null) return null;
     const s = String(v).trim();
     return s === '' ? null : s;
+}
+
+function cleanUuid(v) {
+    if (v === undefined || v === null || v === '') return null;
+    return String(v);
 }

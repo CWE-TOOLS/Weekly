@@ -104,6 +104,7 @@ export async function createInventoryItem(castingId, fields = {}) {
         width: cleanText(fields.width),
         length: cleanText(fields.length),
         color: cleanText(fields.color),
+        color_log_id: cleanUuid(fields.color_log_id),
         sealer: cleanText(fields.sealer),
         quantity: cleanQty(fields.quantity, 1),
         extras: cleanExtras(fields.extras),
@@ -140,6 +141,7 @@ export async function updateInventoryItem(itemId, fields) {
     if (fields.width !== undefined) payload.width = cleanText(fields.width);
     if (fields.length !== undefined) payload.length = cleanText(fields.length);
     if (fields.color !== undefined) payload.color = cleanText(fields.color);
+    if (fields.color_log_id !== undefined) payload.color_log_id = cleanUuid(fields.color_log_id);
     if (fields.sealer !== undefined) payload.sealer = cleanText(fields.sealer);
     if (fields.quantity !== undefined) payload.quantity = cleanQty(fields.quantity, 1);
     if (fields.extras !== undefined) payload.extras = cleanExtras(fields.extras);
@@ -223,4 +225,9 @@ function cleanNumber(v) {
     const n = (typeof v === 'number') ? v : parseFloat(String(v));
     if (!Number.isFinite(n)) return null;
     return n;
+}
+
+function cleanUuid(v) {
+    if (v === undefined || v === null || v === '') return null;
+    return String(v);
 }

@@ -2621,6 +2621,155 @@ body.pp-printing .pp-tab-panel[data-panel="castings"] { display: none !important
     background: var(--bg-secondary, #f3f4f6);
 }
 
+/* Multi-color: toolbar checkbox */
+.pp-cl-multi-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+    user-select: none;
+    padding: 4px 8px;
+    border: 1px solid var(--border-primary);
+    background: #fff;
+    border-radius: 4px;
+}
+.pp-cl-multi-toggle:has(input:checked) {
+    background: var(--accent-primary);
+    color: #fff;
+    border-color: var(--accent-primary);
+}
+.pp-cl-multi-toggle input[type="checkbox"] {
+    margin: 0;
+}
+.pp-cl-multi-toggle input[type="checkbox"]:disabled + span {
+    opacity: 0.85;
+}
+
+/* Multi-color: pill strip + add/delete row */
+.pp-cl-logs-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    border-top: 1px solid var(--border-primary);
+    padding-top: 12px;
+}
+.pp-cl-logs-pills {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.pp-cl-logs-empty {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-style: italic;
+}
+.pp-cl-logs-pill {
+    padding: 5px 12px;
+    border: 1px solid var(--border-primary);
+    background: #fff;
+    color: var(--text-secondary);
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.pp-cl-logs-pill:hover {
+    background: var(--bg-secondary, #f3f4f6);
+    color: var(--text-primary);
+}
+.pp-cl-logs-pill.is-active {
+    background: var(--accent-primary);
+    color: #fff;
+    border-color: var(--accent-primary);
+}
+.pp-cl-logs-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.pp-cl-logs-add-btn,
+.pp-cl-logs-delete-btn {
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    border: 1px solid var(--border-primary);
+    background: #fff;
+    color: var(--text-primary);
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.pp-cl-logs-add-btn {
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
+}
+.pp-cl-logs-add-btn:hover {
+    background: var(--accent-primary);
+    color: #fff;
+}
+.pp-cl-logs-delete-btn:not(:disabled):hover {
+    background: #fee2e2;
+    border-color: #fca5a5;
+    color: #b91c1c;
+}
+.pp-cl-logs-delete-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Color-log dropdown used in inventory rows */
+.pp-inv-color-select {
+    padding: 4px 6px;
+    border: 1px solid var(--border-primary);
+    background: #fff;
+    color: var(--text-primary);
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: inherit;
+    min-width: 0;
+}
+.pp-inv-color-select:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+.pp-inv-color-select:disabled {
+    background: #f9fafb;
+    color: var(--text-secondary);
+    font-style: italic;
+    cursor: not-allowed;
+}
+
+/* Batch ticket per-ticket color-log selector */
+.pp-bt-context-colorlog-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.pp-bt-context-colorlog {
+    padding: 4px 8px;
+    border: 1px solid var(--border-primary);
+    background: #fff;
+    color: var(--text-primary);
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: inherit;
+}
+.pp-bt-context-colorlog:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
 .pp-cl-save-status {
     font-size: 12px;
     color: var(--text-secondary);

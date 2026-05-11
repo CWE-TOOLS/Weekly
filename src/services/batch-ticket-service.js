@@ -23,7 +23,8 @@ const FORM_TO_DB = {
     outTemp: 'out_temp',
     waterTemp: 'water_temp',
     notes: 'notes',
-    batchAssignments: 'batch_assignments'
+    batchAssignments: 'batch_assignments',
+    colorLogId: 'color_log_id'
 };
 
 async function getClient() {
@@ -38,6 +39,8 @@ function toDb(formObj) {
         if (formObj[formKey] !== undefined) {
             const v = formObj[formKey];
             if (v === '' && (dbKey === 'cu_ft' || dbKey === 'face_sq_ft' || dbKey === 'cu_ft_per_250' || dbKey === 'pig_reduction')) {
+                out[dbKey] = null;
+            } else if (v === '' && dbKey === 'color_log_id') {
                 out[dbKey] = null;
             } else {
                 out[dbKey] = v;
@@ -60,7 +63,8 @@ export function rowToForm(row) {
         outTemp: row.out_temp || '',
         waterTemp: row.water_temp || '',
         notes: row.notes || '',
-        batchAssignments: Array.isArray(row.batch_assignments) ? row.batch_assignments : []
+        batchAssignments: Array.isArray(row.batch_assignments) ? row.batch_assignments : [],
+        colorLogId: row.color_log_id || null
     };
 }
 
@@ -76,7 +80,8 @@ export function emptyForm(castingId) {
         outTemp: '',
         waterTemp: '',
         notes: '',
-        batchAssignments: []
+        batchAssignments: [],
+        colorLogId: null
     };
 }
 

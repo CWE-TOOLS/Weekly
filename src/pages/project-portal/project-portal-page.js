@@ -67,11 +67,17 @@ import {
 } from '../../services/inventory-service.js';
 import {
     loadColorLogForProject,
+    loadColorLogsForProject,
+    loadColorLogById,
+    createColorLogForProject,
+    deleteColorLog,
+    getColorLogUsageCounts,
     saveColorLogForProject,
     loadPresets as loadColorLogPresets,
     saveAsPreset as saveColorLogAsPreset,
     updatePreset as updateColorLogPreset
 } from '../../services/color-log-service.js';
+import { enableMultiColorForProject } from '../../services/multi-color-service.js';
 import {
     loadBatchTicketsForCastings,
     saveBatchTicketForCasting,
@@ -151,7 +157,10 @@ let currentCastingInventory = new Map();   // castingId -> Array<inventory row>
 let currentCastingInventoryLoadedFor = null; // project_number we last loaded inventory for
 let inventorySaveTimers = new Map();       // itemId -> debounce handle
 let copiedComponents = null;               // Array<{type,width,length,color,sealer,quantity,extras,cu_ft,ff_sq_ft}> from a copy action
-let currentColorLog = null;                // form-shaped record (id null = unsaved)
+let currentColorLog = null;                // form-shaped record (id null = unsaved) — currently active log when multi-color on
+let currentColorLogs = [];                 // all non-preset color logs for this project (>=1 when project has any)
+let currentColorLogId = null;              // id of the active log being edited in the Color Log tab
+let currentMultiColorEnabled = false;      // mirrors projects.multi_color_enabled for the active project
 let colorLogPresets = [];                  // cached preset rows
 let colorLogSaveTimer = null;              // debounce timer
 let colorLogLoadedFor = null;              // project_number we last loaded for
@@ -205,6 +214,9 @@ async function showListView() {
     setProjectInUrl(null);
     colorLogLoadedFor = null;
     currentColorLog = null;
+    currentColorLogs = [];
+    currentColorLogId = null;
+    currentMultiColorEnabled = false;
     batchTicketsLoadedFor = null;
     batchTickets.clear();
     currentBatchCastingId = null;
@@ -220,6 +232,9 @@ async function showFormView(projectNumber, draftOverrides = null) {
     // Invalidate color-log cache so we reload for the new project on next tab activation.
     colorLogLoadedFor = null;
     currentColorLog = null;
+    currentColorLogs = [];
+    currentColorLogId = null;
+    currentMultiColorEnabled = false;
     if (colorLogSaveTimer) { clearTimeout(colorLogSaveTimer); colorLogSaveTimer = null; }
 
     // Invalidate batch-ticket cache.
@@ -259,6 +274,7 @@ async function showFormView(projectNumber, draftOverrides = null) {
     populateForm(project);
 
     currentPhasesEnabled = !!project.phases_enabled;
+    currentMultiColorEnabled = !!project.multi_color_enabled;
     shipQtyModeGlobal = !!project.ship_qty_mode;
     if (isExisting && currentPhasesEnabled) {
         try {
@@ -918,7 +934,10 @@ function renderInventoryRow(item, castingId) {
                 <input type="text" class="pp-inv-input" data-field="type" placeholder="Type" value="${escapeAttr(item.type || '')}" />
                 <input type="text" class="pp-inv-input" data-field="width" placeholder="Width" value="${escapeAttr(item.width || '')}" />
                 <input type="text" class="pp-inv-input" data-field="length" placeholder="Length" value="${escapeAttr(item.length || '')}" />
-                <input type="text" class="pp-inv-input" data-field="color" placeholder="Color" value="${escapeAttr(item.color || '')}" />
+                ${buildColorLogSelectHtml(item.color_log_id, {
+                    className: 'pp-inv-input pp-inv-color-select',
+                    dataAttrs: { 'data-field': 'color_log_id' }
+                })}
                 <input type="number" class="pp-inv-input pp-inv-input-num" data-field="cu_ft" step="any" min="0" placeholder="0" value="${item.cu_ft == null ? '' : escapeAttr(item.cu_ft)}" />
                 <input type="number" class="pp-inv-input pp-inv-input-num" data-field="ff_sq_ft" step="any" min="0" placeholder="0" value="${item.ff_sq_ft == null ? '' : escapeAttr(item.ff_sq_ft)}" />
             </div>
@@ -1220,7 +1239,13 @@ async function handleAddInventoryItem(castingId) {
     if (!currentProjectNumber || !castingId) return;
     if (!currentCastInvExpanded.has(castingId)) currentCastInvExpanded.add(castingId);
     try {
-        const created = await createInventoryItem(castingId, { quantity: 1 });
+        // Auto-link to the project's first color log (if any) so new
+        // components inherit it without the user having to pick.
+        const defaultColorLogId = currentColorLogs[0]?.id || null;
+        const created = await createInventoryItem(castingId, {
+            quantity: 1,
+            color_log_id: defaultColorLogId
+        });
         if (created) {
             const list = getInventoryFor(castingId).slice();
             list.push(created);
@@ -1247,7 +1272,7 @@ async function saveInventoryItem(itemId, castingId) {
 
     const NUMERIC_FIELDS = new Set(['cu_ft', 'ff_sq_ft']);
     const fields = {};
-    row.querySelectorAll('input[data-field]').forEach(input => {
+    row.querySelectorAll('[data-field]').forEach(input => {
         const field = input.dataset.field;
         if (field === 'quantity') {
             const n = parseInt(input.value, 10);
@@ -1263,6 +1288,9 @@ async function saveInventoryItem(itemId, castingId) {
                 const n = parseFloat(raw);
                 fields[field] = Number.isFinite(n) ? n : null;
             }
+        } else if (field === 'color_log_id') {
+            const v = input.value;
+            fields.color_log_id = (v && v !== '') ? v : null;
         } else {
             const cleaned = (input.value || '').trim();
             fields[field] = cleaned === '' ? null : cleaned;
@@ -2628,7 +2656,7 @@ function renderTrackCard(comp, castingId) {
                 <input type="text" class="pp-track-input" data-field="panel_id" value="${escapeAttr(comp.panel_id || '')}" readonly title="${escapeAttr(lockTitle)}" />
                 <input type="text" class="pp-track-input" data-field="width" value="${escapeAttr(comp.width || '')}" readonly title="${escapeAttr(lockTitle)}" />
                 <input type="text" class="pp-track-input" data-field="length" value="${escapeAttr(comp.length || '')}" readonly title="${escapeAttr(lockTitle)}" />
-                <input type="text" class="pp-track-input" data-field="color" value="${escapeAttr(comp.color || '')}" readonly title="${escapeAttr(lockTitle)}" />
+                <input type="text" class="pp-track-input" data-field="color" value="${escapeAttr(resolveComponentColorName(comp))}" readonly title="${escapeAttr(lockTitle)}" />
                 <select class="pp-track-crate-select${currentNum ? ' pp-track-crate-set' : ''}" data-action="track-crate-select" data-component-id="${escapeAttr(comp.id)}" title="Assign this panel to a crate">${options}</select>
             </div>
         </div>
@@ -2710,6 +2738,7 @@ async function runTrackingSync() {
                     length: inv.length || null,
                     panel_id: nextPanelId(inv.type),
                     color: inv.color || null,
+                    color_log_id: inv.color_log_id || null,
                     sealer: inv.sealer || null
                 });
             }
@@ -2720,6 +2749,7 @@ async function runTrackingSync() {
                     length: inv.length || null,
                     panel_id: inv.type ? `${inv.type}.EXTRA` : null,
                     color: inv.color || null,
+                    color_log_id: inv.color_log_id || null,
                     sealer: inv.sealer || null
                 });
             }
@@ -2756,6 +2786,7 @@ function componentsMatchExpected(current, expected) {
         if (norm(c.width) !== norm(e.width)) return false;
         if (norm(c.length) !== norm(e.length)) return false;
         if (norm(c.color) !== norm(e.color)) return false;
+        if (norm(c.color_log_id) !== norm(e.color_log_id)) return false;
         if (norm(c.sealer) !== norm(e.sealer)) return false;
     }
     return true;
@@ -3075,15 +3106,28 @@ async function activateColorLogTab() {
 
     if (colorLogLoadedFor !== currentProjectNumber) {
         try {
-            const existing = await loadColorLogForProject(currentProjectNumber);
-            currentColorLog = existing || createEmptyColorLog();
+            // Load all color logs for the project. Multi-color projects get
+            // a populated list; single-color projects get [oneLog] or [].
+            const list = await loadColorLogsForProject(currentProjectNumber);
+            currentColorLogs = list;
+            if (list.length > 0) {
+                currentColorLogId = list[0].id;
+                currentColorLog = list[0];
+            } else {
+                // No log yet — start with an unsaved empty form.
+                currentColorLogId = null;
+                currentColorLog = createEmptyColorLog();
+            }
         } catch (err) {
             logger.error('[color-log] load failed', err);
+            currentColorLogs = [];
+            currentColorLogId = null;
             currentColorLog = createEmptyColorLog();
             showToast('Failed to load color log', 'error');
         }
         colorLogLoadedFor = currentProjectNumber;
         renderColorLog();
+        renderColorLogsToolbar();
         await refreshPresetPicker();
     } else if (currentColorLog) {
         // Same project — refresh the project display in case the name changed.
@@ -3129,6 +3173,307 @@ function loadPresetIntoForm(presetId) {
     scheduleColorLogSave();
 }
 
+// ---------- Multi-color: toggle, pills, add/delete ----------
+
+/**
+ * Apply the current multi-color state to the toolbar UI:
+ *   - the checkbox reflects the project's flag, and is locked-on once true
+ *   - the pill strip is visible when multi-color is on
+ *   - the pill list reflects currentColorLogs with the active one highlighted
+ */
+function renderColorLogsToolbar() {
+    const cb = document.getElementById('pp-cl-multi-toggle');
+    if (cb) {
+        cb.checked = currentMultiColorEnabled;
+        // One-way: once enabled, lock it. Disabled state is what carries
+        // the "already on" affordance for the user.
+        cb.disabled = currentMultiColorEnabled;
+    }
+    renderColorLogsPills();
+}
+
+function renderColorLogsPills() {
+    const bar = document.getElementById('pp-cl-logs-bar');
+    const pills = document.getElementById('pp-cl-logs-pills');
+    const delBtn = document.getElementById('pp-cl-logs-delete');
+    if (!bar || !pills) return;
+
+    bar.hidden = !currentMultiColorEnabled;
+    if (!currentMultiColorEnabled) {
+        pills.innerHTML = '';
+        return;
+    }
+
+    if (currentColorLogs.length === 0) {
+        pills.innerHTML = '<span class="pp-cl-logs-empty">No color logs yet — click + Add color log to create one.</span>';
+        if (delBtn) delBtn.disabled = true;
+        return;
+    }
+
+    pills.innerHTML = currentColorLogs.map(l => {
+        const active = l.id === currentColorLogId ? ' is-active' : '';
+        const label = escapeHtml((l.name || '').trim() || '(unnamed)');
+        return `<button type="button" class="pp-cl-logs-pill${active}" data-color-log-id="${escapeHtml(l.id)}">${label}</button>`;
+    }).join('');
+    if (delBtn) delBtn.disabled = currentColorLogs.length === 0;
+}
+
+async function handleMultiColorToggleChange(checkbox) {
+    if (!currentProjectNumber) {
+        checkbox.checked = false;
+        return;
+    }
+    if (currentMultiColorEnabled) {
+        // Already on — one-way switch, ignore.
+        checkbox.checked = true;
+        return;
+    }
+    if (!checkbox.checked) return; // unchecking from off state is a no-op
+
+    const confirmed = window.confirm(
+        'Enable multiple color logs for this project?\n\n' +
+        'This is a one-way switch — once on, it cannot be turned off. ' +
+        'All existing components will stay linked to your current color log.'
+    );
+    if (!confirmed) {
+        checkbox.checked = false;
+        return;
+    }
+
+    try {
+        // Flush any in-flight save first so the existing log has an id.
+        if (colorLogSaveTimer) {
+            clearTimeout(colorLogSaveTimer);
+            colorLogSaveTimer = null;
+            await saveColorLogNow();
+        }
+        await enableMultiColorForProject(currentProjectNumber);
+        currentMultiColorEnabled = true;
+
+        // Re-load color logs so a single-log project gets its row reflected
+        // back from the DB (the existing-pill UI needs it in currentColorLogs).
+        const list = await loadColorLogsForProject(currentProjectNumber);
+        currentColorLogs = list;
+        if (list.length > 0 && !list.some(l => l.id === currentColorLogId)) {
+            currentColorLogId = list[0].id;
+            currentColorLog = list[0];
+            renderColorLog();
+        }
+
+        // Reload casting components / inventory so their color_log_id FKs
+        // (which the migration backfilled) are reflected in the in-memory
+        // caches. Best-effort — silently skip if loaders fail.
+        try { await reloadColorLinkedRowsForProject(); } catch (e) {
+            logger.warn('[multi-color] reload after enable failed', e);
+        }
+
+        renderColorLogsToolbar();
+        rerenderColorAwareTabs();
+        showToast('Multi-color enabled for this project', 'success');
+    } catch (err) {
+        logger.error('[multi-color] enable failed', err);
+        checkbox.checked = false;
+        showToast('Failed to enable multi-color', 'error');
+    }
+}
+
+async function handleColorLogPillClick(id) {
+    if (!id || id === currentColorLogId) return;
+    // Flush pending save on the previous log before switching.
+    if (colorLogSaveTimer) {
+        clearTimeout(colorLogSaveTimer);
+        colorLogSaveTimer = null;
+        try { await saveColorLogNow(); } catch (e) { /* logged */ }
+    }
+    const next = currentColorLogs.find(l => l.id === id);
+    if (!next) return;
+    currentColorLogId = id;
+    currentColorLog = next;
+    renderColorLog();
+    renderColorLogsPills();
+}
+
+async function handleAddColorLog() {
+    if (!currentProjectNumber || !currentMultiColorEnabled) return;
+    // Flush pending save on the active log first.
+    if (colorLogSaveTimer) {
+        clearTimeout(colorLogSaveTimer);
+        colorLogSaveTimer = null;
+        try { await saveColorLogNow(); } catch (e) { /* logged */ }
+    }
+    try {
+        const created = await createColorLogForProject(currentProjectNumber);
+        currentColorLogs.push(created);
+        currentColorLogId = created.id;
+        currentColorLog = created;
+        renderColorLog();
+        renderColorLogsPills();
+        // Re-render dependent UI so the new log shows up in dropdowns.
+        rerenderColorAwareTabs();
+    } catch (err) {
+        logger.error('[color-log] add failed', err);
+        showToast('Failed to add color log', 'error');
+    }
+}
+
+async function handleDeleteColorLog(id) {
+    if (!id || !currentMultiColorEnabled) return;
+    const log = currentColorLogs.find(l => l.id === id);
+    if (!log) return;
+
+    let counts;
+    try {
+        counts = await getColorLogUsageCounts(id);
+    } catch (err) {
+        logger.error('[color-log] usage check failed', err);
+        showToast('Could not check color log usage', 'error');
+        return;
+    }
+    const total = counts.components + counts.inventory + counts.batchTickets;
+    if (total > 0) {
+        const parts = [];
+        if (counts.components)   parts.push(`${counts.components} component${counts.components === 1 ? '' : 's'}`);
+        if (counts.inventory)    parts.push(`${counts.inventory} inventory item${counts.inventory === 1 ? '' : 's'}`);
+        if (counts.batchTickets) parts.push(`${counts.batchTickets} batch ticket${counts.batchTickets === 1 ? '' : 's'}`);
+        showToast(`Can't delete — still used by ${parts.join(', ')}`, 'error');
+        return;
+    }
+
+    if (!window.confirm(`Delete color log "${log.name || '(unnamed)'}"?`)) return;
+
+    try {
+        await deleteColorLog(id);
+        currentColorLogs = currentColorLogs.filter(l => l.id !== id);
+        if (currentColorLogs.length > 0) {
+            currentColorLogId = currentColorLogs[0].id;
+            currentColorLog = currentColorLogs[0];
+        } else {
+            currentColorLogId = null;
+            currentColorLog = createEmptyColorLog();
+        }
+        renderColorLog();
+        renderColorLogsPills();
+        rerenderColorAwareTabs();
+    } catch (err) {
+        logger.error('[color-log] delete failed', err);
+        showToast('Failed to delete color log', 'error');
+    }
+}
+
+/** Re-render every tab whose UI depends on the color log list. */
+function rerenderColorAwareTabs() {
+    if (currentTab === 'tracking') renderTracking();
+    if (currentTab === 'castings') renderCastings();
+    if (currentTab === 'shipping') renderShipping();
+    if (currentTab === 'batch-tickets') {
+        try { renderBatchTickets(); } catch (e) { /* tab may not be ready */ }
+    }
+}
+
+/**
+ * Reload casting components + inventory after the multi-color enable
+ * runs its backfill, so the in-memory caches reflect the newly populated
+ * color_log_id FKs. Used only at toggle-on time.
+ */
+async function reloadColorLinkedRowsForProject() {
+    if (!currentProjectNumber) return;
+    const castingIds = (currentCastings || []).map(c => c.id);
+    if (castingIds.length === 0) return;
+
+    const [compsMap, invMap] = await Promise.all([
+        loadAllComponentsForProject(castingIds),
+        loadAllInventoryForProject(castingIds)
+    ]);
+    currentCastingComponents = compsMap;
+    currentCastingInventory = invMap;
+}
+
+// ---------- Multi-color helpers ----------
+
+/** In-memory lookup. Falls back to a fresh DB fetch when not in the cache. */
+function getColorLogByIdSync(id) {
+    if (!id) return null;
+    return currentColorLogs.find(l => l.id === id) || null;
+}
+
+/**
+ * Resolve a component / inventory row's color display name. Prefers the
+ * linked color_log_id (post-feature data); falls back to the legacy
+ * free-text `color` column for rows that predate the FK; finally falls
+ * back to the project's currently active color log name.
+ */
+function resolveComponentColorName(comp) {
+    if (!comp) return '';
+    const log = getColorLogByIdSync(comp.color_log_id);
+    if (log) return log.name || '';
+    if (comp.color) return comp.color;
+    if (currentMultiColorEnabled) return '';
+    return currentColorLog?.name || '';
+}
+
+/**
+ * For a batch ticket: returns the color-log form record to scale from.
+ * Priority: explicit ticket.colorLogId > most-common color_log_id among
+ * the casting's components > project's first color log.
+ */
+function getActiveBatchColorLog(casting, ticket) {
+    // Explicit override on the ticket.
+    if (ticket?.colorLogId) {
+        const explicit = getColorLogByIdSync(ticket.colorLogId);
+        if (explicit) return explicit;
+    }
+    // Most-common color_log_id among the casting's components.
+    if (casting?.id) {
+        const comps = currentCastingComponents.get(casting.id) || [];
+        const counts = new Map();
+        for (const c of comps) {
+            if (!c.color_log_id) continue;
+            counts.set(c.color_log_id, (counts.get(c.color_log_id) || 0) + 1);
+        }
+        if (counts.size > 0) {
+            let bestId = null, bestN = -1;
+            for (const [id, n] of counts) {
+                if (n > bestN) { bestId = id; bestN = n; }
+            }
+            const hit = getColorLogByIdSync(bestId);
+            if (hit) return hit;
+        }
+    }
+    // Project's first log.
+    if (currentColorLogs.length > 0) return currentColorLogs[0];
+    // Legacy single-log fallback.
+    return currentColorLog || null;
+}
+
+/**
+ * Build a `<select>` of the project's color logs for a component / inventory
+ * cell. When the project has zero color logs, renders a single disabled
+ * option prompting the user to create one. Returns an HTML string.
+ *
+ * @param {string|null} selectedId
+ * @param {{className?:string, dataAttrs?:Object}} [opts]
+ */
+function buildColorLogSelectHtml(selectedId, opts = {}) {
+    const cls = opts.className || 'pp-color-log-select';
+    const dataAttrs = Object.entries(opts.dataAttrs || {})
+        .map(([k, v]) => `${k}="${escapeHtml(String(v))}"`)
+        .join(' ');
+    if (!currentColorLogs.length) {
+        return `<select class="${cls}" ${dataAttrs} disabled>` +
+            `<option value="">— Create color log —</option>` +
+            `</select>`;
+    }
+    const options = currentColorLogs.map(l => {
+        const sel = (selectedId && l.id === selectedId) ? ' selected' : '';
+        return `<option value="${escapeHtml(l.id)}"${sel}>${escapeHtml(l.name || '(unnamed)')}</option>`;
+    }).join('');
+    // Auto-select first when nothing matches (e.g. legacy row with null FK).
+    const placeholderOpt = selectedId && !currentColorLogs.some(l => l.id === selectedId)
+        ? `<option value="" disabled selected>— Pick color log —</option>`
+        : '';
+    return `<select class="${cls}" ${dataAttrs}>${placeholderOpt}${options}</select>`;
+}
+
 function setColorLogStatus(state) {
     const el = document.getElementById('pp-cl-save-status');
     if (!el) return;
@@ -3160,7 +3505,19 @@ async function saveColorLogNow() {
         const saved = await saveColorLogForProject(currentProjectNumber, currentColorLog);
         if (saved) {
             // Preserve the id so subsequent saves are UPDATEs not INSERTs.
+            const wasNew = !currentColorLog.id;
             currentColorLog.id = saved.id;
+            if (wasNew) currentColorLogId = saved.id;
+            // Keep the in-memory list in sync so the pill strip / dropdowns
+            // see the latest name. New rows get appended; existing rows
+            // updated in place.
+            const existingIdx = currentColorLogs.findIndex(l => l.id === saved.id);
+            if (existingIdx === -1) {
+                currentColorLogs.push(currentColorLog);
+            } else {
+                currentColorLogs[existingIdx] = currentColorLog;
+            }
+            if (typeof renderColorLogsPills === 'function') renderColorLogsPills();
         }
         setColorLogStatus('saved');
         setTimeout(() => setColorLogStatus(''), 1500);
@@ -3594,6 +3951,22 @@ function wireEvents() {
                 handleSaveAsPresetClick();
                 return;
             }
+
+            // Multi-color pill strip clicks
+            const pillBtn = e.target.closest('.pp-cl-logs-pill');
+            if (pillBtn) {
+                const id = pillBtn.dataset.colorLogId;
+                if (id) handleColorLogPillClick(id);
+                return;
+            }
+            if (e.target.id === 'pp-cl-logs-add') {
+                handleAddColorLog();
+                return;
+            }
+            if (e.target.id === 'pp-cl-logs-delete') {
+                handleDeleteColorLog(currentColorLogId);
+                return;
+            }
         });
 
         document.addEventListener('click', (e) => {
@@ -3627,6 +4000,12 @@ function wireEvents() {
 
         clPanel.addEventListener('change', (e) => {
             const target = e.target;
+
+            if (target.id === 'pp-cl-multi-toggle') {
+                handleMultiColorToggleChange(target);
+                return;
+            }
+
             if (!currentColorLog) return;
 
             if (target.id === 'pp-cl-preset-select') {
@@ -4062,11 +4441,24 @@ function wireEvents() {
         if (!e.target.closest('.pp-cast-card-header')) return;
         scheduleCastingSave(card.getAttribute('data-casting-id'));
     });
+    // Dropdowns (color log) fire 'change' instead of 'input'.
+    castingsList.addEventListener('change', (e) => {
+        if (!e.target.matches('select[data-field]')) return;
+        const invRow = e.target.closest('.pp-inv-row[data-inventory-id]');
+        if (!invRow) return;
+        const itemId = invRow.getAttribute('data-inventory-id');
+        const castingId = invRow.getAttribute('data-casting-id');
+        // Save immediately for selects — no debounce needed.
+        const t = inventorySaveTimers.get(itemId);
+        if (t) clearTimeout(t);
+        inventorySaveTimers.delete(itemId);
+        saveInventoryItem(itemId, castingId);
+    });
     // Flush inventory save immediately on blur so users see the count update without waiting.
     castingsList.addEventListener('focusout', (e) => {
         const invRow = e.target.closest('.pp-inv-row[data-inventory-id]');
         if (!invRow) return;
-        if (!e.target.matches('input[data-field]')) return;
+        if (!e.target.matches('input[data-field], select[data-field]')) return;
         const itemId = invRow.getAttribute('data-inventory-id');
         const castingId = invRow.getAttribute('data-casting-id');
         const t = inventorySaveTimers.get(itemId);
@@ -4125,21 +4517,24 @@ async function activateBatchTicketsTab() {
     }
     if (needsSave) needsSave.hidden = true;
 
-    // Make sure color log is loaded — we need its ingredients to scale.
+    // Make sure color logs are loaded — we need ingredients to scale.
     // Don't set colorLogLoadedFor — leave that to activateColorLogTab so its
     // first activation still triggers renderColorLog + refreshPresetPicker.
-    if (!currentColorLog) {
+    if (currentColorLogs.length === 0) {
         try {
-            const existing = await loadColorLogForProject(currentProjectNumber);
-            currentColorLog = existing || createEmptyColorLog();
+            const list = await loadColorLogsForProject(currentProjectNumber);
+            currentColorLogs = list;
+            if (list.length > 0 && !currentColorLog?.id) {
+                currentColorLogId = list[0].id;
+                currentColorLog = list[0];
+            }
         } catch (err) {
             logger.error('[batch-tickets] color-log load failed', err);
-            currentColorLog = createEmptyColorLog();
         }
     }
 
     // No color log yet → block until they create one.
-    if (!currentColorLog || !currentColorLog.id) {
+    if (currentColorLogs.length === 0) {
         if (needsCL) needsCL.hidden = false;
         if (noCastings) noCastings.hidden = true;
         if (pills) pills.innerHTML = '';
@@ -4209,6 +4604,17 @@ function renderBatchTicketsContent() {
 }
 
 function renderBatchTicketBody(casting, ticket) {
+    const activeLog = getActiveBatchColorLog(casting, ticket);
+    const colorLogPicker = currentMultiColorEnabled && currentColorLogs.length > 0
+        ? `<div class="pp-bt-context-colorlog-group">
+                <label class="pp-bt-context-date-label" for="pp-bt-color-${escapeAttr(casting.id)}">Color Log</label>
+                <select id="pp-bt-color-${escapeAttr(casting.id)}" class="pp-bt-context-colorlog" data-bt-field="colorLogId">
+                    ${currentColorLogs.map(l =>
+                        `<option value="${escapeAttr(l.id)}"${l.id === activeLog?.id ? ' selected' : ''}>${escapeHtml(l.name || '(unnamed)')}</option>`
+                    ).join('')}
+                </select>
+            </div>`
+        : '';
     return `
         <div class="pp-bt-form">
             <div class="pp-bt-context">
@@ -4216,6 +4622,7 @@ function renderBatchTicketBody(casting, ticket) {
                     <span class="pp-bt-context-cast-label">Casting</span>${escapeHtml(casting.casting_number || '')}
                 </div>
                 <span class="pp-bt-save-status" data-bt-status></span>
+                ${colorLogPicker}
                 <div class="pp-bt-context-date-group">
                     <label class="pp-bt-context-date-label" for="pp-bt-castdate-${escapeAttr(casting.id)}">Cast Date</label>
                     <input type="date" id="pp-bt-castdate-${escapeAttr(casting.id)}" class="pp-bt-context-date" data-bt-casting-date value="${escapeAttr(casting.casting_date || '')}">
@@ -4270,7 +4677,8 @@ function renderBatchPreview(casting, ticket) {
     const totalCuFt = parseFloat(ticket.cuFt);
     if (!totalCuFt || totalCuFt <= 0) return '';
 
-    const sandLbs = getColorLogSandLbs(currentColorLog);
+    const activeLog = getActiveBatchColorLog(casting, ticket);
+    const sandLbs = getColorLogSandLbs(activeLog);
     if (!sandLbs) {
         return `<div class="pp-bt-no-color-log">No sand weight in this project's color log base ingredients. Add a sand entry to the color log to enable scaling.</div>`;
     }
@@ -4279,7 +4687,7 @@ function renderBatchPreview(casting, ticket) {
         totalCuFt,
         faceSqFt: parseFloat(ticket.faceSqFt) || 0,
         cuFtPer250: parseFloat(ticket.cuFtPer250) || 4.28,
-        castMethod: currentColorLog?.castMethod || 'sprayUp',
+        castMethod: activeLog?.castMethod || 'sprayUp',
         colorLogSandLbs: sandLbs,
         manualOverrides: ticket.batchAssignments
     });
@@ -4288,7 +4696,7 @@ function renderBatchPreview(casting, ticket) {
 
     const sectionHeader = renderBatchSectionHeader(plan);
     const assign = renderBatchAssignTable(plan);
-    const totalsPanel = renderBatchTotals(plan, currentColorLog);
+    const totalsPanel = renderBatchTotals(plan, activeLog);
     const tickets = renderBatchTicketCards(casting, ticket, plan);
 
     return `
@@ -4474,15 +4882,16 @@ function renderBatchTotals(plan, log) {
 }
 
 function renderBatchTicketCards(casting, ticket, plan) {
+    const activeLog = getActiveBatchColorLog(casting, ticket);
     const projectName = document.getElementById('pp-f-project_name')?.value || '';
-    const sampleName = currentColorLog?.name || '';
-    const castMethod = currentColorLog?.castMethod || '';
+    const sampleName = activeLog?.name || '';
+    const castMethod = activeLog?.castMethod || '';
     const castNumber = casting.casting_number || '';
     const castDate = casting.casting_date || '';
 
     return plan.batches.map(b =>
         renderBatchTicketCard({
-            colorLog: currentColorLog,
+            colorLog: activeLog,
             batch: b,
             project: projectName,
             sampleName,
@@ -4713,16 +5122,18 @@ function handleBatchFieldInput(castingId, field, value) {
     if (!(field in ticket)) return;
     ticket[field] = value;
     // Inputs that affect the visible preview: re-render it so summary/tickets stay in sync.
-    const previewAffectingFields = ['cuFt', 'faceSqFt', 'cuFtPer250', 'batchedBy', 'notes'];
+    const previewAffectingFields = ['cuFt', 'faceSqFt', 'cuFtPer250', 'batchedBy', 'notes', 'colorLogId'];
     if (previewAffectingFields.includes(field)) {
         // If the batch count would change, drop manual overrides so they don't desync.
-        const sandLbs = getColorLogSandLbs(currentColorLog);
+        const casting = currentCastings.find(c => c.id === castingId);
+        const activeLog = getActiveBatchColorLog(casting, ticket);
+        const sandLbs = getColorLogSandLbs(activeLog);
         if (sandLbs && Array.isArray(ticket.batchAssignments) && ticket.batchAssignments.length) {
             const newPlan = buildBatchPlan({
                 totalCuFt: parseFloat(ticket.cuFt) || 0,
                 faceSqFt: parseFloat(ticket.faceSqFt) || 0,
                 cuFtPer250: parseFloat(ticket.cuFtPer250) || 4.28,
-                castMethod: currentColorLog?.castMethod || 'sprayUp',
+                castMethod: activeLog?.castMethod || 'sprayUp',
                 colorLogSandLbs: sandLbs,
                 manualOverrides: null
             });
@@ -4737,13 +5148,15 @@ function handleBatchFieldInput(castingId, field, value) {
 
 function handleBatchAssignChange(castingId, idx, type) {
     const ticket = getBatchTicketFor(castingId);
-    const sandLbs = getColorLogSandLbs(currentColorLog);
+    const casting = currentCastings.find(c => c.id === castingId);
+    const activeLog = getActiveBatchColorLog(casting, ticket);
+    const sandLbs = getColorLogSandLbs(activeLog);
     if (!sandLbs) return;
     const plan = buildBatchPlan({
         totalCuFt: parseFloat(ticket.cuFt) || 0,
         faceSqFt: parseFloat(ticket.faceSqFt) || 0,
         cuFtPer250: parseFloat(ticket.cuFtPer250) || 4.28,
-        castMethod: currentColorLog?.castMethod || 'sprayUp',
+        castMethod: activeLog?.castMethod || 'sprayUp',
         colorLogSandLbs: sandLbs,
         manualOverrides: ticket.batchAssignments
     });
@@ -5108,7 +5521,7 @@ function renderCrateCard(crate, members) {
                     <span class="pp-ship-member-panel">${escapeHtml(comp.panel_id || '—')}</span>
                     <span class="pp-ship-member-meta">${escapeHtml(casting.casting_number ? `Cast ${casting.casting_number}` : '')}</span>
                     <span class="pp-ship-member-meta">${escapeHtml([comp.width, comp.length].filter(Boolean).join(' × '))}</span>
-                    <span class="pp-ship-member-meta">${escapeHtml(comp.color || '')}</span>
+                    <span class="pp-ship-member-meta">${escapeHtml(resolveComponentColorName(comp))}</span>
                     <button type="button" class="pp-ship-member-remove" data-action="ship-unassign" data-component-id="${escapeAttr(comp.id)}" title="Remove from this crate">×</button>
                 </div>
             `).join('');
@@ -5164,9 +5577,10 @@ function renderCrateQtyRollup(members) {
     // spec collapses to one row with a count.
     const buckets = new Map();
     for (const { comp } of members) {
-        const key = [comp.type || '', comp.width || '', comp.length || '', comp.color || '', comp.sealer || ''].join('||');
+        const colorName = resolveComponentColorName(comp);
+        const key = [comp.type || '', comp.width || '', comp.length || '', colorName, comp.sealer || ''].join('||');
         if (!buckets.has(key)) {
-            buckets.set(key, { type: comp.type || '', width: comp.width || '', length: comp.length || '', color: comp.color || '', count: 0 });
+            buckets.set(key, { type: comp.type || '', width: comp.width || '', length: comp.length || '', color: colorName, count: 0 });
         }
         buckets.get(key).count++;
     }
@@ -5530,8 +5944,15 @@ function buildStickerPrintHtml(casting, components, projectName) {
         .map(([t, n]) => `<p>${escapeHtml(t)} - (${n}pcs)</p>`);
     inventoryItems.push(`<p>(${components.length}) Pieces Total</p>`);
 
-    // Color comes from the project-level Color Log title (one per project).
-    const stickerColor = (currentColorLog?.name || '').trim();
+    // Per-panel color resolution; title sticker shows the distinct set.
+    const distinctNames = [];
+    for (const c of components) {
+        const n = resolveComponentColorName(c);
+        if (n && !distinctNames.includes(n)) distinctNames.push(n);
+    }
+    const titleColor = distinctNames.length > 0
+        ? distinctNames.join(', ')
+        : (currentColorLog?.name || '').trim();
 
     const titleSticker = `
         <div class="sticker">
@@ -5541,7 +5962,7 @@ function buildStickerPrintHtml(casting, components, projectName) {
                     ${inventoryItems.join('')}
                 </div>
             </div>
-            <div class="sticker-finish">${escapeHtml(stickerColor)}</div>
+            <div class="sticker-finish">${escapeHtml(titleColor)}</div>
         </div>
     `;
 
@@ -5549,13 +5970,14 @@ function buildStickerPrintHtml(casting, components, projectName) {
     // the title sticker ends up on top of the pile.
     const panelStickers = [...components].reverse().map(c => {
         const panel = (c.panel_id || '').trim();
+        const panelColor = resolveComponentColorName(c) || titleColor;
         return `
             <div class="sticker">
                 <div class="sticker-top">${escapeHtml(headerText)}</div>
                 <div class="sticker-content">
                     <div class="sticker-bottom">${escapeHtml(panel)}</div>
                 </div>
-                <div class="sticker-finish">${escapeHtml(stickerColor)}</div>
+                <div class="sticker-finish">${escapeHtml(panelColor)}</div>
             </div>
         `;
     }).join('');
@@ -5904,11 +6326,26 @@ table.pk-table td.pk-checkbox { text-align: center; width: 0.45in; }
 
 function buildPackingListHtml(crate, members, project) {
     const proj = project || {};
-    const colorTitle = (currentColorLog?.name || '').trim();
     const memberCount = members.length;
     const phaseName = currentPhasesEnabled
         ? (currentPhases.find(p => p.id === crate.phase_id)?.phase_name || '')
         : '';
+
+    // Per-member resolved color name. Honors color_log_id → falls back to
+    // legacy free-text → falls back to the project's currently active log.
+    const memberColor = (comp) => resolveComponentColorName(comp);
+
+    // Distinct set of color names actually present in this crate (used in
+    // the header). Order = first appearance.
+    const distinctColors = [];
+    for (const { comp } of members) {
+        const name = memberColor(comp);
+        if (name && !distinctColors.includes(name)) distinctColors.push(name);
+    }
+    const colorHeaderLabel = (currentMultiColorEnabled && distinctColors.length > 1) ? 'Colors:' : 'Color:';
+    const colorHeaderValue = distinctColors.length > 0
+        ? distinctColors.join(', ')
+        : (currentColorLog?.name || '').trim();
 
     const qtyMode = shipQtyModeGlobal;
     // Width/length intentionally omitted from the packing list print layout.
@@ -5920,9 +6357,10 @@ function buildPackingListHtml(crate, members, project) {
     } else if (qtyMode) {
         const buckets = new Map();
         for (const { comp } of members) {
-            const key = [comp.type || '', comp.width || '', comp.length || '', comp.color || colorTitle || ''].join('||');
+            const colorName = memberColor(comp);
+            const key = [comp.type || '', comp.width || '', comp.length || '', colorName].join('||');
             if (!buckets.has(key)) {
-                buckets.set(key, { type: comp.type || '', width: comp.width || '', length: comp.length || '', color: comp.color || colorTitle || '', count: 0 });
+                buckets.set(key, { type: comp.type || '', width: comp.width || '', length: comp.length || '', color: colorName, count: 0 });
             }
             buckets.get(key).count++;
         }
@@ -5946,7 +6384,7 @@ function buildPackingListHtml(crate, members, project) {
                 <td><strong>${escapeHtml(comp.panel_id || '')}</strong></td>
                 <td>${escapeHtml(casting?.casting_number ? `Cast ${casting.casting_number}` : '')}</td>
                 <td>${escapeHtml(comp.type || '')}</td>
-                <td>${escapeHtml(comp.color || colorTitle || '')}</td>
+                <td>${escapeHtml(memberColor(comp))}</td>
                 <td class="pk-checkbox">☐</td>
             </tr>`;
         }).join('');
@@ -5962,7 +6400,7 @@ function buildPackingListHtml(crate, members, project) {
             <div class="pk-meta-row"><span class="pk-label">Project #:</span><span class="pk-value">${escapeHtml(proj.project_number || '')}</span></div>
             <div class="pk-meta-row"><span class="pk-label">Project Name:</span><span class="pk-value">${escapeHtml(proj.project_name || '')}</span></div>
             ${phaseName ? `<div class="pk-meta-row"><span class="pk-label">Phase:</span><span class="pk-value">${escapeHtml(phaseName)}</span></div>` : ''}
-            <div class="pk-meta-row"><span class="pk-label">Color:</span><span class="pk-value">${escapeHtml(colorTitle || '')}</span></div>
+            <div class="pk-meta-row"><span class="pk-label">${escapeHtml(colorHeaderLabel)}</span><span class="pk-value">${escapeHtml(colorHeaderValue || '')}</span></div>
             <div class="pk-meta-row"><span class="pk-label">Panel Count:</span><span class="pk-value">${memberCount}</span></div>
             <div class="pk-meta-row"><span class="pk-label">Weight:</span><span class="pk-value">${escapeHtml(crate.weight || '')}</span></div>
             <div class="pk-meta-row"><span class="pk-label">Dimensions:</span><span class="pk-value">${escapeHtml(crate.dimensions || '')}</span></div>
@@ -6361,7 +6799,8 @@ function handlePrintBatchTickets(castingId) {
     if (!ticket) return;
     const casting = currentCastings.find(c => c.id === castingId);
     if (!casting) return;
-    const sandLbs = getColorLogSandLbs(currentColorLog);
+    const activeLog = getActiveBatchColorLog(casting, ticket);
+    const sandLbs = getColorLogSandLbs(activeLog);
     if (!sandLbs) {
         showToast('Add a sand entry to the color log first', 'error');
         return;
@@ -6370,7 +6809,7 @@ function handlePrintBatchTickets(castingId) {
         totalCuFt: parseFloat(ticket.cuFt) || 0,
         faceSqFt: parseFloat(ticket.faceSqFt) || 0,
         cuFtPer250: parseFloat(ticket.cuFtPer250) || 4.28,
-        castMethod: currentColorLog?.castMethod || 'sprayUp',
+        castMethod: activeLog?.castMethod || 'sprayUp',
         colorLogSandLbs: sandLbs,
         manualOverrides: ticket.batchAssignments
     });
@@ -6380,13 +6819,13 @@ function handlePrintBatchTickets(castingId) {
     }
 
     const projectName = document.getElementById('pp-f-project_name')?.value || '';
-    const sampleName = currentColorLog?.name || '';
-    const castMethod = currentColorLog?.castMethod || '';
+    const sampleName = activeLog?.name || '';
+    const castMethod = activeLog?.castMethod || '';
 
     const pages = plan.batches.map(b => `
         <div class="bt-page bt-${b.type}">
             ${renderBatchTicketCard({
-                colorLog: currentColorLog,
+                colorLog: activeLog,
                 batch: b,
                 project: projectName,
                 sampleName,

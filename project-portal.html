@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="src/styles/variables.css">
     <link rel="stylesheet" href="src/styles/base.css">
     <link rel="stylesheet" href="src/styles/buttons.css">
-    <link rel="stylesheet" href="src/styles/project-portal.css?v=20260508-12">
+    <link rel="stylesheet" href="src/styles/project-portal.css?v=20260511-02">
 
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 </head>
@@ -405,6 +405,10 @@
                                     </select>
                                 </div>
                                 <div class="pp-cl-toolbar-right">
+                                    <label class="pp-cl-multi-toggle" title="When on, this project can have more than one color log. Once enabled, can't be turned off.">
+                                        <input type="checkbox" id="pp-cl-multi-toggle">
+                                        <span>Multiple color logs</span>
+                                    </label>
                                     <span id="pp-cl-save-status" class="pp-cl-save-status"></span>
                                     <div class="pp-cl-menu" id="pp-cl-menu">
                                         <button type="button" id="pp-cl-menu-btn" class="pp-cl-menu-btn" aria-haspopup="true" aria-expanded="false" aria-label="More actions" title="More actions">&#x22EF;</button>
@@ -412,6 +416,14 @@
                                             <button type="button" id="pp-cl-save-preset-btn" class="pp-cl-menu-item" role="menuitem">Save as Standard Color</button>
                                         </div>
                                     </div>
+                                </div>
+                            </div>
+
+                            <div class="pp-cl-logs-bar" id="pp-cl-logs-bar" hidden>
+                                <div class="pp-cl-logs-pills" id="pp-cl-logs-pills"></div>
+                                <div class="pp-cl-logs-actions">
+                                    <button type="button" id="pp-cl-logs-add" class="pp-cl-logs-add-btn" title="Add a new color log">+ Add color log</button>
+                                    <button type="button" id="pp-cl-logs-delete" class="pp-cl-logs-delete-btn" title="Delete the active color log">Delete</button>
                                 </div>
                             </div>
 
@@ -883,6 +895,6 @@
         <div id="pp-toast" class="pp-toast" hidden></div>
     </div>
 
-    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20260511-01"></script>
+    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20260511-02"></script>
 </body>
 </html>
