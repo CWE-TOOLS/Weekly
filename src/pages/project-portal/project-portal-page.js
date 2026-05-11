@@ -5911,13 +5911,8 @@ function buildPackingListHtml(crate, members, project) {
         : '';
 
     const qtyMode = shipQtyModeGlobal;
-    // Drop the Size column entirely if no panel in this crate has any
-    // width/length data — keeps the printed list from showing an empty col.
-    const hasDims = members.some(({ comp }) => comp.width || comp.length);
-
-    const colCount = qtyMode
-        ? (hasDims ? 5 : 4)
-        : (hasDims ? 7 : 6);
+    // Width/length intentionally omitted from the packing list print layout.
+    const colCount = qtyMode ? 4 : 6;
 
     let rows;
     if (members.length === 0) {
@@ -5937,24 +5932,20 @@ function buildPackingListHtml(crate, members, project) {
             (a.width || '').localeCompare(b.width || '')
         );
         rows = aggregated.map((r, i) => {
-            const dim = [r.width, r.length].filter(Boolean).join(' × ');
             return `<tr>
                 <td class="pk-num">${i + 1}</td>
                 <td><strong>${escapeHtml(r.type)}</strong></td>
-                ${hasDims ? `<td>${escapeHtml(dim)}</td>` : ''}
                 <td>${escapeHtml(r.color)}</td>
                 <td class="pk-num">${r.count}</td>
             </tr>`;
         }).join('');
     } else {
         rows = members.map(({ comp, casting }, i) => {
-            const dim = [comp.width, comp.length].filter(Boolean).join(' × ');
             return `<tr>
                 <td class="pk-num">${i + 1}</td>
                 <td><strong>${escapeHtml(comp.panel_id || '')}</strong></td>
                 <td>${escapeHtml(casting?.casting_number ? `Cast ${casting.casting_number}` : '')}</td>
                 <td>${escapeHtml(comp.type || '')}</td>
-                ${hasDims ? `<td>${escapeHtml(dim)}</td>` : ''}
                 <td>${escapeHtml(comp.color || colorTitle || '')}</td>
                 <td class="pk-checkbox">☐</td>
             </tr>`;
@@ -5985,7 +5976,6 @@ function buildPackingListHtml(crate, members, project) {
                 ${qtyMode ? `<tr>
                     <th style="width:0.4in;">#</th>
                     <th>Type</th>
-                    ${hasDims ? `<th>Size (W × L)</th>` : ''}
                     <th>Color</th>
                     <th style="width:0.6in;text-align:center;">Qty</th>
                 </tr>` : `<tr>
@@ -5993,7 +5983,6 @@ function buildPackingListHtml(crate, members, project) {
                     <th>Panel ID</th>
                     <th>Cast</th>
                     <th>Type</th>
-                    ${hasDims ? `<th>Size (W × L)</th>` : ''}
                     <th>Color</th>
                     <th style="width:0.5in;text-align:center;">✓</th>
                 </tr>`}
