@@ -75,10 +75,14 @@ html, body {
     border-bottom: none;
     border-radius: 8px 8px 0 0;
     user-select: none;
-    cursor: default;
+    cursor: pointer;
     box-shadow: inset 0 -2px 0 rgba(0,0,0,0.04);
     transform: translateY(1px);
     transition: background 0.15s, color 0.15s;
+}
+.pp-folder-tab:not(.pp-folder-tab-active):not(.pp-folder-tab-disabled):hover {
+    background: #f1f5f9;
+    color: #0f172a;
 }
 .pp-folder-tab-active {
     color: #0f172a;
@@ -173,7 +177,8 @@ html, body {
     color: #94a3b8;
     pointer-events: none;
 }
-#pp-search {
+#pp-search,
+#pp-rm-search {
     width: 100%;
     padding: 8px 12px 8px 34px;
     border: 1px solid #cbd5e1;
@@ -181,7 +186,8 @@ html, body {
     font-size: 13px;
     background: #f8fafc;
 }
-#pp-search:focus {
+#pp-search:focus,
+#pp-rm-search:focus {
     outline: none;
     border-color: #1d4ed8;
     background: #fff;
@@ -4649,7 +4655,22 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
 .pp-jm-list {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 18px;
+}
+.pp-jm-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.pp-jm-date-header {
+    margin: 0;
+    padding: 0 4px 4px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    border-bottom: 1px solid #e2e8f0;
 }
 
 .pp-jm-card {
@@ -4672,7 +4693,7 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
 .pp-jm-card-row {
     flex: 1 1 auto;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 8px;
     padding: 6px 10px;
     min-width: 0;
@@ -4704,10 +4725,20 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
     font-size: 13px;
     line-height: 1.4;
     color: #0f172a;
-    padding: 6px 10px;
+    padding: 4px 10px;
     border: 1px solid transparent;
     border-radius: 6px;
     background: transparent;
+    /* Wrap long lines, auto-size to content, no manual resize handle. */
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    overflow: hidden;
+    resize: none;
+    field-sizing: content;
+    /* Match the height of the sibling date/author inputs for single-line case
+       so the row reads as one line until content forces a wrap. */
+    min-height: 26px;
     transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
 }
 .pp-jm-body::placeholder { color: #94a3b8; }
@@ -4766,4 +4797,92 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
 .pp-jm-delete:focus {
     outline: none;
     box-shadow: 0 0 0 2px rgba(185, 28, 28, 0.15);
+}
+
+/* =========================================================================
+   Recent Memos — cross-project feed (top-level "Recent Memos" folder tab).
+   Reuses .pp-jm-card / .pp-jm-list / .pp-jm-group / .pp-jm-date-header from
+   the per-project view; adds row + project-chip styling specific to this
+   read-only feed.
+   ========================================================================= */
+.pp-rm-wrap {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 18px 24px 32px;
+}
+.pp-rm-count {
+    margin-left: 12px;
+    font-size: 12px;
+    color: #64748b;
+    font-weight: 500;
+    white-space: nowrap;
+}
+.pp-rm-loading {
+    padding: 24px;
+    text-align: center;
+    color: #94a3b8;
+    font-size: 13px;
+}
+.pp-rm-card-row {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 6px 10px;
+    min-width: 0;
+}
+.pp-rm-project-chip {
+    /* Fixed-width column so body text starts at the same x-position on every
+       row regardless of project-name length. Longer names ellipsis. */
+    flex: 0 0 260px;
+    width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: left;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    color: #1d4ed8;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 999px;
+    padding: 3px 12px;
+    cursor: pointer;
+    margin-top: 2px;
+    letter-spacing: 0.01em;
+    transition: background 0.12s, border-color 0.12s, color 0.12s, box-shadow 0.12s;
+}
+.pp-rm-project-chip:hover {
+    background: #dbeafe;
+    border-color: #93c5fd;
+    color: #1e3a8a;
+}
+.pp-rm-project-chip:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.18);
+}
+.pp-rm-body {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 13px;
+    line-height: 1.4;
+    color: #0f172a;
+    padding: 4px 4px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+}
+.pp-rm-empty-body {
+    color: #94a3b8;
+    font-style: italic;
+}
+.pp-rm-author {
+    flex: 0 0 auto;
+    font-size: 12px;
+    color: #64748b;
+    font-style: italic;
+    padding: 4px 8px;
+    white-space: nowrap;
+    margin-top: 1px;
 }

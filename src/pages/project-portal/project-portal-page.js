@@ -60,6 +60,7 @@ import {
 } from '../../services/phases-service.js';
 import {
     loadMemosForProject,
+    loadAllRecentMemos,
     createMemoForProject,
     updateMemo as updateJobMemo,
     deleteMemo as deleteJobMemo
@@ -127,6 +128,9 @@ const FORM_FIELDS = [
 
 let allProjectRows = [];           // From Supabase
 let currentProjectNumber = null;     // null = list view; string = form view
+let currentFolderTab = 'projects';   // 'projects' | 'recent-memos' — top folder-tab strip
+let recentMemos = [];                // cross-project memo feed for Recent Memos view
+let recentMemosFilter = '';          // search filter applied client-side
 let listSort = { column: 'status', direction: 'asc' };
 let currentTab = 'info';             // 'info' | 'castings' | 'optimizer' | 'tracking' | 'shipping'
 let currentClassroom = '1';          // CR Notes sub-tab: '1' | '2' | '3'
@@ -222,6 +226,9 @@ async function showListView() {
     currentProjectNumber = null;
     document.getElementById('pp-list-view').hidden = false;
     document.getElementById('pp-form-view').hidden = true;
+    const memosView = document.getElementById('pp-memos-view');
+    if (memosView) memosView.hidden = true;
+    setFolderTabActive('projects');
     setProjectInUrl(null);
     colorLogLoadedFor = null;
     currentColorLog = null;
@@ -240,6 +247,8 @@ async function showFormView(projectNumber, draftOverrides = null) {
     currentProjectNumber = projectNumber || null;
     document.getElementById('pp-list-view').hidden = true;
     document.getElementById('pp-form-view').hidden = false;
+    const memosView = document.getElementById('pp-memos-view');
+    if (memosView) memosView.hidden = true;
     setProjectInUrl(projectNumber);
 
     // Invalidate color-log cache so we reload for the new project on next tab activation.
@@ -3708,20 +3717,107 @@ function renderJobMemos() {
             : `${memos.length} memo${memos.length === 1 ? '' : 's'}`;
     }
     if (emptyEl) emptyEl.hidden = memos.length > 0;
-    listEl.innerHTML = memos.map(renderJobMemoCard).join('');
+
+    // Group by memo_date. Memos are already sorted newest-first, so we
+    // just walk and start a new group every time the date key changes.
+    const groups = [];
+    let group = null;
+    for (const memo of memos) {
+        const key = memo.memoDate || '';
+        if (!group || group.dateKey !== key) {
+            group = { dateKey: key, label: formatJobMemoDateHeader(key), memos: [] };
+            groups.push(group);
+        }
+        group.memos.push(memo);
+    }
+
+    listEl.innerHTML = groups.map(g => `
+        <section class="pp-jm-group">
+            <h3 class="pp-jm-date-header">${escapeHtml(g.label)}</h3>
+            ${g.memos.map(renderJobMemoCard).join('')}
+        </section>
+    `).join('');
+
+    // Size pre-existing memo bodies to their content on first render
+    // (browsers without field-sizing:content fall back to this).
+    listEl.querySelectorAll('.pp-jm-body').forEach(autoGrowTextarea);
+}
+
+/**
+ * Smart label for a date-header in the memo list.
+ * - Today / Yesterday for the obvious cases
+ * - "Wed, May 6" for dates within the current year
+ * - "May 4, 2024" for older entries
+ * Parses ISO YYYY-MM-DD as a *local* date so timezones don't shift it.
+ */
+function formatJobMemoDateHeader(isoDate) {
+    if (!isoDate) return 'No date';
+    const parts = isoDate.split('-').map(Number);
+    if (parts.length !== 3 || parts.some(n => !Number.isFinite(n))) return isoDate;
+    const [y, m, d] = parts;
+    const date = new Date(y, m - 1, d);
+    if (Number.isNaN(date.getTime())) return isoDate;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const dateMid = new Date(date);
+    dateMid.setHours(0, 0, 0, 0);
+
+    const dayMs = 86400000;
+    const diffDays = Math.round((dateMid.getTime() - today.getTime()) / dayMs);
+
+    if (diffDays === 0)  return 'Today';
+    if (diffDays === -1) return 'Yesterday';
+    if (diffDays === 1)  return 'Tomorrow';
+
+    const sameYear = date.getFullYear() === today.getFullYear();
+    if (sameYear) {
+        return date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+    }
+    return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+/**
+ * Return the most-recent non-empty author on the project so we can
+ * pre-fill new memos. Memos are newest-first, so iterate and return
+ * the first hit.
+ */
+function findLastJobMemoAuthor(memos) {
+    if (!Array.isArray(memos)) return '';
+    for (const m of memos) {
+        const a = (m.author || '').trim();
+        if (a !== '') return a;
+    }
+    return '';
+}
+
+/**
+ * Re-sort currentJobMemos in place by memo_date DESC, created_at DESC.
+ * Mirrors the server-side ordering so date edits land the memo in the
+ * right group without needing a round-trip.
+ */
+function sortJobMemosLocal() {
+    currentJobMemos.sort((a, b) => {
+        const da = a.memoDate || '';
+        const db = b.memoDate || '';
+        if (da !== db) return db.localeCompare(da);
+        const ca = a.createdAt || '';
+        const cb = b.createdAt || '';
+        return cb.localeCompare(ca);
+    });
 }
 
 function renderJobMemoCard(memo) {
     const id     = escapeAttr(memo.id);
     const date   = escapeAttr(memo.memoDate || '');
     const author = escapeAttr(memo.author || '');
-    const body   = escapeAttr(memo.body || '');
+    const body   = escapeHtml(memo.body || '');
     return `
         <article class="pp-jm-card" data-memo-id="${id}">
             <div class="pp-jm-card-rail" aria-hidden="true"></div>
             <div class="pp-jm-card-row">
                 <input type="date" class="pp-jm-date" data-jm-field="memoDate" value="${date}" aria-label="Memo date">
-                <input type="text" class="pp-jm-body" data-jm-field="body" placeholder="Log an event…" value="${body}" aria-label="Memo body">
+                <textarea class="pp-jm-body" data-jm-field="body" placeholder="Log an event…" rows="1" aria-label="Memo body">${body}</textarea>
                 <input type="text" class="pp-jm-author" data-jm-field="author" placeholder="Author" value="${author}" aria-label="Author">
                 <button type="button" class="pp-jm-delete" data-jm-delete title="Delete memo" aria-label="Delete memo">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
@@ -3741,8 +3837,14 @@ async function handleAddJobMemo() {
         showToast('Save the project first', 'error');
         return;
     }
+    // Carry forward the last author used on this project so users don't
+    // re-type the same name on every memo.
+    const suggestedAuthor = findLastJobMemoAuthor(currentJobMemos);
     try {
-        const memo = await createMemoForProject(currentProjectNumber, { memoDate: new Date().toISOString().slice(0, 10) });
+        const memo = await createMemoForProject(currentProjectNumber, {
+            memoDate: new Date().toISOString().slice(0, 10),
+            author: suggestedAuthor
+        });
         if (memo) {
             // Newest first: prepend.
             currentJobMemos.unshift(memo);
@@ -3825,6 +3927,141 @@ function setJobMemoStatus(state) {
     else if (state === 'saved') { el.textContent = 'Saved'; el.className = 'pp-jm-save-status is-saved'; setTimeout(() => { if (el.classList.contains('is-saved')) el.textContent = ''; }, 1500); }
     else if (state === 'error') { el.textContent = 'Save failed'; el.className = 'pp-jm-save-status is-error'; }
     else { el.textContent = ''; el.className = 'pp-jm-save-status'; }
+}
+
+// ---------- Recent Memos (cross-project feed) ----------
+
+function setFolderTabActive(name) {
+    currentFolderTab = name;
+    document.querySelectorAll('[data-folder-tab]').forEach(t => {
+        const active = t.dataset.folderTab === name;
+        t.classList.toggle('pp-folder-tab-active', active);
+        t.setAttribute('aria-selected', String(active));
+    });
+}
+
+async function showRecentMemosView() {
+    // Flush any pending saves in case the user is coming from a form view.
+    if (colorLogSaveTimer) {
+        clearTimeout(colorLogSaveTimer);
+        colorLogSaveTimer = null;
+        try { await saveColorLogNow(); } catch (e) { /* logged */ }
+    }
+    await flushAllBatchTicketSaves();
+    await flushAllJobMemoSaves();
+
+    currentProjectNumber = null;
+    setProjectInUrl(null);
+
+    document.getElementById('pp-list-view').hidden = true;
+    document.getElementById('pp-form-view').hidden = true;
+    const memosView = document.getElementById('pp-memos-view');
+    if (memosView) memosView.hidden = false;
+    setFolderTabActive('recent-memos');
+
+    await loadAndRenderRecentMemos();
+}
+
+async function loadAndRenderRecentMemos() {
+    const listEl = document.getElementById('pp-rm-list');
+    if (listEl) listEl.innerHTML = '<div class="pp-rm-loading">Loading memos…</div>';
+    try {
+        recentMemos = await loadAllRecentMemos(200);
+    } catch (err) {
+        logger.error('[recent-memos] load failed', err);
+        recentMemos = [];
+        showToast('Failed to load recent memos', 'error');
+    }
+    renderRecentMemos();
+}
+
+function renderRecentMemos() {
+    const listEl  = document.getElementById('pp-rm-list');
+    const emptyEl = document.getElementById('pp-rm-empty');
+    const countEl = document.getElementById('pp-rm-count');
+    if (!listEl) return;
+
+    const filter = (recentMemosFilter || '').trim().toLowerCase();
+    const filtered = !filter ? recentMemos : recentMemos.filter(m => {
+        const project = projectByNumber(m.projectNumber);
+        const haystack = [
+            m.projectNumber || '',
+            project?.project_name || '',
+            m.body || '',
+            m.author || ''
+        ].join(' ').toLowerCase();
+        return haystack.includes(filter);
+    });
+
+    if (countEl) {
+        if (recentMemos.length === 0) {
+            countEl.textContent = '';
+        } else if (filter && filtered.length !== recentMemos.length) {
+            countEl.textContent = `${filtered.length} of ${recentMemos.length}`;
+        } else {
+            countEl.textContent = `${filtered.length} memo${filtered.length === 1 ? '' : 's'}`;
+        }
+    }
+    if (emptyEl) emptyEl.hidden = filtered.length > 0;
+
+    // Group by memo_date (already sorted newest-first by the server).
+    const groups = [];
+    let group = null;
+    for (const memo of filtered) {
+        const key = memo.memoDate || '';
+        if (!group || group.dateKey !== key) {
+            group = { dateKey: key, label: formatJobMemoDateHeader(key), memos: [] };
+            groups.push(group);
+        }
+        group.memos.push(memo);
+    }
+
+    listEl.innerHTML = groups.map(g => `
+        <section class="pp-jm-group">
+            <h3 class="pp-jm-date-header">${escapeHtml(g.label)}</h3>
+            ${g.memos.map(renderRecentMemoCard).join('')}
+        </section>
+    `).join('');
+}
+
+function renderRecentMemoCard(memo) {
+    const project = projectByNumber(memo.projectNumber);
+    const projectNum = memo.projectNumber || '(unknown)';
+    const projectName = project?.project_name || '';
+    const chipText = projectName ? `${projectNum} — ${projectName}` : projectNum;
+    const bodyHtml = memo.body && memo.body.trim() !== ''
+        ? escapeHtml(memo.body)
+        : '<span class="pp-rm-empty-body">(empty memo)</span>';
+    const authorHtml = (memo.author && memo.author.trim() !== '')
+        ? `<span class="pp-rm-author">${escapeHtml(memo.author)}</span>`
+        : '';
+    return `
+        <article class="pp-jm-card pp-rm-card" data-memo-id="${escapeAttr(memo.id)}">
+            <div class="pp-jm-card-rail" aria-hidden="true"></div>
+            <div class="pp-rm-card-row">
+                <button type="button" class="pp-rm-project-chip" data-rm-project="${escapeAttr(memo.projectNumber || '')}" title="Open ${escapeAttr(chipText)} → Job Memos">
+                    ${escapeHtml(chipText)}
+                </button>
+                <div class="pp-rm-body">${bodyHtml}</div>
+                ${authorHtml}
+            </div>
+        </article>
+    `;
+}
+
+function projectByNumber(num) {
+    if (!num) return null;
+    const target = String(num).trim();
+    return allProjectRows.find(p => String(p.project_number || '').trim() === target) || null;
+}
+
+async function handleRecentMemoProjectClick(projectNumber) {
+    if (!projectNumber) return;
+    // Open the project in form view and land on the Job Memos tab.
+    currentTab = 'job-memos';
+    await showFormView(projectNumber);
+    setActiveTab('job-memos');
+    activateJobMemosTab();
 }
 
 // ---------- Wire up ----------
@@ -3926,10 +4163,45 @@ function wireEvents() {
         });
     }
 
-    // Form: back to list
+    // Form: back to list — return to whichever folder tab was last active
     document.getElementById('pp-back-list-btn').addEventListener('click', () => {
-        showListView();
+        if (currentFolderTab === 'recent-memos') {
+            showRecentMemosView();
+        } else {
+            showListView();
+        }
     });
+
+    // Folder tabs at the very top (Project Portal / Recent Memos / disabled stubs)
+    document.querySelectorAll('[data-folder-tab]').forEach(tab => {
+        tab.addEventListener('click', () => {
+            const which = tab.dataset.folderTab;
+            if (which === 'projects') {
+                showListView();
+            } else if (which === 'recent-memos') {
+                showRecentMemosView();
+            }
+        });
+    });
+
+    // Recent Memos: search filter
+    const rmSearch = document.getElementById('pp-rm-search');
+    if (rmSearch) {
+        rmSearch.addEventListener('input', (e) => {
+            recentMemosFilter = e.target.value || '';
+            renderRecentMemos();
+        });
+    }
+
+    // Recent Memos: project-chip click → open that project's Job Memos tab
+    const rmView = document.getElementById('pp-memos-view');
+    if (rmView) {
+        rmView.addEventListener('click', (e) => {
+            const chip = e.target.closest('[data-rm-project]');
+            if (!chip) return;
+            handleRecentMemoProjectClick(chip.dataset.rmProject);
+        });
+    }
 
     // Form: auto-save on input/change (debounced)
     const formEl = document.getElementById('pp-form');
@@ -4250,12 +4522,16 @@ function wireEvents() {
         });
 
         // Date inputs fire 'change' but not always 'input' across browsers — cover both.
+        // After a date edit, re-sort + re-render so the memo moves into the
+        // right date-group header and sort position.
         jmPanel.addEventListener('change', (e) => {
             const fieldEl = e.target.closest('[data-jm-field]');
             if (!fieldEl || fieldEl.tagName !== 'INPUT' || fieldEl.type !== 'date') return;
             const card = fieldEl.closest('.pp-jm-card');
             if (!card) return;
             scheduleJobMemoSave(card.dataset.memoId, 'memoDate', fieldEl.value);
+            sortJobMemosLocal();
+            renderJobMemos();
         });
     }
 

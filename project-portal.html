@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="src/styles/variables.css">
     <link rel="stylesheet" href="src/styles/base.css">
     <link rel="stylesheet" href="src/styles/buttons.css">
-    <link rel="stylesheet" href="src/styles/project-portal.css?v=20260512-04">
+    <link rel="stylesheet" href="src/styles/project-portal.css?v=20260512-09">
 
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 </head>
@@ -28,7 +28,8 @@
                     <span>Weekly Schedule</span>
                 </a>
                 <div class="pp-folder-tabs" role="tablist" aria-label="Portal sections">
-                    <div class="pp-folder-tab pp-folder-tab-active" role="tab" aria-selected="true">Project Portal</div>
+                    <div class="pp-folder-tab pp-folder-tab-active" role="tab" aria-selected="true" data-folder-tab="projects">Project Portal</div>
+                    <div class="pp-folder-tab" role="tab" aria-selected="false" data-folder-tab="recent-memos">Recent Memos</div>
                     <div class="pp-folder-tab pp-folder-tab-disabled" role="tab" aria-disabled="true" title="Coming soon">Shipping Log</div>
                     <div class="pp-folder-tab pp-folder-tab-disabled" role="tab" aria-disabled="true" title="Coming soon">Spec. Vendor Log</div>
                 </div>
@@ -69,6 +70,26 @@
                         <tr><td colspan="8" class="pp-empty">Loading projects...</td></tr>
                     </tbody>
                 </table>
+            </div>
+        </section>
+
+        <!-- RECENT MEMOS VIEW (cross-project feed) -->
+        <section id="pp-memos-view" class="pp-view" hidden>
+            <div class="pp-list-controls">
+                <div class="pp-search-wrap">
+                    <svg class="pp-search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="8"/>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </svg>
+                    <input type="text" id="pp-rm-search" placeholder="Filter memos by project, body, or author..." autocomplete="off" />
+                </div>
+                <span id="pp-rm-count" class="pp-rm-count"></span>
+            </div>
+            <div class="pp-rm-wrap">
+                <div id="pp-rm-empty" class="pp-jm-empty" hidden>
+                    No memos yet across any project.
+                </div>
+                <div id="pp-rm-list" class="pp-jm-list"></div>
             </div>
         </section>
 
@@ -924,6 +945,6 @@
         <div id="pp-toast" class="pp-toast" hidden></div>
     </div>
 
-    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20260512-02"></script>
+    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20260512-05"></script>
 </body>
 </html>

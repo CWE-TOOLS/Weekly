@@ -68,6 +68,30 @@ export async function loadMemosForProject(projectNumber) {
 }
 
 /**
+ * Load the most recent memos across ALL projects, newest first.
+ * Used by the Recent Memos top-level view.
+ * @param {number} [limit=200] maximum rows to return
+ * @returns {Promise<Array<Object>>}
+ */
+export async function loadAllRecentMemos(limit = 200) {
+    const client = await getClient();
+    if (!client) return [];
+
+    const { data, error } = await client
+        .from(TABLE)
+        .select('*')
+        .order('memo_date', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+    if (error) {
+        logger.error('[job-memos] loadAllRecentMemos error:', error);
+        throw error;
+    }
+    return (data || []).map(rowToForm);
+}
+
+/**
  * Insert a new memo for a project. Defaults date to today, empty body/author.
  * @param {string} projectNumber
  * @param {{memoDate?:string, body?:string, author?:string}} [fields]
