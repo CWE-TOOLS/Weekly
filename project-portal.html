@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="src/styles/variables.css">
     <link rel="stylesheet" href="src/styles/base.css">
     <link rel="stylesheet" href="src/styles/buttons.css">
-    <link rel="stylesheet" href="src/styles/project-portal.css?v=20260511-02">
+    <link rel="stylesheet" href="src/styles/project-portal.css?v=20260512-04">
 
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 </head>
@@ -98,6 +98,15 @@
                             <line x1="12" y1="8" x2="12.01" y2="8"/>
                         </svg>
                         <span>Project Info</span>
+                    </button>
+                    <button class="pp-tab-btn" data-tab="job-memos" type="button">
+                        <svg class="pp-tab-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                            <line x1="8" y1="13" x2="16" y2="13"/>
+                            <line x1="8" y1="17" x2="13" y2="17"/>
+                        </svg>
+                        <span>Job Memos</span>
                     </button>
                     <button class="pp-tab-btn" data-tab="castings" type="button">
                         <svg class="pp-tab-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -561,6 +570,26 @@
                         </div>
                     </div>
 
+                    <!-- Tab: Job Memos -->
+                    <div class="pp-tab-panel" data-panel="job-memos" hidden>
+                        <div id="pp-jm-needs-save" class="pp-castings-hint" hidden>
+                            Save the project first to use Job Memos.
+                        </div>
+
+                        <div class="pp-jm-toolbar" id="pp-jm-toolbar" hidden>
+                            <button type="button" id="pp-jm-add" class="pp-jm-add-btn">+ Add Memo</button>
+                            <span class="pp-jm-count" id="pp-jm-count"></span>
+                            <span class="pp-jm-save-status" id="pp-jm-save-status"></span>
+                        </div>
+
+                        <div class="pp-jm-wrap" id="pp-jm-wrap" hidden>
+                            <div class="pp-jm-empty" id="pp-jm-empty" hidden>
+                                No memos yet — click <strong>+ Add Memo</strong> to start the log.
+                            </div>
+                            <div class="pp-jm-list" id="pp-jm-list"></div>
+                        </div>
+                    </div>
+
                     <!-- Tab: Batch Tickets -->
                     <div class="pp-tab-panel" data-panel="batch-tickets" hidden>
                         <div class="pp-bt-wrap">
@@ -895,6 +924,6 @@
         <div id="pp-toast" class="pp-toast" hidden></div>
     </div>
 
-    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20260511-02"></script>
+    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20260512-02"></script>
 </body>
 </html>

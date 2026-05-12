@@ -864,7 +864,7 @@ html, body {
 .pp-inv-header-fields {
     flex: 1 1 auto;
     display: grid;
-    grid-template-columns: 0.45fr 0.45fr 1.2fr 0.6fr 0.6fr 0.8fr 0.6fr 0.7fr;
+    grid-template-columns: 0.45fr 0.45fr 1.0fr 0.55fr 0.55fr 1.4fr 0.55fr 0.65fr;
     gap: 6px;
 }
 .pp-inv-header-fields span {
@@ -915,7 +915,7 @@ html, body {
 .pp-inv-row-fields {
     flex: 1 1 auto;
     display: grid;
-    grid-template-columns: 0.45fr 0.45fr 1.2fr 0.6fr 0.6fr 0.8fr 0.6fr 0.7fr;
+    grid-template-columns: 0.45fr 0.45fr 1.0fr 0.55fr 0.55fr 1.4fr 0.55fr 0.65fr;
     gap: 6px;
 }
 .pp-inv-input {
@@ -2735,7 +2735,7 @@ body.pp-printing .pp-tab-panel[data-panel="castings"] { display: none !important
     background: #fff;
     color: var(--text-primary);
     border-radius: 4px;
-    font-size: 13px;
+    font-size: 12px;
     font-family: inherit;
     min-width: 0;
 }
@@ -4584,3 +4584,186 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
     cursor: pointer;
 }
 .pp-ship-member-remove:hover { background: #fee2e2; }
+
+/* =========================================================================
+   Job Memos — per-project timeline log of dated events.
+   Vertical stack of cards, newest first, each with a colored left rail.
+   ========================================================================= */
+.pp-jm-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0 12px;
+    border-bottom: 1px solid #e5e7eb;
+    margin-bottom: 14px;
+}
+.pp-jm-add-btn {
+    appearance: none;
+    border: 1px solid #1d4ed8;
+    background: #1d4ed8;
+    color: #fff;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
+}
+.pp-jm-add-btn:hover {
+    background: #1e40af;
+    border-color: #1e40af;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+.pp-jm-add-btn:active { background: #1e3a8a; }
+.pp-jm-count {
+    font-size: 12px;
+    color: #64748b;
+    font-weight: 500;
+}
+.pp-jm-save-status {
+    margin-left: auto;
+    font-size: 12px;
+    color: #64748b;
+    min-height: 1em;
+}
+.pp-jm-save-status.is-saving { color: #b45309; }
+.pp-jm-save-status.is-saved  { color: #047857; }
+.pp-jm-save-status.is-error  { color: #b91c1c; }
+
+.pp-jm-wrap {
+    max-width: 820px;
+    margin: 0 auto;
+}
+.pp-jm-empty {
+    border: 1px dashed #cbd5e1;
+    background: #f8fafc;
+    border-radius: 8px;
+    padding: 24px;
+    text-align: center;
+    color: #64748b;
+    font-size: 13px;
+}
+.pp-jm-empty strong { color: #1d4ed8; font-weight: 600; }
+
+.pp-jm-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.pp-jm-card {
+    display: flex;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    transition: box-shadow 0.12s, border-color 0.12s;
+}
+.pp-jm-card:hover {
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.06);
+    border-color: #cbd5e1;
+}
+.pp-jm-card-rail {
+    flex: 0 0 4px;
+    background: linear-gradient(180deg, #3b82f6 0%, #1d4ed8 100%);
+}
+.pp-jm-card-row {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    min-width: 0;
+}
+.pp-jm-date {
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    color: #0f172a;
+    padding: 4px 8px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    background: #f1f5f9;
+    cursor: pointer;
+    flex: 0 0 auto;
+    transition: border-color 0.12s, background 0.12s;
+}
+.pp-jm-date:hover { background: #e2e8f0; border-color: #94a3b8; }
+.pp-jm-date:focus {
+    outline: none;
+    border-color: #1d4ed8;
+    background: #ffffff;
+    box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.15);
+}
+.pp-jm-body {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-family: inherit;
+    font-size: 13px;
+    line-height: 1.4;
+    color: #0f172a;
+    padding: 6px 10px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
+}
+.pp-jm-body::placeholder { color: #94a3b8; }
+.pp-jm-body:hover { background: #f8fafc; border-color: #e2e8f0; }
+.pp-jm-body:focus {
+    outline: none;
+    background: #ffffff;
+    border-color: #1d4ed8;
+    box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.12);
+}
+.pp-jm-author {
+    flex: 0 0 140px;
+    min-width: 0;
+    font-family: inherit;
+    font-size: 12px;
+    color: #475569;
+    padding: 4px 8px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    text-align: right;
+    transition: background 0.12s, border-color 0.12s;
+}
+.pp-jm-author::placeholder { color: #94a3b8; font-style: italic; }
+.pp-jm-author:hover {
+    background: #f8fafc;
+    border-color: #e2e8f0;
+}
+.pp-jm-author:focus {
+    outline: none;
+    background: #ffffff;
+    border-color: #1d4ed8;
+    box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.12);
+    text-align: left;
+}
+.pp-jm-delete {
+    flex: 0 0 26px;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: #94a3b8;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.12s, background 0.12s, border-color 0.12s;
+}
+.pp-jm-delete:hover {
+    color: #b91c1c;
+    background: #fef2f2;
+    border-color: #fca5a5;
+}
+.pp-jm-delete:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(185, 28, 28, 0.15);
+}

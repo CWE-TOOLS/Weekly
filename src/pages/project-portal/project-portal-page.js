@@ -59,6 +59,12 @@ import {
     getPhaseUsageCounts
 } from '../../services/phases-service.js';
 import {
+    loadMemosForProject,
+    createMemoForProject,
+    updateMemo as updateJobMemo,
+    deleteMemo as deleteJobMemo
+} from '../../services/job-memos-service.js';
+import {
     loadAllInventoryForProject,
     createInventoryItem,
     updateInventoryItem,
@@ -164,6 +170,9 @@ let currentMultiColorEnabled = false;      // mirrors projects.multi_color_enabl
 let colorLogPresets = [];                  // cached preset rows
 let colorLogSaveTimer = null;              // debounce timer
 let colorLogLoadedFor = null;              // project_number we last loaded for
+let currentJobMemos = [];                  // form-shaped memo records, sorted newest-first
+let jobMemosLoadedFor = null;              // project_number we last loaded memos for
+let jobMemoSaveTimers = new Map();         // memoId -> debounce handle (per-field edits)
 let batchTickets = new Map();              // castingId -> form-shaped batch ticket record
 let batchTicketsLoadedFor = null;          // project_number we last bulk-loaded for
 let currentBatchCastingId = null;          // active casting in batch tickets tab
@@ -208,6 +217,8 @@ async function showListView() {
     }
     // Flush all pending batch-ticket saves.
     await flushAllBatchTicketSaves();
+    // Flush all pending job-memo saves.
+    await flushAllJobMemoSaves();
     currentProjectNumber = null;
     document.getElementById('pp-list-view').hidden = false;
     document.getElementById('pp-form-view').hidden = true;
@@ -220,6 +231,8 @@ async function showListView() {
     batchTicketsLoadedFor = null;
     batchTickets.clear();
     currentBatchCastingId = null;
+    jobMemosLoadedFor = null;
+    currentJobMemos = [];
     await refreshList();
 }
 
@@ -243,6 +256,12 @@ async function showFormView(projectNumber, draftOverrides = null) {
     currentBatchCastingId = null;
     for (const t of batchTicketSaveTimers.values()) clearTimeout(t);
     batchTicketSaveTimers.clear();
+
+    // Invalidate job-memos cache.
+    jobMemosLoadedFor = null;
+    currentJobMemos = [];
+    for (const t of jobMemoSaveTimers.values()) clearTimeout(t);
+    jobMemoSaveTimers.clear();
 
     // Invalidate shipping/crates cache.
     cratesLoadedFor = null;
@@ -315,6 +334,9 @@ async function showFormView(projectNumber, draftOverrides = null) {
     }
     if (currentTab === 'batch-tickets') {
         activateBatchTicketsTab();
+    }
+    if (currentTab === 'job-memos') {
+        activateJobMemosTab();
     }
 }
 
@@ -414,7 +436,8 @@ function setActiveTab(tab) {
     const printBtn = document.getElementById('pp-print-btn');
     if (printBtn) {
         // Tracking + Shipping have per-row print buttons — hide the global one.
-        if (tab === 'tracking' || tab === 'shipping') {
+        // Job Memos has no print pipeline yet.
+        if (tab === 'tracking' || tab === 'shipping' || tab === 'job-memos') {
             printBtn.hidden = true;
         } else {
             printBtn.hidden = false;
@@ -3641,6 +3664,169 @@ async function handlePresetSaveSubmit() {
     }
 }
 
+// ---------- Job Memos ----------
+
+async function activateJobMemosTab() {
+    const needsSave = document.getElementById('pp-jm-needs-save');
+    const toolbar   = document.getElementById('pp-jm-toolbar');
+    const wrap      = document.getElementById('pp-jm-wrap');
+
+    if (!currentProjectNumber) {
+        if (needsSave) needsSave.hidden = false;
+        if (toolbar) toolbar.hidden = true;
+        if (wrap) wrap.hidden = true;
+        return;
+    }
+
+    if (needsSave) needsSave.hidden = true;
+    if (toolbar) toolbar.hidden = false;
+    if (wrap) wrap.hidden = false;
+
+    if (jobMemosLoadedFor !== currentProjectNumber) {
+        try {
+            currentJobMemos = await loadMemosForProject(currentProjectNumber);
+        } catch (err) {
+            logger.error('[job-memos] load failed', err);
+            currentJobMemos = [];
+            showToast('Failed to load job memos', 'error');
+        }
+        jobMemosLoadedFor = currentProjectNumber;
+    }
+    renderJobMemos();
+}
+
+function renderJobMemos() {
+    const listEl  = document.getElementById('pp-jm-list');
+    const emptyEl = document.getElementById('pp-jm-empty');
+    const countEl = document.getElementById('pp-jm-count');
+    if (!listEl) return;
+
+    const memos = currentJobMemos || [];
+    if (countEl) {
+        countEl.textContent = memos.length === 0
+            ? ''
+            : `${memos.length} memo${memos.length === 1 ? '' : 's'}`;
+    }
+    if (emptyEl) emptyEl.hidden = memos.length > 0;
+    listEl.innerHTML = memos.map(renderJobMemoCard).join('');
+}
+
+function renderJobMemoCard(memo) {
+    const id     = escapeAttr(memo.id);
+    const date   = escapeAttr(memo.memoDate || '');
+    const author = escapeAttr(memo.author || '');
+    const body   = escapeAttr(memo.body || '');
+    return `
+        <article class="pp-jm-card" data-memo-id="${id}">
+            <div class="pp-jm-card-rail" aria-hidden="true"></div>
+            <div class="pp-jm-card-row">
+                <input type="date" class="pp-jm-date" data-jm-field="memoDate" value="${date}" aria-label="Memo date">
+                <input type="text" class="pp-jm-body" data-jm-field="body" placeholder="Log an event…" value="${body}" aria-label="Memo body">
+                <input type="text" class="pp-jm-author" data-jm-field="author" placeholder="Author" value="${author}" aria-label="Author">
+                <button type="button" class="pp-jm-delete" data-jm-delete title="Delete memo" aria-label="Delete memo">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
+                        <polyline points="3 6 5 6 21 6"/>
+                        <path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/>
+                        <path d="M10 11v6M14 11v6"/>
+                        <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>
+                    </svg>
+                </button>
+            </div>
+        </article>
+    `;
+}
+
+async function handleAddJobMemo() {
+    if (!currentProjectNumber) {
+        showToast('Save the project first', 'error');
+        return;
+    }
+    try {
+        const memo = await createMemoForProject(currentProjectNumber, { memoDate: new Date().toISOString().slice(0, 10) });
+        if (memo) {
+            // Newest first: prepend.
+            currentJobMemos.unshift(memo);
+            renderJobMemos();
+            // Focus the new card's body for fast entry.
+            const card = document.querySelector(`.pp-jm-card[data-memo-id="${cssEscape(memo.id)}"]`);
+            if (card) card.querySelector('.pp-jm-body')?.focus();
+        }
+    } catch (err) {
+        logger.error('[job-memos] create failed', err);
+        showToast('Failed to add memo', 'error');
+    }
+}
+
+async function handleDeleteJobMemo(memoId) {
+    if (!memoId) return;
+    const idx = currentJobMemos.findIndex(m => m.id === memoId);
+    if (idx === -1) return;
+    const memo = currentJobMemos[idx];
+    const hasContent = (memo.body && memo.body.trim() !== '') || (memo.author && memo.author.trim() !== '');
+    if (hasContent && !confirm('Delete this memo? This cannot be undone.')) return;
+    // Cancel any pending save for this memo.
+    const t = jobMemoSaveTimers.get(memoId);
+    if (t) { clearTimeout(t); jobMemoSaveTimers.delete(memoId); }
+    try {
+        await deleteJobMemo(memoId);
+        currentJobMemos.splice(idx, 1);
+        renderJobMemos();
+    } catch (err) {
+        logger.error('[job-memos] delete failed', err);
+        showToast('Failed to delete memo', 'error');
+    }
+}
+
+function scheduleJobMemoSave(memoId, field, value) {
+    const memo = currentJobMemos.find(m => m.id === memoId);
+    if (!memo) return;
+    // Local-state update first so we don't lose typing if a re-render happens.
+    memo[field] = value;
+    const existing = jobMemoSaveTimers.get(memoId);
+    if (existing) clearTimeout(existing);
+    setJobMemoStatus('saving');
+    const t = setTimeout(() => saveJobMemoNow(memoId), 600);
+    jobMemoSaveTimers.set(memoId, t);
+}
+
+async function saveJobMemoNow(memoId) {
+    const memo = currentJobMemos.find(m => m.id === memoId);
+    if (!memo) return;
+    jobMemoSaveTimers.delete(memoId);
+    try {
+        await updateJobMemo(memoId, {
+            memoDate: memo.memoDate,
+            body: memo.body,
+            author: memo.author
+        });
+        if (jobMemoSaveTimers.size === 0) setJobMemoStatus('saved');
+    } catch (err) {
+        logger.error('[job-memos] update failed', err);
+        setJobMemoStatus('error');
+        showToast('Failed to save memo', 'error');
+    }
+}
+
+async function flushAllJobMemoSaves() {
+    const ids = [...jobMemoSaveTimers.keys()];
+    for (const id of ids) {
+        clearTimeout(jobMemoSaveTimers.get(id));
+    }
+    jobMemoSaveTimers.clear();
+    for (const id of ids) {
+        try { await saveJobMemoNow(id); } catch (e) { /* already logged */ }
+    }
+}
+
+function setJobMemoStatus(state) {
+    const el = document.getElementById('pp-jm-save-status');
+    if (!el) return;
+    if (state === 'saving') { el.textContent = 'Saving…'; el.className = 'pp-jm-save-status is-saving'; }
+    else if (state === 'saved') { el.textContent = 'Saved'; el.className = 'pp-jm-save-status is-saved'; setTimeout(() => { if (el.classList.contains('is-saved')) el.textContent = ''; }, 1500); }
+    else if (state === 'error') { el.textContent = 'Save failed'; el.className = 'pp-jm-save-status is-error'; }
+    else { el.textContent = ''; el.className = 'pp-jm-save-status'; }
+}
+
 // ---------- Wire up ----------
 
 function wireEvents() {
@@ -3910,6 +4096,8 @@ function wireEvents() {
                 activateColorLogTab();
             } else if (tab === 'batch-tickets') {
                 activateBatchTicketsTab();
+            } else if (tab === 'job-memos') {
+                activateJobMemosTab();
             }
         });
     });
@@ -4030,6 +4218,44 @@ function wireEvents() {
                 clHandleRowUnitChange(tr, target);
                 scheduleColorLogSave();
             }
+        });
+    }
+
+    // ----- Job Memos: event delegation on its panel -----
+    const jmPanel = document.querySelector('.pp-tab-panel[data-panel="job-memos"]');
+    if (jmPanel) {
+        jmPanel.addEventListener('click', (e) => {
+            if (e.target.id === 'pp-jm-add' || e.target.closest('#pp-jm-add')) {
+                handleAddJobMemo();
+                return;
+            }
+            const delBtn = e.target.closest('[data-jm-delete]');
+            if (delBtn) {
+                const card = delBtn.closest('.pp-jm-card');
+                if (card) handleDeleteJobMemo(card.dataset.memoId);
+                return;
+            }
+        });
+
+        jmPanel.addEventListener('input', (e) => {
+            const fieldEl = e.target.closest('[data-jm-field]');
+            if (!fieldEl) return;
+            const card = fieldEl.closest('.pp-jm-card');
+            if (!card) return;
+            const memoId = card.dataset.memoId;
+            const field = fieldEl.dataset.jmField;
+            if (!memoId || !field) return;
+            if (fieldEl.tagName === 'TEXTAREA') autoGrowTextarea(fieldEl);
+            scheduleJobMemoSave(memoId, field, fieldEl.value);
+        });
+
+        // Date inputs fire 'change' but not always 'input' across browsers — cover both.
+        jmPanel.addEventListener('change', (e) => {
+            const fieldEl = e.target.closest('[data-jm-field]');
+            if (!fieldEl || fieldEl.tagName !== 'INPUT' || fieldEl.type !== 'date') return;
+            const card = fieldEl.closest('.pp-jm-card');
+            if (!card) return;
+            scheduleJobMemoSave(card.dataset.memoId, 'memoDate', fieldEl.value);
         });
     }
 
