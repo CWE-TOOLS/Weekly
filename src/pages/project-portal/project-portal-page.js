@@ -212,6 +212,42 @@ function setProjectInUrl(projectNumber) {
     history.pushState({}, '', url);
 }
 
+// Tab + folder-tab URL persistence. Uses replaceState so clicking through
+// tabs doesn't pollute the browser back-stack — only entering / leaving the
+// form view pushes (via setProjectInUrl).
+function setTabInUrl(tab) {
+    const url = new URL(window.location);
+    if (tab && tab !== 'info') {
+        url.searchParams.set('tab', tab);
+    } else {
+        url.searchParams.delete('tab');
+    }
+    history.replaceState({}, '', url);
+}
+
+function setViewInUrl(view) {
+    const url = new URL(window.location);
+    if (view && view !== 'projects') {
+        url.searchParams.set('view', view);
+    } else {
+        url.searchParams.delete('view');
+    }
+    history.replaceState({}, '', url);
+}
+
+function getTabFromUrl() {
+    return new URLSearchParams(window.location.search).get('tab');
+}
+
+function getViewFromUrl() {
+    return new URLSearchParams(window.location.search).get('view');
+}
+
+const VALID_TABS = new Set([
+    'info', 'job-memos', 'castings', 'optimizer', 'tracking',
+    'shipping', 'color-log', 'batch-tickets', 'cr-notes'
+]);
+
 async function showListView() {
     // Flush any pending color-log save before leaving the form view.
     if (colorLogSaveTimer) {
@@ -230,6 +266,7 @@ async function showListView() {
     if (memosView) memosView.hidden = true;
     setFolderTabActive('projects');
     setProjectInUrl(null);
+    setTabInUrl(null);
     colorLogLoadedFor = null;
     currentColorLog = null;
     currentColorLogs = [];
@@ -250,6 +287,8 @@ async function showFormView(projectNumber, draftOverrides = null) {
     const memosView = document.getElementById('pp-memos-view');
     if (memosView) memosView.hidden = true;
     setProjectInUrl(projectNumber);
+    // Leaving the cross-project Recent Memos view as we drill into a project.
+    setViewInUrl(null);
 
     // Invalidate color-log cache so we reload for the new project on next tab activation.
     colorLogLoadedFor = null;
@@ -337,16 +376,15 @@ async function showFormView(projectNumber, draftOverrides = null) {
         renderClassroomTasksAll();
     }
 
-    // If the user is already on the Color Log tab, refresh it for the new project.
-    if (currentTab === 'color-log') {
-        activateColorLogTab();
-    }
-    if (currentTab === 'batch-tickets') {
-        activateBatchTicketsTab();
-    }
-    if (currentTab === 'job-memos') {
-        activateJobMemosTab();
-    }
+    // If the user is already on a data-loading tab, fire its activation now
+    // so the right panel hydrates (this also handles URL-restored deep links
+    // like ?project=X&tab=optimizer after the browser discards an idle tab).
+    if (currentTab === 'color-log')    activateColorLogTab();
+    if (currentTab === 'batch-tickets') activateBatchTicketsTab();
+    if (currentTab === 'job-memos')    activateJobMemosTab();
+    if (currentTab === 'optimizer')    activateOptimizerTab();
+    if (currentTab === 'tracking')     activateTrackingTab();
+    if (currentTab === 'shipping')     activateShippingTab();
 }
 
 function openNewProjectModal() {
@@ -461,6 +499,11 @@ function setActiveTab(tab) {
     if (tab === 'shipping' && currentProjectNumber) {
         activateShippingTab();
     }
+
+    // Persist the active tab in the URL so a page reload (e.g. after the
+    // browser discards an idle tab) restores the user where they left off.
+    // Only meaningful when in form view — list view has its own URL state.
+    if (currentProjectNumber) setTabInUrl(tab);
 }
 
 /**
@@ -3938,6 +3981,7 @@ function setFolderTabActive(name) {
         t.classList.toggle('pp-folder-tab-active', active);
         t.setAttribute('aria-selected', String(active));
     });
+    setViewInUrl(name);
 }
 
 async function showRecentMemosView() {
@@ -3952,6 +3996,7 @@ async function showRecentMemosView() {
 
     currentProjectNumber = null;
     setProjectInUrl(null);
+    setTabInUrl(null);
 
     document.getElementById('pp-list-view').hidden = true;
     document.getElementById('pp-form-view').hidden = true;
@@ -7563,13 +7608,27 @@ function handlePrintColorLog() {
 async function init() {
     wireEvents();
     const urlProject = getProjectFromUrl();
+    const urlTab     = getTabFromUrl();
+    const urlView    = getViewFromUrl();
+
+    // Recent Memos cross-project view takes precedence if explicitly requested.
+    if (urlView === 'recent-memos' && urlProject === null) {
+        loadAllData().catch(err => logger.warn(err));
+        await showRecentMemosView();
+        return;
+    }
+
     if (urlProject !== null) {
-        // form view, but still load list data in background for completeness
+        // Form view. Set the initial tab BEFORE showFormView so its
+        // internal setActiveTab + activate-tab calls land on the right panel.
+        if (urlTab && VALID_TABS.has(urlTab)) currentTab = urlTab;
+        // List data still loads in the background for completeness.
         loadAllData().catch(err => logger.warn(err));
         await showFormView(urlProject);
-    } else {
-        await showListView();
+        return;
     }
+
+    await showListView();
 }
 
 if (document.readyState === 'loading') {
