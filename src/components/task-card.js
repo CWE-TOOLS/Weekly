@@ -56,10 +56,13 @@ export function createTaskCard(task, rowClass, isEditingUnlocked) {
         card.appendChild(castDiv);
     }
 
-    // Project description
+    // Project manager (from projects table) — falls back to the Google Sheet
+    // description (column C) when the task has no project-number match or the
+    // matched project has no PM set. Mirrors how the title falls back from
+    // resolvedProjectName to the sheet's project name.
     const projectDescDiv = document.createElement('div');
     projectDescDiv.className = 'project-description';
-    projectDescDiv.textContent = task.projectDescription || '';
+    projectDescDiv.textContent = task.resolvedProjectManager || task.projectDescription || '';
     card.appendChild(projectDescDiv);
 
     // Day counter

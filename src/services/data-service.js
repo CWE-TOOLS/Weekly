@@ -255,8 +255,9 @@ export function mergeTaskDescriptions(tasks, descriptionsMap) {
  *
  * For each task whose `projectNumber` (sheet column H) matches a row in
  * `projects.project_number`, sets `task.resolvedProjectName` to
- * `projects.project_name`. The original `task.project` (sheet name) is
- * preserved so other lookups keyed on it (e.g. task_descriptions) keep working.
+ * `projects.project_name` and `task.resolvedProjectManager` to `projects.pm`.
+ * The original `task.project` (sheet name) is preserved so other lookups
+ * keyed on it (e.g. task_descriptions) keep working.
  *
  * @param {Array<Object>} tasks - All tasks (modified in-place)
  * @param {Array<Object>} projects - Rows from the `projects` table
@@ -276,6 +277,9 @@ export function enrichTasksWithProject(tasks, projects) {
         if (project && project.project_name) {
             task.resolvedProjectName = project.project_name;
             matched++;
+        }
+        if (project && typeof project.pm === 'string' && project.pm.trim()) {
+            task.resolvedProjectManager = project.pm.trim();
         }
     }
 
