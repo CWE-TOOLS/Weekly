@@ -549,9 +549,15 @@ async function loadAllData() {
     }));
 }
 
+// Returns the *next upcoming* ship date per project — earliest "Ship…" row
+// dated today-or-later. Past ship rows are ignored so orphan/old rows in the
+// sheet don't pin a project to a stale date.
 function buildShipDateMap(tasks) {
     const out = new Map();
     if (!Array.isArray(tasks)) return out;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayMs = today.getTime();
     for (const t of tasks) {
         const num = String(t?.projectNumber || '').trim();
         if (!num) continue;
@@ -559,6 +565,8 @@ function buildShipDateMap(tasks) {
         if (!dept.startsWith('ship')) continue;
         const date = String(t?.date || '').trim();
         if (!date) continue;
+        const parsed = parseDate(date);
+        if (!parsed || parsed.getTime() < todayMs) continue;
         const existing = out.get(num);
         if (!existing || compareDateStrings(date, existing) < 0) {
             out.set(num, date);
