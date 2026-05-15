@@ -196,14 +196,17 @@ export function mergeTasks(sheetsTasks, manualTasks) {
  * IMPORTANT: Preserves exact project names (no trimming) when matching.
  *
  * @param {Array<Object>} tasks - Array of task objects to update (modified in-place)
- * @param {Map<string, string>} descriptionsMap - Map of descriptions keyed by "project|department|day_number"
- * @modifies {Array<Object>} tasks - Adds description property to each task
+ * @param {Map<string, {description: string, castingSide: string|null}>} descriptionsMap
+ *   Map keyed by "project|department|day_number". Each entry carries the
+ *   description override plus the optional casting side (Cast-department only).
+ * @modifies {Array<Object>} tasks - Adds description and castingSide to each task
  *
  * @example
  * const tasks = [{project: 'Project A', department: 'Mill 1', dayNumber: '1'}];
- * const descriptions = new Map([['Project A|Mill 1|1', 'Task description']]);
+ * const descriptions = new Map([
+ *   ['Project A|Mill 1|1', { description: 'Task description', castingSide: null }]
+ * ]);
  * mergeTaskDescriptions(tasks, descriptions);
- * // tasks[0].description === 'Task description'
  */
 export function mergeTaskDescriptions(tasks, descriptionsMap) {
     let matchedCount = 0;
@@ -221,15 +224,16 @@ export function mergeTaskDescriptions(tasks, descriptionsMap) {
         // Normalize project name to match how it's stored and displayed
         const normalizedProject = normalizeProjectName(task.project);
         const key = `${normalizedProject}|${task.department}|${task.dayNumber}`;
-        const found = descriptionsMap.has(key);
+        const entry = descriptionsMap.get(key);
 
-        // Look up description in the Map
-        if (found) {
-            task.description = descriptionsMap.get(key);
+        if (entry) {
+            task.description = entry.description;
+            task.castingSide = entry.castingSide;
             matchedCount++;
         } else {
             // No description found - set to empty string (graceful fallback)
             task.description = task.description || '';
+            task.castingSide = null;
             missingCount++;
         }
     });

@@ -47,6 +47,31 @@ export function makeTaskCardEditable(taskCard) {
     textarea.value = originalValue;
     textarea.placeholder = 'Enter task description...';
     descDiv.replaceWith(textarea);
+
+    // Casting side dropdown — only for Cast-department tasks. Inserted above
+    // the description textarea; stored separately on the task_descriptions row.
+    const task = state.getAllTasks().find(t => t.id === taskId);
+    if (task && task.department === 'Cast') {
+        const originalSide = (task.castingSide === 'A' || task.castingSide === 'B') ? task.castingSide : '';
+        taskCard.dataset.originalCastingSide = originalSide;
+
+        const sideSelect = document.createElement('select');
+        sideSelect.className = 'edit-casting-side';
+        sideSelect.title = 'Casting side';
+        [
+            { value: '', label: 'No side' },
+            { value: 'A', label: 'Side A' },
+            { value: 'B', label: 'Side B' }
+        ].forEach(opt => {
+            const o = document.createElement('option');
+            o.value = opt.value;
+            o.textContent = opt.label;
+            if (originalSide === opt.value) o.selected = true;
+            sideSelect.appendChild(o);
+        });
+        textarea.before(sideSelect);
+    }
+
     textarea.focus();
 
     // Hide the existing Edit and Plan buttons
@@ -104,8 +129,12 @@ export async function saveTaskCardEdit(taskCard) {
     if (!taskCard) return;
 
     const textarea = taskCard.querySelector('.edit-description');
+    const sideSelect = taskCard.querySelector('.edit-casting-side');
     const taskId = taskCard.dataset.taskId;
     const newDescription = textarea ? textarea.value.trim() : '';
+    // sideSelect only exists for Cast-department tasks. Empty string -> null
+    // means "no side selected" (clears the column).
+    const newCastingSide = sideSelect ? (sideSelect.value || null) : undefined;
 
     try {
         // Update task in state
@@ -114,6 +143,9 @@ export async function saveTaskCardEdit(taskCard) {
 
         if (task) {
             task.description = newDescription;
+            if (newCastingSide !== undefined) {
+                task.castingSide = newCastingSide;
+            }
 
             // Save to backend
             if (task.isManual) {
@@ -121,10 +153,9 @@ export async function saveTaskCardEdit(taskCard) {
             } else {
                 // Save to staging sheet (cache invalidation happens automatically in saveToStaging)
                 const { saveToStaging } = await import('../services/sheets-service.js');
-                await saveToStaging(task.project, [{
-                    task: task,
-                    newText: newDescription
-                }]);
+                const entry = { task: task, newText: newDescription };
+                if (newCastingSide !== undefined) entry.castingSide = newCastingSide;
+                await saveToStaging(task.project, [entry]);
             }
 
             // Send refresh signal to other clients
@@ -138,8 +169,10 @@ export async function saveTaskCardEdit(taskCard) {
             showSuccessNotification('Task updated successfully!');
         }
 
-        // Restore normal view
-        restoreTaskCardView(taskCard, newDescription);
+        // Restore normal view (passes the freshly-saved side so the badge updates
+        // in place — without this the card still shows the pre-edit value until
+        // a full re-render).
+        restoreTaskCardView(taskCard, newDescription, newCastingSide);
 
     } catch (error) {
         logger.error('Failed to save task:', error);
@@ -165,8 +198,11 @@ export function cancelTaskCardEdit(taskCard) {
  * Restore task card to normal view after editing
  * @param {HTMLElement} taskCard - Task card to restore
  * @param {string} description - Description text to display
+ * @param {string|null|undefined} [castingSide] - Newly-saved side ('A' / 'B' / null
+ *   to clear). Pass `undefined` (default) when restoring without persisting — the
+ *   existing badge is left alone, which is what we want for the cancel path.
  */
-function restoreTaskCardView(taskCard, description) {
+function restoreTaskCardView(taskCard, description, castingSide) {
     if (!taskCard) return;
 
     taskCard.classList.remove('editing');
@@ -190,6 +226,33 @@ function restoreTaskCardView(taskCard, description) {
         textarea.replaceWith(descDiv);
     }
 
+    // Remove casting-side dropdown (only present for Cast tasks)
+    const sideSelect = taskCard.querySelector('.edit-casting-side');
+    if (sideSelect) sideSelect.remove();
+
+    // Sync the visible side badge with the freshly-saved value. Skipped on
+    // cancel (castingSide === undefined) so we leave the existing badge alone.
+    if (castingSide !== undefined) {
+        let badge = taskCard.querySelector('.task-casting-side');
+        const wantBadge = castingSide === 'A' || castingSide === 'B';
+        if (wantBadge) {
+            if (!badge) {
+                badge = document.createElement('div');
+                badge.className = 'task-casting-side';
+                const anchor = taskCard.querySelector('.task-cast-number')
+                    || taskCard.querySelector('.task-title');
+                if (anchor) {
+                    anchor.after(badge);
+                } else {
+                    taskCard.prepend(badge);
+                }
+            }
+            badge.textContent = `Side ${castingSide}`;
+        } else if (badge) {
+            badge.remove();
+        }
+    }
+
     // Remove edit actions container
     const editActions = taskCard.querySelector('.edit-actions');
     if (editActions) {
@@ -204,4 +267,5 @@ function restoreTaskCardView(taskCard, description) {
 
     // Clean up
     delete taskCard.dataset.originalDescription;
+    delete taskCard.dataset.originalCastingSide;
 }

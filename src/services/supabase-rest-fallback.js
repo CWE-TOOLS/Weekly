@@ -12,7 +12,8 @@ import { normalizeProjectName } from '../utils/ui-utils.js';
 
 /**
  * Fetch task descriptions using REST API (fallback for old browsers)
- * @returns {Promise<Map<string, string>>} Map of task descriptions
+ * @returns {Promise<Map<string, {description: string, castingSide: string|null}>>}
+ *   Map keyed by "project|department|day_number". Mirrors the supabase-js path.
  */
 export async function fetchTaskDescriptionsREST() {
     try {
@@ -44,7 +45,10 @@ export async function fetchTaskDescriptionsREST() {
             data.forEach(function(row) {
                 const normalizedProject = normalizeProjectName(row.project);
                 const key = normalizedProject + '|' + row.department + '|' + row.day_number;
-                descriptionsMap.set(key, row.description || '');
+                descriptionsMap.set(key, {
+                    description: row.description || '',
+                    castingSide: row.casting_side || null
+                });
             });
 
             logger.info('✅ Loaded ' + descriptionsMap.size + ' task descriptions via REST API');

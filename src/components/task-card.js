@@ -56,6 +56,15 @@ export function createTaskCard(task, rowClass, isEditingUnlocked) {
         card.appendChild(castDiv);
     }
 
+    // Casting side (A/B) — Cast-department only, rendered when a side has been
+    // selected for this task. Stored in task_descriptions.casting_side.
+    if (task.castingSide === 'A' || task.castingSide === 'B') {
+        const sideDiv = document.createElement('div');
+        sideDiv.className = 'task-casting-side';
+        sideDiv.textContent = `Side ${task.castingSide}`;
+        card.appendChild(sideDiv);
+    }
+
     // Project manager (from projects table) — falls back to the Google Sheet
     // description (column C) when the task has no project-number match or the
     // matched project has no PM set. Mirrors how the title falls back from

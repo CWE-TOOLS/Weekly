@@ -143,6 +143,27 @@
   text-align: center;
 }
 
+.task-casting-side {
+  font-weight: 500;
+  font-size: 0.8rem;
+  margin-bottom: 0.25rem;
+  color: inherit;
+  text-align: center;
+  opacity: 0.85;
+}
+
+.edit-casting-side {
+  display: block;
+  width: 100%;
+  margin-bottom: 0.35rem;
+  padding: 0.25rem 0.35rem;
+  font-size: 0.85rem;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+  background-color: rgba(255, 255, 255, 0.9);
+  color: #333;
+}
+
 .task-description {
   font-size: 1rem;
   font-weight: 600;

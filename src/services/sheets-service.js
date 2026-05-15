@@ -380,7 +380,9 @@ async function getStagingDataDirect() {
  * function signature for backward compatibility.
  *
  * @param {string} projectName - Project name (IMPORTANT: preserved exactly, no trimming)
- * @param {Array<{task: Object, newText: string}>} changedTasks - Array of task updates
+ * @param {Array<{task: Object, newText: string, castingSide?: ('A'|'B'|null)}>} changedTasks
+ *   Array of task updates. `castingSide` is only meaningful for Cast-department
+ *   tasks; when present, the column is written (including explicit null to clear).
  * @returns {Promise<boolean>} True if save successful
  * @throws {Error} If Supabase update fails
  *
@@ -409,19 +411,28 @@ export async function saveToStaging(projectName, changedTasks) {
         // Normalize project name for consistent storage
         const normalizedProjectName = normalizeProjectName(projectName);
 
-        const descriptions = changedTasks.map(({task, newText}) => {
+        const descriptions = changedTasks.map((entry) => {
+            const { task, newText } = entry;
             // Validate task has required fields
             if (!task.department || !task.dayNumber) {
                 logger.warn('⚠️ Skipping task with missing department or dayNumber:', task);
                 return null;
             }
 
-            return {
+            const record = {
                 project: normalizedProjectName, // Normalize to match display and lookup behavior
                 department: task.department,
                 day_number: task.dayNumber,
                 description: (newText != null ? newText : '') // Handle null/undefined descriptions (Chrome 76 compatible)
             };
+
+            // Pass casting_side through only when the caller included it (cast-task
+            // edits). Property may be 'A' / 'B' / null — null clears the selection.
+            if (Object.prototype.hasOwnProperty.call(entry, 'castingSide')) {
+                record.casting_side = entry.castingSide;
+            }
+
+            return record;
         }).filter(desc => desc !== null); // Remove invalid entries
 
         logger.info(`  → Valid descriptions to save: ${descriptions.length}`);

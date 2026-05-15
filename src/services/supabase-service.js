@@ -297,12 +297,13 @@ export async function sendRefreshSignal(updateInfo = {}) {
  * Fetches all task descriptions from the task_descriptions table and returns them
  * as a Map keyed by "project|department|day_number" for fast lookup.
  *
- * @returns {Promise<Map<string, string>>} Map of task descriptions keyed by composite key
+ * @returns {Promise<Map<string, {description: string, castingSide: string|null}>>} Map keyed by composite key
  *
  * @example
  * const descriptions = await fetchTaskDescriptions();
- * const key = 'Project A|Mill 1|1';
- * const description = descriptions.get(key);
+ * const entry = descriptions.get('Project A|Mill 1|1');
+ * entry.description; // 'Task desc'
+ * entry.castingSide; // 'A' | 'B' | null
  */
 export async function fetchTaskDescriptions() {
     // Use REST API fallback in degraded mode
@@ -320,7 +321,7 @@ export async function fetchTaskDescriptions() {
 
         const { data, error } = await supabaseClient
             .from('task_descriptions')
-            .select('project, department, day_number, description')
+            .select('project, department, day_number, description, casting_side')
             .limit(10000); // Increase limit to fetch all descriptions (default is 1000)
 
         if (error) {
@@ -331,6 +332,7 @@ export async function fetchTaskDescriptions() {
 
         // Convert array to Map for fast lookup
         // Key format: "project|department|day_number"
+        // Value: { description, castingSide } — castingSide is null unless set
         // IMPORTANT: Do NOT trim project names - preserve exact match
         const descriptionsMap = new Map();
 
@@ -338,7 +340,10 @@ export async function fetchTaskDescriptions() {
             data.forEach(row => {
                 const normalizedProject = normalizeProjectName(row.project);
                 const key = `${normalizedProject}|${row.department}|${row.day_number}`;
-                descriptionsMap.set(key, row.description || '');
+                descriptionsMap.set(key, {
+                    description: row.description || '',
+                    castingSide: row.casting_side || null
+                });
             });
 
             logger.info(`✅ Loaded ${descriptionsMap.size} task descriptions from Supabase`);
@@ -666,13 +671,24 @@ export async function saveTaskDescriptions(descriptions) {
 
             logger.debug(`  → [${index}] Project: "${desc.project}", Dept: "${desc.department}", Day: "${desc.day_number}", Desc length: ${description.length}`);
 
-            return {
+            const record = {
                 project: desc.project, // IMPORTANT: Do NOT trim - preserve exact project name
                 department: desc.department,
                 day_number: desc.day_number,
                 description: description,
                 updated_at: new Date().toISOString()
             };
+
+            // Only include casting_side when the caller explicitly provided one
+            // (cast-task edits). Omitting the column leaves the existing DB value
+            // untouched on upsert conflict — so non-cast saves don't clobber it.
+            if (Object.prototype.hasOwnProperty.call(desc, 'casting_side')) {
+                record.casting_side = desc.casting_side === 'A' || desc.casting_side === 'B'
+                    ? desc.casting_side
+                    : null;
+            }
+
+            return record;
         });
 
         // Use upsert to insert/update records
