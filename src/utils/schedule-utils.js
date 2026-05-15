@@ -74,6 +74,16 @@ export function generateSpecialDepartmentTasks(weekDates, monday, departmentName
     const allTasks = getAllTasks();
     const specialTasks = [];
 
+    // Render an upcoming Cast task as "Project Name — Side A". The side suffix
+    // is only appended when the task has a saved casting_side ('A' or 'B').
+    const formatProjectWithSide = (t) => {
+        const name = escapeHtml(t.project);
+        const side = (t.castingSide === 'A' || t.castingSide === 'B')
+            ? ` — Side ${t.castingSide}`
+            : '';
+        return name + side;
+    };
+
     // Generate tasks for weekdays only (Mon-Fri)
     weekDates.forEach((date, i) => {
         // Only process Mon-Fri (index 0-4 in typical Mon-Sat array)
@@ -89,10 +99,10 @@ export function generateSpecialDepartmentTasks(weekDates, monday, departmentName
                 const saturdayString = saturday.toDateString();
                 const saturdayProjects = allTasks
                     .filter(t => { const d = parseDate(t.date); return t.department === 'Cast' && t.project && d && d.toDateString() === saturdayString; })
-                    .map(t => t.project);
+                    .map(formatProjectWithSide);
 
                 if (saturdayProjects.length > 0) {
-                    castingProjects.push(`<b>Sat:</b> ${saturdayProjects.map(escapeHtml).join(', ')}`);
+                    castingProjects.push(`<b>Sat:</b> ${saturdayProjects.join(', ')}`);
                 }
 
                 // Get Monday's casting projects (next week)
@@ -101,10 +111,10 @@ export function generateSpecialDepartmentTasks(weekDates, monday, departmentName
                 const mondayString = nextMonday.toDateString();
                 const mondayProjects = allTasks
                     .filter(t => { const d = parseDate(t.date); return t.department === 'Cast' && t.project && d && d.toDateString() === mondayString; })
-                    .map(t => t.project);
+                    .map(formatProjectWithSide);
 
                 if (mondayProjects.length > 0) {
-                    castingProjects.push(`<b>Mon:</b> ${mondayProjects.map(escapeHtml).join(', ')}`);
+                    castingProjects.push(`<b>Mon:</b> ${mondayProjects.join(', ')}`);
                 }
             } else {
                 // Mon-Thu - show next day's casting projects
@@ -113,10 +123,10 @@ export function generateSpecialDepartmentTasks(weekDates, monday, departmentName
                 const nextDateString = nextDate.toDateString();
                 const nextDayProjects = allTasks
                     .filter(t => { const d = parseDate(t.date); return t.department === 'Cast' && t.project && d && d.toDateString() === nextDateString; })
-                    .map(t => t.project);
+                    .map(formatProjectWithSide);
 
                 if (nextDayProjects.length > 0) {
-                    castingProjects = nextDayProjects.map(escapeHtml);
+                    castingProjects = nextDayProjects;
                 }
             }
 
