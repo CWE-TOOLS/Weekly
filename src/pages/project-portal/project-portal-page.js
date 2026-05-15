@@ -367,6 +367,12 @@ async function showFormView(projectNumber, draftOverrides = null) {
     setActiveTab(currentTab);
 
     if (projectNumber) {
+        // Preload color logs so color-aware tabs (Casting Inventory, Tracking,
+        // Shipping, Batch Tickets) render their dropdowns correctly on first
+        // paint. Without this, refreshing onto Casting Inventory shows "Create
+        // color log" placeholders even when a log exists, until the user
+        // manually visits the Color Log tab.
+        if (isExisting) await ensureColorLogsLoaded();
         await loadAndRenderCastings();
         await loadAndRenderClassroomTasks();
     } else {
@@ -3171,6 +3177,43 @@ function clHandleRowUnitChange(tr, select) {
     }
 }
 
+/**
+ * Populate the in-memory color-log cache for the current project.
+ * No-op when there's no project, or when the cache is already hot for this project.
+ * Safe to call from any tab — does NOT touch the Color Log tab's DOM.
+ *
+ * Why this exists: color-aware tabs (Casting Inventory, Tracking, Shipping,
+ * Batch Tickets) read `currentColorLogs` when they render. If those tabs render
+ * before the user has visited the Color Log tab, every dropdown falls through
+ * to the "— Create color log —" disabled state even when a log exists in the DB.
+ * Loading eagerly in showFormView prevents that on initial paint / after refresh.
+ */
+async function ensureColorLogsLoaded() {
+    if (!currentProjectNumber) return;
+    if (colorLogLoadedFor === currentProjectNumber) return;
+    try {
+        // Load all color logs for the project. Multi-color projects get
+        // a populated list; single-color projects get [oneLog] or [].
+        const list = await loadColorLogsForProject(currentProjectNumber);
+        currentColorLogs = list;
+        if (list.length > 0) {
+            currentColorLogId = list[0].id;
+            currentColorLog = list[0];
+        } else {
+            // No log yet — start with an unsaved empty form.
+            currentColorLogId = null;
+            currentColorLog = createEmptyColorLog();
+        }
+    } catch (err) {
+        logger.error('[color-log] load failed', err);
+        currentColorLogs = [];
+        currentColorLogId = null;
+        currentColorLog = createEmptyColorLog();
+        showToast('Failed to load color log', 'error');
+    }
+    colorLogLoadedFor = currentProjectNumber;
+}
+
 async function activateColorLogTab() {
     const needsSave = document.getElementById('pp-cl-needs-save');
     const toolbar   = document.getElementById('pp-cl-toolbar');
@@ -3187,33 +3230,12 @@ async function activateColorLogTab() {
     if (toolbar) toolbar.hidden = false;
     if (wrap) wrap.hidden = false;
 
-    if (colorLogLoadedFor !== currentProjectNumber) {
-        try {
-            // Load all color logs for the project. Multi-color projects get
-            // a populated list; single-color projects get [oneLog] or [].
-            const list = await loadColorLogsForProject(currentProjectNumber);
-            currentColorLogs = list;
-            if (list.length > 0) {
-                currentColorLogId = list[0].id;
-                currentColorLog = list[0];
-            } else {
-                // No log yet — start with an unsaved empty form.
-                currentColorLogId = null;
-                currentColorLog = createEmptyColorLog();
-            }
-        } catch (err) {
-            logger.error('[color-log] load failed', err);
-            currentColorLogs = [];
-            currentColorLogId = null;
-            currentColorLog = createEmptyColorLog();
-            showToast('Failed to load color log', 'error');
-        }
-        colorLogLoadedFor = currentProjectNumber;
-        renderColorLog();
-        renderColorLogsToolbar();
-        await refreshPresetPicker();
-    } else if (currentColorLog) {
-        // Same project — refresh the project display in case the name changed.
+    // Cache may already be hot (preloaded by showFormView). Either way the
+    // tab's UI must render fresh every time it's activated.
+    await ensureColorLogsLoaded();
+
+    // Refresh the project display in case the project name changed.
+    if (currentColorLog) {
         const live = getCurrentProjectDisplay();
         if (currentColorLog.project !== live) {
             currentColorLog.project = live;
@@ -3221,6 +3243,10 @@ async function activateColorLogTab() {
             if (el) el.value = live;
         }
     }
+
+    renderColorLog();
+    renderColorLogsToolbar();
+    await refreshPresetPicker();
 }
 
 async function refreshPresetPicker() {
