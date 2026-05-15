@@ -1,11 +1,17 @@
 /* Project Portal */
 
-/* Override base.css `body { height: 100vh; overflow: hidden }` so this page scrolls. */
+/* Override base.css `body { height: 100vh; overflow: hidden }` so this page scrolls.
+   IMPORTANT: only html scrolls. If body also has `overflow: auto`, body becomes a
+   scroll container — but body's content fits inside body, so it never scrolls.
+   `position: sticky` then references body (which doesn't scroll), and the sticky
+   sidebar rides along as html scrolls. Setting body to `overflow: visible` lets
+   sticky elements reference the html viewport (the actual scroll container). */
 html, body {
     height: auto;
     min-height: 100vh;
-    overflow: auto;
 }
+html { overflow: auto; }
+body { overflow: visible; }
 
 #project-portal-app {
     min-height: 100vh;
@@ -402,6 +408,11 @@ html, body {
     position: sticky;
     top: 56px;
     align-self: flex-start;
+    /* Keep tabs reachable while scrolling long lists.
+       Cap height to viewport minus the sticky header so the sidebar
+       can scroll internally on short viewports instead of being cut off. */
+    max-height: calc(100vh - 56px);
+    overflow-y: auto;
 }
 .pp-tab-btn {
     display: flex;
