@@ -144,12 +144,11 @@
 }
 
 .task-casting-side {
-  font-weight: 500;
-  font-size: 0.8rem;
+  font-weight: 700;
+  font-size: 1.05rem;
   margin-bottom: 0.25rem;
   color: inherit;
   text-align: center;
-  opacity: 0.85;
 }
 
 .edit-casting-side {
