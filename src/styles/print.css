@@ -242,6 +242,15 @@ li:last-child {
         box-sizing: border-box;
     }
 
+    /* Casting side row — Cast department only, sits just under the title. */
+    .print-task-casting-side {
+        font-size: 1.0em !important;
+        font-weight: 700 !important;
+        text-align: center;
+        margin-bottom: 0.2em;
+        color: #111 !important;
+    }
+
     .print-task-description {
         font-size: 1.08em !important;
         font-weight: 600 !important;
@@ -322,6 +331,10 @@ li:last-child {
         padding: 0.2em;
     }
 
+    .print-page.daily-print .print-task-casting-side {
+        font-size: 1.35em !important;
+    }
+
     .print-page.daily-print .print-task-description {
         font-size: 1.27em;
         margin-bottom: 0.3em;
@@ -388,6 +401,13 @@ li:last-child {
     .print-page-optimized .print-task-title {
         font-size: 7pt !important;
         padding: 0.1em 0.2em !important;
+        margin-bottom: 0.05em !important;
+        line-height: 1.1 !important;
+    }
+
+    .print-page-optimized .print-task-casting-side {
+        font-size: 7pt !important;
+        font-weight: 700 !important;
         margin-bottom: 0.05em !important;
         line-height: 1.1 !important;
     }

@@ -122,17 +122,24 @@ function createTableFooter(dates, tasks, printType) {
 function createPrintTaskCard(task, departmentClass) {
     const card = document.createElement('div');
     card.className = `print-task-card department-${departmentClass}`;
-    
+
     const colors = window.PrintUtils.getDepartmentColorMapping()[departmentClass] || { bg: '#333', text: '#FFFFFF' };
-    
+
     // Calculate revenue based on hours
     const hours = parseFloat(task.hours || 0);
     const revenue = hours * REVENUE.HOURLY_RATE;
-    
+
+    // Casting side (Cast department only) renders as a dedicated row beneath
+    // the title so Side A/B is unmissable on a printed schedule.
+    const castingSideHtml = (task.castingSide === 'A' || task.castingSide === 'B')
+        ? `<div class="print-task-casting-side">Side ${task.castingSide}</div>`
+        : '';
+
     card.innerHTML = `
         <div class="print-task-title" style="background-color: ${colors.bg} !important; color: ${colors.text} !important;">
             ${task.project || 'Unknown Project'}
         </div>
+        ${castingSideHtml}
         <div class="print-task-day-counter">
             ${task.dayCounter || ''}
         </div>
@@ -144,7 +151,7 @@ function createPrintTaskCard(task, departmentClass) {
             <strong>hrs:</strong> ${Math.round(hours)} | <strong>Revenue:</strong> $${revenue.toLocaleString()}
         </div>
     `;
-    
+
     return card;
 }
 
