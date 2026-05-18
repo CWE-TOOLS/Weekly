@@ -6245,6 +6245,7 @@ table.tp-table tbody td { height: 13pt; }
    print rendering across browsers. Light gray that still shows on most printers. */
 table.tp-table tbody tr:nth-child(even) td { background: #eef2f7; }
 .tp-col-panel { font-weight: 700; text-align: left !important; }
+.tp-col-color { font-size: 7.5pt; }
 .tp-col-phase { font-size: 7.5pt; }
 .tp-empty { padding: 10pt; text-align: center; font-style: italic; color: #555; border: 0.6pt dashed #999; }
 @media print { .tp-no-print { display: none; } }
@@ -6257,17 +6258,22 @@ function buildTrackPrintHtml(casting, components, projectNumber, projectName) {
     // Phases come out in TRACKING_PHASES order, filtered by what's currently selected.
     const selectedPhases = TRACKING_PHASES.filter(p => currentTrackingPhases.has(p));
 
-    // Column widths: Panel ID gets a fixed share; phase columns split the rest evenly.
-    // With table-layout:fixed, this ensures consistent column sizing on the printed page.
-    const panelIdPct = selectedPhases.length === 0 ? 100 : 16;
-    const phasePct = selectedPhases.length === 0 ? 0 : (100 - panelIdPct) / selectedPhases.length;
+    // Column widths: Panel ID and Color get fixed shares; phase columns split
+    // the rest evenly. With table-layout:fixed, this ensures consistent column
+    // sizing on the printed page.
+    const panelIdPct = selectedPhases.length === 0 ? 55 : 14;
+    const colorPct   = selectedPhases.length === 0 ? 45 : 12;
+    const phasePct = selectedPhases.length === 0
+        ? 0
+        : (100 - panelIdPct - colorPct) / selectedPhases.length;
 
     const headerCells = [
         `<th class="tp-col-panel" style="width: ${panelIdPct}%;">Panel ID</th>`,
+        `<th class="tp-col-color" style="width: ${colorPct}%;">Color</th>`,
         ...selectedPhases.map(p => `<th class="tp-col-phase" style="width: ${phasePct}%;">${escapeHtml(TRACK_PRINT_PHASE_LABELS[p] || p)}</th>`)
     ].join('');
 
-    const totalCols = 1 + selectedPhases.length;
+    const totalCols = 2 + selectedPhases.length;
     const rows = components.length === 0
         ? `<tr><td colspan="${totalCols}" class="tp-empty">No components recorded for this casting.</td></tr>`
         : components.map(comp => {
@@ -6275,6 +6281,7 @@ function buildTrackPrintHtml(casting, components, projectNumber, projectName) {
             return `
                 <tr>
                     <td class="tp-col-panel">${escapeHtml(comp.panel_id || '')}</td>
+                    <td class="tp-col-color">${escapeHtml(resolveComponentColorName(comp))}</td>
                     ${phaseCells}
                 </tr>
             `;
