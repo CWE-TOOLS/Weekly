@@ -3082,10 +3082,11 @@ function clGetSandWeightLbs() {
 function clRenderIngTable(tableId, items, type) {
     const tbody = document.querySelector(`#${tableId} tbody`);
     if (!tbody) return;
+    const valField = type === 'additive' ? 'amount' : 'weight';
     tbody.innerHTML = items.map((item, i) => `
         <tr data-cl-type="${type}" data-cl-idx="${i}">
             <td><input type="text" value="${escapeAttr(item.name || '')}" data-cl-field="name"></td>
-            <td><input type="number" step="any" value="${item.weight ?? item.amount ?? ''}" data-cl-field="weight"></td>
+            <td><input type="number" step="any" value="${item[valField] ?? item.weight ?? item.amount ?? ''}" data-cl-field="${valField}"></td>
             <td>${clUnitSelect(item.unit || 'lbs')}</td>
             <td><input type="text" value="${escapeAttr(item.note || '')}" data-cl-field="note"></td>
             <td class="pp-cl-col-action"><button type="button" class="pp-cl-btn-remove" data-cl-remove>&times;</button></td>
@@ -7772,6 +7773,24 @@ function buildColorLogPrintHtml(log, projectNumber, projectDisplay) {
         return `<div class="ing-row"><span class="ilabel">Other Agg 0${i + 1}</span><span class="ival">${escapeHtml(val)}</span></div>`;
     }).join('');
 
+    // Additives — 3 standard slots (ADVA / Eclipse / Fibers) plus any custom ones the user added
+    const STD_ADDITIVES = ['ADVA', 'Eclipse', 'Fibers'];
+    const additiveRows = (() => {
+        const rows = STD_ADDITIVES.map((name) =>
+            `<div class="ing-row"><span class="ilabel">${name}</span><span class="ival">${escapeHtml(additiveVal(name))}</span></div>`
+        );
+        const extras = list('additives').filter((a) => {
+            const n = (a?.name || '').trim().toLowerCase();
+            return n && !STD_ADDITIVES.some((s) => s.toLowerCase() === n);
+        });
+        for (const a of extras) {
+            const hasAmt = a.amount !== '' && a.amount != null;
+            const val = hasAmt ? `${a.amount} ${a.unit || 'oz'}${a.note ? ' ' + a.note : ''}` : '';
+            rows.push(`<div class="ing-row"><span class="ilabel">${escapeHtml(a.name)}</span><span class="ival">${escapeHtml(val)}</span></div>`);
+        }
+        return rows.join('');
+    })();
+
     // Grout (3 slots: Antique White / Bright White / Other — fall back to user's row name)
     const groutNames = ['Antique White', 'Bright White', 'Other'];
     const groutList = list('groutType');
@@ -7822,9 +7841,7 @@ function buildColorLogPrintHtml(log, projectNumber, projectDisplay) {
       <div class="ing-row"><span class="ilabel">Water</span><span class="ival">${escapeHtml(baseIngVal('Water'))}</span></div>
     </div>
     <div class="col-right">
-      <div class="ing-row"><span class="ilabel">ADVA</span><span class="ival">${escapeHtml(additiveVal('ADVA'))}</span></div>
-      <div class="ing-row"><span class="ilabel">Eclipse</span><span class="ival">${escapeHtml(additiveVal('Eclipse'))}</span></div>
-      <div class="ing-row"><span class="ilabel">Fibers</span><span class="ival">${escapeHtml(additiveVal('Fibers'))}</span></div>
+      ${additiveRows}
       <div class="ing-row" style="margin-top:4pt;border-bottom:none;"><span class="ilabel" style="font-weight:700;">Notes</span></div>
       <div style="font-style:italic;font-size:10pt;min-height:20pt;"></div>
     </div>
