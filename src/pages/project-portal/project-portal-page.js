@@ -105,6 +105,7 @@ import {
     deleteClassroomTask,
     setClassroomTasksOrder
 } from '../../services/classroom-tasks-service.js';
+import { renderCastingLayout } from './casting-layout.js?v=20260519-01';
 
 const STATUS_SORT_ORDER = {
     'kicked off': 0,
@@ -245,7 +246,7 @@ function getViewFromUrl() {
 
 const VALID_TABS = new Set([
     'info', 'job-memos', 'castings', 'optimizer', 'tracking',
-    'shipping', 'color-log', 'batch-tickets', 'cr-notes'
+    'casting-layout', 'shipping', 'color-log', 'batch-tickets', 'cr-notes'
 ]);
 
 async function showListView() {
@@ -390,6 +391,7 @@ async function showFormView(projectNumber, draftOverrides = null) {
     if (currentTab === 'job-memos')    activateJobMemosTab();
     if (currentTab === 'optimizer')    activateOptimizerTab();
     if (currentTab === 'tracking')     activateTrackingTab();
+    if (currentTab === 'casting-layout') activateCastingLayoutTab();
     if (currentTab === 'shipping')     activateShippingTab();
 }
 
@@ -489,8 +491,8 @@ function setActiveTab(tab) {
     const printBtn = document.getElementById('pp-print-btn');
     if (printBtn) {
         // Tracking + Shipping have per-row print buttons — hide the global one.
-        // Job Memos has no print pipeline yet.
-        if (tab === 'tracking' || tab === 'shipping' || tab === 'job-memos') {
+        // Job Memos has no print pipeline yet; Casting Layout has its own button.
+        if (tab === 'tracking' || tab === 'shipping' || tab === 'job-memos' || tab === 'casting-layout') {
             printBtn.hidden = true;
         } else {
             printBtn.hidden = false;
@@ -2461,6 +2463,123 @@ async function loadAllComponentsForCurrentProject() {
         currentCastingComponents = new Map();
         for (const id of ids) currentCastingComponents.set(id, []);
     }
+}
+
+// ---------- Casting Layout ----------
+
+// UI state for the Casting Layout tab. The mold offset is the only editable
+// control — everything else on the tab is generated from the casting data.
+let clSelectedCastingId = null;
+let clSelectedArea = 'B';
+let clOffsetPerSide = 4;
+let clGapBetween = 0;
+
+function castingLayoutLabel(c) {
+    const num = (c.casting_number || '').trim();
+    const desc = (c.description || '').trim();
+    const base = num ? `Casting ${num}` : 'Casting (unnamed)';
+    return desc ? `${base} — ${desc}` : base;
+}
+
+async function activateCastingLayoutTab() {
+    const needsSave = document.getElementById('pp-clay-needs-save');
+    const noCastings = document.getElementById('pp-clay-no-castings');
+    const controls = document.getElementById('pp-clay-controls');
+    const viewer = document.getElementById('pp-clay-viewer');
+    const errorEl = document.getElementById('pp-clay-error');
+    if (errorEl) errorEl.textContent = '';
+
+    if (!currentProjectNumber) {
+        needsSave.hidden = false;
+        noCastings.hidden = true;
+        controls.hidden = true;
+        viewer.hidden = true;
+        return;
+    }
+    needsSave.hidden = true;
+
+    if (currentCastings.length === 0) {
+        try { currentCastings = await loadCastings(currentProjectNumber); }
+        catch (e) { logger.error('[project-portal] loadCastings failed:', e); }
+    }
+
+    if (currentCastings.length === 0) {
+        noCastings.hidden = false;
+        controls.hidden = true;
+        viewer.hidden = true;
+        return;
+    }
+    noCastings.hidden = true;
+    controls.hidden = false;
+    viewer.hidden = false;
+
+    await loadAllComponentsForCurrentProject();
+
+    // Keep the selected casting valid as projects/castings change.
+    const validIds = new Set(currentCastings.map(c => c.id));
+    if (!clSelectedCastingId || !validIds.has(clSelectedCastingId)) {
+        clSelectedCastingId = currentCastings[0].id;
+    }
+
+    const sel = document.getElementById('pp-clay-casting');
+    if (sel) {
+        sel.innerHTML = '';
+        for (const c of currentCastings) {
+            const opt = document.createElement('option');
+            opt.value = c.id;
+            opt.textContent = castingLayoutLabel(c);
+            sel.appendChild(opt);
+        }
+        sel.value = clSelectedCastingId;
+    }
+    const areaSel = document.getElementById('pp-clay-area');
+    if (areaSel) areaSel.value = clSelectedArea;
+    const offsetInput = document.getElementById('pp-clay-offset');
+    if (offsetInput) offsetInput.value = clOffsetPerSide;
+    const gapInput = document.getElementById('pp-clay-gap');
+    if (gapInput) gapInput.value = clGapBetween;
+
+    renderCastingLayoutTab();
+}
+
+function renderCastingLayoutTab() {
+    const card = document.getElementById('pp-clay-card');
+    const errorEl = document.getElementById('pp-clay-error');
+    if (!card) return;
+
+    const casting = currentCastings.find(c => c.id === clSelectedCastingId);
+    const components = currentCastingComponents.get(clSelectedCastingId) || [];
+    const title = casting
+        ? `${currentProjectNumber} — ${castingLayoutLabel(casting)}`
+        : 'Casting Layout';
+
+    renderCastingLayout({
+        container: card,
+        errorEl,
+        components,
+        title,
+        area: clSelectedArea,
+        offsetPerSide: clOffsetPerSide,
+        gapBetween: clGapBetween
+    });
+}
+
+function printCastingLayout() {
+    const svgEl = document.querySelector('#pp-clay-card svg');
+    if (!svgEl) { alert('No layout to print yet.'); return; }
+    const w = window.open('', '_blank');
+    if (!w) return;
+    w.document.write(`<!DOCTYPE html>
+<html><head><title>Casting Layout</title>
+<style>
+  @page { size: letter portrait; margin: 0.5in; }
+  html, body { margin: 0; padding: 0; }
+  svg { width: 7.5in; height: 10in; display: block; margin: 0 auto; }
+</style></head>
+<body>${svgEl.outerHTML}</body></html>`);
+    w.document.close();
+    w.focus();
+    w.print();
 }
 
 function renderTrackingPhasesBar() {
@@ -4443,6 +4562,8 @@ function wireEvents() {
                 activateOptimizerTab();
             } else if (tab === 'tracking') {
                 activateTrackingTab();
+            } else if (tab === 'casting-layout') {
+                activateCastingLayoutTab();
             } else if (tab === 'color-log') {
                 activateColorLogTab();
             } else if (tab === 'batch-tickets') {
@@ -4452,6 +4573,27 @@ function wireEvents() {
             }
         });
     });
+
+    // ----- Casting Layout: control wiring -----
+    document.getElementById('pp-clay-casting')?.addEventListener('change', (e) => {
+        clSelectedCastingId = e.target.value;
+        renderCastingLayoutTab();
+    });
+    document.getElementById('pp-clay-area')?.addEventListener('change', (e) => {
+        clSelectedArea = e.target.value;
+        renderCastingLayoutTab();
+    });
+    document.getElementById('pp-clay-offset')?.addEventListener('input', (e) => {
+        const v = parseFloat(e.target.value);
+        clOffsetPerSide = (Number.isFinite(v) && v >= 0) ? v : 0;
+        renderCastingLayoutTab();
+    });
+    document.getElementById('pp-clay-gap')?.addEventListener('input', (e) => {
+        const v = parseFloat(e.target.value);
+        clGapBetween = (Number.isFinite(v) && v >= 0) ? v : 0;
+        renderCastingLayoutTab();
+    });
+    document.getElementById('pp-clay-print-btn')?.addEventListener('click', printCastingLayout);
 
     // ----- Color Log: event delegation on its panel -----
     const clPanel = document.querySelector('.pp-tab-panel[data-panel="color-log"]');
@@ -4835,10 +4977,12 @@ function wireEvents() {
         }
     });
 
-    // Tracking: "go to castings" link in empty state
-    document.querySelector('[data-action="goto-castings-from-tracking"]')?.addEventListener('click', () => {
-        setActiveTab('castings');
-        if (currentProjectNumber) loadAndRenderCastings();
+    // "Go to castings" link in the Tracking / Casting Layout empty states.
+    document.querySelectorAll('[data-action="goto-castings-from-tracking"]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            setActiveTab('castings');
+            if (currentProjectNumber) loadAndRenderCastings();
+        });
     });
 
     // Global phase switcher in the title bar

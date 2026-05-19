@@ -4897,3 +4897,92 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
     white-space: nowrap;
     margin-top: 1px;
 }
+
+/* ============================================================
+   Casting Layout tab
+   ============================================================ */
+.pp-clay-wrap {
+    max-width: 1100px;
+    margin: 24px auto;
+    background: #ffffff;
+    padding: 28px 32px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+}
+.pp-clay-header { margin-bottom: 18px; }
+.pp-clay-title {
+    margin: 0 0 4px 0;
+    font-size: 18px;
+    color: #0f172a;
+    font-weight: 600;
+}
+.pp-clay-sub { margin: 0; }
+
+.pp-clay-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 16px;
+    padding: 14px 16px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    margin-bottom: 14px;
+}
+.pp-clay-ctrl {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #334155;
+}
+.pp-clay-select,
+.pp-clay-offset {
+    font-size: 13px;
+    font-weight: 500;
+    color: #0f172a;
+    padding: 6px 8px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    background: #ffffff;
+}
+.pp-clay-select { min-width: 220px; }
+.pp-clay-offset { width: 110px; }
+.pp-clay-print { margin-left: auto; }
+
+.pp-clay-error {
+    min-height: 1.2em;
+    margin-bottom: 8px;
+    font-size: 13px;
+    color: #dc2626;
+    font-weight: 600;
+}
+
+.pp-clay-viewer {
+    display: flex;
+    justify-content: center;
+    padding: 8px;
+    background: #f3f4f6;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+}
+.pp-clay-card {
+    width: 100%;
+    max-width: 760px;
+    background: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+.pp-clay-card svg {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+.pp-clay-empty {
+    padding: 48px 16px;
+    text-align: center;
+    color: #94a3b8;
+    font-style: italic;
+    font-size: 14px;
+}
