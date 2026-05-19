@@ -3293,6 +3293,29 @@ body.pp-printing .pp-tab-panel[data-panel="color-log"] { display: none !importan
     letter-spacing: 0.06em;
     margin: 0 0 2px;
 }
+.pp-bt-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+.pp-bt-card-head .pp-bt-card-title { margin: 0; }
+.pp-bt-import-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: #fff;
+    border: 1px solid var(--accent-primary, #4f46e5);
+    color: var(--accent-primary, #4f46e5);
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.pp-bt-import-btn:hover { background: rgba(79, 70, 229, 0.06); }
+.pp-bt-import-btn:active { background: rgba(79, 70, 229, 0.12); }
 
 /* Advanced disclosure (Cu Ft per 250lb) */
 .pp-bt-advanced { margin-top: 4px; }
@@ -3386,6 +3409,28 @@ body.pp-printing .pp-tab-panel[data-panel="color-log"] { display: none !importan
     outline: none;
     border-color: var(--accent-primary, #4f46e5);
     box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.15);
+}
+
+.pp-bt-pigreduce { margin-top: 12px; }
+.pp-bt-pigreduce-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+}
+.pp-bt-pigreduce-input { width: 90px; flex: 0 0 auto; }
+.pp-bt-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #0f172a;
+    cursor: pointer;
+}
+.pp-bt-checkbox input { cursor: pointer; margin: 0; }
+.pp-bt-field-hint {
+    font-size: 11px;
+    color: #64748b;
 }
 
 .pp-bt-btn {

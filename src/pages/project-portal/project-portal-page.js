@@ -5095,7 +5095,8 @@ function wireEvents() {
         const target = e.target;
         if (!currentBatchCastingId) return;
         if (target.matches('[data-bt-field]')) {
-            handleBatchFieldInput(currentBatchCastingId, target.dataset.btField, target.value);
+            const val = target.type === 'checkbox' ? target.checked : target.value;
+            handleBatchFieldInput(currentBatchCastingId, target.dataset.btField, val);
         }
     });
     btContent?.addEventListener('change', (e) => {
@@ -5110,6 +5111,12 @@ function wireEvents() {
             const idx = parseInt(target.dataset.btAssign, 10);
             handleBatchAssignChange(currentBatchCastingId, idx, target.value);
             return;
+        }
+    });
+    btContent?.addEventListener('click', (e) => {
+        if (!currentBatchCastingId) return;
+        if (e.target.closest('[data-bt-import]')) {
+            handleImportBatchFromTracking(currentBatchCastingId);
         }
     });
 
@@ -5212,8 +5219,21 @@ function wireEvents() {
 // settings.
 // ===================================================================
 
-// Pigment reduction applied to FINAL Backup batches (hardcoded — not user-editable).
+// Default pigment reduction applied to FINAL Backup batches.
+// Per-casting value is editable via the batch ticket form (ticket.pigReduction).
 const FINAL_BACKUP_PIG_REDUCTION_PCT = 50;
+
+/**
+ * Resolve a casting's FINAL Back Up pigment reduction percentage.
+ * Falls back to the 50% default for blank/invalid values; clamps to 0–100.
+ * @param {string|number} raw
+ * @returns {number}
+ */
+function parsePigReduction(raw) {
+    const n = parseFloat(raw);
+    if (isNaN(n)) return FINAL_BACKUP_PIG_REDUCTION_PCT;
+    return Math.min(100, Math.max(0, n));
+}
 
 function getBatchTicketFor(castingId) {
     if (!batchTickets.has(castingId)) {
@@ -5355,7 +5375,15 @@ function renderBatchTicketBody(casting, ticket) {
             </div>
 
             <div class="pp-bt-card">
-                <h3 class="pp-bt-card-title">Batch Plan</h3>
+                <div class="pp-bt-card-head">
+                    <h3 class="pp-bt-card-title">Batch Plan</h3>
+                    <button type="button" class="pp-bt-import-btn" data-bt-import title="Total Cu Ft & FF Sq Ft from this casting's inventory">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>
+                        </svg>
+                        Import from Tracking
+                    </button>
+                </div>
                 <div class="pp-bt-grid">
                     <div class="pp-bt-field">
                         <label class="pp-bt-field-label">Total Cu Ft Needed</label>
@@ -5365,6 +5393,17 @@ function renderBatchTicketBody(casting, ticket) {
                         <label class="pp-bt-field-label">Face Sq Ft</label>
                         <input type="number" step="0.01" class="pp-bt-input" data-bt-field="faceSqFt" value="${escapeAttr(ticket.faceSqFt)}">
                     </div>
+                </div>
+                <div class="pp-bt-field pp-bt-pigreduce">
+                    <label class="pp-bt-field-label">Back Up Pigment Reduction (%)</label>
+                    <div class="pp-bt-pigreduce-row">
+                        <input type="number" step="1" min="0" max="100" class="pp-bt-input pp-bt-pigreduce-input" data-bt-field="pigReduction" value="${escapeAttr(ticket.pigReduction)}" placeholder="50">
+                        <label class="pp-bt-checkbox">
+                            <input type="checkbox" data-bt-field="pigReduceFirstBackup"${ticket.pigReduceFirstBackup ? ' checked' : ''}>
+                            Also reduce First Back Up
+                        </label>
+                    </div>
+                    <span class="pp-bt-field-hint">Always applied to FINAL Back Up. Check the box to also reduce First Back Up.</span>
                 </div>
                 <details class="pp-bt-advanced"${parseFloat(ticket.cuFtPer250) !== 4.28 ? ' open' : ''}>
                     <summary>Advanced</summary>
@@ -5419,9 +5458,11 @@ function renderBatchPreview(casting, ticket) {
 
     if (!plan.batches.length) return '';
 
+    const pigReductionPct = parsePigReduction(ticket.pigReduction);
+    const reduceFirstBackup = !!ticket.pigReduceFirstBackup;
     const sectionHeader = renderBatchSectionHeader(plan);
     const assign = renderBatchAssignTable(plan);
-    const totalsPanel = renderBatchTotals(plan, activeLog);
+    const totalsPanel = renderBatchTotals(plan, activeLog, pigReductionPct, reduceFirstBackup);
     const tickets = renderBatchTicketCards(casting, ticket, plan);
 
     return `
@@ -5488,9 +5529,8 @@ function renderBatchAssignTable(plan) {
  *   - Pigments multiplied by (1 - reduction%) on FINAL Back Up batches
  * Matches the totals table from Batchin Calc/index.html.
  */
-function renderBatchTotals(plan, log) {
+function renderBatchTotals(plan, log, pigReductionPct = FINAL_BACKUP_PIG_REDUCTION_PCT, reduceFirstBackup = false) {
     if (!plan?.batches?.length) return '';
-    const pigReductionPct = FINAL_BACKUP_PIG_REDUCTION_PCT;
     const isDirectCast = log?.castMethod === 'directCast';
 
     const totals = {};
@@ -5526,7 +5566,8 @@ function renderBatchTotals(plan, log) {
 
     plan.batches.forEach(b => {
         const { batchSandLbs, scaleFactor, type: batchType } = b;
-        const pigMultiplier = batchType === 'finalBackUp' ? (1 - pigReductionPct / 100) : 1;
+        const applyPigReduction = batchType === 'finalBackUp' || (batchType === 'firstBackUp' && reduceFirstBackup);
+        const pigMultiplier = applyPigReduction ? (1 - pigReductionPct / 100) : 1;
         const isBackup = batchType === 'firstBackUp' || batchType === 'finalBackUp';
 
         // Base ingredients — split sand into Bulk Sand for sprayUp backup batches.
@@ -5614,6 +5655,9 @@ function renderBatchTicketCards(casting, ticket, plan) {
     const castNumber = casting.casting_number || '';
     const castDate = casting.casting_date || '';
 
+    const pigReductionPct = parsePigReduction(ticket.pigReduction);
+    const reduceFirstBackup = !!ticket.pigReduceFirstBackup;
+
     return plan.batches.map(b =>
         renderBatchTicketCard({
             colorLog: activeLog,
@@ -5624,7 +5668,9 @@ function renderBatchTicketCards(casting, ticket, plan) {
             castNumber,
             castDate,
             batchedBy: ticket.batchedBy,
-            notes: ticket.notes
+            notes: ticket.notes,
+            pigReductionPct,
+            reduceFirstBackup
         })
     ).join('');
 }
@@ -5635,11 +5681,11 @@ function renderBatchTicketCards(casting, ticket, plan) {
  */
 function renderBatchTicketCard({
     colorLog, batch, project, sampleName, castMethod, castNumber, castDate,
-    batchedBy, notes
+    batchedBy, notes, pigReductionPct = FINAL_BACKUP_PIG_REDUCTION_PCT, reduceFirstBackup = false
 }) {
     const { batchSandLbs, scaleFactor, num, total, type: batchType } = batch;
-    const pigReductionPct = FINAL_BACKUP_PIG_REDUCTION_PCT;
-    const pigMultiplier = batchType === 'finalBackUp' ? (1 - pigReductionPct / 100) : 1;
+    const applyPigReduction = batchType === 'finalBackUp' || (batchType === 'firstBackUp' && reduceFirstBackup);
+    const pigMultiplier = applyPigReduction ? (1 - pigReductionPct / 100) : 1;
     const cb = (checked) => `<span class="bt-cb-box ${checked ? 'checked' : ''}"></span>`;
 
     const findBase = (name) => (colorLog?.baseIngredients || []).find(i => (i.name || '').toLowerCase() === name.toLowerCase());
@@ -5704,7 +5750,7 @@ function renderBatchTicketCard({
     const forton = fortonBase.qty !== '-' ? fortonBase : fortonAdd;
 
     // Pigments (4 slots)
-    const reducedLabel = (batchType === 'finalBackUp' && pigReductionPct > 0) ? ` (${pigReductionPct}% reduced)` : '';
+    const reducedLabel = (applyPigReduction && pigReductionPct > 0) ? ` (${pigReductionPct}% reduced)` : '';
     let pigRows = '';
     for (let i = 0; i < 4; i++) {
         const p = (colorLog?.pigments || [])[i];
@@ -5847,7 +5893,7 @@ function handleBatchFieldInput(castingId, field, value) {
     if (!(field in ticket)) return;
     ticket[field] = value;
     // Inputs that affect the visible preview: re-render it so summary/tickets stay in sync.
-    const previewAffectingFields = ['cuFt', 'faceSqFt', 'cuFtPer250', 'batchedBy', 'notes', 'colorLogId'];
+    const previewAffectingFields = ['cuFt', 'faceSqFt', 'cuFtPer250', 'pigReduction', 'pigReduceFirstBackup', 'batchedBy', 'notes', 'colorLogId'];
     if (previewAffectingFields.includes(field)) {
         // If the batch count would change, drop manual overrides so they don't desync.
         const casting = currentCastings.find(c => c.id === castingId);
@@ -5891,6 +5937,72 @@ function handleBatchAssignChange(castingId, idx, type) {
     ticket.batchAssignments = assignments;
     rerenderBatchPreview(castingId);
     scheduleBatchTicketSave(castingId);
+}
+
+/**
+ * Import "Total Cu Ft Needed" and "Face Sq Ft" by totalling the selected
+ * casting's inventory rows. Each row contributes its value × (quantity + extras).
+ * A field is only filled when EVERY row has that value — otherwise that field
+ * is left untouched and the user is warned which rows are incomplete.
+ * @param {string} castingId
+ */
+async function handleImportBatchFromTracking(castingId) {
+    if (!castingId) return;
+
+    // Inventory is loaded lazily by the Casting Inventory tab — make sure it's
+    // present for this project before we total it.
+    if (currentCastingInventoryLoadedFor !== currentProjectNumber) {
+        try {
+            await loadAllInventoryForCurrentProject();
+        } catch (err) {
+            logger.error('[batch-tickets] inventory load for import failed', err);
+            showToast('Could not load inventory for import', 'error');
+            return;
+        }
+    }
+
+    const rows = getInventoryFor(castingId);
+    if (!rows.length) {
+        showToast('No inventory components for this casting', 'error');
+        return;
+    }
+
+    const has = (v) => v !== null && v !== undefined && v !== '';
+    const unitsFor = (r) => (Number(r.quantity) || 0) + (Number(r.extras) || 0);
+
+    const cuFtComplete = rows.every(r => has(r.cu_ft));
+    const ffComplete   = rows.every(r => has(r.ff_sq_ft));
+
+    let totalCuFt = 0, totalFf = 0;
+    for (const r of rows) {
+        const units = unitsFor(r);
+        totalCuFt += (Number(r.cu_ft) || 0) * units;
+        totalFf   += (Number(r.ff_sq_ft) || 0) * units;
+    }
+
+    const ticket = getBatchTicketFor(castingId);
+    const applied = [];
+    if (cuFtComplete) { ticket.cuFt = String(roundSig(totalCuFt, 2)); applied.push('Total Cu Ft'); }
+    if (ffComplete)   { ticket.faceSqFt = String(roundSig(totalFf, 2)); applied.push('Face Sq Ft'); }
+
+    if (!applied.length) {
+        showToast('Import blocked — inventory rows are missing Cu Ft and FF Sq Ft values', 'error');
+        return;
+    }
+
+    // Plan inputs changed — drop manual batch-type overrides so they can't desync.
+    ticket.batchAssignments = [];
+    renderBatchTicketsContent();
+    scheduleBatchTicketSave(castingId);
+
+    const skipped = [];
+    if (!cuFtComplete) skipped.push('Cu Ft');
+    if (!ffComplete)   skipped.push('FF Sq Ft');
+    if (skipped.length) {
+        showToast(`Imported ${applied.join(' & ')}. Skipped ${skipped.join(' & ')} — some inventory rows are blank.`, 'error');
+    } else {
+        showToast(`Imported ${applied.join(' & ')} from inventory`, 'success');
+    }
 }
 
 async function handleCastingDateChange(castingId, value) {
