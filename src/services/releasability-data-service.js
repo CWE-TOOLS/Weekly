@@ -128,10 +128,16 @@ export async function loadProjectsFromSheets(forceRefresh = false) {
       // Get department from the earliest Mill or Form Out task
       const department = sortedByActual[0].task.department;
 
+      // Project number comes straight from the Google Sheet import (column 8).
+      // Use the first task that carries one; null if the sheet left it blank.
+      const numberTask = projectTasks.find(t => t.projectNumber);
+      const projectNumber = numberTask ? numberTask.projectNumber : null;
+
       // Add project to releasability board
       if (true) { // Always true now since we already filtered for Mill/Form Out
         projects.push({
           project: projectName,
+          projectNumber: projectNumber,
           weekMonday: earliestWeek,
           actualStartDate: earliestActualDate,
           department: department,
@@ -475,6 +481,7 @@ export async function loadAllReleasabilityData(forceRefresh = false) {
       return {
         id,
         project: project.project,
+        projectNumber: project.projectNumber || null,
         weekMonday: project.weekMonday,
         actualStartDate: project.actualStartDate,
         department: project.department,
@@ -505,6 +512,7 @@ export async function loadAllReleasabilityData(forceRefresh = false) {
         projects.push({
           id,
           project: record.project,
+          projectNumber: null, // Manual projects have no Google Sheet row
           weekMonday: record.weekMonday,
           actualStartDate: record.weekMonday, // Manual projects use weekMonday as start date
           department: record.department,

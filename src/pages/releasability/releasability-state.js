@@ -283,6 +283,7 @@ export function addProject(project, silent = false) {
   const newProject = {
     id: project.id || generateProjectId(),
     project: project.project,
+    projectNumber: project.projectNumber || null,
     weekMonday: project.weekMonday,
     actualStartDate: project.actualStartDate || project.weekMonday,
     department: project.department || null,

@@ -382,6 +382,15 @@ function createProjectNameCell(project) {
     cell.appendChild(dragIcon);
   }
 
+  // Project number badge (only when the board project matched a portal project)
+  if (project.projectNumber) {
+    const numBadge = document.createElement('span');
+    numBadge.className = 'project-number-badge';
+    numBadge.textContent = project.projectNumber;
+    numBadge.title = `Project #${project.projectNumber}`;
+    cell.appendChild(numBadge);
+  }
+
   // Project name
   const nameSpan = document.createElement('span');
   nameSpan.className = 'project-name';
