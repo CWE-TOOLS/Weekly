@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="src/styles/variables.css">
     <link rel="stylesheet" href="src/styles/base.css">
     <link rel="stylesheet" href="src/styles/buttons.css">
-    <link rel="stylesheet" href="src/styles/project-portal.css?v=20260519-03">
+    <link rel="stylesheet" href="src/styles/project-portal.css?v=20260521-01">
 
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 </head>
@@ -413,7 +413,7 @@
                         <div class="pp-clay-wrap">
                             <div class="pp-clay-header">
                                 <h2 class="pp-clay-title">Casting Layout</h2>
-                                <p class="pp-muted pp-clay-sub">Auto-arranges a casting's panels onto the shop-floor tables. Panel sizes come from the Tracking sheet; the mold footprint adds the offset below to every edge.</p>
+                                <p class="pp-muted pp-clay-sub">Auto-arranges a casting's panels onto the shop-floor tables. Panel sizes come from the Tracking sheet; the mold footprint adds the offset below to every edge. Drag a form to fine-tune its spot; double-click it or hover and press R to rotate. The first change saves a manual layout.</p>
                             </div>
 
                             <div id="pp-clay-needs-save" class="pp-castings-hint" hidden>
@@ -446,6 +446,7 @@
                                     <input type="number" id="pp-clay-gap" class="pp-clay-offset" min="0" step="0.25" value="0" />
                                 </label>
                                 <button id="pp-clay-print-btn" class="pp-secondary-btn pp-clay-print" type="button">Print Layout</button>
+                                <button id="pp-clay-reset-btn" class="pp-secondary-btn pp-clay-reset" type="button" hidden>Reset to auto-pack</button>
                             </div>
 
                             <div id="pp-clay-error" class="pp-clay-error"></div>
@@ -1002,6 +1003,6 @@
         <div id="pp-toast" class="pp-toast" hidden></div>
     </div>
 
-    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20260519-03"></script>
+    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20260521-01"></script>
 </body>
 </html>

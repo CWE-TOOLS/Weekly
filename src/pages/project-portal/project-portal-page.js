@@ -105,7 +105,13 @@ import {
     deleteClassroomTask,
     setClassroomTasksOrder
 } from '../../services/classroom-tasks-service.js';
-import { renderCastingLayout } from './casting-layout.js?v=20260519-01';
+import { renderCastingLayout } from './casting-layout.js?v=20260521-01';
+import { attachLayoutDrag } from './casting-layout-drag.js?v=20260521-01';
+import {
+    loadLayoutPositions,
+    snapshotLayout,
+    clearLayoutPositions
+} from '../../services/casting-layout-service.js';
 
 const STATUS_SORT_ORDER = {
     'kicked off': 0,
@@ -2473,6 +2479,10 @@ let clSelectedCastingId = null;
 let clSelectedArea = 'B';
 let clOffsetPerSide = 4;
 let clGapBetween = 0;
+// Saved manual mold positions for the selected casting (all areas). When this
+// holds rows for the current area, the layout renders manually instead of
+// auto-packed.
+let clLayoutPositions = [];
 
 function castingLayoutLabel(c) {
     const num = (c.casting_number || '').trim();
@@ -2539,7 +2549,20 @@ async function activateCastingLayoutTab() {
     const gapInput = document.getElementById('pp-clay-gap');
     if (gapInput) gapInput.value = clGapBetween;
 
+    await loadLayoutPositionsForSelected();
     renderCastingLayoutTab();
+}
+
+/** Load saved mold positions for the currently-selected casting. */
+async function loadLayoutPositionsForSelected() {
+    try {
+        clLayoutPositions = clSelectedCastingId
+            ? await loadLayoutPositions(clSelectedCastingId)
+            : [];
+    } catch (e) {
+        logger.error('[project-portal] loadLayoutPositions failed:', e);
+        clLayoutPositions = [];
+    }
 }
 
 function renderCastingLayoutTab() {
@@ -2553,15 +2576,57 @@ function renderCastingLayoutTab() {
         ? `${currentProjectNumber} — ${castingLayoutLabel(casting)}`
         : 'Casting Layout';
 
-    renderCastingLayout({
+    const handle = renderCastingLayout({
         container: card,
         errorEl,
         components,
         title,
         area: clSelectedArea,
         offsetPerSide: clOffsetPerSide,
-        gapBetween: clGapBetween
+        gapBetween: clGapBetween,
+        positions: clLayoutPositions
     });
+
+    if (handle) {
+        attachLayoutDrag(handle, {
+            castingId: clSelectedCastingId,
+            area: clSelectedArea,
+            onCommit: commitLayoutPositions
+        });
+    }
+
+    // The reset button only makes sense once a layout has been customized.
+    const resetBtn = document.getElementById('pp-clay-reset-btn');
+    if (resetBtn) resetBtn.hidden = !handle || handle.mode !== 'manual';
+}
+
+/**
+ * Persist dragged mold positions, then reload and re-render. The first commit
+ * for an auto-packed casting snapshots every mold, switching it to manual mode.
+ */
+async function commitLayoutPositions(rows) {
+    try {
+        await snapshotLayout(rows);
+        await loadLayoutPositionsForSelected();
+    } catch (e) {
+        logger.error('[project-portal] commitLayoutPositions failed:', e);
+        alert('Could not save the layout change. Please try again.');
+    }
+    renderCastingLayoutTab();
+}
+
+/** Discard the manual layout for the current casting area, back to auto-pack. */
+async function resetCastingLayout() {
+    if (!clSelectedCastingId) return;
+    if (!confirm('Discard the manual layout for this casting area and return to automatic packing?')) return;
+    try {
+        await clearLayoutPositions(clSelectedCastingId, clSelectedArea);
+        await loadLayoutPositionsForSelected();
+    } catch (e) {
+        logger.error('[project-portal] resetCastingLayout failed:', e);
+        alert('Could not reset the layout. Please try again.');
+    }
+    renderCastingLayoutTab();
 }
 
 function printCastingLayout() {
@@ -4576,8 +4641,9 @@ function wireEvents() {
     });
 
     // ----- Casting Layout: control wiring -----
-    document.getElementById('pp-clay-casting')?.addEventListener('change', (e) => {
+    document.getElementById('pp-clay-casting')?.addEventListener('change', async (e) => {
         clSelectedCastingId = e.target.value;
+        await loadLayoutPositionsForSelected();
         renderCastingLayoutTab();
     });
     document.getElementById('pp-clay-area')?.addEventListener('change', (e) => {
@@ -4595,6 +4661,7 @@ function wireEvents() {
         renderCastingLayoutTab();
     });
     document.getElementById('pp-clay-print-btn')?.addEventListener('click', printCastingLayout);
+    document.getElementById('pp-clay-reset-btn')?.addEventListener('click', resetCastingLayout);
 
     // ----- Color Log: event delegation on its panel -----
     const clPanel = document.querySelector('.pp-tab-panel[data-panel="color-log"]');

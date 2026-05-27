@@ -29,11 +29,21 @@ const AREA_B_TABLES = [
 ];
 
 /**
- * Casting Area A — placeholder layout. Until the real Area A table dimensions
- * are supplied, Area A reuses Area B's table arrangement so the tab is usable.
- * Replace this array with Area A's actual tables when available.
+ * Casting Area A — three casting tables, all oriented long-side vertical.
+ *
+ * Right side: one large 60" × 1170" table.
+ * Left side: an L-shape modeled as two stacked tables with their left edges
+ * aligned — a 72" × 351" upper section and a 60" × 255" lower section (the
+ * right edge steps in by 12" at the 351" mark). The two left tables are
+ * bottom-aligned with the right table, so the left stack starts 564" down.
+ *
+ * Source: "Casting Layout 2026-04-13-CAST #1.pdf" (SIDE A).
  */
-const AREA_A_TABLES = AREA_B_TABLES.map(t => ({ ...t }));
+const AREA_A_TABLES = [
+  { id: 1, name: 'Table 1', narrow: 60, long: 1170, x: 144, y: 0,   packAxis: 'y' }, // right side
+  { id: 2, name: 'Table 2', narrow: 72, long: 351,  x: 0,   y: 564, packAxis: 'y' }, // left upper
+  { id: 3, name: 'Table 3', narrow: 60, long: 255,  x: 0,   y: 915, packAxis: 'y' }, // left lower
+];
 
 /** Selectable casting areas, keyed by the value used in the area <select>. */
 export const CASTING_AREAS = {
@@ -124,58 +134,126 @@ function svgText(ns, x, y, content, fontSize, fill, weight) {
 // ============================================================================
 
 /**
- * Pack molds onto the casting tables. Molds are sorted widest-first; each is
- * tried on every table in both orientations until one fits.
+ * Pack molds onto the casting tables using shelf (row) packing.
+ *
+ * Each table is filled with straight rows that run across the table's narrow
+ * axis. Molds are laid side-by-side within a row; when a row has no more room
+ * across, a new row is opened further along the table's long axis — so a table
+ * fills in *both* directions instead of as a single end-to-end strip.
+ *
+ * Molds are sorted longest-side-first so the deepest rows are created first,
+ * letting shorter molds tuck into the rows behind them. Both 90° orientations
+ * of every mold are tried, so molds rotate whenever that yields a fit.
+ *
  * @param {Array<{outerW:number, outerL:number}>} molds
  * @param {Array<Object>} tableDefs
- * @param {number} [gapBetween] - inches of clearance left between adjacent molds
+ * @param {number} [gapBetween] - inches of clearance left between adjacent molds and rows
  * @returns {{tables:Array<Object>, unplaced:Array<Object>}}
  */
 function placeMoldsOnTables(molds, tableDefs, gapBetween = 0) {
-  const tables = tableDefs.map(t => ({ ...t, usedLength: 0, placedMolds: [] }));
+  const tables = tableDefs.map(t => ({
+    ...t,
+    longUsed: 0,     // long-axis inches consumed by rows so far
+    shelves: [],     // rows packed onto this table
+    placedMolds: [], // {mold, sx, sy, sw, sh} screen rectangles for rendering
+  }));
   const unplaced = [];
-  const sorted = [...molds].sort((a, b) => b.outerW - a.outerW);
+
+  // Longest-side-first: the molds that need the deepest rows go down first.
+  const sorted = [...molds].sort((a, b) =>
+    Math.max(b.outerW, b.outerL) - Math.max(a.outerW, a.outerL));
 
   for (const mold of sorted) {
-    const oW = mold.outerW;
-    const oL = mold.outerL;
-    let placed = false;
+    if (!placeOneMold(mold, tables, gapBetween)) unplaced.push(mold);
+  }
 
-    const orientations = [
-      { across: oL, along: oW },
-      { across: oW, along: oL }
-    ];
-
-    for (const table of tables) {
-      for (const { across, along } of orientations) {
-        if (across > table.narrow) continue;
-        const gap = table.placedMolds.length > 0 ? gapBetween : 0;
-        if (table.usedLength + gap + along > table.long) continue;
-
-        const offset = table.usedLength + gap;
-        let mx, my, mw, mh;
-        if (table.packAxis === 'x') {
-          mx = table.x + offset;
-          my = table.y + (table.narrow - across) / 2;
-          mw = along; mh = across;
-        } else {
-          mx = table.x + (table.narrow - across) / 2;
-          my = table.y + offset;
-          mw = across; mh = along;
-        }
-
-        table.placedMolds.push({ mold, sx: mx, sy: my, sw: mw, sh: mh });
-        table.usedLength = offset + along;
-        placed = true;
-        break;
+  // Centre each finished row across the table's narrow axis so a partly-filled
+  // row sits balanced rather than jammed against one edge.
+  for (const table of tables) {
+    for (const shelf of table.shelves) {
+      const shift = (table.narrow - shelf.narrowUsed) / 2;
+      if (shift <= 0) continue;
+      for (const rec of shelf.recs) {
+        if (table.packAxis === 'x') rec.sy += shift;
+        else rec.sx += shift;
       }
-      if (placed) break;
     }
-
-    if (!placed) unplaced.push(mold);
   }
 
   return { tables, unplaced };
+}
+
+/**
+ * Place a single mold: first into any existing row that still has room,
+ * otherwise into a new row on the first table that can fit one.
+ * @returns {boolean} true if the mold was placed
+ */
+function placeOneMold(mold, tables, gap) {
+  // Both 90° orientations — `across` spans the narrow axis, `depth` the long axis.
+  const orientations = [
+    { across: mold.outerW, depth: mold.outerL },
+    { across: mold.outerL, depth: mold.outerW },
+  ];
+
+  // 1) Try to slot the mold into an existing row.
+  for (const table of tables) {
+    for (const shelf of table.shelves) {
+      for (const { across, depth } of orientations) {
+        if (depth > shelf.depth) continue;          // a row's depth is fixed
+        if (across > table.narrow) continue;
+        const g = shelf.recs.length > 0 ? gap : 0;
+        if (shelf.narrowUsed + g + across > table.narrow) continue;
+        addMoldToShelf(table, shelf, mold, across, depth, g);
+        return true;
+      }
+    }
+  }
+
+  // 2) No existing row fits — open a new one. Prefer the orientation with the
+  //    smaller `across` span, which leaves more room for molds beside it.
+  const byAcross = [...orientations].sort((a, b) => a.across - b.across);
+  for (const table of tables) {
+    const g = table.shelves.length > 0 ? gap : 0;
+    const rowStart = table.longUsed + g;
+    for (const { across, depth } of byAcross) {
+      if (across > table.narrow) continue;
+      if (rowStart + depth > table.long) continue;
+      const shelf = { longStart: rowStart, depth, narrowUsed: 0, recs: [] };
+      table.shelves.push(shelf);
+      table.longUsed = rowStart + depth;
+      addMoldToShelf(table, shelf, mold, across, depth, 0);
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Append a mold to a row: compute its screen rectangle, store it for rendering,
+ * and advance the row's narrow-axis cursor.
+ */
+function addMoldToShelf(table, shelf, mold, across, depth, gap) {
+  const narrowPos = shelf.narrowUsed + gap;
+  const longPos = shelf.longStart;
+  let sx, sy, sw, sh;
+  if (table.packAxis === 'x') {
+    // long axis → screen x, narrow axis → screen y
+    sx = table.x + longPos;
+    sy = table.y + narrowPos;
+    sw = depth;
+    sh = across;
+  } else {
+    // long axis → screen y, narrow axis → screen x
+    sx = table.x + narrowPos;
+    sy = table.y + longPos;
+    sw = across;
+    sh = depth;
+  }
+  const rec = { mold, sx, sy, sw, sh };
+  table.placedMolds.push(rec);
+  shelf.recs.push(rec);
+  shelf.narrowUsed = narrowPos + across;
 }
 
 // ============================================================================
@@ -207,6 +285,7 @@ function buildMolds(components, offsetPerSide) {
       colorByType.set(typeKey, MOLD_COLORS[colorByType.size % MOLD_COLORS.length]);
     }
     molds.push({
+      componentId: c.id || null,
       label: (c.panel_id || c.type || `Panel ${i + 1}`).trim(),
       color: colorByType.get(typeKey),
       concreteW: w,
@@ -220,8 +299,149 @@ function buildMolds(components, offsetPerSide) {
 }
 
 // ============================================================================
+// LAYOUT GEOMETRY HELPERS
+// ============================================================================
+
+/**
+ * Footprint a mold occupies on the diagram for a given rotation, in inches.
+ * Rotation 0 keeps the mold's natural orientation (outerW along x); rotation
+ * 90 swaps the axes.
+ * @param {{outerW:number, outerL:number}} mold
+ * @param {number} rotation - 0 or 90
+ * @returns {{sw:number, sh:number}}
+ */
+export function moldScreenSize(mold, rotation) {
+  return Number(rotation) === 90
+    ? { sw: mold.outerL, sh: mold.outerW }
+    : { sw: mold.outerW, sh: mold.outerL };
+}
+
+/**
+ * True if two inch-space rectangles overlap. Rectangles that merely share an
+ * edge do not count as overlapping.
+ * @param {{sx:number,sy:number,sw:number,sh:number}} a
+ * @param {{sx:number,sy:number,sw:number,sh:number}} b
+ * @returns {boolean}
+ */
+export function rectsOverlap(a, b) {
+  return a.sx < b.sx + b.sw && a.sx + a.sw > b.sx
+      && a.sy < b.sy + b.sh && a.sy + a.sh > b.sy;
+}
+
+/**
+ * True if an inch-space rectangle sits entirely within a single casting table.
+ * @param {{sx:number,sy:number,sw:number,sh:number}} rect
+ * @param {Array<Object>} tableDefs
+ * @returns {boolean}
+ */
+export function isRectInsideTables(rect, tableDefs) {
+  const EPS = 0.01;
+  for (const t of tableDefs) {
+    const r = getTableScreenRect(t);
+    if (rect.sx >= r.x - EPS && rect.sy >= r.y - EPS
+        && rect.sx + rect.sw <= r.x + r.w + EPS
+        && rect.sy + rect.sh <= r.y + r.h + EPS) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// ============================================================================
+// LAYOUT MODES
+// ============================================================================
+
+/**
+ * Auto layout — run the shelf packer and flatten the result into one flat list
+ * of placed molds (inch-space rects + the rotation each ended up at).
+ */
+function layoutAuto(molds, tableDefs, gapBetween) {
+  const { tables, unplaced } = placeMoldsOnTables(molds, tableDefs, gapBetween);
+  const placed = [];
+  for (const t of tables) {
+    for (const rec of t.placedMolds) {
+      const rotation =
+        Math.abs(rec.sw - rec.mold.outerW) <= Math.abs(rec.sw - rec.mold.outerL) ? 0 : 90;
+      placed.push({
+        componentId: rec.mold.componentId,
+        mold: rec.mold,
+        sx: rec.sx, sy: rec.sy, sw: rec.sw, sh: rec.sh,
+        rotation,
+      });
+    }
+  }
+  return { placed, unplaced };
+}
+
+/**
+ * Manual layout — place each mold at its saved position. A mold with no saved
+ * position (a component added after the layout was customized) is cascaded at
+ * the first table's corner so it stays visible and draggable.
+ */
+function layoutManual(molds, posForArea, tableDefs) {
+  const byComponent = new Map();
+  for (const p of posForArea) byComponent.set(p.component_id, p);
+
+  const origin = tableDefs[0] ? getTableScreenRect(tableDefs[0]) : { x: 0, y: 0 };
+  const placed = [];
+  let cascade = 0;
+
+  for (const mold of molds) {
+    const pos = byComponent.get(mold.componentId);
+    let sx, sy, rotation;
+    if (pos) {
+      sx = Number(pos.pos_x) || 0;
+      sy = Number(pos.pos_y) || 0;
+      rotation = Number(pos.rotation) === 90 ? 90 : 0;
+    } else {
+      sx = origin.x + cascade * 6;
+      sy = origin.y + cascade * 6;
+      rotation = 0;
+      cascade++;
+    }
+    const { sw, sh } = moldScreenSize(mold, rotation);
+    placed.push({
+      componentId: mold.componentId,
+      mold, sx, sy, sw, sh, rotation,
+      isNew: !pos,
+    });
+  }
+  return { placed, unplaced: [] };
+}
+
+// ============================================================================
 // RENDERING
 // ============================================================================
+
+/**
+ * Build the SVG group for one mold. The group carries `data-component-id` so
+ * the drag layer can identify which component it represents.
+ *
+ * Draws two nested rectangles: the outer one is the mold form footprint
+ * (concrete + offsetPerSide on each edge), the inner dashed one is the
+ * concrete panel itself. The dimension label shows the concrete dims —
+ * the mold offset is constant and reported once in the summary text.
+ */
+function buildMoldGroup(NS, rec, tx, ty, ts, fontSize, offsetPerSide) {
+  const g = document.createElementNS(NS, 'g');
+  g.setAttribute('class', rec.isNew ? 'clay-mold clay-mold-new' : 'clay-mold');
+  if (rec.componentId) g.setAttribute('data-component-id', rec.componentId);
+  const mx = tx(rec.sx), my = ty(rec.sy), mw = ts(rec.sw), mh = ts(rec.sh);
+  g.appendChild(svgRect(NS, mx, my, mw, mh, rec.mold.color, '#333', 0.4));
+
+  // Inner rectangle = the concrete panel, inset by the mold offset on every side.
+  // Only drawn when the inset leaves a visible rectangle.
+  const inset = ts(offsetPerSide);
+  if (inset > 0 && mw > inset * 2 && mh > inset * 2) {
+    const innerRect = svgRect(NS, mx + inset, my + inset, mw - inset * 2, mh - inset * 2, 'none', '#333', 0.3);
+    innerRect.setAttribute('stroke-dasharray', '2 2');
+    g.appendChild(innerRect);
+  }
+
+  g.appendChild(svgText(NS, mx + mw / 2, my + mh / 2 - fontSize * 0.4, rec.mold.label, fontSize * 0.85, '#222', 'bold'));
+  g.appendChild(svgText(NS, mx + mw / 2, my + mh / 2 + fontSize * 0.4, `${frac(rec.mold.concreteW)} x ${frac(rec.mold.concreteL)}`, fontSize * 0.65, '#444', 'normal'));
+  return g;
+}
 
 /**
  * Render a casting layout diagram into a container.
@@ -233,9 +453,13 @@ function buildMolds(components, offsetPerSide) {
  * @param {string} [opts.area] - 'A' or 'B'
  * @param {number} [opts.offsetPerSide] - mold-base offset per edge, in inches
  * @param {number} [opts.gapBetween] - clearance between adjacent molds, in inches
+ * @param {Array<Object>} [opts.positions] - saved manual positions; when any
+ *        exist for `area` the layout is rendered manually instead of auto-packed
+ * @returns {Object|null} layout handle {mode, area, svg, transform, tableDefs,
+ *        placed, unplaced}, or null when there is nothing to draw
  */
-export function renderCastingLayout({ container, errorEl, components, title, area = 'B', offsetPerSide = 4, gapBetween = 0 }) {
-  if (!container) return;
+export function renderCastingLayout({ container, errorEl, components, title, area = 'B', offsetPerSide = 4, gapBetween = 0, positions = null }) {
+  if (!container) return null;
   container.innerHTML = '';
   if (errorEl) errorEl.textContent = '';
 
@@ -252,10 +476,15 @@ export function renderCastingLayout({ container, errorEl, components, title, are
     if (errorEl && skipped.length > 0) {
       errorEl.textContent = `${skipped.length} panel(s) skipped — missing or unreadable dimensions.`;
     }
-    return;
+    return null;
   }
 
-  const { tables, unplaced } = placeMoldsOnTables(molds, tableDefs, gapBetween);
+  // Manual mode whenever saved positions exist for this area; otherwise auto-pack.
+  const posForArea = (positions || []).filter(p => (p.area === 'A' ? 'A' : 'B') === area);
+  const mode = posForArea.length > 0 ? 'manual' : 'auto';
+  const { placed, unplaced } = mode === 'manual'
+    ? layoutManual(molds, posForArea, tableDefs)
+    : layoutAuto(molds, tableDefs, gapBetween);
 
   const pageW = 750;
   const pageH = 1000;
@@ -289,7 +518,7 @@ export function renderCastingLayout({ container, errorEl, components, title, are
   const ts = (v) => v * scale;
 
   // Draw tables
-  for (const t of tables) {
+  for (const t of tableDefs) {
     const r = getTableScreenRect(t);
     const tableRect = svgRect(NS, tx(r.x), ty(r.y), ts(r.w), ts(r.h), tableColor, tableBorder, 0.5);
     tableRect.setAttribute('rx', 1);
@@ -303,17 +532,12 @@ export function renderCastingLayout({ container, errorEl, components, title, are
     svg.appendChild(svgText(NS, tx(r.x) + ts(r.w) / 2, ty(r.y) + ts(r.h) + fontSize * 1.2, dimStr, fontSize * 0.7, '#888', 'normal'));
   }
 
-  // Draw molds on tables
-  for (const t of tables) {
-    for (const pm of t.placedMolds) {
-      const mx = tx(pm.sx), my = ty(pm.sy), mw = ts(pm.sw), mh = ts(pm.sh);
-      svg.appendChild(svgRect(NS, mx, my, mw, mh, pm.mold.color, '#333', 0.4));
-      svg.appendChild(svgText(NS, mx + mw / 2, my + mh / 2 - fontSize * 0.4, pm.mold.label, fontSize * 0.85, '#222', 'bold'));
-      svg.appendChild(svgText(NS, mx + mw / 2, my + mh / 2 + fontSize * 0.4, `${frac(pm.mold.outerW)} x ${frac(pm.mold.outerL)}`, fontSize * 0.65, '#444', 'normal'));
-    }
+  // Draw molds — each as a <g class="clay-mold"> so the drag layer can grab it.
+  for (const rec of placed) {
+    svg.appendChild(buildMoldGroup(NS, rec, tx, ty, ts, fontSize, offsetPerSide));
   }
 
-  // Draw unplaced (overflow) molds
+  // Draw unplaced (overflow) molds — auto mode only.
   if (unplaced.length > 0) {
     svg.appendChild(svgText(NS, pageW / 2, overflowY, 'OVERFLOW — Does not fit on tables', fontSize * 1.1, '#dc2626', 'bold'));
 
@@ -330,17 +554,27 @@ export function renderCastingLayout({ container, errorEl, components, title, are
       const mr = svgRect(NS, ux, oy, drawW, drawH, mold.color, '#dc2626', 0.6);
       mr.setAttribute('stroke-dasharray', '3,2');
       svg.appendChild(mr);
+
+      // Inner concrete rectangle — same convention as the on-table molds.
+      const oInset = offsetPerSide * oScale;
+      if (oInset > 0 && drawW > oInset * 2 && drawH > oInset * 2) {
+        const innerR = svgRect(NS, ux + oInset, oy + oInset, drawW - oInset * 2, drawH - oInset * 2, 'none', '#dc2626', 0.3);
+        innerR.setAttribute('stroke-dasharray', '2 2');
+        svg.appendChild(innerR);
+      }
+
       svg.appendChild(svgText(NS, ux + drawW / 2, oy + drawH / 2 - fontSize * 0.2, mold.label, fontSize * 0.75, '#dc2626', 'bold'));
-      svg.appendChild(svgText(NS, ux + drawW / 2, oy + drawH / 2 + fontSize * 0.5, `${frac(mold.outerW)} x ${frac(mold.outerL)}`, fontSize * 0.6, '#dc2626', 'normal'));
+      svg.appendChild(svgText(NS, ux + drawW / 2, oy + drawH / 2 + fontSize * 0.5, `${frac(mold.concreteW)} x ${frac(mold.concreteL)}`, fontSize * 0.6, '#dc2626', 'normal'));
       ux += drawW + 8;
     }
   }
 
   // Title + summary
   const totalMolds = molds.length;
-  const placedCount = totalMolds - unplaced.length;
-  const summaryStr = `${totalMolds} molds — ${placedCount} on tables`
-    + (unplaced.length > 0 ? ` — ${unplaced.length} overflow` : '')
+  const summaryStr = (mode === 'manual'
+      ? `${totalMolds} molds — manual layout`
+      : `${totalMolds} molds — ${totalMolds - unplaced.length} on tables`
+        + (unplaced.length > 0 ? ` — ${unplaced.length} overflow` : ''))
     + ` — +${frac(offsetPerSide)}/side mold offset`;
   svg.appendChild(svgText(NS, pageW / 2, 18, title || 'Casting Layout', fontSize * 1.5, '#222', 'bold'));
   svg.appendChild(svgText(NS, pageW / 2, 38, summaryStr, fontSize, unplaced.length > 0 ? '#dc2626' : '#555', 'normal'));
@@ -354,4 +588,6 @@ export function renderCastingLayout({ container, errorEl, components, title, are
     if (skipped.length > 0) parts.push(`${skipped.length} panel(s) skipped — missing or unreadable dimensions.`);
     errorEl.textContent = parts.join(' ');
   }
+
+  return { mode, area, svg, transform: { scale, offsetX, offsetY }, tableDefs, placed, unplaced };
 }

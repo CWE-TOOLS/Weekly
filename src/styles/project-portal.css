@@ -5031,3 +5031,38 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
     font-style: italic;
     font-size: 14px;
 }
+
+/* ----- Casting Layout: draggable molds ----- */
+.clay-mold {
+    cursor: grab;
+    -webkit-user-select: none;
+    user-select: none;
+    touch-action: none;
+}
+.clay-mold > rect {
+    transition: stroke 0.1s ease, stroke-width 0.1s ease;
+}
+.clay-mold:hover > rect {
+    stroke: #2563eb;
+    stroke-width: 1.6;
+}
+.clay-mold-dragging,
+.clay-mold-dragging:hover {
+    cursor: grabbing;
+}
+.clay-mold-dragging > rect {
+    stroke: #2563eb;
+    stroke-width: 2.2;
+}
+.clay-mold-new > rect {
+    stroke: #d97706;
+    stroke-width: 1.6;
+    stroke-dasharray: 4 2;
+}
+.clay-mold-invalid > rect {
+    animation: clay-mold-flash 0.45s ease-in-out;
+}
+@keyframes clay-mold-flash {
+    0%, 100% { stroke: #333333; stroke-width: 0.4; }
+    50%      { stroke: #dc2626; stroke-width: 3.2; }
+}
