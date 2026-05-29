@@ -286,6 +286,32 @@ export async function setComponentsProducedBulk(componentIds, produced) {
 }
 
 /**
+ * Mark a component rejected or clear the flag. Un-rejecting is allowed but
+ * the UI gates it behind a confirm so accidental clicks don't quietly
+ * un-flag a panel that already has a remake in flight.
+ * @param {string} componentId
+ * @param {boolean} rejected
+ */
+export async function setComponentRejected(componentId, rejected) {
+    if (!componentId) throw new Error('componentId required');
+    const client = await getClient();
+    if (!client) throw new Error('Supabase client unavailable');
+
+    const { data, error } = await client
+        .from(TABLE)
+        .update({ rejected: !!rejected })
+        .eq('id', componentId)
+        .select()
+        .maybeSingle();
+
+    if (error) {
+        logger.error('[tracking] setComponentRejected error:', error);
+        throw error;
+    }
+    return data;
+}
+
+/**
  * Update sort_order for a list of component ids in the order given.
  * @param {string[]} idsInOrder
  */

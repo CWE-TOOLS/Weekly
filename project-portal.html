@@ -368,6 +368,7 @@
 
                             <div class="pp-castings-add">
                                 <button id="pp-cast-add-btn" class="pp-add-btn" type="button">+ Add Casting</button>
+                                <button id="pp-cast-add-remake-btn" class="pp-add-btn pp-add-btn-remake" type="button" title="Build a new casting from rejected panels on existing castings">+ Add Remake Casting</button>
                             </div>
 
                             <div id="pp-castings-needs-save" class="pp-castings-hint" hidden>
@@ -954,6 +955,33 @@
                     <div class="pp-modal-actions">
                         <button type="button" class="pp-secondary-btn" id="pp-delete-modal-cancel">Cancel</button>
                         <button type="submit" class="pp-danger-btn" id="pp-delete-modal-confirm" disabled>Delete project</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Add Remake Casting Modal -->
+        <div id="pp-remake-modal" class="pp-modal-backdrop" hidden>
+            <div class="pp-modal" role="dialog" aria-modal="true" aria-labelledby="pp-remake-modal-title">
+                <div class="pp-modal-header">
+                    <h2 id="pp-remake-modal-title">Add Remake Casting</h2>
+                    <button type="button" class="pp-modal-close" id="pp-remake-modal-close" aria-label="Close">&times;</button>
+                </div>
+                <form id="pp-remake-modal-form" class="pp-modal-body">
+                    <p class="pp-modal-hint">
+                        Pick which castings to pull rejected panels from. A new
+                        casting will be created with one inventory line per panel
+                        type, summing rejected quantities. The new panels will
+                        get fresh panel IDs; the original rejected panels stay
+                        rejected on their source casting.
+                    </p>
+                    <div id="pp-remake-modal-list" class="pp-remake-list"></div>
+                    <div id="pp-remake-modal-empty" class="pp-modal-hint" hidden>
+                        No rejected panels found on this project.
+                    </div>
+                    <div class="pp-modal-actions">
+                        <button type="button" class="pp-secondary-btn" id="pp-remake-modal-cancel">Cancel</button>
+                        <button type="submit" class="pp-primary-btn" id="pp-remake-modal-submit" disabled>Create remake casting</button>
                     </div>
                 </form>
             </div>

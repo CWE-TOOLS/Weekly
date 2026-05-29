@@ -38,7 +38,8 @@ import {
     createComponentsBulk,
     deleteAllComponentsForCasting,
     setComponentProduced,
-    setComponentsProducedBulk
+    setComponentsProducedBulk,
+    setComponentRejected
 } from '../../services/tracking-service.js';
 import {
     loadCratesForProject,
@@ -855,16 +856,26 @@ async function loadAndRenderCastings() {
         logger.error('[project-portal] loadCastings failed:', err);
         currentCastings = [];
     }
-    // First time visiting this project's Castings tab in this session:
-    // seed every casting as expanded. Subsequent re-renders within the same
-    // project preserve the user's collapse choices.
+    await loadAllInventoryForCurrentProject();
+    // First time visiting this project's Castings tab in this session: seed
+    // every casting as expanded EXCEPT those with more than the threshold of
+    // inventory rows — those would push the rest off-screen, so default them
+    // collapsed. Subsequent re-renders within the same project preserve the
+    // user's collapse choices (clicking the chevron is sticky for the session).
     if (castInvExpandedProject !== currentProjectNumber) {
-        currentCastInvExpanded = new Set(currentCastings.map(c => c.id));
+        currentCastInvExpanded = new Set(
+            currentCastings
+                .filter(c => getInventoryFor(c.id).length <= CAST_INV_AUTO_EXPAND_LIMIT)
+                .map(c => c.id)
+        );
         castInvExpandedProject = currentProjectNumber;
     }
-    await loadAllInventoryForCurrentProject();
     renderCastings();
 }
+
+// Castings with more than this many inventory rows default to collapsed when
+// the user first lands on the Castings tab for a project.
+const CAST_INV_AUTO_EXPAND_LIMIT = 10;
 
 async function loadAllInventoryForCurrentProject() {
     const ids = currentCastings.map(c => c.id);
@@ -1267,6 +1278,198 @@ async function handleAddCastingClick() {
         cleanup();
         if (currentCastings.length === 0) renderCastings();
     });
+}
+
+// ---------- Add Remake Casting ----------
+//
+// "Add Remake Casting" creates a brand-new casting on the active project whose
+// inventory mirrors the rejected panels pulled from one or more *existing*
+// castings on this project. The user picks the source castings via checkbox;
+// every rejected panel on a selected source is pulled in. The new casting
+// gets a fresh, sequential casting_number and brand-new panel_ids — there is
+// no back-link to the originals. The original rejected panels stay rejected
+// on their source castings forever.
+
+// Working state for the modal — refreshed each time it's opened.
+let remakeModalSources = []; // [{ casting, rejected: [components] }]
+let remakeModalSelected = new Set();
+
+async function handleAddRemakeCastingClick() {
+    if (!currentProjectNumber) return;
+    if (currentCastings.length === 0) {
+        showToast('No castings on this project yet.', 'error');
+        return;
+    }
+
+    // Ensure components are loaded so we can read the rejected flag.
+    await loadAllComponentsForCurrentProject();
+
+    // Build the picker list: every casting with ≥1 rejected panel.
+    remakeModalSources = currentCastings
+        .slice()
+        .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+        .map(casting => {
+            const comps = currentCastingComponents.get(casting.id) || [];
+            const rejected = comps.filter(c => c.rejected);
+            return { casting, rejected };
+        })
+        .filter(entry => entry.rejected.length > 0);
+
+    remakeModalSelected = new Set();
+    renderRemakeModal();
+
+    const modal = document.getElementById('pp-remake-modal');
+    if (modal) modal.hidden = false;
+}
+
+function renderRemakeModal() {
+    const listEl = document.getElementById('pp-remake-modal-list');
+    const emptyEl = document.getElementById('pp-remake-modal-empty');
+    const submitBtn = document.getElementById('pp-remake-modal-submit');
+    if (!listEl || !emptyEl || !submitBtn) return;
+
+    if (remakeModalSources.length === 0) {
+        listEl.innerHTML = '';
+        emptyEl.hidden = false;
+        submitBtn.disabled = true;
+        return;
+    }
+    emptyEl.hidden = true;
+
+    listEl.innerHTML = remakeModalSources.map(entry => {
+        const id = entry.casting.id;
+        const num = escapeHtml(entry.casting.casting_number || '');
+        const desc = entry.casting.description ? ` — ${escapeHtml(entry.casting.description)}` : '';
+        const n = entry.rejected.length;
+        const isChecked = remakeModalSelected.has(id);
+        return `
+            <label class="pp-remake-row">
+                <input type="checkbox" data-action="remake-source" data-casting-id="${escapeAttr(id)}" ${isChecked ? 'checked' : ''} />
+                <span class="pp-remake-row-label">Casting ${num}${desc}</span>
+                <span class="pp-remake-row-count">${n} rejected</span>
+            </label>
+        `;
+    }).join('');
+
+    submitBtn.disabled = remakeModalSelected.size === 0;
+}
+
+function closeRemakeModal() {
+    const modal = document.getElementById('pp-remake-modal');
+    if (modal) modal.hidden = true;
+    remakeModalSources = [];
+    remakeModalSelected = new Set();
+}
+
+/**
+ * Aggregate selected sources' rejected panels into inventory lines.
+ * Returns array of { type, width, length, color, color_log_id, sealer, quantity }.
+ * Lines are grouped by the join of (type, width, length, color_log_id||color, sealer)
+ * so that identical panels collapse to a single qty-N line — the same shape the
+ * user would manually enter on the Castings tab.
+ */
+function aggregateRemakeInventory(selectedIds) {
+    const groups = new Map();
+    for (const entry of remakeModalSources) {
+        if (!selectedIds.has(entry.casting.id)) continue;
+        for (const c of entry.rejected) {
+            const key = [
+                c.type || '',
+                c.width || '',
+                c.length || '',
+                c.color_log_id || c.color || '',
+                c.sealer || ''
+            ].join('|');
+            const existing = groups.get(key);
+            if (existing) {
+                existing.quantity += 1;
+            } else {
+                groups.set(key, {
+                    type: c.type || null,
+                    width: c.width || null,
+                    length: c.length || null,
+                    color: c.color || null,
+                    color_log_id: c.color_log_id || null,
+                    sealer: c.sealer || null,
+                    quantity: 1
+                });
+            }
+        }
+    }
+    return Array.from(groups.values());
+}
+
+async function handleCreateRemakeSubmit() {
+    if (!currentProjectNumber) return;
+    const submitBtn = document.getElementById('pp-remake-modal-submit');
+    if (remakeModalSelected.size === 0) return;
+
+    const lines = aggregateRemakeInventory(remakeModalSelected);
+    if (lines.length === 0) {
+        showToast('No rejected panels in the selected castings.', 'error');
+        return;
+    }
+
+    // Reserve a fresh casting number. Mirrors the auto-number logic used by
+    // "Add Casting" so remakes slot into the same per-phase sequence.
+    const phaseScoped = getCastingsForActivePhase();
+    let suggested = suggestNextCastingNumber(phaseScoped);
+    if (!suggested) suggested = String(phaseScoped.length + 1);
+    if (phaseScoped.some(c => (c.casting_number || '').toLowerCase() === suggested.toLowerCase())) {
+        // Walk forward until we find a free number.
+        let n = parseInt(suggested, 10);
+        if (!Number.isFinite(n)) n = phaseScoped.length + 1;
+        while (phaseScoped.some(c => (c.casting_number || '') === String(n))) n++;
+        suggested = String(n);
+    }
+
+    if (submitBtn) submitBtn.disabled = true;
+    try {
+        const sourceLabels = Array.from(remakeModalSelected)
+            .map(id => remakeModalSources.find(e => e.casting.id === id)?.casting.casting_number)
+            .filter(Boolean)
+            .join(', ');
+        const description = sourceLabels ? `Remake of Cast ${sourceLabels}` : 'Remake';
+        const created = await createCasting({
+            project_number: currentProjectNumber,
+            casting_number: suggested,
+            description,
+            phase_id: currentPhasesEnabled ? currentPhaseId : null
+        });
+        if (!created) throw new Error('createCasting returned null');
+        currentCastings.push(created);
+        currentCastInvExpanded.add(created.id);
+        // Seed empty caches for the new casting so the inventory write loop +
+        // syncTrackingFromInventory both see it without a full reload.
+        setInventoryFor(created.id, []);
+        currentCastingComponents.set(created.id, []);
+
+        // Write inventory lines sequentially so sort_order increments cleanly,
+        // pushing each created row into the local cache the same way
+        // handleAddInventoryItem does so the subsequent sync picks them up.
+        for (let idx = 0; idx < lines.length; idx++) {
+            const line = lines[idx];
+            const createdLine = await createInventoryItem(created.id, { ...line, sort_order: idx });
+            if (createdLine) {
+                const list = getInventoryFor(created.id).slice();
+                list.push(createdLine);
+                setInventoryFor(created.id, list);
+            }
+        }
+
+        closeRemakeModal();
+        // Re-sync tracking from inventory so the new panel_ids materialize,
+        // then re-render the Castings tab.
+        await syncTrackingFromInventory();
+        renderCastings();
+        const totalPanels = lines.reduce((n, l) => n + l.quantity, 0);
+        showToast(`Remake casting ${created.casting_number} created (${totalPanels} panel${totalPanels === 1 ? '' : 's'}).`);
+    } catch (err) {
+        logger.error('[project-portal] create remake casting failed:', err);
+        const msg = (err.code === '23505') ? 'That casting # already exists.' : (err.message || 'Could not create remake casting.');
+        showToast(msg, 'error');
+        if (submitBtn) submitBtn.disabled = false;
+    }
 }
 
 async function handleSaveCasting(id) {
@@ -2411,6 +2614,40 @@ async function handleTrackingCrateSelect(componentId, crateNumber) {
     if (crate) await assignComponentToCrate(componentId, crate.id);
 }
 
+async function handleRejectedToggle(componentId, checkboxEl) {
+    if (!componentId) return;
+    let target = null;
+    for (const list of currentCastingComponents.values()) {
+        const found = list.find(c => c.id === componentId);
+        if (found) { target = found; break; }
+    }
+    if (!target) return;
+
+    const prev = !!target.rejected;
+    const next = checkboxEl ? !!checkboxEl.checked : !prev;
+    if (prev === next) return;
+
+    const label = target.panel_id ? `panel ${target.panel_id}` : 'this panel';
+    const message = next
+        ? `Mark ${label} as rejected?\n\nUse "Add Remake Casting" on the Castings tab to schedule the replacement.`
+        : `Un-reject ${label}?\n\nMake sure a remake hasn't already been scheduled for it — otherwise you'll end up with a duplicate panel in production.`;
+    const ok = window.confirm(message);
+    if (!ok) {
+        if (checkboxEl) checkboxEl.checked = prev;
+        return;
+    }
+    target.rejected = next;
+    renderTracking();
+    try {
+        await setComponentRejected(componentId, next);
+    } catch (err) {
+        logger.error('[project-portal] setComponentRejected failed:', err);
+        target.rejected = prev;
+        renderTracking();
+        showToast('Could not save rejected flag — check connection.', 'error');
+    }
+}
+
 async function handleProducedToggle(componentId, produced) {
     if (!componentId) return;
     // If the row is part of a multi-row selection, apply the toggle to every selected row.
@@ -2832,6 +3069,10 @@ function renderTrackSection(casting) {
     const isOpen = currentTrackExpanded.has(casting.id);
     const components = getComponentsFor(casting.id);
     const count = components.length;
+    const rejectedCount = components.reduce((n, c) => n + (c.rejected ? 1 : 0), 0);
+    const rejectedBadge = rejectedCount > 0
+        ? `<span class="pp-track-section-rejected-count" title="${rejectedCount} rejected ${rejectedCount === 1 ? 'panel' : 'panels'}">${rejectedCount} rejected</span>`
+        : '';
     const desc = casting.description ? `<span class="pp-track-section-desc">${escapeHtml(casting.description)}</span>` : '';
 
     const cardsHtml = count === 0
@@ -2853,6 +3094,7 @@ function renderTrackSection(casting) {
                 <span>Length</span>
                 <span>Color</span>
                 <span>Crate #</span>
+                <span>Rejected</span>
             </div>
         </div>
     `;
@@ -2898,6 +3140,7 @@ function renderTrackSection(casting) {
                     </button>
                 </div>
                 <span class="pp-track-section-count">${count} ${count === 1 ? 'component' : 'components'}</span>
+                ${rejectedBadge}
             </div>
             ${body}
         </div>
@@ -2917,8 +3160,12 @@ function renderTrackCard(comp, castingId) {
         .join('');
     const isSelected = selectedComponentIds.has(comp.id);
     const isProduced = !!comp.produced;
+    const isRejected = !!comp.rejected;
+    const rejectTitle = isRejected
+        ? 'This panel is rejected. Unchecking will prompt to confirm — make sure no remake was already scheduled.'
+        : 'Mark this panel as rejected. Use Add Remake Casting to schedule the replacement.';
     return `
-        <div class="pp-track-card pp-track-card-locked${isSelected ? ' pp-track-card-selected' : ''}${isProduced ? ' pp-track-card-produced' : ''}" data-component-id="${escapeAttr(comp.id)}" data-casting-id="${escapeAttr(castingId)}">
+        <div class="pp-track-card pp-track-card-locked${isSelected ? ' pp-track-card-selected' : ''}${isProduced ? ' pp-track-card-produced' : ''}${isRejected ? ' pp-track-card-rejected' : ''}" data-component-id="${escapeAttr(comp.id)}" data-casting-id="${escapeAttr(castingId)}">
             <div class="pp-track-card-grip-spacer">
                 <input type="checkbox" class="pp-track-row-select" data-action="track-row-select" data-component-id="${escapeAttr(comp.id)}" ${isSelected ? 'checked' : ''} aria-label="Select this panel" />
             </div>
@@ -2931,6 +3178,9 @@ function renderTrackCard(comp, castingId) {
                 <input type="text" class="pp-track-input" data-field="length" value="${escapeAttr(comp.length || '')}" readonly title="${escapeAttr(lockTitle)}" />
                 <input type="text" class="pp-track-input" data-field="color" value="${escapeAttr(resolveComponentColorName(comp))}" readonly title="${escapeAttr(lockTitle)}" />
                 <select class="pp-track-crate-select${currentNum ? ' pp-track-crate-set' : ''}" data-action="track-crate-select" data-component-id="${escapeAttr(comp.id)}" title="Assign this panel to a crate">${options}</select>
+                <label class="pp-track-rejected-cell" title="${escapeAttr(rejectTitle)}">
+                    <input type="checkbox" class="pp-track-rejected" data-action="track-rejected-toggle" data-component-id="${escapeAttr(comp.id)}" ${isRejected ? 'checked' : ''} aria-label="Mark as rejected" />
+                </label>
             </div>
         </div>
     `;
@@ -4941,6 +5191,9 @@ function wireEvents() {
         // Produced checkbox — handled by its own change handler; let it through without
         // our card-click intercept that would otherwise hijack the toggle.
         if (e.target.closest('input[data-action="track-produced-toggle"]')) return;
+        // Same for the Rejected checkbox — its change handler runs the confirm
+        // and write-once write; the card-click intercept must not eat it.
+        if (e.target.closest('input[data-action="track-rejected-toggle"]')) return;
         // Click anywhere on a panel card to toggle selection (skip the crate select).
         const card = e.target.closest('.pp-track-card[data-component-id]');
         if (card && !e.target.closest('select')) {
@@ -5004,6 +5257,12 @@ function wireEvents() {
         if (producedCb) {
             const id = producedCb.dataset.componentId;
             if (id) handleProducedToggle(id, producedCb.checked);
+            return;
+        }
+        const rejectCb = e.target.closest('input[data-action="track-rejected-toggle"]');
+        if (rejectCb) {
+            const id = rejectCb.dataset.componentId;
+            if (id) handleRejectedToggle(id, rejectCb);
             return;
         }
         const rowCb = e.target.closest('input[data-action="track-row-select"]');
@@ -5200,6 +5459,30 @@ function wireEvents() {
 
     // Castings: add
     document.getElementById('pp-cast-add-btn').addEventListener('click', handleAddCastingClick);
+
+    // Castings: add remake (button + modal)
+    document.getElementById('pp-cast-add-remake-btn')?.addEventListener('click', handleAddRemakeCastingClick);
+    document.getElementById('pp-remake-modal-close')?.addEventListener('click', closeRemakeModal);
+    document.getElementById('pp-remake-modal-cancel')?.addEventListener('click', closeRemakeModal);
+    document.getElementById('pp-remake-modal')?.addEventListener('click', (e) => {
+        // Click on backdrop (the modal-backdrop itself, not its inner card) closes the modal.
+        if (e.target.id === 'pp-remake-modal') closeRemakeModal();
+    });
+    document.getElementById('pp-remake-modal-list')?.addEventListener('change', (e) => {
+        const cb = e.target.closest('input[data-action="remake-source"]');
+        if (!cb) return;
+        const castingId = cb.dataset.castingId;
+        if (!castingId) return;
+        if (cb.checked) remakeModalSelected.add(castingId);
+        else remakeModalSelected.delete(castingId);
+        // Just toggle the submit-button state; no full re-render needed.
+        const submitBtn = document.getElementById('pp-remake-modal-submit');
+        if (submitBtn) submitBtn.disabled = remakeModalSelected.size === 0;
+    });
+    document.getElementById('pp-remake-modal-form')?.addEventListener('submit', (e) => {
+        e.preventDefault();
+        handleCreateRemakeSubmit();
+    });
 
     // Castings: row actions (delegation)
     const castingsList = document.getElementById('pp-castings-list');
