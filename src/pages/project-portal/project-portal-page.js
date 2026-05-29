@@ -7733,6 +7733,12 @@ function handlePrintBatchTickets(castingId) {
     const projectName = document.getElementById('pp-f-project_name')?.value || '';
     const sampleName = activeLog?.name || '';
     const castMethod = activeLog?.castMethod || '';
+    // Pigment reduction (final backup, and optionally first backup) — without
+    // these, renderBatchTicketCard() falls back to its defaults and the
+    // printed tickets show un-reduced pigment values even though the on-screen
+    // preview applies the reduction.
+    const pigReductionPct = parsePigReduction(ticket.pigReduction);
+    const reduceFirstBackup = !!ticket.pigReduceFirstBackup;
 
     const pages = plan.batches.map(b => `
         <div class="bt-page bt-${b.type}">
@@ -7745,7 +7751,9 @@ function handlePrintBatchTickets(castingId) {
                 castNumber: casting.casting_number || '',
                 castDate: casting.casting_date || '',
                 batchedBy: ticket.batchedBy,
-                notes: ticket.notes
+                notes: ticket.notes,
+                pigReductionPct,
+                reduceFirstBackup
             })}
         </div>
     `).join('');
