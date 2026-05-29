@@ -657,6 +657,13 @@ function generatePrintContent(printType, selectedDepts, weekDates, allTasks) {
         const weekStart = weekDates && weekDates.length > 0 ? weekDates[0] : new Date();
         return generatePhaseStartContent(weekStart, selectedDepts, allTasks);
     }
+
+    // Handle board-schedule 11x17 (Mon-Fri × Side B | Side A grid for the
+    // shop whiteboard). Always uses Layout/Cast/Demold; ignores selectedDepts.
+    if (printType === 'board-11x17') {
+        return generateBoardScheduleContent(weekDates, allTasks);
+    }
+
     const printContainer = document.createElement('div');
     printContainer.className = 'print-preview-content';
 
@@ -732,8 +739,297 @@ function generatePrintContent(printType, selectedDepts, weekDates, allTasks) {
  * Measures actual rendered dimensions and applies CSS transform scaling
  */
 function applyPrintScaling(printContent, printType) {
+    // Board schedule is a fixed 11×17 layout - no scaling
+    if (printType === 'board-11x17') return;
     // Delegate scaling to the centralized utility
     window.PrintUtils.applyScaling(printContent, printType, false);
+}
+
+// ============================================
+// BOARD SCHEDULE (11×17) RENDERER
+// ============================================
+
+const BOARD_ACTIVITIES = ['LAYOUT', 'CAST', 'DEMOLD'];
+const BOARD_DAYS = [
+    { key: 'mon', label: 'MON',   offset: 0 },
+    { key: 'tue', label: 'TUES.', offset: 1 },
+    { key: 'wed', label: 'WED',   offset: 2 },
+    { key: 'thu', label: 'THURS.', offset: 3 },
+    { key: 'fri', label: 'FRI',   offset: 4 }
+];
+
+function _boardSideKey(task) {
+    // Side-resolution key for Cast tasks. Falls back to project name if
+    // project number is missing so Sheets-only rows still match.
+    const proj = (task.projectNumber && task.projectNumber.trim()) || (task.project || '').trim();
+    const cast = (task.castingNumber || '').toString().trim();
+    if (!proj || !cast) return null;
+    return `${proj.toLowerCase()}|${cast.toLowerCase()}`;
+}
+
+function _boardLabel(task) {
+    const proj = (task.project || '').trim() || '(no project)';
+    const cast = (task.castingNumber || '').toString().trim();
+    if (!cast) return proj;
+    // Most project names already embed the cast number (e.g. "Hancock
+    // Whitney FE - Cast #2" or "7 Fairfield Cast 16"). If so, return the
+    // project name as-is to avoid the duplicated "Cast #N" tail we were
+    // appending before. Only append when the cast token is genuinely missing.
+    const projLower = proj.toLowerCase();
+    const castLower = cast.toLowerCase();
+    if (projLower.includes(castLower)) return proj;
+    return `${proj} Cast #${cast}`;
+}
+
+// The "layout day" for a Cast is the previous workday. Weekends collapse:
+//   Mon cast  → Fri layout (skip Sat/Sun)
+//   Sun cast  → Fri layout
+//   any other → previous day (Tue→Mon, Wed→Tue, ..., Sat→Fri)
+function _workdayBefore(date) {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    const dow = d.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+    if (dow === 1) d.setDate(d.getDate() - 3);
+    else if (dow === 0) d.setDate(d.getDate() - 2);
+    else d.setDate(d.getDate() - 1);
+    return d;
+}
+
+function generateBoardScheduleContent(weekDates, allTasks) {
+    const printContainer = document.createElement('div');
+    printContainer.className = 'print-preview-content board-11x17-preview';
+
+    if (!Array.isArray(weekDates) || weekDates.length === 0) {
+        logger.warn('Board schedule: no week dates supplied');
+        return printContainer;
+    }
+
+    // Anchor on the Monday of the supplied week.
+    const first = weekDates[0] ? new Date(weekDates[0]) : new Date();
+    const dow = first.getDay();
+    const mondayOffset = first.getDate() - dow + (dow === 0 ? -6 : 1);
+    const monday = new Date(first);
+    monday.setDate(mondayOffset);
+    monday.setHours(0, 0, 0, 0);
+
+    const dayDates = BOARD_DAYS.map(d => {
+        const dt = new Date(monday);
+        dt.setDate(monday.getDate() + d.offset);
+        return dt;
+    });
+    const dayKeyByISO = {};
+    dayDates.forEach((dt, idx) => {
+        const k = dt.toDateString();
+        dayKeyByISO[k] = BOARD_DAYS[idx].key;
+    });
+
+    // 1. Build the side-resolution map from every Cast task in the dataset
+    //    (not just this week) so Layouts that lead a Cast in the following
+    //    week and Demolds that trail a Cast from the prior week still resolve.
+    const sideByKey = new Map();
+    (allTasks || []).forEach(t => {
+        if (t.department !== 'Cast') return;
+        const side = (t.castingSide === 'A' || t.castingSide === 'B') ? t.castingSide : null;
+        if (!side) return;
+        const k = _boardSideKey(t);
+        if (k && !sideByKey.has(k)) sideByKey.set(k, side);
+    });
+
+    // 2. Bucket activities into cells[day][side].
+    //
+    //    Layout is ALWAYS synthetic in this app — its in-memory row has no
+    //    projectNumber/castingNumber/castingSide, so we can't look up its
+    //    side directly. Instead we derive each LAYOUT entry from the Cast
+    //    it precedes: same project + cast number + side, placed one workday
+    //    before the Cast date. This keeps Layout on the same side as the
+    //    Cast it serves.
+    //
+    //    Cast and Demold are real tasks from the sheet, so we read their
+    //    side from the task (Cast: castingSide; Demold: lookup via the
+    //    sideByKey map built in step 1).
+    const cells = {};
+    BOARD_DAYS.forEach(d => {
+        cells[d.key] = { A: [], B: [] };
+    });
+
+    const unresolved = [];
+
+    const placeEntry = (dayKey, side, activity, task) => {
+        const entry = { activity, label: _boardLabel(task), task };
+        if (side === 'A' || side === 'B') {
+            cells[dayKey][side].push(entry);
+        } else {
+            unresolved.push({ day: dayKey, ...entry });
+        }
+    };
+
+    (allTasks || []).forEach(t => {
+        const td = parseDate(t.date);
+        if (!td) return;
+
+        if (t.department === 'Cast') {
+            const side = (t.castingSide === 'A' || t.castingSide === 'B') ? t.castingSide : null;
+
+            // CAST entry on its own day, if in this week.
+            const castDayKey = dayKeyByISO[td.toDateString()];
+            if (castDayKey) placeEntry(castDayKey, side, 'CAST', t);
+
+            // LAYOUT entry on the previous workday (same side), if that day
+            // falls in this week. Handles Tue/Wed/Thu/Fri Casts (Mon-Thu
+            // layouts) as well as Sat/Mon Casts (Fri layouts).
+            const layoutDate = _workdayBefore(td);
+            const layoutDayKey = dayKeyByISO[layoutDate.toDateString()];
+            if (layoutDayKey) placeEntry(layoutDayKey, side, 'LAYOUT', t);
+            return;
+        }
+
+        if (t.department === 'Demold') {
+            const dayKey = dayKeyByISO[td.toDateString()];
+            if (!dayKey) return;
+            // Prefer an explicit side on the Demold row, then fall back to
+            // the matching Cast's side via projectNumber + castingNumber.
+            let side = (t.castingSide === 'A' || t.castingSide === 'B') ? t.castingSide : null;
+            if (!side) {
+                const k = _boardSideKey(t);
+                if (k) side = sideByKey.get(k) || null;
+            }
+            placeEntry(dayKey, side, 'DEMOLD', t);
+            return;
+        }
+
+        // Ignore real or synthetic Layout rows from the task list — LAYOUT
+        // entries are derived from Cast above. Any other department is not
+        // part of this board.
+    });
+
+    // 3. Render one page per (day, side) that has activity. 11×17 landscape,
+    //    content top-justified so the user can fold the sheet in half and
+    //    pin the printed top-half as a ~17"×5.5" strip. Order is day-grouped
+    //    (Mon-B, Mon-A, Tue-B, Tue-A, ...). Empty (day, side) combos are
+    //    skipped — no blank sheets in the output.
+    let pageCount = 0;
+    BOARD_DAYS.forEach((d, idx) => {
+        const dt = dayDates[idx];
+        if (cells[d.key].B.length > 0) {
+            printContainer.appendChild(_buildBoardSidePage(d, dt, 'B', cells[d.key].B, monday, dayDates[4]));
+            pageCount++;
+        }
+        if (cells[d.key].A.length > 0) {
+            printContainer.appendChild(_buildBoardSidePage(d, dt, 'A', cells[d.key].A, monday, dayDates[4]));
+            pageCount++;
+        }
+    });
+
+    // 4. Unresolved-side bucket goes on its own page at the end so nothing
+    //    gets silently dropped. User pencils them onto the correct side.
+    if (unresolved.length > 0) {
+        printContainer.appendChild(_buildBoardUnresolvedPage(unresolved));
+    }
+
+    logger.info('Board schedule rendered', {
+        sheetsRendered: pageCount,
+        unresolvedCount: unresolved.length,
+        weekStart: monday.toDateString()
+    });
+
+    return printContainer;
+}
+
+function _buildBoardSidePage(day, dayDate, sideLetter, entries, weekMonday, weekFriday) {
+    const page = document.createElement('div');
+    page.className = `print-page board-11x17-page board-side-page board-side-page-${sideLetter.toLowerCase()}`;
+
+    const dateLabel = dayDate.toLocaleDateString(undefined, {
+        weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
+    });
+    const weekLabel = `Week of ${weekMonday.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${weekFriday.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`;
+
+    // ---- TOP HALF: header + side strip. This is what shows after folding.
+    const topHalf = document.createElement('div');
+    topHalf.className = 'board-side-page-top';
+
+    const header = document.createElement('div');
+    header.className = 'board-day-header';
+    header.innerHTML = `
+        <div class="board-day-header-left">
+            <div class="board-day-big">${day.label.replace('.', '')}</div>
+            <div class="board-day-fulldate">${dateLabel}</div>
+            <div class="board-day-side-tag">SIDE ${sideLetter}</div>
+        </div>
+        <div class="board-day-header-right">${weekLabel}</div>
+    `;
+    topHalf.appendChild(header);
+    topHalf.appendChild(_buildBoardStrip(sideLetter, entries));
+    page.appendChild(topHalf);
+
+    // ---- FOLD line at the vertical midpoint
+    const fold = document.createElement('div');
+    fold.className = 'board-fold-line';
+    fold.innerHTML = '<span>fold here — printed side goes outward</span>';
+    page.appendChild(fold);
+
+    // ---- BOTTOM HALF: intentionally blank (back of the folded strip)
+    const bottomHalf = document.createElement('div');
+    bottomHalf.className = 'board-side-page-bottom';
+    page.appendChild(bottomHalf);
+
+    return page;
+}
+
+function _buildBoardStrip(sideLetter, entries) {
+    const strip = document.createElement('div');
+    strip.className = `board-strip board-strip-${sideLetter.toLowerCase()}`;
+
+    const sideLabel = document.createElement('div');
+    sideLabel.className = `board-strip-side-label board-strip-side-${sideLetter.toLowerCase()}`;
+    sideLabel.innerHTML = `<div class="board-strip-side-letter">${sideLetter}</div><div class="board-strip-side-word">SIDE</div>`;
+    strip.appendChild(sideLabel);
+
+    const content = document.createElement('div');
+    content.className = 'board-strip-content';
+    if (!entries || entries.length === 0) {
+        content.classList.add('board-strip-empty');
+        content.innerHTML = '<div class="board-strip-empty-note">— no activity —</div>';
+    } else {
+        // Tag the strip with its activity count so CSS can shrink the type
+        // when there are 3+ activities (otherwise long names wrap to two
+        // lines and the strip blows past the fold line).
+        const count = Math.min(entries.length, 4);
+        strip.classList.add(`board-strip-count-${count}`);
+        const ordered = [...entries].sort((a, b) =>
+            BOARD_ACTIVITIES.indexOf(a.activity) - BOARD_ACTIVITIES.indexOf(b.activity));
+        ordered.forEach(e => {
+            const line = document.createElement('div');
+            line.className = 'board-activity';
+            const chip = document.createElement('span');
+            chip.className = `board-chip board-chip-${e.activity}`;
+            chip.textContent = e.activity;
+            const lbl = document.createElement('span');
+            lbl.className = 'board-activity-label';
+            lbl.textContent = e.label;
+            line.appendChild(chip);
+            line.appendChild(lbl);
+            content.appendChild(line);
+        });
+    }
+    strip.appendChild(content);
+
+    return strip;
+}
+
+function _buildBoardUnresolvedPage(unresolved) {
+    const page = document.createElement('div');
+    page.className = 'print-page board-11x17-page board-unresolved-page';
+    const lines = unresolved.map(u => {
+        const dayLabel = BOARD_DAYS.find(d => d.key === u.day).label;
+        return `<li><span class="board-chip board-chip-${u.activity}">${u.activity}</span> <span class="board-activity-label">${u.label}</span> <span class="board-unresolved-day">(${dayLabel})</span></li>`;
+    }).join('');
+    page.innerHTML = `
+        <div class="board-unresolved-title">Unresolved side — assign on the board by hand:</div>
+        <ul class="board-unresolved-list">${lines}</ul>
+        <div class="board-unresolved-note">Tip: set the side on the matching Cast task so future prints resolve automatically.</div>
+    `;
+    return page;
 }
 
 /**
@@ -745,6 +1041,9 @@ function executePrint(printContent, printType = 'week', orientation = null) {
     if (printType === 'day' && orientation) {
         // For day print type, use the user-selected orientation
         pageOrientation = orientation;
+    } else if (printType === 'board-11x17') {
+        // Board schedule is locked to 11×17 landscape (tabloid landscape)
+        pageOrientation = 'landscape';
     } else {
         // Default orientation based on print type for other types
         pageOrientation = (printType === 'phase-start') ? 'portrait' : 'landscape';
@@ -762,12 +1061,26 @@ function executePrint(printContent, printType = 'week', orientation = null) {
     let dynamicStyle = null;
     dynamicStyle = document.createElement('style');
     dynamicStyle.id = 'dynamic-page-orientation';
-    dynamicStyle.textContent = `
-        @page {
-            size: letter ${pageOrientation};
-            margin: 0.5in;
-        }
-    `;
+    if (printType === 'board-11x17') {
+        // 17in × 11in tabloid landscape. Top margin is 0 so the content
+        // sits flush against the top edge of the sheet (user folds the
+        // sheet in half — they want zero whitespace above the strip).
+        // Sides and bottom keep a thin margin for printer hardware-margin
+        // safety.
+        dynamicStyle.textContent = `
+            @page {
+                size: 17in 11in;
+                margin: 0 0.25in 0.25in 0.25in;
+            }
+        `;
+    } else {
+        dynamicStyle.textContent = `
+            @page {
+                size: letter ${pageOrientation};
+                margin: 0.5in;
+            }
+        `;
+    }
     document.head.appendChild(dynamicStyle);
 
     // Debug: log the style content
@@ -809,6 +1122,7 @@ export {
     applyPageBreakRules,
     generatePrintContent,
     generateFrozenDailyContent,
+    generateBoardScheduleContent,
     applyPrintScaling,
     executePrint
 };

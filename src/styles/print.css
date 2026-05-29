@@ -925,4 +925,323 @@ li:last-child {
         color: #666 !important;
         font-style: italic;
     }
+
+    /* ============================================
+       BOARD SCHEDULE (11×17 landscape)
+       One page per (day, side) — 10 pages per week. Each page is
+       top-justified so the user folds it in half horizontally; the
+       printed top half becomes a ~17"×5.5" pin-up strip with the
+       blank bottom half folded behind it.
+       Page size is set dynamically in executePrint() to 17in × 11in.
+       ============================================ */
+
+    .board-11x17-page {
+        width: 100%;
+        height: 10.75in;      /* 11in page - 0 top margin - 0.25in bottom = 10.75in */
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: flex-start !important;
+        align-items: stretch !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+        color: #000;
+        page-break-after: always !important;
+    }
+
+    .board-11x17-page:last-child {
+        page-break-after: auto !important;
+    }
+
+    /* Each side-page is split: top half holds everything, bottom half is
+       intentionally blank, with the fold-line marker landing right on the
+       physical 5.5in centerline of the 11in sheet. */
+    .board-side-page-top {
+        flex: 0 0 5.25in;      /* content fills 0 - 5.25in from top of sheet */
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        min-height: 0;
+    }
+
+    .board-fold-line {
+        flex: 0 0 0.25in;      /* 5.25 - 5.5in from top → fold sits at 5.5in (center) */
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+    }
+
+    .board-fold-line::before,
+    .board-fold-line::after {
+        content: '';
+        flex: 1;
+        border-top: 1.5px dashed #aaa;
+        margin: 0 0.2in;
+    }
+
+    .board-fold-line span {
+        font-size: 8pt;
+        color: #888;
+        font-style: italic;
+        letter-spacing: 0.05em;
+    }
+
+    .board-side-page-bottom {
+        flex: 1 1 auto;        /* eats the remaining ~5" - blank */
+        min-height: 0;
+    }
+
+    /* ---- Day header (top of page, slim) ---- */
+    .board-day-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        padding: 0 0.1in 0.06in 0.1in;
+        border-bottom: 2px solid #000;
+        margin-bottom: 0.08in;
+        flex: 0 0 auto;
+    }
+
+    .board-day-header-left {
+        display: flex;
+        align-items: baseline;
+        gap: 0.2in;
+    }
+
+    .board-day-big {
+        font-size: 38pt;
+        font-weight: 900;
+        letter-spacing: 0.03em;
+    }
+
+    .board-day-fulldate {
+        font-size: 16pt;
+        font-weight: 600;
+        color: #333;
+    }
+
+    .board-day-side-tag {
+        font-size: 20pt;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        background: #111 !important;
+        color: #fff !important;
+        padding: 0.05in 0.18in;
+        border-radius: 3px;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    .board-day-header-right {
+        font-size: 12pt;
+        font-weight: 600;
+        color: #555;
+    }
+
+    /* ---- Side strip (one per side, ~5" tall × 17" wide) ---- */
+    .board-strip {
+        flex: 1 1 0;
+        display: flex;
+        flex-direction: row;
+        align-items: stretch;
+        border: 2.5px solid #000;
+        box-sizing: border-box;
+        overflow: hidden;
+        min-height: 0;
+    }
+
+    .board-strip-side-label {
+        flex: 0 0 1.8in;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        border-right: 2px solid #000;
+        padding: 0.1in;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    /* Match the yellow side stickers on the shop board */
+    .board-strip-side-b {
+        background: #facc15 !important; /* yellow */
+        color: #000 !important;
+    }
+    .board-strip-side-a {
+        background: #facc15 !important;
+        color: #000 !important;
+    }
+
+    .board-strip-side-letter {
+        font-size: 140pt;
+        font-weight: 900;
+        line-height: 0.9;
+    }
+
+    .board-strip-side-word {
+        font-size: 22pt;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        margin-top: 0.08in;
+    }
+
+    .board-strip-content {
+        flex: 1 1 auto;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 0.28in;
+        padding: 0.15in 0.3in;
+        min-width: 0;
+    }
+
+    .board-strip-empty {
+        align-items: center;
+        justify-content: center;
+        background:
+            repeating-linear-gradient(
+                135deg,
+                #fafafa,
+                #fafafa 10px,
+                #f0f0f0 10px,
+                #f0f0f0 20px
+            ) !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    .board-strip-empty-note {
+        font-size: 18pt;
+        color: #777;
+        font-style: italic;
+    }
+
+    .board-activity {
+        display: flex;
+        align-items: center;
+        gap: 0.3in;
+        line-height: 1.05;
+    }
+
+    /* ---- Activity chips: match in-app department colors ---- */
+    .board-chip {
+        display: inline-block;
+        font-size: 36pt;
+        font-weight: 900;
+        letter-spacing: 0.05em;
+        padding: 0.1in 0.28in;
+        border-radius: 4px;
+        min-width: 2.6in;
+        text-align: center;
+        color: #fff;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    .board-chip-LAYOUT {
+        background: #A16207 !important;  /* matches in-app Layout color */
+        color: #fff !important;
+    }
+
+    .board-chip-CAST {
+        background: #EF4444 !important;  /* matches in-app Cast color */
+        color: #fff !important;
+    }
+
+    .board-chip-DEMOLD {
+        background: #F97316 !important;  /* matches in-app Demold color */
+        color: #fff !important;
+    }
+
+    .board-activity-label {
+        font-size: 56pt;
+        font-weight: 800;
+        color: #111;
+        flex: 1;
+        word-break: break-word;
+        line-height: 1.0;
+    }
+
+    /* Auto-shrink when a strip holds 3+ activities so the content stays
+       above the fold line. With long project names that wrap to two
+       lines, three 56pt rows overflow the 5" top half; 38pt keeps them
+       comfortably inside. */
+    .board-strip-count-3 .board-activity-label,
+    .board-strip-count-4 .board-activity-label {
+        font-size: 38pt;
+        line-height: 1.0;
+    }
+
+    .board-strip-count-3 .board-chip,
+    .board-strip-count-4 .board-chip {
+        font-size: 26pt;
+        min-width: 1.9in;
+        padding: 0.07in 0.2in;
+    }
+
+    .board-strip-count-3 .board-strip-content,
+    .board-strip-count-4 .board-strip-content {
+        gap: 0.15in;
+        padding: 0.12in 0.25in;
+    }
+
+    .board-strip-count-3 .board-activity,
+    .board-strip-count-4 .board-activity {
+        gap: 0.22in;
+    }
+
+    /* ---- Unresolved bucket page ---- */
+    .board-unresolved-page {
+        padding: 0.25in !important;
+        display: block !important;
+        height: auto !important;
+    }
+
+    .board-unresolved-title {
+        font-size: 16pt;
+        font-weight: 800;
+        color: #7a1212;
+        border-bottom: 2px solid #7a1212;
+        padding-bottom: 0.06in;
+        margin-bottom: 0.15in;
+    }
+
+    .board-unresolved-list {
+        margin: 0;
+        padding-left: 0.3in;
+        font-size: 13pt;
+        list-style: disc;
+    }
+
+    .board-unresolved-list li {
+        margin: 0.1in 0;
+        display: flex;
+        align-items: center;
+        gap: 0.15in;
+    }
+
+    .board-unresolved-list .board-chip {
+        font-size: 11pt;
+        min-width: 1in;
+        padding: 0.03in 0.12in;
+    }
+
+    .board-unresolved-list .board-activity-label {
+        font-size: 13pt;
+        font-weight: 600;
+    }
+
+    .board-unresolved-day {
+        color: #555;
+        font-size: 11pt;
+        font-style: italic;
+    }
+
+    .board-unresolved-note {
+        margin-top: 0.2in;
+        font-size: 10pt;
+        color: #555;
+        font-style: italic;
+    }
 }

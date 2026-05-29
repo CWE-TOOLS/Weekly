@@ -215,6 +215,14 @@ function updatePrintTypeDisplay() {
             frozenDailySectionElement.style.display = 'none';
             departmentsSectionElement.style.display = 'block';
             orientationSectionElement.style.display = 'none';
+        } else if (printType === 'board-11x17') {
+            // Board schedule uses week selector only; departments are fixed
+            // (Layout/Cast/Demold) and page size is locked to 11×17 landscape.
+            weekSectionElement.style.display = 'block';
+            daySectionElement.style.display = 'none';
+            frozenDailySectionElement.style.display = 'none';
+            departmentsSectionElement.style.display = 'none';
+            orientationSectionElement.style.display = 'none';
         } else if (printType === 'day') {
             weekSectionElement.style.display = 'none';
             daySectionElement.style.display = 'block';
@@ -251,8 +259,21 @@ function handlePrintExecute() {
     let printDates;
     let selectedDepts;
 
+    // Board schedule: fixed departments (Layout/Cast/Demold), week selector only.
+    if (printType === 'board-11x17') {
+        selectedDepts = []; // renderer ignores this and uses its own fixed set
+        printDates = preparePrintDates('week', weekSelectElement, null);
+        if (!printDates || printDates.length === 0) {
+            alert('Please select a week for the board schedule.');
+            return;
+        }
+        logger.info('Board schedule print: week prepared', {
+            firstDay: printDates[0] && printDates[0].toDateString(),
+            dayCount: printDates.length
+        });
+    }
     // Handle frozen-daily separately
-    if (printType === 'frozen-daily') {
+    else if (printType === 'frozen-daily') {
         // Frozen daily doesn't need department selection - includes all departments
         // Use selected date from frozen-daily date selector
         if (frozenDailyDateSelectElement && frozenDailyDateSelectElement.value) {
