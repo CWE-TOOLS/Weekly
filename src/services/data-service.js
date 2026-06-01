@@ -126,6 +126,13 @@ export async function fetchAllTasks(suppressEvents = false) {
         debug.log('[Startup] Starting description merge');
         debug.time('[Startup] Description merge');
         mergeTaskDescriptions(allTasks, taskDescriptions);
+        // Casting side is only ever entered on the Cast row, but it's a
+        // property of the casting itself — so Demold tasks for the same
+        // (project, casting #) share that side and should show it too. Mirror
+        // the board-print renderer's sideByKey trick: index Cast sides, then
+        // back-fill onto Demold rows that match. After this, task-card.js's
+        // existing castingSide-aware badge renders on Demold cards automatically.
+        propagateCastingSideToDemold(allTasks);
         debug.timeEnd('[Startup] Description merge');
 
         // Resolve project names from the projects table by project_number
@@ -251,6 +258,61 @@ export function mergeTaskDescriptions(tasks, descriptionsMap) {
                 key: `${t.project}|${t.department}|${t.dayNumber}`
             })));
         }
+    }
+}
+
+/**
+ * Back-fill `castingSide` on Demold tasks from the matching Cast task's side.
+ *
+ * The task_descriptions table is keyed by (project, department, day_number),
+ * so when the user marks Side A/B on a Cast row only the Cast row gets the
+ * casting_side. Demold rows for the same physical casting end up with no
+ * side and the on-card "Side A/B" badge doesn't render. Side is a property
+ * of the casting, not of the day, so it's safe to copy across.
+ *
+ * Match key is (projectNumber || project) + castingNumber — same composite
+ * the board-print renderer uses to resolve sides. Tasks that already have a
+ * side set are left alone; this only fills in nulls.
+ *
+ * @param {Array<Object>} tasks
+ */
+function propagateCastingSideToDemold(tasks) {
+    if (!Array.isArray(tasks) || tasks.length === 0) return;
+
+    const keyFor = (t) => {
+        const proj = (t.projectNumber && String(t.projectNumber).trim())
+            || String(t.project || '').trim();
+        const cast = String(t.castingNumber || '').trim();
+        if (!proj || !cast) return null;
+        return `${proj.toLowerCase()}|${cast.toLowerCase()}`;
+    };
+
+    // Build (project|castingNumber) -> side index from Cast tasks. First Cast
+    // row to claim the key wins, which matches the board-print renderer's
+    // semantics (sides shouldn't disagree across rows of the same casting).
+    const sideByCasting = new Map();
+    for (const t of tasks) {
+        if (t.department !== 'Cast') continue;
+        if (t.castingSide !== 'A' && t.castingSide !== 'B') continue;
+        const k = keyFor(t);
+        if (k && !sideByCasting.has(k)) sideByCasting.set(k, t.castingSide);
+    }
+    if (sideByCasting.size === 0) return;
+
+    let filled = 0;
+    for (const t of tasks) {
+        if (t.department !== 'Demold') continue;
+        if (t.castingSide === 'A' || t.castingSide === 'B') continue;
+        const k = keyFor(t);
+        if (!k) continue;
+        const side = sideByCasting.get(k);
+        if (side) {
+            t.castingSide = side;
+            filled++;
+        }
+    }
+    if (filled > 0) {
+        logger.info(`📍 Propagated casting side to ${filled} Demold task(s) from matching Cast rows.`);
     }
 }
 
