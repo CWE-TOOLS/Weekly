@@ -6835,86 +6835,361 @@ const TRACK_PRINT_PHASE_LABELS = {
 };
 
 const TRACK_PRINT_CSS = `
-/* 11x17 (tabloid) landscape: 17in wide x 11in tall.
-   Explicit dimensions used (rather than the 'tabloid landscape' keyword)
-   for the most consistent cross-browser behavior. */
+/* 11x17 (tabloid) landscape: 17in wide x 11in tall. */
 @page { size: 17in 11in; margin: 0.35in 0.45in; }
-* { margin:0; padding:0; box-sizing:border-box; }
-body { font-family: 'Segoe UI', Arial, sans-serif; color:#000; font-size:8pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-.tp-header { border-bottom: 1.5pt solid #000; padding-bottom: 3pt; margin-bottom: 5pt; }
-.tp-line { font-size: 12pt; font-weight: 800; letter-spacing: 0.3pt; }
-.tp-line .tp-sep { margin: 0 7pt; color: #888; font-weight: 400; }
-table.tp-table { width: 100%; border-collapse: collapse; font-size: 8pt; table-layout: fixed; }
-table.tp-table th, table.tp-table td { border: 0.5pt solid #000; padding: 1.5pt 4pt; text-align: center; vertical-align: middle; word-wrap: break-word; }
-table.tp-table th { background: #f1f5f9; font-weight: 700; font-size: 7.5pt; letter-spacing: 0.3pt; padding: 2.5pt 4pt; }
-table.tp-table tbody td { height: 13pt; }
-/* Alternating row shading. Applied to <td> rather than <tr> for the most reliable
-   print rendering across browsers. Light gray that still shows on most printers. */
-table.tp-table tbody tr:nth-child(even) td { background: #eef2f7; }
-.tp-col-panel { font-weight: 700; text-align: left !important; }
-.tp-col-color { font-size: 7.5pt; }
-.tp-col-phase { font-size: 7.5pt; }
-.tp-empty { padding: 10pt; text-align: center; font-style: italic; color: #555; border: 0.6pt dashed #999; }
-@media print { .tp-no-print { display: none; } }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: "Segoe UI", Arial, sans-serif;
+    color: #1a1d21;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+}
+
+/* Each printed page is one .tp-sheet. Force a page break after each
+   except the last (handled by :last-of-type below). */
+.tp-sheet { page-break-after: always; }
+.tp-sheet:last-of-type { page-break-after: auto; }
+
+/* ---------- Header (single line) ---------- */
+.tp-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 14pt;
+    border-bottom: 3pt solid #1f3a5f;
+    padding-bottom: 6pt;
+}
+.tp-proj { font-size: 14pt; font-weight: 800; white-space: nowrap; }
+.tp-meta { display: flex; gap: 18pt; font-size: 11pt; align-items: baseline; flex-wrap: wrap; }
+.tp-meta b { color: #5b6470; font-weight: 600; }
+
+/* ---------- Instruction band (EN / ES) ---------- */
+.tp-howto {
+    margin: 8pt 0 6pt;
+    background: #1f3a5f;
+    color: #fff;
+    border-radius: 4pt;
+    padding: 6pt 10pt;
+    font-size: 10.5pt;
+    display: flex;
+    flex-direction: column;
+    gap: 5pt;
+}
+.tp-howto-line {
+    display: flex;
+    gap: 12pt;
+    align-items: center;
+    flex-wrap: wrap;
+    line-height: 1.3;
+}
+.tp-howto-line.es {
+    border-top: 1px solid rgba(255,255,255,0.22);
+    padding-top: 5pt;
+    /* Spanish runs ~15-20% longer than English; tighten gap + font so the
+       whole ES band fits on one line at print width, matching EN. */
+    gap: 6pt;
+    font-size: 9pt;
+}
+.tp-howto-line.es .tp-big { font-size: 9.5pt; }
+.tp-howto .tp-lang {
+    background: #fff;
+    color: #1f3a5f;
+    border-radius: 3px;
+    padding: 1px 6px;
+    font-weight: 800;
+    font-size: 9pt;
+    letter-spacing: 0.5px;
+}
+.tp-howto-line.es .tp-lang { background: #ffd24d; }
+.tp-howto .tp-big { font-weight: 800; font-size: 11pt; }
+.tp-howto .tp-star { color: #ffd24d; }
+.tp-howto .tp-chip {
+    background: #fff;
+    color: #1f3a5f;
+    border-radius: 4px;
+    padding: 1px 7px;
+    font-weight: 700;
+    font-family: monospace;
+}
+.tp-howto .tp-failchip { background: #c0392b; color: #fff; }
+
+/* ---------- Grid ---------- */
+table.tp-table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 9pt;
+    table-layout: fixed;
+}
+.tp-table thead th {
+    background: #1f3a5f;
+    color: #fff;
+    font-size: 9pt;
+    font-weight: 700;
+    padding: 6pt 3pt;
+    border: 1px solid #2c4f7c;
+    text-align: center;
+    vertical-align: middle;
+    line-height: 1.15;
+}
+.tp-table thead th.tp-hold { background: #c0392b; }
+.tp-table thead th.tp-col-panel { text-align: left; padding-left: 6pt; }
+.tp-table thead th.tp-col-color { text-align: left; padding-left: 6pt; }
+.tp-table thead th .tp-seq {
+    display: block;
+    font-weight: 600;
+    opacity: 0.7;
+    font-size: 7.5pt;
+    margin-top: 1pt;
+}
+
+.tp-table tbody td {
+    border: 1px solid #c2c9d2;
+    height: 22pt;
+    text-align: center;
+    vertical-align: middle;
+    font-family: Consolas, monospace;
+    font-size: 10pt;
+    color: #16314f;
+}
+.tp-table tbody td.tp-col-panel {
+    text-align: left;
+    padding-left: 6pt;
+    font-weight: 700;
+    font-family: "Segoe UI", Arial, sans-serif;
+    color: #1a1d21;
+    background: #f7f9fc;
+}
+.tp-table tbody td.tp-col-color {
+    text-align: left;
+    padding-left: 6pt;
+    font-family: "Segoe UI", Arial, sans-serif;
+    font-size: 9pt;
+    color: #5b6470;
+    background: #f7f9fc;
+}
+.tp-table tbody td.tp-hold {
+    border-left: 2px solid #c0392b;
+    border-right: 2px solid #c0392b;
+    background: #fdf1ee;
+}
+.tp-table tbody tr.tp-band td { background: #eef2f7; }
+.tp-table tbody tr.tp-band td.tp-col-panel,
+.tp-table tbody tr.tp-band td.tp-col-color { background: #eef1f6; }
+.tp-table tbody tr.tp-band td.tp-hold { background: #fde6e0; }
+
+/* Heavier divider every 5 rows */
+.tp-table tbody tr.tp-group td { border-top: 2px solid #8a929d; }
+
+.tp-done { background: #e7f4ea !important; color: #1f6b34; font-weight: 700; }
+.tp-flag { background: #fde6e0 !important; color: #c0392b; font-weight: 800; }
+
+/* Clearly-marked example row */
+.tp-table tbody tr.tp-example td {
+    background: #fffbe6;
+    border-color: #e6cf73;
+}
+.tp-table tbody tr.tp-example td.tp-col-panel {
+    background: #fff3c4;
+    font-size: 9pt;
+    line-height: 1.1;
+}
+.tp-table tbody tr.tp-example td.tp-col-color { background: #fff7d1; }
+
+/* ---------- Footer note ---------- */
+.tp-note {
+    margin-top: 8pt;
+    font-size: 8.5pt;
+    color: #5b6470;
+    font-style: italic;
+    line-height: 1.4;
+}
 `;
 
-function buildTrackPrintHtml(casting, components, projectNumber, projectName) {
+function buildTrackPrintHtml(casting, components, projectNumber, projectName, rowsPerPage) {
     const num = casting.casting_number || '';
     const desc = casting.description || '';
 
-    // Phases come out in TRACKING_PHASES order, filtered by what's currently selected.
-    const selectedPhases = TRACKING_PHASES.filter(p => currentTrackingPhases.has(p));
+    // Phases come out in TRACKING_PHASES order, filtered by what's currently
+    // selected. FINAL is the QC hold-point — always force it on for the
+    // printed traveler so the 2nd-initial sign-off column is never missing.
+    const userPhases = TRACKING_PHASES.filter(p => currentTrackingPhases.has(p));
+    const selectedPhases = userPhases.includes('FINAL')
+        ? userPhases
+        : [...userPhases, 'FINAL'].sort((a, b) => TRACKING_PHASES.indexOf(a) - TRACKING_PHASES.indexOf(b));
 
-    // Column widths: Panel ID and Color get fixed shares; phase columns split
-    // the rest evenly. With table-layout:fixed, this ensures consistent column
-    // sizing on the printed page.
-    const panelIdPct = selectedPhases.length === 0 ? 55 : 14;
-    const colorPct   = selectedPhases.length === 0 ? 45 : 12;
-    const phasePct = selectedPhases.length === 0
-        ? 0
-        : (100 - panelIdPct - colorPct) / selectedPhases.length;
+    // ---------- Header values ----------
+    const projectLabel = [projectNumber, projectName]
+        .map(s => (s == null ? '' : String(s).trim()))
+        .filter(Boolean)
+        .join(' — ');
 
+    // "Cast 15 kitchen counter" — append description if present.
+    const castNumLabel = num ? `Cast ${num}` : 'Cast';
+    const castLabel = desc ? `${castNumLabel} ${desc}` : castNumLabel;
+
+    // Cast color — if every component shares the same color name use it;
+    // if multiple distinct non-empty colors appear use "Mixed"; else blank.
+    const colorSet = new Set();
+    for (const c of components) {
+        const name = (resolveComponentColorName(c) || '').trim();
+        if (name) colorSet.add(name);
+    }
+    let castColor = '';
+    if (colorSet.size === 1) castColor = [...colorSet][0];
+    else if (colorSet.size > 1) castColor = 'Mixed';
+
+    // Date as M/D/YY (no leading zeros).
+    const d = new Date();
+    const dateLabel = `${d.getMonth() + 1}/${d.getDate()}/${String(d.getFullYear()).slice(-2)}`;
+
+    // ---------- Pagination ----------
+    const rpp = (Number.isFinite(rowsPerPage) && rowsPerPage > 0) ? Math.floor(rowsPerPage) : 28;
+    const chunks = [];
+    if (components.length === 0) {
+        chunks.push([]); // single empty page
+    } else {
+        for (let i = 0; i < components.length; i += rpp) {
+            chunks.push(components.slice(i, i + rpp));
+        }
+    }
+    const totalPages = chunks.length;
+
+    // ---------- Column widths ----------
+    // Panel ID 6%, Color 8%, phases split the remainder evenly.
+    const panelIdPct = 6;
+    const colorPct = 8;
+    const phasePct = selectedPhases.length > 0
+        ? (100 - panelIdPct - colorPct) / selectedPhases.length
+        : 0;
+
+    // ---------- Header cells (built once, used on every page) ----------
     const headerCells = [
-        `<th class="tp-col-panel" style="width: ${panelIdPct}%;">Panel ID</th>`,
-        `<th class="tp-col-color" style="width: ${colorPct}%;">Color</th>`,
-        ...selectedPhases.map(p => `<th class="tp-col-phase" style="width: ${phasePct}%;">${escapeHtml(TRACK_PRINT_PHASE_LABELS[p] || p)}</th>`)
+        `<th class="tp-col-panel" style="width:${panelIdPct}%;">Panel ID</th>`,
+        `<th class="tp-col-color" style="width:${colorPct}%;">Color</th>`,
+        ...selectedPhases.map((p, i) => {
+            const isFinal = p === 'FINAL';
+            const label = escapeHtml(TRACK_PRINT_PHASE_LABELS[p] || p);
+            const seq = `${i + 1}${isFinal ? ' · QC' : ''}`;
+            const cls = isFinal ? 'tp-hold' : '';
+            const labelHtml = isFinal ? `★ ${label}` : label;
+            return `<th class="${cls}" style="width:${phasePct}%;">${labelHtml}<span class="tp-seq">${seq}</span></th>`;
+        })
     ].join('');
 
+    // ---------- Instruction band (literal markup from mockup) ----------
+    const instructionBand = `
+        <div class="tp-howto">
+            <div class="tp-howto-line">
+                <span class="tp-lang">EN</span>
+                <span class="tp-big">How to fill this in:</span>
+                <span>When a step <b>PASSES</b>, write <span class="tp-chip">initials + date</span> in the cell — at the station, as you finish it.</span>
+                <span>Step <b>FAILS</b>? Write <span class="tp-chip tp-failchip">F</span> in the cell. Do not pass it on.</span>
+                <span><b class="tp-star">★ FINAL</b> = QC sign-off — needs a 2nd initial before the panel ships.</span>
+            </div>
+            <div class="tp-howto-line es">
+                <span class="tp-lang">ES</span>
+                <span class="tp-big">Cómo llenar esto:</span>
+                <span>Cuando un paso <b>PASE</b>, escriba <span class="tp-chip">iniciales + fecha</span> en la casilla — en la estación, al terminar.</span>
+                <span>¿Un paso <b>FALLA</b>? Escriba <span class="tp-chip tp-failchip">F</span> en la casilla. No lo pase.</span>
+                <span><b class="tp-star">★ FINAL</b> = QC final — requiere 2.ª inicial antes de enviar.</span>
+            </div>
+        </div>
+    `;
+
+    // ---------- Example row builder (one per page) ----------
+    const buildExampleRow = () => {
+        // Three PASS cells then one F, then blank cells. FINAL cell gets tp-hold.
+        const exampleColor = escapeHtml(castColor || 'Fairfield #12');
+        const exampleSamples = ['MD 6/1', 'MD 6/1', 'RT 6/1', 'F'];
+        const cells = selectedPhases.map((p, i) => {
+            const isFinal = p === 'FINAL';
+            const sample = exampleSamples[i];
+            if (sample === undefined) {
+                return `<td class="${isFinal ? 'tp-hold' : ''}"></td>`;
+            }
+            if (sample === 'F') {
+                // Failure marker — always use tp-flag styling regardless of column.
+                const cls = isFinal ? 'tp-flag tp-hold' : 'tp-flag';
+                return `<td class="${cls}">F</td>`;
+            }
+            const cls = isFinal ? 'tp-done tp-hold' : 'tp-done';
+            return `<td class="${cls}">${escapeHtml(sample)}</td>`;
+        }).join('');
+        return `
+            <tr class="tp-group tp-example">
+                <td class="tp-col-panel">EXAMPLE<br><span style="font-weight:400;font-style:italic;color:#5b6470;">EJEMPLO</span></td>
+                <td class="tp-col-color">${exampleColor}</td>
+                ${cells}
+            </tr>
+        `;
+    };
+
     const totalCols = 2 + selectedPhases.length;
-    const rows = components.length === 0
-        ? `<tr><td colspan="${totalCols}" class="tp-empty">No components recorded for this casting.</td></tr>`
-        : components.map(comp => {
-            const phaseCells = selectedPhases.map(() => `<td class="tp-col-phase"></td>`).join('');
-            return `
+
+    // ---------- Build each sheet ----------
+    const sheets = chunks.map((chunk, pageIdx) => {
+        const pageNum = pageIdx + 1;
+
+        let bodyRows = buildExampleRow();
+
+        if (chunk.length === 0) {
+            // Empty-components edge case: single message row spanning all cols.
+            bodyRows += `
                 <tr>
-                    <td class="tp-col-panel">${escapeHtml(comp.panel_id || '')}</td>
-                    <td class="tp-col-color">${escapeHtml(resolveComponentColorName(comp))}</td>
-                    ${phaseCells}
+                    <td colspan="${totalCols}" style="padding:14pt;text-align:center;font-style:italic;color:#5b6470;background:#fff;">No components recorded for this casting.</td>
                 </tr>
             `;
-        }).join('');
+        } else {
+            bodyRows += chunk.map((comp, idx) => {
+                // Mockup pattern: rows 1,6,11,... get tp-group (heavier top border);
+                // rows 2,4,6,8,... get tp-band (zebra). Rows can have both.
+                const rowNum = idx + 1; // 1-indexed within this page
+                const classes = [];
+                if (rowNum % 5 === 1) classes.push('tp-group');
+                if (rowNum % 2 === 0) classes.push('tp-band');
+                const rowClass = classes.length ? ` class="${classes.join(' ')}"` : '';
 
-    // Single-line header: "Project 12345 Smith Residence | Phase 2 · Cast 2 kitchen counter"
-    const phaseName = currentPhasesEnabled
-        ? (currentPhases.find(p => p.id === casting.phase_id)?.phase_name || '')
-        : '';
-    const projectLabel = [projectNumber, projectName].filter(Boolean).map(s => escapeHtml(s)).join(' ');
-    const castParts = ['Cast', num, desc].filter(Boolean).map(s => escapeHtml(s)).join(' ');
-    const castLabel = phaseName ? `${escapeHtml(phaseName)} · ${castParts}` : castParts;
-    const headerLine = [projectLabel, castLabel].filter(Boolean).join('<span class="tp-sep">|</span>');
+                const phaseCells = selectedPhases.map(p => {
+                    const isFinal = p === 'FINAL';
+                    const cls = isFinal ? 'tp-hold' : 'tp-col-phase';
+                    return `<td class="${cls}"></td>`;
+                }).join('');
 
-    return `<!doctype html><html><head><meta charset="utf-8"><title>Tracking — ${escapeHtml(projectNumber)} — Cast ${escapeHtml(num)}</title><style>${TRACK_PRINT_CSS}</style></head><body>
-        <div class="tp-header">
-            <div class="tp-line">${headerLine}</div>
-        </div>
+                return `
+                    <tr${rowClass}>
+                        <td class="tp-col-panel">${escapeHtml(comp.panel_id || '')}</td>
+                        <td class="tp-col-color">${escapeHtml(resolveComponentColorName(comp) || '')}</td>
+                        ${phaseCells}
+                    </tr>
+                `;
+            }).join('');
+        }
 
-        <table class="tp-table">
-            <thead>
-                <tr>${headerCells}</tr>
-            </thead>
-            <tbody>${rows}</tbody>
-        </table>
-    </body></html>`;
+        const pageInfo = `Page ${pageNum} of ${totalPages}`;
+
+        const headerMeta = [
+            castLabel ? `<span><b>Cast&nbsp;#</b>&nbsp;${escapeHtml(String(num) || '')}${desc ? ` ${escapeHtml(desc)}` : ''}</span>` : '',
+            castColor ? `<span><b>Color</b>&nbsp;${escapeHtml(castColor)}</span>` : '',
+            `<span><b>Date</b>&nbsp;${escapeHtml(dateLabel)}</span>`,
+            `<span><b>Page</b>&nbsp;${escapeHtml(pageInfo.replace(/^Page\s*/, ''))}</span>`
+        ].filter(Boolean).join('');
+
+        return `
+            <div class="tp-sheet">
+                <div class="tp-top">
+                    <div class="tp-proj">${escapeHtml(projectLabel)}</div>
+                    <div class="tp-meta">${headerMeta}</div>
+                </div>
+                ${instructionBand}
+                <table class="tp-table">
+                    <thead><tr>${headerCells}</tr></thead>
+                    <tbody>${bodyRows}</tbody>
+                </table>
+            </div>
+        `;
+    }).join('');
+
+    return `<!doctype html><html><head><meta charset="utf-8"><title>Tracking — ${escapeHtml(projectNumber)} — ${escapeHtml(castLabel)}</title><style>${TRACK_PRINT_CSS}</style></head><body>${sheets}</body></html>`;
 }
 
 function handlePrintTracking(castingId) {
@@ -6927,7 +7202,18 @@ function handlePrintTracking(castingId) {
     const components = getComponentsFor(castingId) || [];
     const projectNumber = currentProjectNumber || '';
     const projectName = document.getElementById('pp-f-project_name')?.value || '';
-    const html = buildTrackPrintHtml(casting, components, projectNumber, projectName);
+
+    // Prompt for rows-per-page (remembers last value in localStorage).
+    const LS_KEY = 'pp-track-print-rows-per-page';
+    const lastValue = parseInt(localStorage.getItem(LS_KEY), 10);
+    const defaultRows = (Number.isFinite(lastValue) && lastValue > 0) ? lastValue : 28;
+    const input = window.prompt('Rows per page on the printed tracking sheet:', String(defaultRows));
+    if (input === null) return; // user cancelled
+    const parsed = parseInt(input, 10);
+    const rowsPerPage = (Number.isFinite(parsed) && parsed > 0) ? parsed : defaultRows;
+    try { localStorage.setItem(LS_KEY, String(rowsPerPage)); } catch {}
+
+    const html = buildTrackPrintHtml(casting, components, projectNumber, projectName, rowsPerPage);
 
     // Remove any leftover iframe from a prior print attempt.
     const prior = document.getElementById('pp-track-print-frame');
