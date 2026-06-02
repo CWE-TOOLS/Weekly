@@ -148,9 +148,12 @@ function svgText(ns, x, y, content, fontSize, fill, weight) {
  * @param {Array<{outerW:number, outerL:number}>} molds
  * @param {Array<Object>} tableDefs
  * @param {number} [gapBetween] - inches of clearance left between adjacent molds and rows
+ * @param {boolean} [bottomJustify] - shift each table's molds along its long axis so the
+ *        last packed row sits flush with the table's far end (used for Casting Area A so
+ *        the right-side Table 1 visually bottom-aligns with the L-shape on the left).
  * @returns {{tables:Array<Object>, unplaced:Array<Object>}}
  */
-function placeMoldsOnTables(molds, tableDefs, gapBetween = 0) {
+function placeMoldsOnTables(molds, tableDefs, gapBetween = 0, bottomJustify = false) {
   const tables = tableDefs.map(t => ({
     ...t,
     longUsed: 0,     // long-axis inches consumed by rows so far
@@ -176,6 +179,20 @@ function placeMoldsOnTables(molds, tableDefs, gapBetween = 0) {
       for (const rec of shelf.recs) {
         if (table.packAxis === 'x') rec.sy += shift;
         else rec.sx += shift;
+      }
+    }
+  }
+
+  // Bottom-justify (long-axis) — push every mold on a partly-filled table down
+  // its long axis so the trailing edge of the last row meets the table's end.
+  // Used only for areas where bottom-alignment is the desired reading (Area A).
+  if (bottomJustify) {
+    for (const table of tables) {
+      const slack = table.long - table.longUsed;
+      if (slack <= 0) continue;
+      for (const rec of table.placedMolds) {
+        if (table.packAxis === 'x') rec.sx += slack;
+        else rec.sy += slack;
       }
     }
   }
@@ -355,8 +372,8 @@ export function isRectInsideTables(rect, tableDefs) {
  * Auto layout — run the shelf packer and flatten the result into one flat list
  * of placed molds (inch-space rects + the rotation each ended up at).
  */
-function layoutAuto(molds, tableDefs, gapBetween) {
-  const { tables, unplaced } = placeMoldsOnTables(molds, tableDefs, gapBetween);
+function layoutAuto(molds, tableDefs, gapBetween, bottomJustify = false) {
+  const { tables, unplaced } = placeMoldsOnTables(molds, tableDefs, gapBetween, bottomJustify);
   const placed = [];
   for (const t of tables) {
     for (const rec of t.placedMolds) {
@@ -484,7 +501,7 @@ export function renderCastingLayout({ container, errorEl, components, title, are
   const mode = posForArea.length > 0 ? 'manual' : 'auto';
   const { placed, unplaced } = mode === 'manual'
     ? layoutManual(molds, posForArea, tableDefs)
-    : layoutAuto(molds, tableDefs, gapBetween);
+    : layoutAuto(molds, tableDefs, gapBetween, area === 'A');
 
   const pageW = 750;
   const pageH = 1000;
