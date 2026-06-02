@@ -7082,16 +7082,16 @@ function buildTrackPrintHtml(casting, components, projectNumber, projectName, ro
             <div class="tp-howto-line">
                 <span class="tp-lang">EN</span>
                 <span class="tp-big">How to fill this in:</span>
-                <span>When a step <b>PASSES</b>, write <span class="tp-chip">initials + date</span> in the cell — at the station, as you finish it.</span>
+                <span>When a step <b>PASSES</b>, write your <span class="tp-chip">initials</span> in the cell — at the station, as you finish it.</span>
                 <span>Step <b>FAILS</b>? Write <span class="tp-chip tp-failchip">F</span> in the cell. Do not pass it on.</span>
                 <span><b class="tp-star">★ FINAL</b> = QC sign-off — needs a 2nd initial before the panel ships.</span>
             </div>
             <div class="tp-howto-line es">
                 <span class="tp-lang">ES</span>
-                <span class="tp-big">Cómo llenar esto:</span>
-                <span>Cuando un paso <b>PASE</b>, escriba <span class="tp-chip">iniciales + fecha</span> en la casilla — en la estación, al terminar.</span>
-                <span>¿Un paso <b>FALLA</b>? Escriba <span class="tp-chip tp-failchip">F</span> en la casilla. No lo pase.</span>
-                <span><b class="tp-star">★ FINAL</b> = QC final — requiere 2.ª inicial antes de enviar.</span>
+                <span class="tp-big">Cómo completar esta hoja:</span>
+                <span>Cuando un paso <b>PASE</b>, escriba sus <span class="tp-chip">iniciales</span> en la casilla — en la estación, al terminarlo.</span>
+                <span>¿Un paso <b>FALLA</b>? Escriba <span class="tp-chip tp-failchip">F</span> en la casilla. No lo pase adelante.</span>
+                <span><b class="tp-star">★ FINAL</b> = aprobación final de QC — requiere una 2.ª inicial antes de enviar el panel.</span>
             </div>
         </div>
     `;
@@ -7100,7 +7100,7 @@ function buildTrackPrintHtml(casting, components, projectNumber, projectName, ro
     const buildExampleRow = () => {
         // Three PASS cells then one F, then blank cells. FINAL cell gets tp-hold.
         const exampleColor = escapeHtml(castColor || 'Fairfield #12');
-        const exampleSamples = ['MD 6/1', 'MD 6/1', 'RT 6/1', 'F'];
+        const exampleSamples = ['MD', 'MD', 'RT', 'F'];
         const cells = selectedPhases.map((p, i) => {
             const isFinal = p === 'FINAL';
             const sample = exampleSamples[i];
