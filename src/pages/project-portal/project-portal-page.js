@@ -7089,7 +7089,7 @@ function buildTrackPrintHtml(casting, components, projectNumber, projectName, ro
             <div class="tp-howto-line es">
                 <span class="tp-lang">ES</span>
                 <span class="tp-big">Cómo completar esta hoja:</span>
-                <span>Cuando un paso <b>PASE</b>, escriba sus <span class="tp-chip">iniciales</span> en la casilla — en la estación, al terminarlo.</span>
+                <span>Cuando termine un paso correctamente, escriba sus <span class="tp-chip">iniciales</span> en la casilla — en la estación.</span>
                 <span>¿Un paso <b>FALLA</b>? Escriba <span class="tp-chip tp-failchip">F</span> en la casilla. No lo pase adelante.</span>
                 <span><b class="tp-star">★ FINAL</b> = aprobación final de QC — requiere una 2.ª inicial antes de enviar el panel.</span>
             </div>
