@@ -6896,10 +6896,12 @@ body {
     print-color-adjust: exact;
 }
 
-/* Each printed page is one .tp-sheet. Force a page break after each
-   except the last (handled by :last-of-type below). */
-.tp-sheet { page-break-after: always; }
-.tp-sheet:last-of-type { page-break-after: auto; }
+/* Single continuous sheet — the browser paginates the long table
+   automatically. The table's <thead> repeats on every printed page
+   (display: table-header-group), and rows avoid splitting mid-row. */
+.tp-sheet { }
+table.tp-table thead { display: table-header-group; }
+table.tp-table tbody tr { page-break-inside: avoid; break-inside: avoid; }
 
 /* ---------- Header (single line) ---------- */
 .tp-top {
@@ -7056,7 +7058,7 @@ table.tp-table {
 }
 `;
 
-function buildTrackPrintHtml(casting, components, projectNumber, projectName, rowsPerPage) {
+function buildTrackPrintHtml(casting, components, projectNumber, projectName) {
     const num = casting.casting_number || '';
     const desc = casting.description || '';
 
@@ -7093,18 +7095,6 @@ function buildTrackPrintHtml(casting, components, projectNumber, projectName, ro
     const d = new Date();
     const dateLabel = `${d.getMonth() + 1}/${d.getDate()}/${String(d.getFullYear()).slice(-2)}`;
 
-    // ---------- Pagination ----------
-    const rpp = (Number.isFinite(rowsPerPage) && rowsPerPage > 0) ? Math.floor(rowsPerPage) : 28;
-    const chunks = [];
-    if (components.length === 0) {
-        chunks.push([]); // single empty page
-    } else {
-        for (let i = 0; i < components.length; i += rpp) {
-            chunks.push(components.slice(i, i + rpp));
-        }
-    }
-    const totalPages = chunks.length;
-
     // ---------- Column widths ----------
     // Panel ID 6%, Color 8%, phases split the remainder evenly.
     const panelIdPct = 6;
@@ -7113,7 +7103,7 @@ function buildTrackPrintHtml(casting, components, projectNumber, projectName, ro
         ? (100 - panelIdPct - colorPct) / selectedPhases.length
         : 0;
 
-    // ---------- Header cells (built once, used on every page) ----------
+    // ---------- Header cells (single <thead>; browser repeats it per print page) ----------
     const headerCells = [
         `<th class="tp-col-panel" style="width:${panelIdPct}%;">Panel ID</th>`,
         `<th class="tp-col-color" style="width:${colorPct}%;">Color</th>`,
@@ -7147,100 +7137,91 @@ function buildTrackPrintHtml(casting, components, projectNumber, projectName, ro
         </div>
     `;
 
-    // ---------- Example row builder (one per page) ----------
-    const buildExampleRow = () => {
-        // Three PASS cells then one F, then blank cells. FINAL cell gets tp-hold.
-        const exampleColor = escapeHtml(castColor || 'Fairfield #12');
-        const exampleSamples = ['MD', 'MD', 'RT', 'F'];
-        const cells = selectedPhases.map((p, i) => {
-            const isFinal = p === 'FINAL';
-            const sample = exampleSamples[i];
-            if (sample === undefined) {
-                return `<td class="${isFinal ? 'tp-hold' : ''}"></td>`;
-            }
-            if (sample === 'F') {
-                // Failure marker — always use tp-flag styling regardless of column.
-                const cls = isFinal ? 'tp-flag tp-hold' : 'tp-flag';
-                return `<td class="${cls}">F</td>`;
-            }
-            const cls = isFinal ? 'tp-done tp-hold' : 'tp-done';
-            return `<td class="${cls}">${escapeHtml(sample)}</td>`;
-        }).join('');
-        return `
-            <tr class="tp-group tp-example">
-                <td class="tp-col-panel">EXAMPLE<br><span style="font-weight:400;font-style:italic;color:#5b6470;">EJEMPLO</span></td>
-                <td class="tp-col-color">${exampleColor}</td>
-                ${cells}
-            </tr>
-        `;
-    };
+    // ---------- Example row (rendered once at top of the body) ----------
+    // Three PASS cells then one F, then blank cells. FINAL cell gets tp-hold.
+    const exampleColor = escapeHtml(castColor || 'Fairfield #12');
+    const exampleSamples = ['MD', 'MD', 'RT', 'F'];
+    const exampleCells = selectedPhases.map((p, i) => {
+        const isFinal = p === 'FINAL';
+        const sample = exampleSamples[i];
+        if (sample === undefined) {
+            return `<td class="${isFinal ? 'tp-hold' : ''}"></td>`;
+        }
+        if (sample === 'F') {
+            const cls = isFinal ? 'tp-flag tp-hold' : 'tp-flag';
+            return `<td class="${cls}">F</td>`;
+        }
+        const cls = isFinal ? 'tp-done tp-hold' : 'tp-done';
+        return `<td class="${cls}">${escapeHtml(sample)}</td>`;
+    }).join('');
+    const exampleRow = `
+        <tr class="tp-group tp-example">
+            <td class="tp-col-panel">EXAMPLE<br><span style="font-weight:400;font-style:italic;color:#5b6470;">EJEMPLO</span></td>
+            <td class="tp-col-color">${exampleColor}</td>
+            ${exampleCells}
+        </tr>
+    `;
 
     const totalCols = 2 + selectedPhases.length;
 
-    // ---------- Build each sheet ----------
-    const sheets = chunks.map((chunk, pageIdx) => {
-        const pageNum = pageIdx + 1;
+    // ---------- Build the single continuous body ----------
+    let bodyRows = exampleRow;
 
-        let bodyRows = buildExampleRow();
+    if (components.length === 0) {
+        bodyRows += `
+            <tr>
+                <td colspan="${totalCols}" style="padding:14pt;text-align:center;font-style:italic;color:#5b6470;background:#fff;">No components recorded for this casting.</td>
+            </tr>
+        `;
+    } else {
+        bodyRows += components.map((comp, idx) => {
+            // Mockup pattern: rows 1,6,11,... get tp-group (heavier top border);
+            // rows 2,4,6,8,... get tp-band (zebra). Rows can have both.
+            const rowNum = idx + 1;
+            const classes = [];
+            if (rowNum % 5 === 1) classes.push('tp-group');
+            if (rowNum % 2 === 0) classes.push('tp-band');
+            const rowClass = classes.length ? ` class="${classes.join(' ')}"` : '';
 
-        if (chunk.length === 0) {
-            // Empty-components edge case: single message row spanning all cols.
-            bodyRows += `
-                <tr>
-                    <td colspan="${totalCols}" style="padding:14pt;text-align:center;font-style:italic;color:#5b6470;background:#fff;">No components recorded for this casting.</td>
+            const phaseCells = selectedPhases.map(p => {
+                const isFinal = p === 'FINAL';
+                const cls = isFinal ? 'tp-hold' : 'tp-col-phase';
+                return `<td class="${cls}"></td>`;
+            }).join('');
+
+            return `
+                <tr${rowClass}>
+                    <td class="tp-col-panel">${escapeHtml(comp.panel_id || '')}</td>
+                    <td class="tp-col-color">${escapeHtml(resolveComponentColorName(comp) || '')}</td>
+                    ${phaseCells}
                 </tr>
             `;
-        } else {
-            bodyRows += chunk.map((comp, idx) => {
-                // Mockup pattern: rows 1,6,11,... get tp-group (heavier top border);
-                // rows 2,4,6,8,... get tp-band (zebra). Rows can have both.
-                const rowNum = idx + 1; // 1-indexed within this page
-                const classes = [];
-                if (rowNum % 5 === 1) classes.push('tp-group');
-                if (rowNum % 2 === 0) classes.push('tp-band');
-                const rowClass = classes.length ? ` class="${classes.join(' ')}"` : '';
+        }).join('');
+    }
 
-                const phaseCells = selectedPhases.map(p => {
-                    const isFinal = p === 'FINAL';
-                    const cls = isFinal ? 'tp-hold' : 'tp-col-phase';
-                    return `<td class="${cls}"></td>`;
-                }).join('');
+    const headerMeta = [
+        castLabel ? `<span><b>Cast&nbsp;#</b>&nbsp;${escapeHtml(String(num) || '')}${desc ? ` ${escapeHtml(desc)}` : ''}</span>` : '',
+        castColor ? `<span><b>Color</b>&nbsp;${escapeHtml(castColor)}</span>` : '',
+        `<span><b>Date</b>&nbsp;${escapeHtml(dateLabel)}</span>`
+    ].filter(Boolean).join('');
 
-                return `
-                    <tr${rowClass}>
-                        <td class="tp-col-panel">${escapeHtml(comp.panel_id || '')}</td>
-                        <td class="tp-col-color">${escapeHtml(resolveComponentColorName(comp) || '')}</td>
-                        ${phaseCells}
-                    </tr>
-                `;
-            }).join('');
-        }
-
-        const pageInfo = `Page ${pageNum} of ${totalPages}`;
-
-        const headerMeta = [
-            castLabel ? `<span><b>Cast&nbsp;#</b>&nbsp;${escapeHtml(String(num) || '')}${desc ? ` ${escapeHtml(desc)}` : ''}</span>` : '',
-            castColor ? `<span><b>Color</b>&nbsp;${escapeHtml(castColor)}</span>` : '',
-            `<span><b>Date</b>&nbsp;${escapeHtml(dateLabel)}</span>`,
-            `<span><b>Page</b>&nbsp;${escapeHtml(pageInfo.replace(/^Page\s*/, ''))}</span>`
-        ].filter(Boolean).join('');
-
-        return `
-            <div class="tp-sheet">
-                <div class="tp-top">
-                    <div class="tp-proj">${escapeHtml(projectLabel)}</div>
-                    <div class="tp-meta">${headerMeta}</div>
-                </div>
-                ${instructionBand}
-                <table class="tp-table">
-                    <thead><tr>${headerCells}</tr></thead>
-                    <tbody>${bodyRows}</tbody>
-                </table>
+    // One sheet: header + instruction band once, then a single long table.
+    // The browser paginates the table; the <thead> repeats on each printed page.
+    const sheet = `
+        <div class="tp-sheet">
+            <div class="tp-top">
+                <div class="tp-proj">${escapeHtml(projectLabel)}</div>
+                <div class="tp-meta">${headerMeta}</div>
             </div>
-        `;
-    }).join('');
+            ${instructionBand}
+            <table class="tp-table">
+                <thead><tr>${headerCells}</tr></thead>
+                <tbody>${bodyRows}</tbody>
+            </table>
+        </div>
+    `;
 
-    return `<!doctype html><html><head><meta charset="utf-8"><title>Tracking — ${escapeHtml(projectNumber)} — ${escapeHtml(castLabel)}</title><style>${TRACK_PRINT_CSS}</style></head><body>${sheets}</body></html>`;
+    return `<!doctype html><html><head><meta charset="utf-8"><title>Tracking — ${escapeHtml(projectNumber)} — ${escapeHtml(castLabel)}</title><style>${TRACK_PRINT_CSS}</style></head><body>${sheet}</body></html>`;
 }
 
 function handlePrintTracking(castingId) {
@@ -7254,17 +7235,10 @@ function handlePrintTracking(castingId) {
     const projectNumber = currentProjectNumber || '';
     const projectName = document.getElementById('pp-f-project_name')?.value || '';
 
-    // Prompt for rows-per-page (remembers last value in localStorage).
-    const LS_KEY = 'pp-track-print-rows-per-page';
-    const lastValue = parseInt(localStorage.getItem(LS_KEY), 10);
-    const defaultRows = (Number.isFinite(lastValue) && lastValue > 0) ? lastValue : 28;
-    const input = window.prompt('Rows per page on the printed tracking sheet:', String(defaultRows));
-    if (input === null) return; // user cancelled
-    const parsed = parseInt(input, 10);
-    const rowsPerPage = (Number.isFinite(parsed) && parsed > 0) ? parsed : defaultRows;
-    try { localStorage.setItem(LS_KEY, String(rowsPerPage)); } catch {}
-
-    const html = buildTrackPrintHtml(casting, components, projectNumber, projectName, rowsPerPage);
+    // Single continuous sheet — header once at the top, then one long table.
+    // The browser paginates the table automatically and repeats the <thead>
+    // on each printed page (handled by CSS in TRACK_PRINT_CSS).
+    const html = buildTrackPrintHtml(casting, components, projectNumber, projectName);
 
     // Remove any leftover iframe from a prior print attempt.
     const prior = document.getElementById('pp-track-print-frame');
