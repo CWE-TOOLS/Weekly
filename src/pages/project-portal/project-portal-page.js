@@ -2060,7 +2060,9 @@ function renderOptColumn(casting) {
         cardsHtml = `<div class="pp-opt-cards-empty">No tasks yet. Add one below.</div>`;
     } else {
         cardsHtml = phases.map(p => {
-            const value = (p.hours === undefined || p.hours === null) ? '' : String(p.hours);
+            // Render 0 as empty so the placeholder="0" carries the visual — users no longer
+            // have to delete the leading 0 before typing a real value.
+            const value = (p.hours === undefined || p.hours === null || p.hours === 0) ? '' : String(p.hours);
             const description = (p.description == null) ? '' : String(p.description);
             const hasDesc = description.trim().length > 0;
             const isExpanded = currentOptDescExpanded.has(p.id);
@@ -2153,14 +2155,27 @@ function renderOptTotals() {
         el.textContent = String(sumPhases(getPhasesFor(castingId)));
     });
 
-    // Grand total — sum across ALL castings (not just visible)
+    // Grand/Phase total — for phased projects, sum only the active phase's
+    // castings so the bottom total reflects the phase you're viewing.
     const grandEl = document.getElementById('pp-opt-grand-total');
     if (grandEl) {
         let grand = 0;
-        for (const phases of currentCastingPhases.values()) {
-            grand += sumPhases(phases);
+        if (currentPhasesEnabled) {
+            for (const c of getCastingsForActivePhase()) {
+                grand += sumPhases(getPhasesFor(c.id));
+            }
+        } else {
+            for (const phases of currentCastingPhases.values()) {
+                grand += sumPhases(phases);
+            }
         }
         grandEl.textContent = String(grand);
+    }
+
+    // Match the label to what the number actually represents.
+    const labelEl = document.querySelector('.pp-opt-grand-total .pp-opt-total-label');
+    if (labelEl) {
+        labelEl.textContent = currentPhasesEnabled ? 'Phase Total' : 'Grand Total';
     }
 }
 
@@ -2227,6 +2242,16 @@ function handleAddPhaseClick() {
                 setPhasesFor(currentOptCastingId, existing);
             }
             renderOptimizer();
+            // Auto-focus the hours input on the newly-created card so the user can keep
+            // typing without reaching for the mouse: name → Enter → hours → Enter → next card.
+            if (phase?.id) {
+                const newCard = document.querySelector(`.pp-opt-card[data-phase-id="${CSS.escape(phase.id)}"]`);
+                const hoursInput = newCard?.querySelector('input[data-action="hours"]');
+                if (hoursInput) {
+                    hoursInput.focus();
+                    hoursInput.select();
+                }
+            }
         } catch (err) {
             logger.error('[project-portal] createCastingPhase failed:', err);
             showToast('Add task failed: ' + (err.message || err), 'error');
@@ -5164,9 +5189,35 @@ function wireEvents() {
     optColumns.addEventListener('keydown', (e) => {
         if (e.key !== 'Enter') return;
         const input = e.target;
-        if (input.matches('input[data-action="rename"]') || input.matches('input[data-action="hours"]')) {
+        if (input.matches('input[data-action="rename"]')) {
             e.preventDefault();
-            input.blur(); // triggers change
+            input.blur(); // triggers change → handleRenamePhase
+            return;
+        }
+        if (input.matches('input[data-action="hours"]')) {
+            e.preventDefault();
+            const card = input.closest('.pp-opt-card[data-phase-id]');
+            if (!card) { input.blur(); return; }
+            // Flush any pending debounced save so the typed value commits before focus moves.
+            const phaseId = card.dataset.phaseId;
+            const castingId = card.dataset.castingId;
+            const pending = optimizerPhaseSaveTimers.get(phaseId);
+            if (pending) {
+                clearTimeout(pending);
+                optimizerPhaseSaveTimers.delete(phaseId);
+                handleSetHours(castingId, phaseId, input.value);
+            }
+            // Move focus to the next (or previous, with Shift) card's hours input in this column.
+            const cards = Array.from(card.parentElement.querySelectorAll('.pp-opt-card[data-phase-id]:not(.pp-opt-card-draft)'));
+            const idx = cards.indexOf(card);
+            const dir = e.shiftKey ? -1 : 1;
+            const nextInput = cards[idx + dir]?.querySelector('input[data-action="hours"]');
+            if (nextInput) {
+                nextInput.focus();
+                nextInput.select();
+            } else {
+                input.blur();
+            }
         }
     });
 
