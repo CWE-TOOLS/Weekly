@@ -219,6 +219,82 @@ export async function deleteComponent(componentId) {
 }
 
 /**
+ * Snapshot the tracking-only fields (rejected, produced, crate_id) keyed by
+ * panel_id for every component on a casting. Used by the inventory→tracking
+ * resync to preserve QC/production/crate state across a wipe-and-rebuild —
+ * inventory doesn't define these fields, so a naked DELETE+INSERT would
+ * silently wipe them (see project 0118 bug).
+ * @param {string} castingId
+ * @returns {Promise<Map<string, {rejected:boolean, produced:boolean, crate_id:string|null}>>}
+ */
+export async function loadTrackingStateForCasting(castingId) {
+    if (!castingId) return new Map();
+    const client = await getClient();
+    if (!client) throw new Error('Supabase client unavailable');
+
+    const { data, error } = await client
+        .from(TABLE)
+        .select('panel_id, rejected, produced, crate_id')
+        .eq('casting_id', castingId);
+
+    if (error) {
+        logger.error('[tracking] loadTrackingStateForCasting error:', error);
+        throw error;
+    }
+
+    const result = new Map();
+    for (const row of (data || [])) {
+        if (!row.panel_id) continue;
+        result.set(row.panel_id, {
+            rejected: !!row.rejected,
+            produced: !!row.produced,
+            crate_id: row.crate_id || null
+        });
+    }
+    return result;
+}
+
+/**
+ * Restore tracking-only fields (rejected, produced, crate_id) onto freshly
+ * inserted components, matching by panel_id within a single casting. Only
+ * panels whose snapshot has at least one non-default value are touched.
+ * Paired with loadTrackingStateForCasting above.
+ * @param {string} castingId
+ * @param {Map<string, {rejected:boolean, produced:boolean, crate_id:string|null}>} stateByPanelId
+ */
+export async function applyTrackingStateForCasting(castingId, stateByPanelId) {
+    if (!castingId) return;
+    if (!stateByPanelId || stateByPanelId.size === 0) return;
+    const client = await getClient();
+    if (!client) throw new Error('Supabase client unavailable');
+
+    const writes = [];
+    for (const [panelId, state] of stateByPanelId.entries()) {
+        if (!panelId) continue;
+        if (!state.rejected && !state.produced && !state.crate_id) continue;
+        writes.push(
+            client.from(TABLE)
+                .update({
+                    rejected: !!state.rejected,
+                    produced: !!state.produced,
+                    crate_id: state.crate_id || null
+                })
+                .eq('casting_id', castingId)
+                .eq('panel_id', panelId)
+        );
+    }
+    if (writes.length === 0) return;
+
+    const results = await Promise.all(writes);
+    for (const { error } of results) {
+        if (error) {
+            logger.error('[tracking] applyTrackingStateForCasting error:', error);
+            throw error;
+        }
+    }
+}
+
+/**
  * Delete all components for a casting in one round-trip.
  * @param {string} castingId
  * @returns {Promise<number>} count of rows the operation targeted (best-effort)

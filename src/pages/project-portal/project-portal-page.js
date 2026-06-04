@@ -37,6 +37,8 @@ import {
     loadAllComponentsForProject,
     createComponentsBulk,
     deleteAllComponentsForCasting,
+    loadTrackingStateForCasting,
+    applyTrackingStateForCasting,
     setComponentProduced,
     setComponentsProducedBulk,
     setComponentRejected
@@ -1083,9 +1085,23 @@ function ensureCastingsSortable() {
             const newIdx = evt.newIndex;
             if (oldIdx === newIdx || oldIdx === undefined || newIdx === undefined) return;
 
+            // Reordering can shift panel_id allocation (runTrackingSync walks
+            // castings in sort_order). Refuse if either the moved row or the
+            // row at the destination index is locked — moving across a locked
+            // casting would change its sort_order and re-attach its tracking
+            // marks to the wrong physical panel.
+            const moved = currentCastings[oldIdx];
+            const neighbor = currentCastings[newIdx];
+            if (isCastingInventoryLocked(moved) || isCastingInventoryLocked(neighbor)) {
+                const locked = isCastingInventoryLocked(moved) ? moved : neighbor;
+                showCastingLockedToast(locked);
+                renderCastings();
+                return;
+            }
+
             const reordered = currentCastings.slice();
-            const [moved] = reordered.splice(oldIdx, 1);
-            reordered.splice(newIdx, 0, moved);
+            const [movedRow] = reordered.splice(oldIdx, 1);
+            reordered.splice(newIdx, 0, movedRow);
             reordered.forEach((c, idx) => { c.sort_order = idx; });
             currentCastings = reordered;
 
@@ -1507,6 +1523,10 @@ function scheduleCastingSave(id) {
 async function handleDeleteCasting(id) {
     const c = currentCastings.find(x => x.id === id);
     if (!c) return;
+    if (isCastingInventoryLocked(c)) {
+        showCastingLockedToast(c);
+        return;
+    }
     if (!confirm(`Delete casting ${c.casting_number}?`)) return;
     try {
         await deleteCasting(id);
@@ -1537,6 +1557,11 @@ function handleToggleCastInventory(castingId) {
 
 async function handleAddInventoryItem(castingId) {
     if (!currentProjectNumber || !castingId) return;
+    const casting = currentCastings.find(c => c.id === castingId);
+    if (isCastingInventoryLocked(casting)) {
+        showCastingLockedToast(casting);
+        return;
+    }
     if (!currentCastInvExpanded.has(castingId)) currentCastInvExpanded.add(castingId);
     try {
         // Auto-link to the project's first color log (if any) so new
@@ -1566,6 +1591,11 @@ async function handleAddInventoryItem(castingId) {
 async function saveInventoryItem(itemId, castingId) {
     const row = document.querySelector(`.pp-inv-row[data-inventory-id="${itemId}"]`);
     if (!row) return;
+    const casting = currentCastings.find(c => c.id === castingId);
+    if (isCastingInventoryLocked(casting)) {
+        showCastingLockedToast(casting);
+        return;
+    }
     const list = getInventoryFor(castingId);
     const item = list.find(c => c.id === itemId);
     if (!item) return;
@@ -1643,6 +1673,11 @@ function updateCastingInventoryCount(castingId) {
 }
 
 async function handleDeleteInventoryItem(castingId, itemId) {
+    const casting = currentCastings.find(c => c.id === castingId);
+    if (isCastingInventoryLocked(casting)) {
+        showCastingLockedToast(casting);
+        return;
+    }
     try {
         // Cancel any pending debounced save for this item.
         const t = inventorySaveTimers.get(itemId);
@@ -1685,6 +1720,12 @@ function ensureInventorySortables() {
                 const oldIdx = evt.oldIndex;
                 const newIdx = evt.newIndex;
                 if (oldIdx === newIdx || oldIdx === undefined || newIdx === undefined) return;
+                const casting = currentCastings.find(c => c.id === castingId);
+                if (isCastingInventoryLocked(casting)) {
+                    showCastingLockedToast(casting);
+                    renderCastings();
+                    return;
+                }
                 const list = getInventoryFor(castingId).slice();
                 const [moved] = list.splice(oldIdx, 1);
                 list.splice(newIdx, 0, moved);
@@ -2455,6 +2496,11 @@ function handleCopyComponents(castingId) {
 async function handlePasteComponents(targetCastingId) {
     if (!Array.isArray(copiedComponents) || copiedComponents.length === 0) return;
     if (!targetCastingId) return;
+    const targetCasting = currentCastings.find(c => c.id === targetCastingId);
+    if (isCastingInventoryLocked(targetCasting)) {
+        showCastingLockedToast(targetCasting);
+        return;
+    }
     if (!currentCastInvExpanded.has(targetCastingId)) currentCastInvExpanded.add(targetCastingId);
     try {
         const existing = getInventoryFor(targetCastingId);
@@ -2533,6 +2579,54 @@ function getComponentsFor(castingId) {
 }
 function setComponentsFor(castingId, components) {
     currentCastingComponents.set(castingId, components);
+}
+
+// Numeric-ish comparator for casting_number — handles "1","2","10" correctly
+// while staying stable on non-numeric values ("A1","C-3") via string fallback.
+function compareCastingNumber(a, b) {
+    const an = parseInt(String(a ?? ''), 10);
+    const bn = parseInt(String(b ?? ''), 10);
+    const aNum = Number.isFinite(an);
+    const bNum = Number.isFinite(bn);
+    if (aNum && bNum && an !== bn) return an - bn;
+    if (aNum && !bNum) return -1;
+    if (!aNum && bNum) return 1;
+    return String(a ?? '').localeCompare(String(b ?? ''));
+}
+
+// Inventory edits to an earlier casting can shift panel_id numbering inside
+// later castings (panel_ids are assigned by a per-type running counter across
+// all castings in sort order — see runTrackingSync). Once any tracking state
+// (rejected / produced / crate_id) exists, a renumber would re-attach those
+// marks to the wrong physical panel. To prevent silent corruption, once a
+// casting has any tracking state on it, that casting AND every casting with
+// a lower casting_number become inventory-read-only. Tracking operations
+// (reject / produced / crate toggles) stay fully live so the user can keep
+// marking production progress on locked castings.
+function isCastingInventoryLocked(casting) {
+    if (!casting) return false;
+    // Find the highest casting_number that has any tracking state.
+    let cap = null;
+    for (const c of currentCastings) {
+        const comps = currentCastingComponents.get(c.id) || [];
+        const hasState = comps.some(p =>
+            p.rejected === true || p.produced === true || p.crate_id != null
+        );
+        if (!hasState) continue;
+        if (cap === null || compareCastingNumber(c.casting_number, cap) > 0) {
+            cap = c.casting_number;
+        }
+    }
+    if (cap === null) return false;
+    return compareCastingNumber(casting.casting_number, cap) <= 0;
+}
+
+// Shared error toast for inventory-mutation guards. The wording calls out the
+// "why" (a later casting has tracking state) so the user knows it's not just
+// a generic lock.
+function showCastingLockedToast(casting) {
+    const num = casting?.casting_number || '?';
+    showToast(`Casting ${num} is locked: a later casting has rejected/produced/crated panels.`, 'error');
 }
 
 async function activateTrackingTab() {
@@ -3306,13 +3400,44 @@ async function runTrackingSync() {
         const current = getComponentsFor(casting.id);
         if (componentsMatchExpected(current, expected)) continue;
 
+        // Defense in depth: if a UI guard ever lets an inventory mutation
+        // through on a locked casting, refuse to wipe and rebuild its
+        // components here. The handler that triggered the sync has already
+        // toasted (or should have), so abort silently with a logger warning.
+        if (isCastingInventoryLocked(casting)) {
+            logger.warn('[project-portal] runTrackingSync: skipping locked casting', casting.casting_number || casting.id);
+            continue;
+        }
+
+        // The DELETE+INSERT below replaces the casting's casting_components rows
+        // from inventory data, but inventory has no concept of `rejected`,
+        // `produced`, or `crate_id` — those are tracking-only fields. Snapshot
+        // them by panel_id first and restore after the rebuild so a benign
+        // inventory edit doesn't wipe QC/production/crate state (project 0118).
+        // If the snapshot fetch fails we abort rather than silently wipe.
+        let trackingStateSnapshot;
+        try {
+            trackingStateSnapshot = await loadTrackingStateForCasting(casting.id);
+        } catch (err) {
+            logger.error('[project-portal] snapshot tracking state failed for casting', casting.id, err);
+            showToast('Tracking sync failed: ' + (err.message || err), 'error');
+            return;
+        }
+
         try {
             await deleteAllComponentsForCasting(casting.id);
             if (expected.length === 0) {
                 setComponentsFor(casting.id, []);
             } else {
                 const created = await createComponentsBulk(casting.id, expected);
-                setComponentsFor(casting.id, created || []);
+                // Restore rejected/produced/crate_id onto the new rows by panel_id.
+                // Panels whose panel_id no longer exists after the rebuild (e.g.
+                // the inventory row was removed) are correctly dropped.
+                await applyTrackingStateForCasting(casting.id, trackingStateSnapshot);
+                // Re-read the rebuilt rows so the in-memory cache reflects the
+                // restored tracking fields, not the post-INSERT defaults.
+                const refreshed = await loadAllComponentsForProject([casting.id]);
+                setComponentsFor(casting.id, refreshed.get(casting.id) || created || []);
             }
         } catch (err) {
             logger.error('[project-portal] sync tracking failed for casting', casting.id, err);
