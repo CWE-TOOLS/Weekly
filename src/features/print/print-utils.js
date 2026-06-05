@@ -228,9 +228,9 @@ function getMaxTasksForDept(dept, tasks, dates, printType) {
  */
 import * as PrintRenderer from './print-renderer.js';
 
-function generatePrintContent(printType, selectedDepts, weekDates, allTasks) {
+function generatePrintContent(printType, selectedDepts, weekDates, allTasks, options) {
     // Use the modular renderer
-    return PrintRenderer.generatePrintContent(printType, selectedDepts, weekDates, allTasks);
+    return PrintRenderer.generatePrintContent(printType, selectedDepts, weekDates, allTasks, options);
 }
 
 /**

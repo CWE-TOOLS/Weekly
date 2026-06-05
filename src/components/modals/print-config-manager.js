@@ -15,6 +15,10 @@ let currentPrintWeekDates = [];
 let allDepartmentsForPrint = [];
 let currentPrintType = 'week';
 let currentOrientation = 'landscape';
+// Board Schedule (11×17) only — defaults to ON so the Saturday page is
+// produced and Mon Cast's Layout lands on Sat. Toggle OFF for the
+// original Mon-Fri-only behavior (weekend work collapsed onto Friday).
+let includeBoardSaturday = true;
 
 /**
  * Get current print type
@@ -46,6 +50,22 @@ export function getCurrentOrientation() {
  */
 export function setCurrentOrientation(orientation) {
     currentOrientation = orientation;
+}
+
+/**
+ * Get whether the Board Schedule (11×17) print should include Saturday.
+ * @returns {boolean}
+ */
+export function getIncludeBoardSaturday() {
+    return includeBoardSaturday;
+}
+
+/**
+ * Set whether the Board Schedule (11×17) print should include Saturday.
+ * @param {boolean} value
+ */
+export function setIncludeBoardSaturday(value) {
+    includeBoardSaturday = !!value;
 }
 
 /**

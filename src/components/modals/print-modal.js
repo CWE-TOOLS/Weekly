@@ -17,6 +17,8 @@ import {
     setCurrentPrintType,
     getCurrentOrientation,
     setCurrentOrientation,
+    getIncludeBoardSaturday,
+    setIncludeBoardSaturday,
     getCurrentPrintWeekDates,
     populateWeekSelect,
     setDefaultDate,
@@ -41,6 +43,8 @@ let daySectionElement = null;
 let frozenDailySectionElement = null;
 let departmentsSectionElement = null;
 let orientationSectionElement = null;
+let boardSaturdaySectionElement = null;
+let boardSaturdayCheckbox = null;
 let departmentsGridElement = null;
 let checkAllButton = null;
 let uncheckAllButton = null;
@@ -63,6 +67,8 @@ export function initializePrintModal() {
     frozenDailySectionElement = document.getElementById('frozen-daily-select-section');
     departmentsSectionElement = document.getElementById('departments-section');
     orientationSectionElement = document.getElementById('orientation-section');
+    boardSaturdaySectionElement = document.getElementById('board-saturday-section');
+    boardSaturdayCheckbox = document.getElementById('print-board-saturday');
     departmentsGridElement = document.querySelector('.departments-grid');
     checkAllButton = document.getElementById('check-all-depts');
     uncheckAllButton = document.getElementById('uncheck-all-depts');
@@ -97,6 +103,15 @@ export function initializePrintModal() {
             setCurrentOrientation(e.target.value);
         });
     });
+
+    // Board schedule: Include Saturday checkbox
+    if (boardSaturdayCheckbox) {
+        // Sync DOM → state on init (HTML default is checked).
+        setIncludeBoardSaturday(boardSaturdayCheckbox.checked);
+        boardSaturdayCheckbox.addEventListener('change', (e) => {
+            setIncludeBoardSaturday(e.target.checked);
+        });
+    }
 
     // Week select change
     if (weekSelectElement) {
@@ -208,6 +223,10 @@ function updatePrintTypeDisplay() {
     setCurrentPrintType(printType);
 
     if (weekSectionElement && daySectionElement && frozenDailySectionElement && departmentsSectionElement && orientationSectionElement) {
+        // Default: hide the board-only "Include Saturday" toggle. The
+        // board-11x17 branch below switches it back on.
+        if (boardSaturdaySectionElement) boardSaturdaySectionElement.style.display = 'none';
+
         if (printType === 'week' || printType === 'phase-start') {
             // Both week and phase-start use week selector and departments
             weekSectionElement.style.display = 'block';
@@ -223,6 +242,7 @@ function updatePrintTypeDisplay() {
             frozenDailySectionElement.style.display = 'none';
             departmentsSectionElement.style.display = 'none';
             orientationSectionElement.style.display = 'none';
+            if (boardSaturdaySectionElement) boardSaturdaySectionElement.style.display = 'block';
         } else if (printType === 'day') {
             weekSectionElement.style.display = 'none';
             daySectionElement.style.display = 'block';
@@ -316,7 +336,10 @@ function handlePrintExecute() {
     });
     
     if (window.PrintUtils && window.PrintUtils.generatePrintContent) {
-        const printContent = window.PrintUtils.generatePrintContent(printType, selectedDepts, printDates, allTasks);
+        const printOptions = {
+            includeBoardSaturday: getIncludeBoardSaturday()
+        };
+        const printContent = window.PrintUtils.generatePrintContent(printType, selectedDepts, printDates, allTasks, printOptions);
 
         if (printContent) {
             logger.info('Print content generated successfully', {

@@ -643,7 +643,7 @@ function generatePhaseStartContent(weekStartDate, selectedDepts, allTasks) {
 /**
  * Generate complete print content for selected departments with department-per-page scaling
  */
-function generatePrintContent(printType, selectedDepts, weekDates, allTasks) {
+function generatePrintContent(printType, selectedDepts, weekDates, allTasks, options) {
     // Handle frozen daily print type
     if (printType === 'frozen-daily') {
         // Use the first date as the target date (should be next business day)
@@ -658,10 +658,12 @@ function generatePrintContent(printType, selectedDepts, weekDates, allTasks) {
         return generatePhaseStartContent(weekStart, selectedDepts, allTasks);
     }
 
-    // Handle board-schedule 11x17 (Mon-Fri × Side B | Side A grid for the
-    // shop whiteboard). Always uses Layout/Cast/Demold; ignores selectedDepts.
+    // Handle board-schedule 11x17 (Mon-Fri[-Sat] × Side B | Side A grid for
+    // the shop whiteboard). Always uses Layout/Cast/Demold; ignores
+    // selectedDepts. The "Include Saturday" toggle from the modal arrives
+    // here via options.includeBoardSaturday (defaults to true).
     if (printType === 'board-11x17') {
-        return generateBoardScheduleContent(weekDates, allTasks);
+        return generateBoardScheduleContent(weekDates, allTasks, options);
     }
 
     const printContainer = document.createElement('div');
@@ -750,13 +752,20 @@ function applyPrintScaling(printContent, printType) {
 // ============================================
 
 const BOARD_ACTIVITIES = ['LAYOUT', 'CAST', 'DEMOLD'];
-const BOARD_DAYS = [
+const BOARD_DAYS_MON_FRI = [
     { key: 'mon', label: 'MON',   offset: 0 },
     { key: 'tue', label: 'TUES.', offset: 1 },
     { key: 'wed', label: 'WED',   offset: 2 },
     { key: 'thu', label: 'THURS.', offset: 3 },
     { key: 'fri', label: 'FRI',   offset: 4 }
 ];
+const BOARD_DAYS_MON_SAT = [
+    ...BOARD_DAYS_MON_FRI,
+    { key: 'sat', label: 'SAT',   offset: 5 }
+];
+// Full superset — used by helpers that just need to label-lookup a day key
+// without caring which mode the user picked.
+const BOARD_DAYS = BOARD_DAYS_MON_SAT;
 
 function _boardSideKey(task) {
     // Side-resolution key for Cast tasks. Falls back to project name if
@@ -781,21 +790,29 @@ function _boardLabel(task) {
     return `${proj} Cast #${cast}`;
 }
 
-// The "layout day" for a Cast is the previous workday. Weekends collapse:
-//   Mon cast  → Fri layout (skip Sat/Sun)
-//   Sun cast  → Fri layout
-//   any other → previous day (Tue→Mon, Wed→Tue, ..., Sat→Fri)
-function _workdayBefore(date) {
+// The "layout day" for a Cast is the previous workday.
+//
+// includeSaturday=true (default, Mon-Sat shop):
+//   Mon → Sat (skip Sun), Tue → Mon, ..., Sat → Fri.
+// includeSaturday=false (original Mon-Fri behavior):
+//   Mon → Fri (skip Sat/Sun), Tue → Mon, ..., Sat → Fri.
+function _workdayBefore(date, includeSaturday) {
     const d = new Date(date);
     d.setHours(0, 0, 0, 0);
     const dow = d.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
-    if (dow === 1) d.setDate(d.getDate() - 3);
-    else if (dow === 0) d.setDate(d.getDate() - 2);
-    else d.setDate(d.getDate() - 1);
+    if (includeSaturday) {
+        if (dow === 1) d.setDate(d.getDate() - 2);      // Mon → Sat (skip Sun)
+        else if (dow === 0) d.setDate(d.getDate() - 1); // Sun → Sat (safety)
+        else d.setDate(d.getDate() - 1);                // Tue-Sat → prior day
+    } else {
+        if (dow === 1) d.setDate(d.getDate() - 3);      // Mon → Fri (skip weekend)
+        else if (dow === 0) d.setDate(d.getDate() - 2); // Sun → Fri (safety)
+        else d.setDate(d.getDate() - 1);                // Tue-Sat → prior day
+    }
     return d;
 }
 
-function generateBoardScheduleContent(weekDates, allTasks) {
+function generateBoardScheduleContent(weekDates, allTasks, options) {
     const printContainer = document.createElement('div');
     printContainer.className = 'print-preview-content board-11x17-preview';
 
@@ -803,6 +820,13 @@ function generateBoardScheduleContent(weekDates, allTasks) {
         logger.warn('Board schedule: no week dates supplied');
         return printContainer;
     }
+
+    // "Include Saturday" toggle from the modal. Default true: Mon-Sat work
+    // week, Sat gets its own page, Mon Cast's Layout lands on Sat. Set
+    // false to restore the original Mon-Fri behavior (no Sat page; Mon
+    // Cast's Layout collapses onto Fri).
+    const includeSaturday = !options || options.includeBoardSaturday !== false;
+    const boardDays = includeSaturday ? BOARD_DAYS_MON_SAT : BOARD_DAYS_MON_FRI;
 
     // Anchor on the Monday of the supplied week.
     const first = weekDates[0] ? new Date(weekDates[0]) : new Date();
@@ -812,7 +836,7 @@ function generateBoardScheduleContent(weekDates, allTasks) {
     monday.setDate(mondayOffset);
     monday.setHours(0, 0, 0, 0);
 
-    const dayDates = BOARD_DAYS.map(d => {
+    const dayDates = boardDays.map(d => {
         const dt = new Date(monday);
         dt.setDate(monday.getDate() + d.offset);
         return dt;
@@ -820,7 +844,7 @@ function generateBoardScheduleContent(weekDates, allTasks) {
     const dayKeyByISO = {};
     dayDates.forEach((dt, idx) => {
         const k = dt.toDateString();
-        dayKeyByISO[k] = BOARD_DAYS[idx].key;
+        dayKeyByISO[k] = boardDays[idx].key;
     });
 
     // 1. Build the side-resolution map from every Cast task in the dataset
@@ -848,7 +872,7 @@ function generateBoardScheduleContent(weekDates, allTasks) {
     //    side from the task (Cast: castingSide; Demold: lookup via the
     //    sideByKey map built in step 1).
     const cells = {};
-    BOARD_DAYS.forEach(d => {
+    boardDays.forEach(d => {
         cells[d.key] = { A: [], B: [] };
     });
 
@@ -874,10 +898,11 @@ function generateBoardScheduleContent(weekDates, allTasks) {
             const castDayKey = dayKeyByISO[td.toDateString()];
             if (castDayKey) placeEntry(castDayKey, side, 'CAST', t);
 
-            // LAYOUT entry on the previous workday (same side), if that day
-            // falls in this week. Handles Tue/Wed/Thu/Fri Casts (Mon-Thu
-            // layouts) as well as Sat/Mon Casts (Fri layouts).
-            const layoutDate = _workdayBefore(td);
+            // LAYOUT entry on the previous workday (same side), if that
+            // day falls in this week. Toggle-dependent:
+            //   includeSaturday=true  → Mon→Sat, Tue→Mon, ..., Sat→Fri
+            //   includeSaturday=false → Mon→Fri (skip weekend), Tue→Mon, ...
+            const layoutDate = _workdayBefore(td, includeSaturday);
             const layoutDayKey = dayKeyByISO[layoutDate.toDateString()];
             if (layoutDayKey) placeEntry(layoutDayKey, side, 'LAYOUT', t);
             return;
@@ -908,7 +933,7 @@ function generateBoardScheduleContent(weekDates, allTasks) {
     //    (Mon-B, Mon-A, Tue-B, Tue-A, ...). Empty (day, side) combos are
     //    skipped — no blank sheets in the output.
     let pageCount = 0;
-    BOARD_DAYS.forEach((d, idx) => {
+    boardDays.forEach((d, idx) => {
         const dt = dayDates[idx];
         if (cells[d.key].B.length > 0) {
             printContainer.appendChild(_buildBoardSidePage(d, dt, 'B', cells[d.key].B, monday, dayDates[4]));
