@@ -881,7 +881,7 @@ body { overflow: visible; }
 .pp-inv-header-fields {
     flex: 1 1 auto;
     display: grid;
-    grid-template-columns: 0.45fr 0.45fr 1.0fr 0.55fr 0.55fr 1.4fr 0.55fr 0.65fr;
+    grid-template-columns: 0.45fr 0.45fr 1.0fr 0.55fr 0.55fr 1.4fr 0.55fr 0.65fr 0.7fr;
     gap: 6px;
 }
 .pp-inv-header-fields span {
@@ -932,8 +932,83 @@ body { overflow: visible; }
 .pp-inv-row-fields {
     flex: 1 1 auto;
     display: grid;
-    grid-template-columns: 0.45fr 0.45fr 1.0fr 0.55fr 0.55fr 1.4fr 0.55fr 0.65fr;
+    grid-template-columns: 0.45fr 0.45fr 1.0fr 0.55fr 0.55fr 1.4fr 0.55fr 0.65fr 0.7fr;
     gap: 6px;
+}
+.pp-inv-remake-cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 8px;
+    font-size: 11px;
+    color: #6b7280;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+.pp-inv-import-remakes {
+    margin-left: 8px;
+}
+.pp-import-remakes-list {
+    max-height: 60vh;
+    overflow-y: auto;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 8px;
+}
+.pp-import-remakes-group {
+    margin-bottom: 10px;
+}
+.pp-import-remakes-group:last-child { margin-bottom: 0; }
+.pp-import-remakes-group-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: #374151;
+    margin: 2px 0 6px;
+    padding: 4px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    user-select: none;
+}
+.pp-import-remakes-group-title:hover {
+    background: #eef2f7;
+}
+.pp-import-remakes-group-title input[type="checkbox"] {
+    cursor: pointer;
+    margin: 0;
+}
+.pp-import-remakes-group-count {
+    color: #6b7280;
+    font-weight: 400;
+    font-size: 0.85rem;
+}
+.pp-import-remakes-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.pp-import-remakes-row:hover { background: #f3f4f6; }
+.pp-import-remakes-row input { cursor: pointer; }
+.pp-import-remakes-row-meta {
+    color: #6b7280;
+    font-size: 0.85rem;
+    margin-left: auto;
+}
+.pp-import-remakes-empty {
+    text-align: center;
+    color: #9ca3af;
+    font-style: italic;
+    padding: 24px 0;
 }
 .pp-inv-input {
     width: 100%;
@@ -1981,7 +2056,7 @@ body { overflow: visible; }
     flex: 1 1 auto;
     min-width: 0;
     display: grid;
-    grid-template-columns: 70px 0.5fr 0.7fr 0.7fr 1fr 0.5fr 70px;
+    grid-template-columns: 70px 0.5fr 0.7fr 0.7fr 1fr 0.5fr 70px 0.7fr;
     gap: 4px;
     align-items: center;
 }
@@ -2038,6 +2113,22 @@ body { overflow: visible; }
     color: #991b1b;
 }
 
+/* "Remake In" column — read-only display showing where (if anywhere) this
+   panel has been imported into as a remake. Derived from the import-side tag. */
+.pp-track-remake-cell {
+    display: flex;
+    align-items: center;
+    padding: 4px 8px;
+    font-size: 0.85rem;
+    color: #6b7280;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 /* "N rejected" pill in the casting section header — only rendered when > 0. */
 .pp-track-section-rejected-count {
     margin-left: 8px;
@@ -2065,7 +2156,7 @@ body { overflow: visible; }
     flex: 1 1 auto;
     min-width: 0;
     display: grid;
-    grid-template-columns: 70px 0.5fr 0.7fr 0.7fr 1fr 0.5fr 70px;
+    grid-template-columns: 70px 0.5fr 0.7fr 0.7fr 1fr 0.5fr 70px 0.7fr;
     gap: 4px;
 }
 .pp-track-header-fields span {

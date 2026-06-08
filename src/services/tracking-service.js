@@ -147,6 +147,8 @@ export async function createComponentsBulk(castingId, items) {
         color: cleanText(item.color),
         color_log_id: cleanUuid(item.color_log_id),
         sealer: cleanText(item.sealer),
+        remake_of_panel_id: cleanText(item.remake_of_panel_id),
+        remake_of_casting_id: cleanUuid(item.remake_of_casting_id),
         from_inventory: true,
         sort_order: startOrder + idx
     }));

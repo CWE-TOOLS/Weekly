@@ -987,6 +987,24 @@
             </div>
         </div>
 
+        <!-- Import Remakes Modal -->
+        <div class="pp-modal-backdrop" id="pp-import-remakes-modal" role="dialog" aria-modal="true" aria-labelledby="pp-import-remakes-title" hidden>
+            <div class="pp-modal">
+                <div class="pp-modal-header">
+                    <h2 id="pp-import-remakes-title">Import Remakes</h2>
+                    <button type="button" class="pp-modal-close" id="pp-import-remakes-close" aria-label="Close">&times;</button>
+                </div>
+                <div class="pp-modal-body">
+                    <p class="pp-modal-hint" id="pp-import-remakes-intro">Select rejected panels to bring into this casting as remakes.</p>
+                    <div class="pp-import-remakes-list" id="pp-import-remakes-list"></div>
+                </div>
+                <div class="pp-modal-actions">
+                    <button type="button" class="pp-secondary-btn" id="pp-import-remakes-cancel">Cancel</button>
+                    <button type="button" class="pp-primary-btn" id="pp-import-remakes-submit" disabled>Import Selected</button>
+                </div>
+            </div>
+        </div>
+
         <!-- Print Tracking Modal -->
         <div id="pp-track-print-modal" class="pp-modal-backdrop" hidden>
             <div class="pp-modal" role="dialog" aria-modal="true" aria-labelledby="pp-track-print-modal-title">

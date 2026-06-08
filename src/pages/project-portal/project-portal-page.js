@@ -70,6 +70,7 @@ import {
 } from '../../services/job-memos-service.js';
 import {
     loadAllInventoryForProject,
+    loadCastingInventory,
     createInventoryItem,
     updateInventoryItem,
     deleteInventoryItem,
@@ -858,7 +859,14 @@ async function loadAndRenderCastings() {
         logger.error('[project-portal] loadCastings failed:', err);
         currentCastings = [];
     }
-    await loadAllInventoryForCurrentProject();
+    // Components are needed alongside inventory so the Import Remakes button
+    // can detect rejected panels from other castings on first paint. Without
+    // this load, countImportableRemakes reads an empty map and shows (0) until
+    // the user visits the Tracking tab.
+    await Promise.all([
+        loadAllInventoryForCurrentProject(),
+        loadAllComponentsForCurrentProject()
+    ]);
     // First time visiting this project's Castings tab in this session: seed
     // every casting as expanded EXCEPT those with more than the threshold of
     // inventory rows — those would push the rest off-screen, so default them
@@ -1013,10 +1021,19 @@ function renderInventoryBody(casting, items) {
                 <span>Color</span>
                 <span class="pp-inv-header-num">Cu Ft</span>
                 <span class="pp-inv-header-num">FF Sq Ft</span>
+                <span>Remake Of</span>
             </div>
             <div class="pp-inv-header-delete-spacer"></div>
         </div>
     `;
+
+    const candidateCount = countImportableRemakes(casting.id);
+    const importTitle = candidateCount === 0
+        ? 'No rejected panels target this casting'
+        : `${candidateCount} rejected panel(s) ready to import`;
+    const importLabel = candidateCount > 0
+        ? `+ Import Remakes (${candidateCount})`
+        : '+ Import Remakes';
 
     return `
         <div class="pp-cast-card-body">
@@ -1025,11 +1042,51 @@ function renderInventoryBody(casting, items) {
                 ${cardsHtml}
             </div>
             <button type="button" class="pp-add-btn pp-inv-add" data-action="add-inventory" data-casting-id="${escapeAttr(casting.id)}">+ Add Component</button>
+            <button type="button" class="pp-add-btn pp-inv-import-remakes" data-action="open-import-remakes" data-casting-id="${escapeAttr(casting.id)}" ${candidateCount === 0 ? 'disabled' : ''} title="${escapeAttr(importTitle)}">${escapeHtml(importLabel)}</button>
         </div>
     `;
 }
 
+function countImportableRemakes(castingId) {
+    let count = 0;
+    const importedKeys = new Set();
+    for (const list of currentCastingComponents.values()) {
+        for (const c of list) {
+            if (c.remake_of_panel_id && c.remake_of_casting_id) {
+                importedKeys.add(`${c.remake_of_casting_id}::${c.remake_of_panel_id}`);
+            }
+        }
+    }
+    // Hoist the target casting's sort_order once per function call.
+    const target = currentCastings.find(cc => cc.id === castingId);
+    const targetOrder = target ? (target.sort_order ?? -Infinity) : -Infinity;
+
+    for (const list of currentCastingComponents.values()) {
+        for (const c of list) {
+            if (!c.rejected) continue;
+            // Only count panels from EARLIER castings (sort_order < target's).
+            const srcCasting = currentCastings.find(cc => cc.id === c.casting_id);
+            const srcOrder = srcCasting ? (srcCasting.sort_order ?? -Infinity) : -Infinity;
+            if (srcOrder >= targetOrder) continue;
+            // Skip if already imported anywhere.
+            const key = `${c.casting_id}::${c.panel_id}`;
+            if (importedKeys.has(key)) continue;
+            count++;
+        }
+    }
+    return count;
+}
+
 function renderInventoryRow(item, castingId) {
+    let remakeCellHtml;
+    if (!item.remake_of_panel_id || !item.remake_of_casting_id) {
+        remakeCellHtml = `<span class="pp-inv-input pp-inv-remake-cell" aria-label="Remake of"></span>`;
+    } else {
+        const srcCasting = currentCastings.find(c => c.id === item.remake_of_casting_id);
+        const srcNum = srcCasting?.casting_number || '?';
+        const srcLabel = `${srcNum}:${item.remake_of_panel_id}`;
+        remakeCellHtml = `<span class="pp-inv-input pp-inv-remake-cell" title="Remake of panel ${escapeAttr(item.remake_of_panel_id)} from casting ${escapeAttr(srcNum)}">${escapeHtml(srcLabel)}</span>`;
+    }
     return `
         <div class="pp-inv-row" data-inventory-id="${escapeAttr(item.id)}" data-casting-id="${escapeAttr(castingId)}">
             <div class="pp-inv-row-grip" aria-hidden="true" title="Drag to reorder">
@@ -1050,6 +1107,7 @@ function renderInventoryRow(item, castingId) {
                 })}
                 <input type="number" class="pp-inv-input pp-inv-input-num" data-field="cu_ft" step="any" min="0" placeholder="0" value="${item.cu_ft == null ? '' : escapeAttr(item.cu_ft)}" />
                 <input type="number" class="pp-inv-input pp-inv-input-num" data-field="ff_sq_ft" step="any" min="0" placeholder="0" value="${item.ff_sq_ft == null ? '' : escapeAttr(item.ff_sq_ft)}" />
+                ${remakeCellHtml}
             </div>
             <button class="pp-inv-row-delete" type="button" data-action="delete-inventory" aria-label="Delete component" title="Delete component">&times;</button>
         </div>
@@ -1488,6 +1546,208 @@ async function handleCreateRemakeSubmit() {
     }
 }
 
+// Import Remakes modal — bring any rejected panel from an EARLIER casting in
+// this project (one not yet imported anywhere) into this casting's inventory,
+// attributed back to its source panel/casting.
+let importRemakesTargetCastingId = null;
+
+function openImportRemakesModal(castingId) {
+    const target = currentCastings.find(c => c.id === castingId);
+    if (!target) return;
+    importRemakesTargetCastingId = castingId;
+
+    const modal = document.getElementById('pp-import-remakes-modal');
+    const list = document.getElementById('pp-import-remakes-list');
+    const intro = document.getElementById('pp-import-remakes-intro');
+    const submit = document.getElementById('pp-import-remakes-submit');
+    if (!modal || !list || !submit || !intro) return;
+
+    // Build the set of source (casting_id, panel_id) pairs that have already
+    // been imported anywhere in this project, so they're excluded.
+    const importedKeys = new Set();
+    for (const arr of currentCastingComponents.values()) {
+        for (const c of arr) {
+            if (c.remake_of_panel_id && c.remake_of_casting_id) {
+                importedKeys.add(`${c.remake_of_casting_id}::${c.remake_of_panel_id}`);
+            }
+        }
+    }
+
+    const candidates = [];
+    const targetOrder = target.sort_order ?? -Infinity;
+    for (const arr of currentCastingComponents.values()) {
+        for (const c of arr) {
+            if (!c.rejected) continue;
+            const srcCasting = currentCastings.find(cc => cc.id === c.casting_id);
+            const srcOrder = srcCasting ? (srcCasting.sort_order ?? -Infinity) : -Infinity;
+            if (srcOrder >= targetOrder) continue;
+            const key = `${c.casting_id}::${c.panel_id}`;
+            if (importedKeys.has(key)) continue;
+            candidates.push(c);
+        }
+    }
+
+    intro.textContent = candidates.length === 0
+        ? `No rejected panels are currently targeting ${target.casting_number || 'this casting'} for remake.`
+        : `Select panels to import into ${target.casting_number || 'this casting'} as remakes. Each becomes a new inventory line.`;
+
+    if (candidates.length === 0) {
+        list.innerHTML = `<div class="pp-import-remakes-empty">Nothing to import.</div>`;
+        submit.disabled = true;
+    } else {
+        // Group by source casting for clarity.
+        const groups = new Map();
+        for (const c of candidates) {
+            if (!groups.has(c.casting_id)) groups.set(c.casting_id, []);
+            groups.get(c.casting_id).push(c);
+        }
+        const groupHtml = [];
+        for (const [srcCastingId, comps] of groups) {
+            const srcCasting = currentCastings.find(cc => cc.id === srcCastingId);
+            const srcLabel = srcCasting ? (srcCasting.casting_number || '?') : '?';
+            comps.sort((a, b) => String(a.panel_id || '').localeCompare(String(b.panel_id || '')));
+            const rows = comps.map(c => {
+                const dims = [c.width, c.length].filter(Boolean).join(' × ');
+                const meta = [dims, resolveComponentColorName(c)].filter(Boolean).join(' · ');
+                return `<label class="pp-import-remakes-row">
+                    <input type="checkbox" data-component-id="${escapeAttr(c.id)}" />
+                    <span class="pp-import-remakes-row-name">${escapeHtml(c.panel_id || '?')}</span>
+                    <span class="pp-import-remakes-row-meta">${escapeHtml(meta)}</span>
+                </label>`;
+            }).join('');
+            groupHtml.push(`<div class="pp-import-remakes-group" data-src-casting-id="${escapeAttr(srcCastingId)}">
+                <label class="pp-import-remakes-group-title">
+                    <input type="checkbox" class="pp-import-remakes-group-toggle" data-src-casting-id="${escapeAttr(srcCastingId)}" aria-label="Select all from ${escapeAttr(srcLabel)}" />
+                    <span>From ${escapeHtml(srcLabel)} <span class="pp-import-remakes-group-count">(${comps.length})</span></span>
+                </label>
+                ${rows}
+            </div>`);
+        }
+        list.innerHTML = groupHtml.join('');
+        submit.disabled = true;
+
+        const groupToggles = list.querySelectorAll('.pp-import-remakes-group-toggle');
+        const childCheckboxes = list.querySelectorAll('.pp-import-remakes-row input[type="checkbox"]');
+
+        function refreshSubmitState() {
+            const anyChecked = list.querySelectorAll('.pp-import-remakes-row input[type="checkbox"]:checked').length > 0;
+            submit.disabled = !anyChecked;
+        }
+
+        function refreshGroupState(groupEl) {
+            const toggle = groupEl.querySelector('.pp-import-remakes-group-toggle');
+            if (!toggle) return;
+            const kids = groupEl.querySelectorAll('.pp-import-remakes-row input[type="checkbox"]');
+            const checkedCount = Array.from(kids).filter(cb => cb.checked).length;
+            if (checkedCount === 0) {
+                toggle.checked = false;
+                toggle.indeterminate = false;
+            } else if (checkedCount === kids.length) {
+                toggle.checked = true;
+                toggle.indeterminate = false;
+            } else {
+                toggle.checked = false;
+                toggle.indeterminate = true;
+            }
+        }
+
+        groupToggles.forEach(toggle => {
+            toggle.addEventListener('change', () => {
+                const groupEl = toggle.closest('.pp-import-remakes-group');
+                if (!groupEl) return;
+                const turnOn = toggle.checked;
+                groupEl.querySelectorAll('.pp-import-remakes-row input[type="checkbox"]').forEach(cb => {
+                    cb.checked = turnOn;
+                });
+                toggle.indeterminate = false;
+                refreshSubmitState();
+            });
+        });
+
+        childCheckboxes.forEach(cb => {
+            cb.addEventListener('change', () => {
+                const groupEl = cb.closest('.pp-import-remakes-group');
+                if (groupEl) refreshGroupState(groupEl);
+                refreshSubmitState();
+            });
+        });
+    }
+
+    modal.hidden = false;
+}
+
+function closeImportRemakesModal() {
+    const modal = document.getElementById('pp-import-remakes-modal');
+    if (modal) modal.hidden = true;
+    importRemakesTargetCastingId = null;
+}
+
+async function handleImportRemakesConfirm() {
+    const targetCastingId = importRemakesTargetCastingId;
+    if (!targetCastingId) return;
+    const list = document.getElementById('pp-import-remakes-list');
+    if (!list) return;
+    const checked = Array.from(list.querySelectorAll('input[type="checkbox"]:checked'));
+    if (checked.length === 0) return;
+
+    // Resolve each checked component-id back to its source row.
+    const sources = [];
+    for (const cb of checked) {
+        const id = cb.dataset.componentId;
+        if (!id) continue;
+        let found = null;
+        for (const arr of currentCastingComponents.values()) {
+            const c = arr.find(x => x.id === id);
+            if (c) { found = c; break; }
+        }
+        if (found) sources.push(found);
+    }
+    if (sources.length === 0) return;
+
+    const submit = document.getElementById('pp-import-remakes-submit');
+    if (submit) submit.disabled = true;
+
+    let okCount = 0;
+    let failCount = 0;
+    for (const src of sources) {
+        try {
+            await createInventoryItem(targetCastingId, {
+                type: src.type || null,
+                width: src.width || null,
+                length: src.length || null,
+                color: src.color || null,
+                color_log_id: src.color_log_id || null,
+                sealer: src.sealer || null,
+                quantity: 1,
+                extras: 0,
+                remake_of_panel_id: src.panel_id || null,
+                remake_of_casting_id: src.casting_id || null
+            });
+            okCount++;
+        } catch (err) {
+            logger.error('[project-portal] import remake failed:', err);
+            failCount++;
+        }
+    }
+
+    closeImportRemakesModal();
+    if (okCount > 0) {
+        // Refresh local inventory cache for the target casting then re-sync
+        // tracking so the new rows materialize as panel_ids.
+        try {
+            const refreshed = await loadCastingInventory(targetCastingId);
+            setInventoryFor(targetCastingId, refreshed);
+        } catch (e) {
+            logger.error('[project-portal] post-import reload failed:', e);
+        }
+        renderCastings();
+        await syncTrackingFromInventory();
+        showToast(`Imported ${okCount} remake${okCount === 1 ? '' : 's'}${failCount ? ` (${failCount} failed)` : ''}.`, failCount ? 'warning' : 'success');
+    } else {
+        showToast('Could not import remakes — check connection.', 'error');
+    }
+}
+
 async function handleSaveCasting(id) {
     const card = document.querySelector(`.pp-cast-card[data-casting-id="${id}"]`);
     if (!card) return;
@@ -1679,7 +1939,6 @@ async function handleDeleteInventoryItem(castingId, itemId) {
         return;
     }
     try {
-        // Cancel any pending debounced save for this item.
         const t = inventorySaveTimers.get(itemId);
         if (t) { clearTimeout(t); inventorySaveTimers.delete(itemId); }
         await deleteInventoryItem(itemId);
@@ -2605,7 +2864,11 @@ function compareCastingNumber(a, b) {
 // marking production progress on locked castings.
 function isCastingInventoryLocked(casting) {
     if (!casting) return false;
-    // Find the highest casting_number that has any tracking state.
+    // Find the highest sort_order among castings that have any tracking state.
+    // Use sort_order (database-canonical drag-order) NOT casting_number — that's
+    // a user-editable display string and names like "1A Remake" parse to int 1
+    // even when they're the latest casting in the project, which would lock
+    // them incorrectly.
     let cap = null;
     for (const c of currentCastings) {
         const comps = currentCastingComponents.get(c.id) || [];
@@ -2613,12 +2876,11 @@ function isCastingInventoryLocked(casting) {
             p.rejected === true || p.produced === true || p.crate_id != null
         );
         if (!hasState) continue;
-        if (cap === null || compareCastingNumber(c.casting_number, cap) > 0) {
-            cap = c.casting_number;
-        }
+        const ord = c.sort_order ?? -Infinity;
+        if (cap === null || ord > cap) cap = ord;
     }
     if (cap === null) return false;
-    return compareCastingNumber(casting.casting_number, cap) <= 0;
+    return (casting.sort_order ?? -Infinity) <= cap;
 }
 
 // Shared error toast for inventory-mutation guards. The wording calls out the
@@ -3214,6 +3476,7 @@ function renderTrackSection(casting) {
                 <span>Color</span>
                 <span>Crate #</span>
                 <span>Rejected</span>
+                <span>Remake In</span>
             </div>
         </div>
     `;
@@ -3283,6 +3546,27 @@ function renderTrackCard(comp, castingId) {
     const rejectTitle = isRejected
         ? 'This panel is rejected. Unchecking will prompt to confirm — make sure no remake was already scheduled.'
         : 'Mark this panel as rejected. Use Add Remake Casting to schedule the replacement.';
+
+    // "Remake In" is now a read-only display: where (if anywhere) has this panel
+    // been imported into as a remake? Derived by scanning every component in the
+    // project for one whose remake_of_* fields point back at this panel.
+    let remakeDestLabel = '';
+    let remakeDestTitle = 'Not yet imported as a remake.';
+    {
+        let dest = null;
+        for (const arr of currentCastingComponents.values()) {
+            const hit = arr.find(c => c.remake_of_casting_id === castingId && c.remake_of_panel_id === comp.panel_id);
+            if (hit) { dest = hit; break; }
+        }
+        if (dest) {
+            const destCasting = currentCastings.find(c => c.id === dest.casting_id);
+            const destNum = destCasting?.casting_number || '?';
+            const destPanel = dest.panel_id || '?';
+            remakeDestLabel = `${destNum}:${destPanel}`;
+            remakeDestTitle = `Imported into casting ${destNum} as panel ${destPanel}.`;
+        }
+    }
+
     return `
         <div class="pp-track-card pp-track-card-locked${isSelected ? ' pp-track-card-selected' : ''}${isProduced ? ' pp-track-card-produced' : ''}${isRejected ? ' pp-track-card-rejected' : ''}" data-component-id="${escapeAttr(comp.id)}" data-casting-id="${escapeAttr(castingId)}">
             <div class="pp-track-card-grip-spacer">
@@ -3300,6 +3584,7 @@ function renderTrackCard(comp, castingId) {
                 <label class="pp-track-rejected-cell" title="${escapeAttr(rejectTitle)}">
                     <input type="checkbox" class="pp-track-rejected" data-action="track-rejected-toggle" data-component-id="${escapeAttr(comp.id)}" ${isRejected ? 'checked' : ''} aria-label="Mark as rejected" />
                 </label>
+                <span class="pp-track-remake-cell" title="${escapeAttr(remakeDestTitle)}">${escapeHtml(remakeDestLabel)}</span>
             </div>
         </div>
     `;
@@ -3381,7 +3666,9 @@ async function runTrackingSync() {
                     panel_id: nextPanelId(inv.type),
                     color: inv.color || null,
                     color_log_id: inv.color_log_id || null,
-                    sealer: inv.sealer || null
+                    sealer: inv.sealer || null,
+                    remake_of_panel_id: inv.remake_of_panel_id || null,
+                    remake_of_casting_id: inv.remake_of_casting_id || null
                 });
             }
             for (let i = 0; i < extras; i++) {
@@ -3392,7 +3679,9 @@ async function runTrackingSync() {
                     panel_id: inv.type ? `${inv.type}.EXTRA` : null,
                     color: inv.color || null,
                     color_log_id: inv.color_log_id || null,
-                    sealer: inv.sealer || null
+                    sealer: inv.sealer || null,
+                    remake_of_panel_id: inv.remake_of_panel_id || null,
+                    remake_of_casting_id: inv.remake_of_casting_id || null
                 });
             }
         }
@@ -5660,6 +5949,14 @@ function wireEvents() {
         handleCreateRemakeSubmit();
     });
 
+    // Castings: import remakes (modal close/cancel/backdrop/submit)
+    document.getElementById('pp-import-remakes-close')?.addEventListener('click', closeImportRemakesModal);
+    document.getElementById('pp-import-remakes-cancel')?.addEventListener('click', closeImportRemakesModal);
+    document.getElementById('pp-import-remakes-submit')?.addEventListener('click', handleImportRemakesConfirm);
+    document.getElementById('pp-import-remakes-modal')?.addEventListener('click', (e) => {
+        if (e.target.id === 'pp-import-remakes-modal') closeImportRemakesModal();
+    });
+
     // Castings: row actions (delegation)
     const castingsList = document.getElementById('pp-castings-list');
     castingsList.addEventListener('click', (e) => {
@@ -5675,6 +5972,8 @@ function wireEvents() {
             handleToggleCastInventory(castingId);
         } else if (action === 'add-inventory') {
             handleAddInventoryItem(castingId);
+        } else if (action === 'open-import-remakes') {
+            if (!btn.disabled) openImportRemakesModal(castingId);
         } else if (action === 'copy-components') {
             if (!btn.disabled) handleCopyComponents(castingId);
         } else if (action === 'paste-components') {

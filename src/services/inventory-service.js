@@ -110,6 +110,8 @@ export async function createInventoryItem(castingId, fields = {}) {
         extras: cleanExtras(fields.extras),
         cu_ft: cleanNumber(fields.cu_ft),
         ff_sq_ft: cleanNumber(fields.ff_sq_ft),
+        remake_of_panel_id: cleanText(fields.remake_of_panel_id),
+        remake_of_casting_id: cleanUuid(fields.remake_of_casting_id),
         sort_order: order
     };
 
