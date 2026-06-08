@@ -1244,4 +1244,368 @@ li:last-child {
         color: #555;
         font-style: italic;
     }
+
+    /* =========================================================
+       Buy-In Sheets — hand-fill manager form, letter landscape.
+       One page per production crew. Expected Value is autopopulated
+       from sum(hours) × $135/hr; every other column is blank for
+       hand-fill. Layout mirrors the source PDF (Buy In Sheet.pdf).
+       ========================================================= */
+    .buy-in-report .print-page {
+        page-break-after: always;
+        page-break-inside: avoid;
+        display: block !important;
+        justify-content: flex-start !important;
+        align-items: stretch !important;
+        padding: 0.3in 0.6in 0.3in 0.6in !important;
+        width: 100%;
+        height: 100%;
+        min-height: 7.5in;
+        box-sizing: border-box;
+        background: white;
+        font-family: 'Calibri', 'Arial', Helvetica, sans-serif;
+        color: #000;
+    }
+    .buy-in-report .print-page:last-child {
+        page-break-after: avoid;
+    }
+
+    .buy-in-company {
+        text-align: right;
+        font-size: 11pt;
+        font-weight: 500;
+        letter-spacing: 0.02em;
+        margin-bottom: 0.2in;
+    }
+
+    .buy-in-summary {
+        display: flex;
+        gap: 0.5in;
+        align-items: baseline;
+        font-size: 14pt;
+        font-weight: 700;
+        margin-bottom: 0.28in;
+    }
+    .buy-in-summary-item {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 0.08in;
+    }
+    .buy-in-summary .buy-in-fill {
+        display: inline-block;
+        min-width: 2.2in;
+        border-bottom: 1.5px solid #000;
+        height: 1.1em;
+    }
+    .buy-in-currency, .buy-in-unit {
+        font-weight: 700;
+    }
+
+    .buy-in-meta {
+        display: flex;
+        justify-content: space-between;
+        gap: 0.6in;
+        margin-bottom: 0.18in;
+        font-size: 12pt;
+    }
+    .buy-in-meta-row {
+        display: flex;
+        align-items: baseline;
+        gap: 0.12in;
+    }
+    .buy-in-meta-row:first-child {
+        flex: 1;
+    }
+    .buy-in-meta .buy-in-label,
+    .buy-in-members .buy-in-label {
+        font-weight: 700;
+    }
+    .buy-in-meta-row:first-child .buy-in-value {
+        flex: 1;
+    }
+    .buy-in-meta .buy-in-value {
+        font-weight: 500;
+        border-bottom: 1.5px solid #000;
+        min-width: 2.6in;
+        padding: 0 0.05in 0.02in;
+    }
+
+    /* Crew value is a dept-colored chip — overrides the default underlined
+       Date-style value so the dept color reads as the primary identifier. */
+    .buy-in-meta .buy-in-value.buy-in-crew-chip {
+        display: inline-block;
+        border-bottom: none;
+        border-radius: 0.05in;
+        padding: 0.05in 0.18in;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+        min-width: 1.6in;
+        text-align: center;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    .buy-in-members {
+        display: flex;
+        align-items: baseline;
+        gap: 0.12in;
+        margin-bottom: 0.28in;
+        font-size: 12pt;
+    }
+    .buy-in-members .buy-in-fill-wide {
+        flex: 1;
+        border-bottom: 1.5px solid #000;
+        height: 1.2em;
+    }
+
+    .buy-in-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 11pt;
+        table-layout: fixed;
+    }
+    .buy-in-table th {
+        font-size: 10pt;
+        font-weight: 700;
+        text-align: left;
+        padding: 0.09in 0.12in;
+        background-color: #DCDCDC;
+        border: none;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        letter-spacing: 0.04em;
+        vertical-align: middle;
+    }
+    .buy-in-table th.buy-in-th-actual,
+    .buy-in-table th.buy-in-th-percent {
+        background-color: #FBE5C3;
+    }
+
+    /* DAY header is a two-line stack: "DAY" / "June Week 3" sub-label. */
+    .buy-in-table th.buy-in-th-day {
+        line-height: 1.15;
+    }
+    .buy-in-th-day-main {
+        display: block;
+    }
+    .buy-in-th-day-week {
+        display: block;
+        font-size: 9pt;
+        font-weight: 500;
+        letter-spacing: 0.02em;
+        margin-top: 0.02in;
+        color: #333;
+    }
+    .buy-in-table tbody td {
+        padding: 0.22in 0.12in 0.06in 0.12in;
+        font-weight: 500;
+        vertical-align: bottom;
+        font-size: 11pt;
+    }
+    /* Value cells use a larger font and center the autopopulated /
+       to-be-hand-filled NUMBER within the column. The $ stays anchored to
+       the left edge and the % stays anchored to the right edge — that way
+       the printed form keeps the writing-line behavior of the source PDF
+       (manager writes the number in the middle, $ / % sit in fixed spots). */
+    .buy-in-table tbody td.buy-in-cell-expected,
+    .buy-in-table tbody td.buy-in-cell-actual,
+    .buy-in-table tbody td.buy-in-cell-delta,
+    .buy-in-table tbody td.buy-in-cell-percent {
+        font-size: 14pt;
+        text-align: center;
+        position: relative;
+    }
+    /* Anchor the $ to the left and % to the right of NON-split cells. Split
+       cells (Crate/Ship combined sheet) keep $ inline with each half. */
+    .buy-in-table tbody td.buy-in-cell-expected:not(.buy-in-cell-split) > .buy-in-currency,
+    .buy-in-table tbody td.buy-in-cell-actual:not(.buy-in-cell-split) > .buy-in-currency,
+    .buy-in-table tbody td.buy-in-cell-delta:not(.buy-in-cell-split) > .buy-in-currency {
+        position: absolute;
+        left: 0.12in;
+        bottom: 0.06in;
+    }
+    .buy-in-table tbody td.buy-in-cell-percent:not(.buy-in-cell-split) > .buy-in-unit {
+        position: absolute;
+        right: 0.12in;
+        bottom: 0.06in;
+    }
+    /* With $ absolutely-positioned, drop the inline padding on .buy-in-amount
+       inside non-split cells so the centered number sits cleanly. */
+    .buy-in-table tbody td.buy-in-cell-expected:not(.buy-in-cell-split) > .buy-in-amount,
+    .buy-in-table tbody td.buy-in-cell-actual:not(.buy-in-cell-split) > .buy-in-amount,
+    .buy-in-table tbody td.buy-in-cell-delta:not(.buy-in-cell-split) > .buy-in-amount,
+    .buy-in-table tbody td.buy-in-cell-percent:not(.buy-in-cell-split) > .buy-in-amount {
+        padding-left: 0;
+        padding-right: 0;
+        text-align: center;
+    }
+    .buy-in-table tbody td.buy-in-cell-day {
+        padding-bottom: 0.1in;
+        border-bottom: none;
+        vertical-align: middle;
+    }
+    .buy-in-cell-day {
+        font-weight: 500;
+        width: 14%;
+    }
+    .buy-in-cell-expected,
+    .buy-in-cell-actual,
+    .buy-in-cell-delta,
+    .buy-in-cell-percent {
+        width: 21.5%;
+    }
+    .buy-in-table tbody td.buy-in-cell-expected,
+    .buy-in-table tbody td.buy-in-cell-actual,
+    .buy-in-table tbody td.buy-in-cell-delta,
+    .buy-in-table tbody td.buy-in-cell-percent {
+        border-bottom: 1.5px solid #000;
+    }
+
+    /* Value-cell innards: keep $ and the amount on a single baseline. We use
+       flex with align-items:baseline so the $ sits flush against the writing
+       area (matching the PDF) and amounts that are pre-filled don't drop
+       below the line. */
+    .buy-in-cell-expected,
+    .buy-in-cell-actual,
+    .buy-in-cell-delta,
+    .buy-in-cell-percent {
+        white-space: nowrap;
+    }
+    .buy-in-table .buy-in-currency {
+        display: inline-block;
+        font-weight: 700;
+        vertical-align: baseline;
+    }
+    .buy-in-table .buy-in-amount {
+        display: inline-block;
+        vertical-align: baseline;
+        padding-left: 0.08in;
+        padding-right: 0.05in;
+    }
+    .buy-in-cell-percent .buy-in-amount {
+        padding-left: 0;
+        padding-right: 0.08in;
+        text-align: right;
+    }
+    .buy-in-cell-percent .buy-in-unit {
+        display: inline-block;
+        vertical-align: baseline;
+        font-weight: 700;
+    }
+
+    /* Thin spacer row visual: blank gap between Saturday and the WEEKLY TOTAL */
+    .buy-in-table tbody tr:last-child td {
+        padding-bottom: 0.16in;
+    }
+
+    .buy-in-total-row td {
+        font-weight: 700;
+        padding: 0.16in 0.12in 0.12in 0.12in !important;
+        background-color: #DCDCDC;
+        border-top: 2px solid #000;
+        border-bottom: 1.5px solid #000;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        vertical-align: middle;
+        font-size: 11pt;
+        white-space: nowrap;
+    }
+    /* WEEKLY TOTAL value cells get the same enlarged + centered treatment as
+       the body rows so the autopopulated total sits visually in line with
+       each day's number above it. $ stays anchored left, % anchored right. */
+    .buy-in-total-row td.buy-in-cell-expected,
+    .buy-in-total-row td.buy-in-cell-actual,
+    .buy-in-total-row td.buy-in-cell-delta,
+    .buy-in-total-row td.buy-in-cell-percent {
+        font-size: 14pt;
+        text-align: center;
+        position: relative;
+    }
+    .buy-in-total-row td.buy-in-cell-expected:not(.buy-in-cell-split) > .buy-in-currency,
+    .buy-in-total-row td.buy-in-cell-actual:not(.buy-in-cell-split) > .buy-in-currency,
+    .buy-in-total-row td.buy-in-cell-delta:not(.buy-in-cell-split) > .buy-in-currency {
+        position: absolute;
+        left: 0.12in;
+        top: 50%;
+        transform: translateY(-50%);
+    }
+    .buy-in-total-row td.buy-in-cell-percent:not(.buy-in-cell-split) > .buy-in-unit {
+        position: absolute;
+        right: 0.12in;
+        top: 50%;
+        transform: translateY(-50%);
+    }
+    .buy-in-total-row td.buy-in-cell-expected:not(.buy-in-cell-split) > .buy-in-amount,
+    .buy-in-total-row td.buy-in-cell-actual:not(.buy-in-cell-split) > .buy-in-amount,
+    .buy-in-total-row td.buy-in-cell-delta:not(.buy-in-cell-split) > .buy-in-amount,
+    .buy-in-total-row td.buy-in-cell-percent:not(.buy-in-cell-split) > .buy-in-amount {
+        padding-left: 0;
+        padding-right: 0;
+        text-align: center;
+    }
+    .buy-in-total-row td.buy-in-cell-day {
+        padding-left: 0.12in !important;
+        letter-spacing: 0.02em;
+    }
+    .buy-in-total-row .buy-in-cell-actual,
+    .buy-in-total-row .buy-in-cell-percent {
+        background-color: #FBE5C3 !important;
+    }
+
+    /* =========================================================
+       Buy-In Combined (Crate / Ship) — split-column variant.
+       Each value cell is two halves separated by a "/" divider:
+         Crate (= Crating + Load summed) on the left,
+         Ship on the right.
+       The header gets a CRATE / SHIPPING sub-row under each column.
+       ========================================================= */
+    .buy-in-table-combined thead .buy-in-subhead th.buy-in-th-sub {
+        font-size: 8pt;
+        font-weight: 500;
+        letter-spacing: 0.04em;
+        padding: 0 0.12in 0.06in 0.12in;
+        background-color: #DCDCDC;
+        color: #333;
+        text-align: left;
+    }
+    .buy-in-table-combined thead .buy-in-subhead th.buy-in-th-actual.buy-in-th-sub,
+    .buy-in-table-combined thead .buy-in-subhead th.buy-in-th-percent.buy-in-th-sub {
+        background-color: #FBE5C3;
+    }
+    .buy-in-table-combined thead tr:first-child th {
+        padding-bottom: 0.02in;
+    }
+
+    .buy-in-cell-split {
+        display: table-cell;
+    }
+    .buy-in-cell-split .buy-in-split-half {
+        display: inline-block;
+        vertical-align: baseline;
+        white-space: nowrap;
+    }
+    .buy-in-cell-split .buy-in-split-half .buy-in-amount {
+        min-width: 0.55in;
+    }
+    .buy-in-cell-percent.buy-in-cell-split .buy-in-split-half .buy-in-amount {
+        min-width: 0.45in;
+        text-align: right;
+        padding-right: 0.04in;
+    }
+    .buy-in-cell-split .buy-in-split-sep {
+        display: inline-block;
+        padding: 0 0.06in;
+        font-weight: 500;
+        color: #333;
+        vertical-align: baseline;
+    }
+
+    /* WEEKLY TOTAL on the combined sheet collapses $ to single values and
+       only keeps the % cell split. The split rule above already handles
+       sizing — just need to make sure the inline split element doesn't
+       break across lines. */
+    .buy-in-total-row-combined .buy-in-cell-percent.buy-in-cell-split {
+        font-weight: 700;
+    }
 }

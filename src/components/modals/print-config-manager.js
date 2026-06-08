@@ -20,6 +20,56 @@ let currentOrientation = 'landscape';
 // original Mon-Fri-only behavior (weekend work collapsed onto Friday).
 let includeBoardSaturday = true;
 
+// Which "kind" of department list the picker is currently showing. The buy-in
+// print type uses a different fixed list (includes Batch+Layout, excludes
+// Facilities) AND a different localStorage key so it doesn't trample the
+// regular Print Week selection — and vice versa. Default = the legacy list.
+let currentDeptListKind = 'default';
+
+// Department list shown when the Buy-In Sheets print type is selected. The
+// renderer iterates these in this same order. Excludes Special Events and
+// Facilities per product spec; includes the two synthetic crews (Batch,
+// Layout) so the manager can issue them their own form.
+//
+// The shipping crew uses a single combined "Crate / Ship" entry rather than
+// the three underlying departments (Crating, Load, Ship). Production runs one
+// combined buy-in sheet for that group with split CRATE / SHIPPING columns
+// (Crate = Crating + Load summed, Ship = Ship alone). See
+// BUY_IN_CRATE_SHIP_LABEL in print-renderer.js for the renderer-side handling.
+export const BUY_IN_CRATE_SHIP = 'Crate / Ship';
+export const BUY_IN_DEPARTMENTS = [
+    'Mill', 'Form Out', 'Cast', 'Batch', 'Samples', 'Demold', 'Layout',
+    'Finish', 'Seal', 'Final Insp.', 'Special', BUY_IN_CRATE_SHIP
+];
+
+/**
+ * Set which department list kind the picker should render. Either 'default'
+ * (the dynamic getFilteredDepartments() list used by Print Week / Print Day /
+ * Phase Start) or 'buy-in' (the fixed BUY_IN_DEPARTMENTS list).
+ */
+export function setCurrentDeptListKind(kind) {
+    currentDeptListKind = (kind === 'buy-in') ? 'buy-in' : 'default';
+}
+
+/**
+ * @returns {string} 'default' | 'buy-in'
+ */
+export function getCurrentDeptListKind() {
+    return currentDeptListKind;
+}
+
+function _deptStorageKey() {
+    return currentDeptListKind === 'buy-in'
+        ? 'printSelectedDepartments_buyIn'
+        : 'printSelectedDepartments';
+}
+
+function _deptListForCurrentKind() {
+    return currentDeptListKind === 'buy-in'
+        ? BUY_IN_DEPARTMENTS.slice()
+        : getFilteredDepartments();
+}
+
 /**
  * Get current print type
  * @returns {string} Current print type ('week' or 'day')
@@ -182,12 +232,16 @@ export function getFilteredDepartments() {
 export function populateDepartmentsGrid(departmentsGridElement, onChangeCallback) {
     if (!departmentsGridElement) return;
 
-    const departments = getFilteredDepartments();
+    // Department list + saved-selection key are both keyed off the current
+    // dept-list kind (set via setCurrentDeptListKind). Buy-in has its own
+    // fixed list and its own localStorage key so the two print types don't
+    // overwrite each other's pick state.
+    const departments = _deptListForCurrentKind();
     departmentsGridElement.innerHTML = '';
 
-    // Restore saved print department selections
-    const savedPrintDepartments = localStorage.getItem('printSelectedDepartments')
-        ? JSON.parse(localStorage.getItem('printSelectedDepartments'))
+    const storageKey = _deptStorageKey();
+    const savedPrintDepartments = localStorage.getItem(storageKey)
+        ? JSON.parse(localStorage.getItem(storageKey))
         : null;
     const defaultSelectedDepts = savedPrintDepartments !== null ? savedPrintDepartments : departments;
 
@@ -221,7 +275,7 @@ export function populateDepartmentsGrid(departmentsGridElement, onChangeCallback
 export function saveDepartmentSelection() {
     const selectedDepts = Array.from(document.querySelectorAll('.departments-grid input[type="checkbox"]:checked'))
         .map(cb => cb.value);
-    localStorage.setItem('printSelectedDepartments', JSON.stringify(selectedDepts));
+    localStorage.setItem(_deptStorageKey(), JSON.stringify(selectedDepts));
 }
 
 /**

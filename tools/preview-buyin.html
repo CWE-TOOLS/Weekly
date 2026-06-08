@@ -1,0 +1,399 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Buy-In preview</title>
+<style>
+/* Render the buy-in form as if @media print was active.
+   Page emulates 11in × 8.5in (landscape letter) at 96 DPI = 1056 × 816 px,
+   minus 0.5in margins = 960 × 720 px content area. */
+html, body {
+    margin: 0;
+    padding: 0;
+    background: #ddd;
+}
+.preview-stage {
+    /* 10in × 7.5in @ 96 DPI — actual printable area for landscape letter
+       after the printer's 0.5in @page margin. Keeps the preview honest
+       about what fits on a single page. */
+    width: 960px;
+    height: 720px;
+    margin: 24px auto;
+    background: white;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    box-sizing: border-box;
+    padding: 0;
+}
+
+/* === buy-in CSS (verbatim copy of what's in print.css for visual check) === */
+.buy-in-report .print-page {
+    page-break-after: always;
+    page-break-inside: avoid;
+    display: block !important;
+    justify-content: flex-start !important;
+    align-items: stretch !important;
+    padding: 0.3in 0.6in 0.3in 0.6in !important;
+    width: 100%;
+    height: 100%;
+    min-height: 7.5in;
+    box-sizing: border-box;
+    background: white;
+    font-family: 'Calibri', 'Arial', Helvetica, sans-serif;
+    color: #000;
+}
+.buy-in-company {
+    text-align: right;
+    font-size: 11pt;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    margin-bottom: 0.2in;
+}
+.buy-in-summary {
+    display: flex;
+    gap: 0.5in;
+    align-items: baseline;
+    font-size: 14pt;
+    font-weight: 700;
+    margin-bottom: 0.28in;
+}
+.buy-in-summary-item {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.08in;
+}
+.buy-in-summary .buy-in-fill {
+    display: inline-block;
+    min-width: 2.2in;
+    border-bottom: 1.5px solid #000;
+    height: 1.1em;
+}
+.buy-in-currency, .buy-in-unit {
+    font-weight: 700;
+}
+.buy-in-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.6in;
+    margin-bottom: 0.18in;
+    font-size: 12pt;
+}
+.buy-in-meta-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.12in;
+}
+.buy-in-meta-row:first-child {
+    flex: 1;
+}
+.buy-in-meta .buy-in-label,
+.buy-in-members .buy-in-label {
+    font-weight: 700;
+}
+.buy-in-meta-row:first-child .buy-in-value {
+    flex: 1;
+}
+.buy-in-meta .buy-in-value {
+    font-weight: 500;
+    border-bottom: 1.5px solid #000;
+    min-width: 2.6in;
+    padding: 0 0.05in 0.02in;
+}
+.buy-in-meta .buy-in-value.buy-in-crew-chip {
+    display: inline-block;
+    border-bottom: none;
+    border-radius: 0.05in;
+    padding: 0.05in 0.18in;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    min-width: 1.6in;
+    text-align: center;
+}
+.buy-in-members {
+    display: flex;
+    align-items: baseline;
+    gap: 0.12in;
+    margin-bottom: 0.28in;
+    font-size: 12pt;
+}
+.buy-in-members .buy-in-fill-wide {
+    flex: 1;
+    border-bottom: 1.5px solid #000;
+    height: 1.2em;
+}
+.buy-in-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11pt;
+    table-layout: fixed;
+}
+.buy-in-table th {
+    font-size: 10pt;
+    font-weight: 700;
+    text-align: left;
+    padding: 0.09in 0.12in;
+    background-color: #DCDCDC;
+    border: none;
+    letter-spacing: 0.04em;
+    vertical-align: middle;
+}
+.buy-in-table th.buy-in-th-actual,
+.buy-in-table th.buy-in-th-percent {
+    background-color: #FBE5C3;
+}
+.buy-in-table th.buy-in-th-day {
+    line-height: 1.15;
+}
+.buy-in-th-day-main {
+    display: block;
+}
+.buy-in-th-day-week {
+    display: block;
+    font-size: 9pt;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    margin-top: 0.02in;
+    color: #333;
+}
+.buy-in-table tbody td {
+    padding: 0.22in 0.12in 0.06in 0.12in;
+    font-weight: 500;
+    vertical-align: bottom;
+    font-size: 11pt;
+}
+.buy-in-table tbody td.buy-in-cell-expected,
+.buy-in-table tbody td.buy-in-cell-actual,
+.buy-in-table tbody td.buy-in-cell-delta,
+.buy-in-table tbody td.buy-in-cell-percent {
+    font-size: 14pt;
+    text-align: center;
+    position: relative;
+}
+.buy-in-table tbody td.buy-in-cell-expected:not(.buy-in-cell-split) > .buy-in-currency,
+.buy-in-table tbody td.buy-in-cell-actual:not(.buy-in-cell-split) > .buy-in-currency,
+.buy-in-table tbody td.buy-in-cell-delta:not(.buy-in-cell-split) > .buy-in-currency {
+    position: absolute;
+    left: 0.12in;
+    bottom: 0.06in;
+}
+.buy-in-table tbody td.buy-in-cell-percent:not(.buy-in-cell-split) > .buy-in-unit {
+    position: absolute;
+    right: 0.12in;
+    bottom: 0.06in;
+}
+.buy-in-table tbody td.buy-in-cell-expected:not(.buy-in-cell-split) > .buy-in-amount,
+.buy-in-table tbody td.buy-in-cell-actual:not(.buy-in-cell-split) > .buy-in-amount,
+.buy-in-table tbody td.buy-in-cell-delta:not(.buy-in-cell-split) > .buy-in-amount,
+.buy-in-table tbody td.buy-in-cell-percent:not(.buy-in-cell-split) > .buy-in-amount {
+    padding-left: 0;
+    padding-right: 0;
+    text-align: center;
+}
+.buy-in-table tbody td.buy-in-cell-day {
+    padding-bottom: 0.1in;
+    border-bottom: none;
+    vertical-align: middle;
+}
+.buy-in-cell-day {
+    font-weight: 500;
+    width: 14%;
+}
+.buy-in-cell-expected,
+.buy-in-cell-actual,
+.buy-in-cell-delta,
+.buy-in-cell-percent {
+    width: 21.5%;
+}
+.buy-in-table tbody td.buy-in-cell-expected,
+.buy-in-table tbody td.buy-in-cell-actual,
+.buy-in-table tbody td.buy-in-cell-delta,
+.buy-in-table tbody td.buy-in-cell-percent {
+    border-bottom: 1.5px solid #000;
+}
+.buy-in-cell-expected,
+.buy-in-cell-actual,
+.buy-in-cell-delta,
+.buy-in-cell-percent {
+    white-space: nowrap;
+}
+.buy-in-table .buy-in-currency {
+    display: inline-block;
+    font-weight: 700;
+    vertical-align: baseline;
+}
+.buy-in-table .buy-in-amount {
+    display: inline-block;
+    vertical-align: baseline;
+    padding-left: 0.08in;
+    padding-right: 0.05in;
+}
+.buy-in-cell-percent .buy-in-amount {
+    padding-left: 0;
+    padding-right: 0.08in;
+    text-align: right;
+}
+.buy-in-cell-percent .buy-in-unit {
+    display: inline-block;
+    vertical-align: baseline;
+    font-weight: 700;
+}
+.buy-in-table tbody tr:last-child td {
+    padding-bottom: 0.16in;
+}
+.buy-in-total-row td {
+    font-weight: 700;
+    padding: 0.16in 0.12in 0.12in 0.12in !important;
+    background-color: #DCDCDC;
+    border-top: 2px solid #000;
+    border-bottom: 1.5px solid #000;
+    vertical-align: middle;
+    font-size: 11pt;
+    white-space: nowrap;
+}
+.buy-in-total-row td.buy-in-cell-expected,
+.buy-in-total-row td.buy-in-cell-actual,
+.buy-in-total-row td.buy-in-cell-delta,
+.buy-in-total-row td.buy-in-cell-percent {
+    font-size: 14pt;
+    text-align: center;
+    position: relative;
+}
+.buy-in-total-row td.buy-in-cell-expected:not(.buy-in-cell-split) > .buy-in-currency,
+.buy-in-total-row td.buy-in-cell-actual:not(.buy-in-cell-split) > .buy-in-currency,
+.buy-in-total-row td.buy-in-cell-delta:not(.buy-in-cell-split) > .buy-in-currency {
+    position: absolute;
+    left: 0.12in;
+    top: 50%;
+    transform: translateY(-50%);
+}
+.buy-in-total-row td.buy-in-cell-percent:not(.buy-in-cell-split) > .buy-in-unit {
+    position: absolute;
+    right: 0.12in;
+    top: 50%;
+    transform: translateY(-50%);
+}
+.buy-in-total-row td.buy-in-cell-expected:not(.buy-in-cell-split) > .buy-in-amount,
+.buy-in-total-row td.buy-in-cell-actual:not(.buy-in-cell-split) > .buy-in-amount,
+.buy-in-total-row td.buy-in-cell-delta:not(.buy-in-cell-split) > .buy-in-amount,
+.buy-in-total-row td.buy-in-cell-percent:not(.buy-in-cell-split) > .buy-in-amount {
+    padding-left: 0;
+    padding-right: 0;
+    text-align: center;
+}
+.buy-in-total-row td.buy-in-cell-day {
+    padding-left: 0.12in !important;
+    letter-spacing: 0.02em;
+}
+.buy-in-total-row .buy-in-cell-actual,
+.buy-in-total-row .buy-in-cell-percent {
+    background-color: #FBE5C3 !important;
+}
+</style>
+</head>
+<body>
+<div class="preview-stage">
+    <div class="print-preview-content buy-in-report">
+        <div class="print-page buy-in-page">
+            <div class="buy-in-company">CONCRETEWORKS EAST</div>
+
+            <div class="buy-in-summary">
+                <span class="buy-in-summary-item">
+                    <span class="buy-in-label">Percent</span>
+                    <span class="buy-in-fill"></span>
+                    <span class="buy-in-unit">%</span>
+                </span>
+                <span class="buy-in-summary-item">
+                    <span class="buy-in-label">Delta</span>
+                    <span class="buy-in-currency">$</span>
+                    <span class="buy-in-fill"></span>
+                </span>
+            </div>
+
+            <div class="buy-in-meta">
+                <div class="buy-in-meta-row">
+                    <span class="buy-in-label">Crew:</span>
+                    <span class="buy-in-value buy-in-crew-chip" style="background-color: #EF4444; color: #FFFFFF;">Cast</span>
+                </div>
+                <div class="buy-in-meta-row">
+                    <span class="buy-in-label">Date:</span>
+                    <span class="buy-in-value">Jun 8 – Jun 13, 2026</span>
+                </div>
+            </div>
+
+            <div class="buy-in-members">
+                <span class="buy-in-label">Members:</span>
+                <span class="buy-in-fill-wide"></span>
+            </div>
+
+            <table class="buy-in-table">
+                <thead>
+                    <tr>
+                        <th class="buy-in-th-day">
+                            <span class="buy-in-th-day-main">DAY</span>
+                            <span class="buy-in-th-day-week">June Week 2</span>
+                        </th>
+                        <th class="buy-in-th-expected">EXPECTED VALUE</th>
+                        <th class="buy-in-th-actual">ACTUAL VALUE</th>
+                        <th class="buy-in-th-delta">DELTA</th>
+                        <th class="buy-in-th-percent">% COMPLETED</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="buy-in-cell-day">Monday</td>
+                        <td class="buy-in-cell-expected"><span class="buy-in-currency">$</span><span class="buy-in-amount">3,240</span></td>
+                        <td class="buy-in-cell-actual"><span class="buy-in-currency">$</span><span class="buy-in-amount"></span></td>
+                        <td class="buy-in-cell-delta"><span class="buy-in-currency">$</span><span class="buy-in-amount"></span></td>
+                        <td class="buy-in-cell-percent"><span class="buy-in-amount"></span><span class="buy-in-unit">%</span></td>
+                    </tr>
+                    <tr>
+                        <td class="buy-in-cell-day">Tuesday</td>
+                        <td class="buy-in-cell-expected"><span class="buy-in-currency">$</span><span class="buy-in-amount">4,860</span></td>
+                        <td class="buy-in-cell-actual"><span class="buy-in-currency">$</span><span class="buy-in-amount"></span></td>
+                        <td class="buy-in-cell-delta"><span class="buy-in-currency">$</span><span class="buy-in-amount"></span></td>
+                        <td class="buy-in-cell-percent"><span class="buy-in-amount"></span><span class="buy-in-unit">%</span></td>
+                    </tr>
+                    <tr>
+                        <td class="buy-in-cell-day">Wednesday</td>
+                        <td class="buy-in-cell-expected"><span class="buy-in-currency">$</span><span class="buy-in-amount">2,700</span></td>
+                        <td class="buy-in-cell-actual"><span class="buy-in-currency">$</span><span class="buy-in-amount"></span></td>
+                        <td class="buy-in-cell-delta"><span class="buy-in-currency">$</span><span class="buy-in-amount"></span></td>
+                        <td class="buy-in-cell-percent"><span class="buy-in-amount"></span><span class="buy-in-unit">%</span></td>
+                    </tr>
+                    <tr>
+                        <td class="buy-in-cell-day">Thursday</td>
+                        <td class="buy-in-cell-expected"><span class="buy-in-currency">$</span><span class="buy-in-amount">5,400</span></td>
+                        <td class="buy-in-cell-actual"><span class="buy-in-currency">$</span><span class="buy-in-amount"></span></td>
+                        <td class="buy-in-cell-delta"><span class="buy-in-currency">$</span><span class="buy-in-amount"></span></td>
+                        <td class="buy-in-cell-percent"><span class="buy-in-amount"></span><span class="buy-in-unit">%</span></td>
+                    </tr>
+                    <tr>
+                        <td class="buy-in-cell-day">Friday</td>
+                        <td class="buy-in-cell-expected"><span class="buy-in-currency">$</span><span class="buy-in-amount">4,050</span></td>
+                        <td class="buy-in-cell-actual"><span class="buy-in-currency">$</span><span class="buy-in-amount"></span></td>
+                        <td class="buy-in-cell-delta"><span class="buy-in-currency">$</span><span class="buy-in-amount"></span></td>
+                        <td class="buy-in-cell-percent"><span class="buy-in-amount"></span><span class="buy-in-unit">%</span></td>
+                    </tr>
+                    <tr>
+                        <td class="buy-in-cell-day">Saturday</td>
+                        <td class="buy-in-cell-expected"><span class="buy-in-currency">$</span><span class="buy-in-amount"></span></td>
+                        <td class="buy-in-cell-actual"><span class="buy-in-currency">$</span><span class="buy-in-amount"></span></td>
+                        <td class="buy-in-cell-delta"><span class="buy-in-currency">$</span><span class="buy-in-amount"></span></td>
+                        <td class="buy-in-cell-percent"><span class="buy-in-amount"></span><span class="buy-in-unit">%</span></td>
+                    </tr>
+                </tbody>
+                <tfoot>
+                    <tr class="buy-in-total-row">
+                        <td class="buy-in-cell-day">WEEKLY TOTAL:</td>
+                        <td class="buy-in-cell-expected"><span class="buy-in-currency">$</span><span class="buy-in-amount">20,250</span></td>
+                        <td class="buy-in-cell-actual"><span class="buy-in-currency">$</span><span class="buy-in-amount"></span></td>
+                        <td class="buy-in-cell-delta"><span class="buy-in-currency">$</span><span class="buy-in-amount"></span></td>
+                        <td class="buy-in-cell-percent"><span class="buy-in-amount"></span><span class="buy-in-unit">%</span></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+</body>
+</html>

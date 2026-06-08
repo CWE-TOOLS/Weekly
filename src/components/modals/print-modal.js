@@ -27,7 +27,8 @@ import {
     getSelectedDepartments,
     updateWeekDates,
     validatePrintConfig,
-    preparePrintDates
+    preparePrintDates,
+    setCurrentDeptListKind
 } from './print-config-manager.js';
 
 // Private state
@@ -222,6 +223,16 @@ function updatePrintTypeDisplay() {
     const printType = (checkedRadio && checkedRadio.value) || 'week';
     setCurrentPrintType(printType);
 
+    // Swap the department-list kind based on the print type. Buy-in has its
+    // own fixed list (BUY_IN_DEPARTMENTS, includes Batch+Layout) and its own
+    // saved selection — every other print type shares the legacy list. The
+    // re-populate below picks up whichever kind is now active so the user
+    // sees the correct chips when they flip between print types.
+    setCurrentDeptListKind(printType === 'buy-in' ? 'buy-in' : 'default');
+    if (departmentsGridElement) {
+        populateDepartmentsGrid(departmentsGridElement, saveDepartmentSelection);
+    }
+
     if (weekSectionElement && daySectionElement && frozenDailySectionElement && departmentsSectionElement && orientationSectionElement) {
         // Default: hide the board-only "Include Saturday" toggle. The
         // board-11x17 branch below switches it back on.
@@ -243,6 +254,16 @@ function updatePrintTypeDisplay() {
             departmentsSectionElement.style.display = 'none';
             orientationSectionElement.style.display = 'none';
             if (boardSaturdaySectionElement) boardSaturdaySectionElement.style.display = 'block';
+        } else if (printType === 'buy-in') {
+            // Buy-in sheets use the week selector and the (buy-in-specific)
+            // department picker. Default list is the 14 production crews
+            // (Special Events + Facilities excluded; Batch + Layout included).
+            // Page size locked to letter landscape to match the source form.
+            weekSectionElement.style.display = 'block';
+            daySectionElement.style.display = 'none';
+            frozenDailySectionElement.style.display = 'none';
+            departmentsSectionElement.style.display = 'block';
+            orientationSectionElement.style.display = 'none';
         } else if (printType === 'day') {
             weekSectionElement.style.display = 'none';
             daySectionElement.style.display = 'block';
@@ -291,6 +312,24 @@ function handlePrintExecute() {
             firstDay: printDates[0] && printDates[0].toDateString(),
             dayCount: printDates.length
         });
+    }
+    // Buy-in sheets: user picks which crew sheets to print from a dedicated
+    // dept list (Mill, Form Out, Cast, Batch, Samples, Demold, Layout, Finish,
+    // Seal, Final Insp., Special, Crate / Ship — Special Events and Facilities
+    // are excluded at the picker level; Crating + Load + Ship collapse into a
+    // single combined "Crate / Ship" sheet with split CRATE / SHIPPING columns).
+    // One page per checked dept.
+    else if (printType === 'buy-in') {
+        selectedDepts = getSelectedDepartments();
+        if (selectedDepts.length === 0) {
+            alert('Please select at least one department for the buy-in sheets.');
+            return;
+        }
+        printDates = preparePrintDates('week', weekSelectElement, null);
+        if (!printDates || printDates.length === 0) {
+            alert('Please select a week for the buy-in sheets.');
+            return;
+        }
     }
     // Handle frozen-daily separately
     else if (printType === 'frozen-daily') {

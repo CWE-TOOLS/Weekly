@@ -8,10 +8,11 @@ import { REVENUE } from '../../config/business-constants.js';
 import { PRINT_LAYOUT, CONTENT_LIMITS } from '../../config/layout-constants.js';
 import { RENDER_DELAY } from '../../config/timing-constants.js';
 
-import { parseDate } from '../../utils/date-utils.js';
+import { parseDate, getWeekMonth, getWeekOfMonth } from '../../utils/date-utils.js';
 import * as PrintLayout from './print-layout.js';
 import * as DepartmentUtils from '../../utils/department-utils.js';
 import { generateAllSyntheticTasks } from '../../utils/schedule-utils.js';
+import { DEPARTMENT_COLORS, normalizeDepartmentClass } from '../../config/department-config.js';
 
 // ============================================
 // PAGE ASSEMBLY
@@ -666,6 +667,14 @@ function generatePrintContent(printType, selectedDepts, weekDates, allTasks, opt
         return generateBoardScheduleContent(weekDates, allTasks, options);
     }
 
+    // Handle buy-in sheets — one hand-fill manager form per production crew.
+    // The picker constrains selectedDepts to BUY_IN_DEPARTMENTS (set up in
+    // print-config-manager), so the renderer just iterates whichever subset
+    // the user checked.
+    if (printType === 'buy-in') {
+        return generateBuyInContent(weekDates, allTasks, selectedDepts);
+    }
+
     const printContainer = document.createElement('div');
     printContainer.className = 'print-preview-content';
 
@@ -743,6 +752,9 @@ function generatePrintContent(printType, selectedDepts, weekDates, allTasks, opt
 function applyPrintScaling(printContent, printType) {
     // Board schedule is a fixed 11×17 layout - no scaling
     if (printType === 'board-11x17') return;
+    // Buy-in sheets are a fixed letter-portrait form with hand-fill blanks —
+    // shrinking the type to "fit" defeats the purpose of having writable lines.
+    if (printType === 'buy-in') return;
     // Delegate scaling to the centralized utility
     window.PrintUtils.applyScaling(printContent, printType, false);
 }
@@ -1057,6 +1069,440 @@ function _buildBoardUnresolvedPage(unresolved) {
     return page;
 }
 
+// ============================================
+// BUY-IN SHEETS RENDERER
+// ============================================
+//
+// One hand-fill manager form per production crew (Mill, Form Out, Cast, Batch,
+// Samples, Demold, Layout, Finish, Seal, Final Insp., Special, Crating, Load,
+// Ship). Special Events and Facilities are intentionally excluded — they
+// aren't tracked as production crews. The "Expected Value" column is
+// autopopulated from sum(task.hours) * REVENUE.HOURLY_RATE per dept per day;
+// every other column (Actual, Delta, %) is left blank for the crew leader
+// to fill in by hand. Layout is letter landscape to match the source PDF.
+
+// MUST stay in sync with BUY_IN_DEPARTMENTS exported from
+// components/modals/print-config-manager.js — that one drives the picker, this
+// one drives the iteration order in the renderer.
+const BUY_IN_DEPARTMENTS = [
+    'Mill', 'Form Out', 'Cast', 'Batch', 'Samples', 'Demold', 'Layout',
+    'Finish', 'Seal', 'Final Insp.', 'Special', 'Crate / Ship'
+];
+
+// Special combined-sheet name: rendered with split CRATE/SHIPPING columns
+// rather than the standard single-value buy-in layout. Crate = Crating + Load
+// hours summed; Ship = Ship hours alone.
+const BUY_IN_CRATE_SHIP = 'Crate / Ship';
+
+const BUY_IN_DAYS = [
+    { label: 'Monday',    offset: 0 },
+    { label: 'Tuesday',   offset: 1 },
+    { label: 'Wednesday', offset: 2 },
+    { label: 'Thursday',  offset: 3 },
+    { label: 'Friday',    offset: 4 },
+    { label: 'Saturday',  offset: 5 }
+];
+
+// Synthetic departments draw their hours from generateAllSyntheticTasks rather
+// than the raw task list (they have no real rows in the sheet).
+const SYNTHETIC_BUY_IN_DEPTS = new Set(['Batch', 'Layout']);
+
+function _buyInFormatMoney(amount) {
+    if (!amount || amount === 0) return '';
+    return amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
+
+function _buyInWeekRange(weekDates) {
+    if (!weekDates || weekDates.length === 0) return '';
+    const first = weekDates[0];
+    const last = weekDates[weekDates.length - 1];
+    if (!first || !last) return '';
+    const fmt = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return `${fmt(first)} – ${fmt(last)}, ${first.getFullYear()}`;
+}
+
+// Build the "June Week 3" label for the DAY column subtitle. Uses the same
+// week-of-month calculation the Print Week selector dropdown uses (so the
+// label here matches what the user picked in the modal).
+function _buyInWeekOfMonthLabel(monday) {
+    if (!monday) return '';
+    const month = getWeekMonth(monday);
+    const weekNum = getWeekOfMonth(monday, month);
+    const monthName = new Date(monday.getFullYear(), month, 1)
+        .toLocaleDateString('en-US', { month: 'long' });
+    return `${monthName} Week ${weekNum}`;
+}
+
+function _calculateBuyInExpectedForDay(dept, dayDate, allTasks, syntheticTasksByDept) {
+    if (!dayDate) return 0;
+    const dayStr = dayDate.toDateString();
+
+    const sourceTasks = SYNTHETIC_BUY_IN_DEPTS.has(dept)
+        ? (syntheticTasksByDept[dept] || [])
+        : (allTasks || []).filter(t => t.department === dept);
+
+    let totalHours = 0;
+    sourceTasks.forEach(task => {
+        const taskDate = parseDate(task.date);
+        if (!taskDate || taskDate.toDateString() !== dayStr) return;
+        const hours = parseFloat(task.hours);
+        if (!isNaN(hours)) totalHours += hours;
+    });
+
+    return Math.round(totalHours * REVENUE.HOURLY_RATE);
+}
+
+function _buildBuyInPage(dept, weekDates, allTasks, syntheticTasksByDept, dateRangeLabel, weekOfMonthLabel) {
+    const page = document.createElement('div');
+    page.className = 'print-page buy-in-page';
+
+    // Company banner (right-aligned, matches the source PDF)
+    const company = document.createElement('div');
+    company.className = 'buy-in-company';
+    company.textContent = 'CONCRETEWORKS EAST';
+    page.appendChild(company);
+
+    // "Percent ___% Delta $___" header row — both blanks for hand-fill
+    const summary = document.createElement('div');
+    summary.className = 'buy-in-summary';
+    summary.innerHTML = `
+        <span class="buy-in-summary-item">
+            <span class="buy-in-label">Percent</span>
+            <span class="buy-in-fill"></span>
+            <span class="buy-in-unit">%</span>
+        </span>
+        <span class="buy-in-summary-item">
+            <span class="buy-in-label">Delta</span>
+            <span class="buy-in-currency">$</span>
+            <span class="buy-in-fill"></span>
+        </span>
+    `;
+    page.appendChild(summary);
+
+    // Crew + Date row (Crew = department name as a dept-colored chip, Date =
+    // week range). The chip uses the canonical DEPARTMENT_COLORS mapping so
+    // every sheet picks up the same color the rest of the app uses for that
+    // dept — gives the manager an at-a-glance way to tell pages apart when
+    // flipping through the printed stack.
+    const deptColors = DEPARTMENT_COLORS[normalizeDepartmentClass(dept)] || { background: '#374151', text: '#FFFFFF' };
+    const meta = document.createElement('div');
+    meta.className = 'buy-in-meta';
+    meta.innerHTML = `
+        <div class="buy-in-meta-row">
+            <span class="buy-in-label">Crew:</span>
+            <span class="buy-in-value buy-in-crew-chip" style="background-color: ${deptColors.background}; color: ${deptColors.text};">${dept}</span>
+        </div>
+        <div class="buy-in-meta-row">
+            <span class="buy-in-label">Date:</span>
+            <span class="buy-in-value">${dateRangeLabel}</span>
+        </div>
+    `;
+    page.appendChild(meta);
+
+    // Members: long blank line for hand-fill
+    const members = document.createElement('div');
+    members.className = 'buy-in-members';
+    members.innerHTML = `
+        <span class="buy-in-label">Members:</span>
+        <span class="buy-in-fill buy-in-fill-wide"></span>
+    `;
+    page.appendChild(members);
+
+    // Day × value table (Expected autopopulated; Actual/Delta/% blank)
+    const table = document.createElement('table');
+    table.className = 'buy-in-table';
+
+    const thead = document.createElement('thead');
+    // Two-line DAY header: "DAY" on top, the week-of-month subtitle below
+    // (e.g. "June Week 3"). Other columns keep their single-line label.
+    thead.innerHTML = `
+        <tr>
+            <th class="buy-in-th-day">
+                <span class="buy-in-th-day-main">DAY</span>
+                <span class="buy-in-th-day-week">${weekOfMonthLabel}</span>
+            </th>
+            <th class="buy-in-th-expected">EXPECTED VALUE</th>
+            <th class="buy-in-th-actual">ACTUAL VALUE</th>
+            <th class="buy-in-th-delta">DELTA</th>
+            <th class="buy-in-th-percent">% COMPLETED</th>
+        </tr>
+    `;
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    let weeklyExpected = 0;
+
+    BUY_IN_DAYS.forEach(d => {
+        const dayDate = weekDates[d.offset];
+        const expected = _calculateBuyInExpectedForDay(dept, dayDate, allTasks, syntheticTasksByDept);
+        weeklyExpected += expected;
+
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td class="buy-in-cell-day">${d.label}</td>
+            <td class="buy-in-cell-expected"><span class="buy-in-currency">$</span><span class="buy-in-amount">${_buyInFormatMoney(expected)}</span></td>
+            <td class="buy-in-cell-actual"><span class="buy-in-currency">$</span><span class="buy-in-amount"></span></td>
+            <td class="buy-in-cell-delta"><span class="buy-in-currency">$</span><span class="buy-in-amount"></span></td>
+            <td class="buy-in-cell-percent"><span class="buy-in-amount"></span><span class="buy-in-unit">%</span></td>
+        `;
+        tbody.appendChild(row);
+    });
+
+    table.appendChild(tbody);
+
+    const tfoot = document.createElement('tfoot');
+    tfoot.innerHTML = `
+        <tr class="buy-in-total-row">
+            <td class="buy-in-cell-day">WEEKLY TOTAL:</td>
+            <td class="buy-in-cell-expected"><span class="buy-in-currency">$</span><span class="buy-in-amount">${_buyInFormatMoney(weeklyExpected)}</span></td>
+            <td class="buy-in-cell-actual"><span class="buy-in-currency">$</span><span class="buy-in-amount"></span></td>
+            <td class="buy-in-cell-delta"><span class="buy-in-currency">$</span><span class="buy-in-amount"></span></td>
+            <td class="buy-in-cell-percent"><span class="buy-in-amount"></span><span class="buy-in-unit">%</span></td>
+        </tr>
+    `;
+    table.appendChild(tfoot);
+
+    page.appendChild(table);
+
+    return page;
+}
+
+// Sum hours across multiple real departments for one day. Used by the
+// combined Crate/Ship sheet (Crate = Crating + Load).
+function _calculateBuyInExpectedForDeptsOnDay(deptList, dayDate, allTasks) {
+    if (!dayDate) return 0;
+    const dayStr = dayDate.toDateString();
+    const set = new Set(deptList);
+
+    let totalHours = 0;
+    (allTasks || []).forEach(task => {
+        if (!set.has(task.department)) return;
+        const taskDate = parseDate(task.date);
+        if (!taskDate || taskDate.toDateString() !== dayStr) return;
+        const hours = parseFloat(task.hours);
+        if (!isNaN(hours)) totalHours += hours;
+    });
+
+    return Math.round(totalHours * REVENUE.HOURLY_RATE);
+}
+
+/**
+ * Combined Crate/Ship buy-in page. Same overall shape as the regular sheet,
+ * but every value column is split with a "/" divider — Crate (= Crating +
+ * Load summed) on the left, Ship on the right. Header sub-label CRATE /
+ * SHIPPING under each column makes the split self-documenting. The WEEKLY
+ * TOTAL row collapses the dollar columns to one combined sum (Crate + Ship)
+ * but keeps the % column split since percentages don't add.
+ */
+function _buildBuyInCombinedCrateShipPage(weekDates, allTasks, dateRangeLabel, weekOfMonthLabel) {
+    const page = document.createElement('div');
+    page.className = 'print-page buy-in-page buy-in-page-combined';
+
+    // Company banner
+    const company = document.createElement('div');
+    company.className = 'buy-in-company';
+    company.textContent = 'CONCRETEWORKS EAST';
+    page.appendChild(company);
+
+    // Percent / Delta hand-fill header line
+    const summary = document.createElement('div');
+    summary.className = 'buy-in-summary';
+    summary.innerHTML = `
+        <span class="buy-in-summary-item">
+            <span class="buy-in-label">Percent</span>
+            <span class="buy-in-fill"></span>
+            <span class="buy-in-unit">%</span>
+        </span>
+        <span class="buy-in-summary-item">
+            <span class="buy-in-label">Delta</span>
+            <span class="buy-in-currency">$</span>
+            <span class="buy-in-fill"></span>
+        </span>
+    `;
+    page.appendChild(summary);
+
+    // Crew chip: use Crating's amber + Ship's green as a visual gradient hint.
+    // Keep it a single solid color (Crating amber) so the chip stays readable
+    // and matches the existing print-color-adjust pattern.
+    const crateColors = DEPARTMENT_COLORS[normalizeDepartmentClass('Crating')] || { background: '#A16207', text: '#FFFFFF' };
+    const meta = document.createElement('div');
+    meta.className = 'buy-in-meta';
+    meta.innerHTML = `
+        <div class="buy-in-meta-row">
+            <span class="buy-in-label">Crew:</span>
+            <span class="buy-in-value buy-in-crew-chip" style="background-color: ${crateColors.background}; color: ${crateColors.text};">Crate / Ship</span>
+        </div>
+        <div class="buy-in-meta-row">
+            <span class="buy-in-label">Date:</span>
+            <span class="buy-in-value">${dateRangeLabel}</span>
+        </div>
+    `;
+    page.appendChild(meta);
+
+    // Members blank line
+    const members = document.createElement('div');
+    members.className = 'buy-in-members';
+    members.innerHTML = `
+        <span class="buy-in-label">Members:</span>
+        <span class="buy-in-fill buy-in-fill-wide"></span>
+    `;
+    page.appendChild(members);
+
+    // Table — every value column gets a CRATE / SHIPPING sub-label so the
+    // split is self-documenting even without the column legend.
+    const table = document.createElement('table');
+    table.className = 'buy-in-table buy-in-table-combined';
+
+    const thead = document.createElement('thead');
+    thead.innerHTML = `
+        <tr>
+            <th class="buy-in-th-day" rowspan="2">
+                <span class="buy-in-th-day-main">DAY</span>
+                <span class="buy-in-th-day-week">${weekOfMonthLabel}</span>
+            </th>
+            <th class="buy-in-th-expected">EXPECTED VALUE</th>
+            <th class="buy-in-th-actual">ACTUAL VALUE</th>
+            <th class="buy-in-th-delta">DELTA</th>
+            <th class="buy-in-th-percent">% COMPLETED</th>
+        </tr>
+        <tr class="buy-in-subhead">
+            <th class="buy-in-th-expected buy-in-th-sub">CRATE&nbsp;&nbsp;/&nbsp;&nbsp;SHIPPING</th>
+            <th class="buy-in-th-actual buy-in-th-sub">CRATE&nbsp;&nbsp;/&nbsp;&nbsp;SHIPPING</th>
+            <th class="buy-in-th-delta buy-in-th-sub">CRATE&nbsp;&nbsp;/&nbsp;&nbsp;SHIPPING</th>
+            <th class="buy-in-th-percent buy-in-th-sub">CRATE&nbsp;&nbsp;/&nbsp;&nbsp;SHIPPING</th>
+        </tr>
+    `;
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    let weeklyCrate = 0;
+    let weeklyShip = 0;
+
+    BUY_IN_DAYS.forEach(d => {
+        const dayDate = weekDates[d.offset];
+        const crateExpected = _calculateBuyInExpectedForDeptsOnDay(['Crating', 'Load'], dayDate, allTasks);
+        const shipExpected = _calculateBuyInExpectedForDeptsOnDay(['Ship'], dayDate, allTasks);
+        weeklyCrate += crateExpected;
+        weeklyShip += shipExpected;
+
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td class="buy-in-cell-day">${d.label}</td>
+            <td class="buy-in-cell-expected buy-in-cell-split">
+                <span class="buy-in-split-half">
+                    <span class="buy-in-currency">$</span><span class="buy-in-amount">${_buyInFormatMoney(crateExpected)}</span>
+                </span>
+                <span class="buy-in-split-sep">/</span>
+                <span class="buy-in-split-half">
+                    <span class="buy-in-currency">$</span><span class="buy-in-amount">${_buyInFormatMoney(shipExpected)}</span>
+                </span>
+            </td>
+            <td class="buy-in-cell-actual buy-in-cell-split">
+                <span class="buy-in-split-half"><span class="buy-in-currency">$</span><span class="buy-in-amount"></span></span>
+                <span class="buy-in-split-sep">/</span>
+                <span class="buy-in-split-half"><span class="buy-in-currency">$</span><span class="buy-in-amount"></span></span>
+            </td>
+            <td class="buy-in-cell-delta buy-in-cell-split">
+                <span class="buy-in-split-half"><span class="buy-in-currency">$</span><span class="buy-in-amount"></span></span>
+                <span class="buy-in-split-sep">/</span>
+                <span class="buy-in-split-half"><span class="buy-in-currency">$</span><span class="buy-in-amount"></span></span>
+            </td>
+            <td class="buy-in-cell-percent buy-in-cell-split">
+                <span class="buy-in-split-half"><span class="buy-in-amount"></span><span class="buy-in-unit">%</span></span>
+                <span class="buy-in-split-sep">/</span>
+                <span class="buy-in-split-half"><span class="buy-in-amount"></span><span class="buy-in-unit">%</span></span>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+
+    table.appendChild(tbody);
+
+    // WEEKLY TOTAL row — every value column stays split (Crate / Ship) to
+    // match the day rows above. EXPECTED shows the two summed totals;
+    // ACTUAL, DELTA, % stay blank for hand-fill but keep the split.
+    const tfoot = document.createElement('tfoot');
+    tfoot.innerHTML = `
+        <tr class="buy-in-total-row buy-in-total-row-combined">
+            <td class="buy-in-cell-day">WEEKLY TOTAL:</td>
+            <td class="buy-in-cell-expected buy-in-cell-split">
+                <span class="buy-in-split-half">
+                    <span class="buy-in-currency">$</span><span class="buy-in-amount">${_buyInFormatMoney(weeklyCrate)}</span>
+                </span>
+                <span class="buy-in-split-sep">/</span>
+                <span class="buy-in-split-half">
+                    <span class="buy-in-currency">$</span><span class="buy-in-amount">${_buyInFormatMoney(weeklyShip)}</span>
+                </span>
+            </td>
+            <td class="buy-in-cell-actual buy-in-cell-split">
+                <span class="buy-in-split-half"><span class="buy-in-currency">$</span><span class="buy-in-amount"></span></span>
+                <span class="buy-in-split-sep">/</span>
+                <span class="buy-in-split-half"><span class="buy-in-currency">$</span><span class="buy-in-amount"></span></span>
+            </td>
+            <td class="buy-in-cell-delta buy-in-cell-split">
+                <span class="buy-in-split-half"><span class="buy-in-currency">$</span><span class="buy-in-amount"></span></span>
+                <span class="buy-in-split-sep">/</span>
+                <span class="buy-in-split-half"><span class="buy-in-currency">$</span><span class="buy-in-amount"></span></span>
+            </td>
+            <td class="buy-in-cell-percent buy-in-cell-split">
+                <span class="buy-in-split-half"><span class="buy-in-amount"></span><span class="buy-in-unit">%</span></span>
+                <span class="buy-in-split-sep">/</span>
+                <span class="buy-in-split-half"><span class="buy-in-amount"></span><span class="buy-in-unit">%</span></span>
+            </td>
+        </tr>
+    `;
+    table.appendChild(tfoot);
+
+    page.appendChild(table);
+
+    return page;
+}
+
+function generateBuyInContent(weekDates, allTasks, selectedDepts) {
+    const printContainer = document.createElement('div');
+    printContainer.className = 'print-preview-content buy-in-report';
+
+    // Anchor on Monday so the synthetic task generator (Batch / Layout) gets
+    // the right week start. weekDates is expected to be a 6-day Mon-Sat range
+    // already, but we normalize defensively here.
+    let monday = (weekDates && weekDates[0]) ? new Date(weekDates[0]) : new Date();
+    const day = monday.getDay();
+    const diff = monday.getDate() - day + (day === 0 ? -6 : 1);
+    monday = new Date(monday.setDate(diff));
+    monday.setHours(0, 0, 0, 0);
+
+    const syntheticTasksByDept = generateAllSyntheticTasks(weekDates, monday, () => allTasks);
+    const dateRangeLabel = _buyInWeekRange(weekDates);
+    const weekOfMonthLabel = _buyInWeekOfMonthLabel(monday);
+
+    // Filter BUY_IN_DEPARTMENTS by the user's picker selection (falling back to
+    // the full list if nothing was passed in, so calling code that hasn't been
+    // updated still works). Preserve BUY_IN_DEPARTMENTS order regardless of
+    // checkbox toggle order.
+    const selectedSet = (Array.isArray(selectedDepts) && selectedDepts.length > 0)
+        ? new Set(selectedDepts)
+        : null;
+    const deptsToRender = selectedSet
+        ? BUY_IN_DEPARTMENTS.filter(d => selectedSet.has(d))
+        : BUY_IN_DEPARTMENTS;
+
+    deptsToRender.forEach(dept => {
+        const page = (dept === BUY_IN_CRATE_SHIP)
+            ? _buildBuyInCombinedCrateShipPage(weekDates, allTasks, dateRangeLabel, weekOfMonthLabel)
+            : _buildBuyInPage(dept, weekDates, allTasks, syntheticTasksByDept, dateRangeLabel, weekOfMonthLabel);
+        printContainer.appendChild(page);
+    });
+
+    logger.info('Buy-in sheets rendered', {
+        departmentsRequested: selectedSet ? selectedDepts.length : BUY_IN_DEPARTMENTS.length,
+        departmentsRendered: deptsToRender.length,
+        weekStart: monday.toDateString(),
+        weekOfMonth: weekOfMonthLabel
+    });
+
+    return printContainer;
+}
+
 /**
  * Execute print with proper setup and cleanup
  */
@@ -1068,6 +1514,9 @@ function executePrint(printContent, printType = 'week', orientation = null) {
         pageOrientation = orientation;
     } else if (printType === 'board-11x17') {
         // Board schedule is locked to 11×17 landscape (tabloid landscape)
+        pageOrientation = 'landscape';
+    } else if (printType === 'buy-in') {
+        // Buy-in sheet is a fixed letter-landscape form to match the source PDF.
         pageOrientation = 'landscape';
     } else {
         // Default orientation based on print type for other types
@@ -1148,6 +1597,7 @@ export {
     generatePrintContent,
     generateFrozenDailyContent,
     generateBoardScheduleContent,
+    generateBuyInContent,
     applyPrintScaling,
     executePrint
 };
