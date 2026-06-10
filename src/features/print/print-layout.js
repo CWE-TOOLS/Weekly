@@ -38,7 +38,7 @@ function createDepartmentHeader(dept, printType, colors) {
 function createDepartmentSummaryRow(dept, totalHours, revenue, dates, printType) {
     const summaryRow = document.createElement('tr');
     const summaryCell = document.createElement('td');
-    summaryCell.colSpan = printType === 'week' ? dates.length : 4;
+    summaryCell.colSpan = printType === 'week' ? dates.length : 5;
     summaryCell.className = 'print-dept-summary';
     summaryCell.textContent = `${dept} - Total Hours: ${Math.round(totalHours)}, Revenue: $${revenue.toLocaleString()}`;
     summaryRow.appendChild(summaryCell);
@@ -64,7 +64,7 @@ function createTableHeader(dates, printType) {
         const singleDate = Array.isArray(dates) ? dates[0] : dates;
         const headers = [
             singleDate.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' }),
-            'Revenue', 'Mid-Day', 'End of Day'
+            'Revenue', 'Mid-Day', 'End of Day', 'Actual Hours'
         ];
         headers.forEach(text => {
             const th = document.createElement('th');
@@ -265,6 +265,14 @@ function createTableBody(dates, tasks, maxTasks, printType) {
             endOfDayCell.style.width = `${PRINT_LAYOUT.PERIOD_CELL_WIDTH_PERCENT}%`;
             endOfDayCell.textContent = '';
             tr.appendChild(endOfDayCell);
+
+            // Actual Hours cell (blank — hand-filled by crew)
+            const actualHoursCell = document.createElement('td');
+            actualHoursCell.className = 'print-grid-cell';
+            actualHoursCell.style.textAlign = 'center';
+            actualHoursCell.style.width = `${PRINT_LAYOUT.PERIOD_CELL_WIDTH_PERCENT}%`;
+            actualHoursCell.textContent = '';
+            tr.appendChild(actualHoursCell);
 
             tbody.appendChild(tr);
         }

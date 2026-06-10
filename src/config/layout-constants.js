@@ -118,8 +118,8 @@ export const PRINT_LAYOUT = {
   /** Task cell width percentage */
   TASK_CELL_WIDTH_PERCENT: 60,
 
-  /** Revenue/time period cell width percentage */
-  PERIOD_CELL_WIDTH_PERCENT: 13.33,
+  /** Revenue/time period cell width percentage (4 columns × 10% = 40%, paired with 60% task cell) */
+  PERIOD_CELL_WIDTH_PERCENT: 10,
 
   /** Print card max width (px) */
   CARD_MAX_WIDTH_PX: 180,
