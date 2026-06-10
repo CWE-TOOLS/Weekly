@@ -196,6 +196,13 @@
                         </svg>
                         <span>CR Notes</span>
                     </button>
+                    <button class="pp-tab-btn" data-tab="actual-labor" type="button">
+                        <svg class="pp-tab-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"/>
+                            <polyline points="12 6 12 12 16 14"/>
+                        </svg>
+                        <span>Actual Labor</span>
+                    </button>
                 </nav>
 
                 <div class="pp-tab-content">
@@ -881,6 +888,13 @@
                                 </div>
                                 <textarea id="pp-f-cr_general_notes" class="pp-cr-textarea" placeholder="General project-level notes…"></textarea>
                             </div>
+                        </div>
+                    </div>
+
+                    <!-- Tab: Actual Labor -->
+                    <div class="pp-tab-panel" data-panel="actual-labor" hidden>
+                        <div id="pp-actual-labor-container" class="pp-actual-labor">
+                            <div class="pp-actual-labor-empty">Loading…</div>
                         </div>
                     </div>
                 </div>

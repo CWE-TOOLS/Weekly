@@ -11,6 +11,25 @@ import { normalizeDepartmentClass } from '../config/department-config.js';
 import { sanitizeDescription } from '../utils/security-utils.js';
 
 /**
+ * Build the inner HTML for a task's `.task-details` div. Single source of truth
+ * for the planned + (optional) actual-hours display, shared by initial render,
+ * smart-update, and the actual-hours-updated DOM patch.
+ */
+export function buildTaskDetailsHTML(task) {
+    let html = '';
+    if (task.missingDate) {
+        html += '<strong>Date:</strong> Missing<br>';
+    }
+    const actualHours = getActualHours(task.id);
+    if (actualHours !== null) {
+        html += `<strong>Hours:</strong> ${task.hours} | <strong class="actual-hours">Actual:</strong> <span class="actual-hours-value">${actualHours}</span>`;
+    } else {
+        html += `<strong>Hours:</strong> ${task.hours}`;
+    }
+    return html;
+}
+
+/**
  * Create a task card element
  * @param {Object} task - Task data object
  * @param {string} task.id - Unique task identifier
@@ -100,22 +119,7 @@ export function createTaskCard(task, rowClass, isEditingUnlocked) {
         const detailsDiv = document.createElement('div');
         detailsDiv.className = 'task-details';
         detailsDiv.dataset.taskId = task.id; // For updating later
-
-        let detailsHTML = '';
-        if (task.missingDate) {
-            detailsHTML += '<strong>Date:</strong> Missing<br>';
-        }
-
-        // Check for actual hours
-        const actualHours = getActualHours(task.id);
-
-        if (actualHours !== null) {
-            detailsHTML += `<strong>Hours:</strong> ${task.hours} | <strong class="actual-hours">Actual:</strong> <span class="actual-hours-value">${actualHours}</span>`;
-        } else {
-            detailsHTML += `<strong>Hours:</strong> ${task.hours}`;
-        }
-
-        detailsDiv.innerHTML = detailsHTML;
+        detailsDiv.innerHTML = buildTaskDetailsHTML(task);
         card.appendChild(detailsDiv);
     }
 

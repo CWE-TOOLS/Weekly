@@ -6,8 +6,12 @@
 
 import { logger } from '../../utils/logger.js';
 import { emit } from '../../core/event-bus.js';
+import { saveActualHours as persistActualHours } from '../../services/actual-hours-service.js';
 
-// In-memory storage for actual hours (Map: taskId -> hours)
+// In-memory render cache (Map: taskId -> hours). Repopulated on app startup
+// from Supabase via seedActualHoursStorage(). task.id is positional and not
+// stable across sheet edits, so we never persist by it — only use it here
+// for fast lookup during render.
 const actualHoursStorage = new Map();
 
 // Current state
@@ -33,6 +37,19 @@ export function setActualHours(taskId, hours) {
         actualHoursStorage.delete(taskId);
     } else {
         actualHoursStorage.set(taskId, hours);
+    }
+}
+
+/**
+ * Bulk-prime the in-memory cache from a Map<taskId, hours>. Called once
+ * at app startup after Supabase rows are loaded and matched to tasks.
+ * @param {Map<string, number>} taskIdToHours
+ */
+export function seedActualHoursStorage(taskIdToHours) {
+    actualHoursStorage.clear();
+    if (!taskIdToHours) return;
+    for (const [id, hours] of taskIdToHours) {
+        actualHoursStorage.set(id, hours);
     }
 }
 
@@ -106,7 +123,7 @@ function handleClear() {
 /**
  * Handle confirm button click
  */
-function handleConfirm() {
+async function handleConfirm() {
     if (!currentTask) return;
 
     const hours = parseInt(currentValue, 10);
@@ -117,18 +134,26 @@ function handleConfirm() {
         return;
     }
 
-    // Save to storage
-    setActualHours(currentTask.id, hours);
+    const confirmBtn = document.getElementById('hours-confirm-btn');
+    if (confirmBtn) confirmBtn.disabled = true;
 
-    logger.info(`Set actual hours for task ${currentTask.id}: ${hours}`);
+    const taskAtConfirm = currentTask;
+    try {
+        await persistActualHours(taskAtConfirm, hours);
+    } catch (err) {
+        logger.error('Failed to persist actual hours:', err);
+        if (confirmBtn) confirmBtn.disabled = false;
+        return;
+    }
 
-    // Emit event to update UI
+    setActualHours(taskAtConfirm.id, hours);
+    logger.info(`Set actual hours for task ${taskAtConfirm.id}: ${hours}`);
+
     emit('actual-hours-updated', {
-        taskId: currentTask.id,
+        taskId: taskAtConfirm.id,
         actualHours: hours
     });
 
-    // Close modal
     hideActualHoursModal();
 }
 

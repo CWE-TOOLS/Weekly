@@ -25,6 +25,9 @@ import { getLocalDateString } from '../utils/date-utils.js';
 // Services
 import * as supabaseService from '../services/supabase-service.js';
 import * as dataService from '../services/data-service.js';
+import { loadActualHoursForDates, buildTaskHoursMap } from '../services/actual-hours-service.js';
+import { seedActualHoursStorage } from '../components/modals/actual-hours-modal.js';
+import { getAllTasks } from './state.js';
 
 // UI Components
 import { initializeDepartmentFilter } from '../components/department-filter.js';
@@ -34,6 +37,7 @@ import { initializeSearch } from '../components/search-bar.js';
 // Features
 import { initializeAddCardIndicators } from '../features/editing/add-card-indicators.js';
 import { initializeDeleteHandler } from '../features/editing/delete-task-handler.js';
+import { initializeLaborPopoverTriggers } from '../features/labor-popover-triggers.js';
 
 // Local imports
 import { setupComponentEvents } from './component-events.js';
@@ -144,6 +148,9 @@ export async function initializeComponents() {
         initializeDeleteHandler();
         logger.debug('  Delete handler');
 
+        initializeLaborPopoverTriggers();
+        logger.debug('  Labor popover triggers');
+
         // Set up component event listeners
         setupComponentEvents();
 
@@ -172,7 +179,7 @@ export async function loadInitialData() {
         // This prevents race conditions with Supabase initialization on cold start
         await dataService.fetchAllTasks();
 
-        logger.debug('Initial data loaded successfully');
+        await primeActualHoursCache();
     } catch (error) {
         logger.error('Failed to load initial data:', error);
         showError('Failed to load tasks: ' + error.message);
@@ -183,6 +190,25 @@ export async function loadInitialData() {
         throw error;
     } finally {
         showLoading(false);
+    }
+}
+
+async function primeActualHoursCache() {
+    try {
+        const tasks = getAllTasks();
+        if (!tasks?.length) return;
+        const dates = tasks.map(t => t.date).filter(Boolean);
+        const rows = await loadActualHoursForDates(dates);
+        const map = buildTaskHoursMap(tasks, rows);
+        seedActualHoursStorage(map);
+        if (rows.length > 0 && map.size === 0) {
+            logger.warn('[actual-hours] rows present but none matched a current task — sample row:', rows[0]);
+        }
+        if (map.size > 0) {
+            eventBus.emit('actual-hours-updated', { primed: true, count: map.size });
+        }
+    } catch (err) {
+        logger.warn('[actual-hours] prime failed:', err);
     }
 }
 

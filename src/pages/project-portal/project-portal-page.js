@@ -101,7 +101,14 @@ import {
     FROM_LBS
 } from '../../utils/batch-calc.js';
 import { fetchAllTasks } from '../../services/data-service.js';
+import { loadActualHoursForProject } from '../../services/actual-hours-service.js';
 import { parseDate } from '../../utils/date-utils.js';
+import {
+    DEPARTMENT_ORDER,
+    DEPARTMENT_COLORS,
+    normalizeDepartment,
+    normalizeDepartmentClass
+} from '../../config/department-config.js';
 import {
     loadClassroomTasks,
     createClassroomTask,
@@ -256,7 +263,8 @@ function getViewFromUrl() {
 
 const VALID_TABS = new Set([
     'info', 'job-memos', 'castings', 'optimizer', 'tracking',
-    'casting-layout', 'shipping', 'color-log', 'batch-tickets', 'cr-notes'
+    'casting-layout', 'shipping', 'color-log', 'batch-tickets', 'cr-notes',
+    'actual-labor'
 ]);
 
 async function showListView() {
@@ -403,6 +411,7 @@ async function showFormView(projectNumber, draftOverrides = null) {
     if (currentTab === 'tracking')     activateTrackingTab();
     if (currentTab === 'casting-layout') activateCastingLayoutTab();
     if (currentTab === 'shipping')     activateShippingTab();
+    if (currentTab === 'actual-labor') activateActualLaborTab();
 }
 
 function openNewProjectModal() {
@@ -502,7 +511,7 @@ function setActiveTab(tab) {
     if (printBtn) {
         // Tracking + Shipping have per-row print buttons — hide the global one.
         // Job Memos has no print pipeline yet; Casting Layout has its own button.
-        if (tab === 'tracking' || tab === 'shipping' || tab === 'job-memos' || tab === 'casting-layout') {
+        if (tab === 'tracking' || tab === 'shipping' || tab === 'job-memos' || tab === 'casting-layout' || tab === 'actual-labor') {
             printBtn.hidden = true;
         } else {
             printBtn.hidden = false;
@@ -2256,6 +2265,209 @@ async function activateOptimizerTab() {
     }
     await loadAllPhasesForProject();
     renderOptimizer();
+}
+
+async function activateActualLaborTab() {
+    const container = document.getElementById('pp-actual-labor-container');
+    if (!container) return;
+
+    if (!currentProjectNumber) {
+        container.innerHTML = '<div class="pp-actual-labor-empty">No project selected.</div>';
+        return;
+    }
+
+    container.innerHTML = '<div class="pp-actual-labor-empty">Loading…</div>';
+
+    let castings = [];
+    let rows = [];
+    try {
+        [castings, rows] = await Promise.all([
+            loadCastings(currentProjectNumber),
+            loadActualHoursForProject(currentProjectNumber)
+        ]);
+    } catch (err) {
+        logger.error('[project-portal] activateActualLaborTab load failed:', err);
+        container.innerHTML = '<div class="pp-actual-labor-empty">Failed to load actual hours.</div>';
+        return;
+    }
+
+    if ((!castings || castings.length === 0) && (!rows || rows.length === 0)) {
+        container.innerHTML = '<div class="pp-actual-labor-empty">No actual hours logged for this project yet.</div>';
+        return;
+    }
+
+    renderActualLaborContent(container, castings || [], rows || []);
+}
+
+function renderActualLaborContent(container, castings, rows) {
+    const escape = (s) => String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+
+    const fmtHours = (n) => Number(n).toFixed(1);
+    const parsePlanned = (v) => {
+        if (v == null || v === '') return null;
+        const n = Number(v);
+        return Number.isFinite(n) ? n : null;
+    };
+    // Δ semantics: positive = over budget (BAD/red), negative = under budget (GOOD/green).
+    const deltaClass = (delta) => delta > 0 ? 'pp-al-delta-bad' : delta < 0 ? 'pp-al-delta-good' : 'pp-al-delta-zero';
+    const fmtDelta = (delta) => (delta > 0 ? '+' : delta < 0 ? '−' : '') + fmtHours(Math.abs(delta));
+    const fmtPct = (delta, planned) => {
+        if (!planned || planned === 0) return '';
+        const pct = (delta / planned) * 100;
+        const rounded = Math.abs(pct) >= 10 ? Math.round(pct) : Math.round(pct * 10) / 10;
+        return ` (${pct > 0 ? '+' : pct < 0 ? '−' : ''}${Math.abs(rounded)}%)`;
+    };
+
+    const rowsByCasting = new Map();
+    for (const row of rows) {
+        const key = row.casting_number == null ? '' : String(row.casting_number);
+        if (!rowsByCasting.has(key)) rowsByCasting.set(key, []);
+        rowsByCasting.get(key).push(row);
+    }
+
+    const sortedCastings = [...castings].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+    const castingKeys = new Set(sortedCastings.map(c => String(c.casting_number)));
+    const orphanKeys = [];
+    for (const key of rowsByCasting.keys()) {
+        if (key === '') continue;
+        if (!castingKeys.has(key)) orphanKeys.push(key);
+    }
+    orphanKeys.sort();
+
+    let projPlanned = 0;
+    let projActual = 0;
+    let projAnyPlanned = false;
+    const groupBodies = [];
+
+    const deptOrderIndex = (dept) => {
+        const idx = DEPARTMENT_ORDER.indexOf(normalizeDepartment(dept));
+        return idx === -1 ? Number.MAX_SAFE_INTEGER : idx;
+    };
+    const renderDeptChip = (dept) => {
+        if (!dept) return '<td>—</td>';
+        const colorKey = normalizeDepartmentClass(normalizeDepartment(dept));
+        const color = DEPARTMENT_COLORS[colorKey];
+        const style = color ? ` style="background:${color.background};color:${color.text}"` : '';
+        return `<td><span class="pp-al-dept-chip"${style}>${escape(dept)}</span></td>`;
+    };
+
+    const renderGroup = (name, groupRows, miscClass = '') => {
+        const sorted = [...groupRows].sort((a, b) => {
+            const dateCmp = String(a.task_date || '').localeCompare(String(b.task_date || ''));
+            if (dateCmp !== 0) return dateCmp;
+            return deptOrderIndex(a.department) - deptOrderIndex(b.department);
+        });
+        let plannedSum = 0;
+        let actualSum = 0;
+        let anyPlanned = false;
+
+        const detailRows = sorted.map(r => {
+            const planned = parsePlanned(r.planned_hours);
+            const actual = Number(r.actual_hours) || 0;
+            actualSum += actual;
+            projActual += actual;
+            let plannedCell = '<td class="num muted">—</td>';
+            let deltaCell = '<td class="num muted">—</td>';
+            if (planned != null) {
+                plannedSum += planned;
+                projPlanned += planned;
+                anyPlanned = true;
+                projAnyPlanned = true;
+                plannedCell = `<td class="num">${fmtHours(planned)}</td>`;
+                const delta = actual - planned;
+                deltaCell = `<td class="num ${deltaClass(delta)}">${fmtDelta(delta)}</td>`;
+            }
+            const day = r.day_number == null || r.day_number === '' ? '' : `Day ${escape(r.day_number)}`;
+            return `<tr class="pp-al-detail-row">
+                <td>${escape(r.task_date)}</td>
+                ${renderDeptChip(r.department)}
+                <td>${day}</td>
+                ${plannedCell}
+                <td class="num">${fmtHours(actual)}</td>
+                ${deltaCell}
+            </tr>`;
+        }).join('');
+
+        const delta = actualSum - plannedSum;
+        const groupDeltaCell = anyPlanned
+            ? `<td class="num ${deltaClass(delta)}">${fmtDelta(delta)}<span class="pp-al-pct">${fmtPct(delta, plannedSum)}</span></td>`
+            : '<td class="num muted">—</td>';
+        const groupPlannedCell = anyPlanned ? `<td class="num">${fmtHours(plannedSum)}</td>` : '<td class="num muted">—</td>';
+
+        return `<tbody class="pp-al-group ${miscClass}">
+            <tr class="pp-al-group-row">
+                <td colspan="3" class="pp-al-group-name">${escape(name)}</td>
+                ${groupPlannedCell}
+                <td class="num">${fmtHours(actualSum)}</td>
+                ${groupDeltaCell}
+            </tr>
+            ${detailRows}
+        </tbody>`;
+    };
+
+    for (const c of sortedCastings) {
+        const key = String(c.casting_number);
+        const sectionRows = rowsByCasting.get(key) || [];
+        if (sectionRows.length === 0) continue;
+        const desc = (c.description || '').trim();
+        const name = desc ? `Cast ${c.casting_number} — ${desc}` : `Cast ${c.casting_number}`;
+        groupBodies.push(renderGroup(name, sectionRows));
+    }
+    for (const key of orphanKeys) {
+        const sectionRows = rowsByCasting.get(key) || [];
+        if (sectionRows.length === 0) continue;
+        groupBodies.push(renderGroup(`Cast ${key}`, sectionRows));
+    }
+    const nonCastingRows = rowsByCasting.get('') || [];
+    if (nonCastingRows.length > 0) {
+        groupBodies.push(renderGroup('Non-casting labor', nonCastingRows, 'pp-al-group-misc'));
+    }
+
+    if (groupBodies.length === 0) {
+        container.innerHTML = '<div class="pp-actual-labor-empty">No actual hours logged for this project yet.</div>';
+        return;
+    }
+
+    let summaryHtml;
+    if (projAnyPlanned) {
+        const delta = projActual - projPlanned;
+        summaryHtml = `<div class="pp-al-summary">
+            <div class="pp-al-summary-label">Project Total</div>
+            <div class="pp-al-summary-stats">
+                <span class="pp-al-stat"><span class="pp-al-stat-label">Planned</span><span class="pp-al-stat-value">${fmtHours(projPlanned)}</span></span>
+                <span class="pp-al-stat"><span class="pp-al-stat-label">Actual</span><span class="pp-al-stat-value">${fmtHours(projActual)}</span></span>
+                <span class="pp-al-stat pp-al-stat-delta ${deltaClass(delta)}"><span class="pp-al-stat-label">Δ</span><span class="pp-al-stat-value">${fmtDelta(delta)}<span class="pp-al-pct">${fmtPct(delta, projPlanned)}</span></span></span>
+            </div>
+        </div>`;
+    } else {
+        summaryHtml = `<div class="pp-al-summary">
+            <div class="pp-al-summary-label">Project Total</div>
+            <div class="pp-al-summary-stats">
+                <span class="pp-al-stat"><span class="pp-al-stat-label">Actual</span><span class="pp-al-stat-value">${fmtHours(projActual)}</span></span>
+            </div>
+        </div>`;
+    }
+
+    container.innerHTML = `
+        ${summaryHtml}
+        <table class="pp-al-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Department</th>
+                    <th>Day</th>
+                    <th class="num">Planned</th>
+                    <th class="num">Actual</th>
+                    <th class="num">Δ</th>
+                </tr>
+            </thead>
+            ${groupBodies.join('')}
+        </table>
+    `;
 }
 
 async function loadAllPhasesForProject() {
@@ -5325,6 +5537,8 @@ function wireEvents() {
                 activateBatchTicketsTab();
             } else if (tab === 'job-memos') {
                 activateJobMemosTab();
+            } else if (tab === 'actual-labor') {
+                activateActualLaborTab();
             }
         });
     });

@@ -12,7 +12,7 @@
  */
 
 import { logger } from './logger.js';
-import { createTaskCard, createTaskCardPlaceholder } from '../components/task-card.js';
+import { createTaskCard, createTaskCardPlaceholder, buildTaskDetailsHTML } from '../components/task-card.js';
 import { getEditingCardId } from '../core/refresh-queue.js';
 import { getIsEditingUnlocked } from '../core/state.js';
 import { debug } from './debug.js';
@@ -114,15 +114,11 @@ function updateTaskCard(cardElement, newTask, rowClass) {
         }
     }
 
-    // Update hours (if present)
+    // Update hours (if present). Use shared builder so the actual-hours badge
+    // is preserved when other tracked fields trigger a smart-update.
     const detailsDiv = cardElement.querySelector('.task-details');
     if (detailsDiv && RENDERING.shouldShowHours(newTask.department)) {
-        let detailsHTML = '';
-        if (newTask.missingDate) {
-            detailsHTML += '<strong>Date:</strong> Missing<br>';
-        }
-        detailsHTML += `<strong>Hours:</strong> ${newTask.hours}`;
-
+        const detailsHTML = buildTaskDetailsHTML(newTask);
         if (detailsDiv.innerHTML !== detailsHTML) {
             detailsDiv.innerHTML = detailsHTML;
         }

@@ -206,16 +206,26 @@
   font-weight: 600;
 }
 
-/* Actual Hours Styling */
+/* Actual Hours Styling — high-contrast tag so the value is legible
+   on every department card color. */
 .task-details .actual-hours {
   color: inherit;
   font-weight: 600;
-  margin-left: 0.25rem;
+  margin-left: 0.35rem;
 }
 
 .task-details .actual-hours-value {
+  display: inline-block;
+  background: #ffffff;
+  color: #dc2626;
   font-weight: 700;
-  color: #ef4444;
+  padding: 1px 0.45rem;
+  border-radius: 4px;
+  margin-left: 0.25rem;
+  min-width: 1.4rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  vertical-align: baseline;
 }
 
 .task-day-counter {
