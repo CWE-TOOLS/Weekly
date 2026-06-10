@@ -6040,7 +6040,7 @@ function wireEvents() {
 // Batch Tickets tab
 // Per-casting accordion. Each casting has its own batch_tickets row
 // holding the batch parameters + manual type overrides. The plan
-// (list of 250/150/50 lb batches, scaled ingredient values) is
+// (list of 250/150/100 lb batches, scaled ingredient values) is
 // derived on render from the project's color log + the casting's
 // settings.
 // ===================================================================
@@ -6305,7 +6305,7 @@ function renderBatchSectionHeader(plan) {
     const parts = [];
     if (summary.count250) parts.push(`${summary.count250} × 250 lb`);
     if (summary.count150) parts.push(`${summary.count150} × 150 lb`);
-    if (summary.count50)  parts.push(`${summary.count50} × 50 lb`);
+    if (summary.count100) parts.push(`${summary.count100} × 100 lb`);
     return `
         <div class="pp-bt-section-header">
             <span class="pp-bt-section-header-title">Generated Batches</span>

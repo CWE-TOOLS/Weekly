@@ -11,7 +11,7 @@
  * @module utils/batch-calc
  */
 
-export const BATCH_SIZES = [250, 150, 50];
+export const BATCH_SIZES = [250, 150, 100];
 
 // Multiplier to convert weight in lbs INTO the target unit.
 //   weightInUnit = weightInLbs * FROM_LBS[unit]
@@ -48,9 +48,9 @@ export function cuFtFor(sandLbs, cuFtPer250 = 4.28) {
 }
 
 /**
- * Greedy: break required cu ft into 250 / 150 / 50 lb batches, then consolidate
- * weight-equivalent combos (150+50+50→250, 50+50+50→150) so total sand is
- * preserved but batch count is minimized. Pure.
+ * Greedy: break required cu ft into 250 / 150 / 100 lb batches, then consolidate
+ * weight-equivalent combos (150+100→250) so total sand is preserved but batch
+ * count is minimized. Pure.
  */
 export function fillBatches(cuFtNeeded, cuFtPer250 = 4.28) {
     const batches = [];
@@ -61,7 +61,7 @@ export function fillBatches(cuFtNeeded, cuFtPer250 = 4.28) {
         for (let i = 0; i < count; i++) batches.push(size);
         remaining -= count * cuFt;
     }
-    // Cover any sub-batch remainder with a 50 lb (smallest available).
+    // Cover any sub-batch remainder with a 100 lb (smallest available).
     if (remaining > 0.01) {
         for (let i = BATCH_SIZES.length - 1; i >= 0; i--) {
             if (cuFtFor(BATCH_SIZES[i], cuFtPer250) >= remaining || i === BATCH_SIZES.length - 1) {
@@ -73,7 +73,7 @@ export function fillBatches(cuFtNeeded, cuFtPer250 = 4.28) {
     return consolidateBatches(batches);
 }
 
-/** Roll up weight-equivalent combos (150+50+50→250, 50+50+50→150). Pure. */
+/** Roll up weight-equivalent combos (150+100→250). Pure. */
 export function consolidateBatches(batches) {
     const result = batches.slice();
     const countSize = (size) => result.filter(b => b === size).length;
@@ -84,15 +84,9 @@ export function consolidateBatches(batches) {
     let changed = true;
     while (changed) {
         changed = false;
-        if (countSize(150) >= 1 && countSize(50) >= 2) {
-            removeOne(150); removeOne(50); removeOne(50);
+        if (countSize(150) >= 1 && countSize(100) >= 1) {
+            removeOne(150); removeOne(100);
             result.push(250);
-            changed = true;
-            continue;
-        }
-        if (countSize(50) >= 3) {
-            removeOne(50); removeOne(50); removeOne(50);
-            result.push(150);
             changed = true;
         }
     }
@@ -185,7 +179,7 @@ export function getColorLogSandLbs(colorLog) {
  * @param {Array<{batchLbs:number,type:string}>} [opts.manualOverrides] — if its length === batches.length, replaces auto types
  * @returns {{
  *   batches: Array<{batchSandLbs:number, scaleFactor:number, cuFt:number, num:number, total:number, type:string}>,
- *   summary: {count250:number,count150:number,count50:number,actualCuFt:number,total:number},
+ *   summary: {count250:number,count150:number,count100:number,actualCuFt:number,total:number},
  *   faceCuFt: number
  * }}
  */
@@ -216,7 +210,7 @@ export function buildBatchPlan({
     const summary = {
         count250: batches.filter(b => b === 250).length,
         count150: batches.filter(b => b === 150).length,
-        count50:  batches.filter(b => b === 50).length,
+        count100: batches.filter(b => b === 100).length,
         actualCuFt: result.reduce((s, b) => s + b.cuFt, 0),
         total: result.length
     };
