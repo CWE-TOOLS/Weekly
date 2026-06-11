@@ -25,6 +25,12 @@ initializeApp()
     .catch(error => {
     logger.error('💥 Failed to initialize application:', error);
 
+    // Drop the loading overlay so it can't cover the error UI
+    const overlay = document.getElementById('loading-overlay');
+    if (overlay) {
+        overlay.classList.add('hidden');
+    }
+
     // Show critical error UI
     const appError = document.getElementById('app-error');
     if (appError) {

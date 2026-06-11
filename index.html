@@ -47,16 +47,19 @@
         </div>
     </div>
 
-    <!-- Loading Overlay (Phase 8) -->
-    <div id="loading-overlay" class="loading-overlay hidden">
+    <!-- Loading Overlay (Phase 8) — visible from first paint so the UI never
+         flashes before init; JS removes it when the app is ready -->
+    <div id="loading-overlay" class="loading-overlay">
         <div class="loading-content">
             <div class="loading-spinner"></div>
-            <div class="loading-message">Loading...</div>
+            <div class="loading-message">Loading schedule…</div>
             <div class="loading-progress">
                 <div class="loading-progress-bar"></div>
             </div>
         </div>
     </div>
+    <noscript><style>#loading-overlay { display: none; }</style></noscript>
+    <script nomodule>document.getElementById('loading-overlay').classList.add('hidden');</script>
 
     <!-- Status Banner (Phase 8) -->
     <div id="status-banner" class="status-banner hidden">
