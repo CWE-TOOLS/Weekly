@@ -6562,6 +6562,21 @@ function renderBatchAssignTable(plan) {
 }
 
 /**
+ * Authored value of a color-log additive row. The Color Log UI writes additive
+ * quantities to `amount` (base ingredients use `weight`), so prefer `amount` and
+ * fall back to `weight` only for legacy rows that predate that change. Returns the
+ * first numerically-valid value, or null when the row has no usable quantity.
+ * Without this, an edit to `amount` would be ignored whenever a stale `weight`
+ * lingered on the row — the ticket would keep showing the old number.
+ */
+function additiveAmount(item) {
+    for (const v of [item?.amount, item?.weight]) {
+        if (v !== '' && v != null && !isNaN(Number(v))) return Number(v);
+    }
+    return null;
+}
+
+/**
  * Mix Day Totals — sums every ingredient across all batches in the plan,
  * applying the same per-batch overrides used on the tickets:
  *   - Sand split into "Sand - Bulk (Cowbay)" for Spray Up backup batches
@@ -6630,9 +6645,9 @@ function renderBatchTotals(plan, log, pigReductionPct = FINAL_BACKUP_PIG_REDUCTI
             addTotal('Fibers_override', 'Fibers - Cemfill', roundSig(fibersLbs, 4), 'lbs', 'dry');
         } else {
             const fib = (log?.additives || []).find(a => /fiber|fibre/i.test(a?.name || ''));
-            const fibAmt = fib?.weight ?? fib?.amount;
-            if (fib && fibAmt !== '' && fibAmt != null && !isNaN(Number(fibAmt))) {
-                addTotal('Fibers', 'Fibers' + (fib.note ? ' (' + fib.note + ')' : ''), roundSig(Number(fibAmt) * scaleFactor, 4), fib.unit || 'g', 'additive');
+            const fibAmt = additiveAmount(fib);
+            if (fib && fibAmt != null) {
+                addTotal('Fibers', 'Fibers' + (fib.note ? ' (' + fib.note + ')' : ''), roundSig(fibAmt * scaleFactor, 4), fib.unit || 'g', 'additive');
             }
         }
 
@@ -6651,9 +6666,9 @@ function renderBatchTotals(plan, log, pigReductionPct = FINAL_BACKUP_PIG_REDUCTI
         for (const add of (log?.additives || [])) {
             if (!add?.name) continue;
             if (/fiber|fibre/i.test(add.name)) continue;
-            const amt = add.weight ?? add.amount;
-            if (amt === '' || amt == null || isNaN(Number(amt))) continue;
-            const a = Number(amt) * scaleFactor;
+            const amt = additiveAmount(add);
+            if (amt == null) continue;
+            const a = amt * scaleFactor;
             addTotal(add.name, add.name + (add.note ? ' (' + add.note + ')' : ''), roundSig(a, 4), add.unit || 'oz', 'additive');
         }
     });
@@ -6729,7 +6744,16 @@ function renderBatchTicketCard({
     const cb = (checked) => `<span class="bt-cb-box ${checked ? 'checked' : ''}"></span>`;
 
     const findBase = (name) => (colorLog?.baseIngredients || []).find(i => (i.name || '').toLowerCase() === name.toLowerCase());
-    const findAdd  = (name) => (colorLog?.additives        || []).find(i => (i.name || '').toLowerCase() === name.toLowerCase());
+    // Additives in the color log usually carry the full product name ("ADVA Flex",
+    // "Forton VF-774", "Eclipse 4500"), so an exact match against the slot key would
+    // miss them and leave the ticket showing a stale "-". Match exact first, then fall
+    // back to a contains match on the key — same tolerance as the fiber lookup below.
+    const findAdd  = (name) => {
+        const list = colorLog?.additives || [];
+        const key = name.toLowerCase();
+        return list.find(i => (i.name || '').toLowerCase() === key)
+            || list.find(i => (i.name || '').toLowerCase().includes(key));
+    };
 
     const scaleBase = (name) => {
         const f = findBase(name);
@@ -6738,12 +6762,11 @@ function renderBatchTicketCard({
     };
     const scaleAdd = (name) => {
         const f = findAdd(name);
-        // Additives are stored as `weight` in the color log UI; legacy rows may use `amount`.
-        const amt = f?.weight ?? f?.amount;
-        if (!f || amt === '' || amt == null || isNaN(Number(amt))) {
+        const amt = additiveAmount(f);
+        if (!f || amt == null) {
             return { qty: '-', unit: f?.unit || 'oz', type: f?.note || '' };
         }
-        return { qty: roundSig(Number(amt) * scaleFactor, 2), unit: f.unit || 'oz', type: f.note || '' };
+        return { qty: roundSig(amt * scaleFactor, 2), unit: f.unit || 'oz', type: f.note || '' };
     };
 
     const portland = scaleBase('Portland');
@@ -6764,10 +6787,10 @@ function renderBatchTicketCard({
 
     // Tolerant lookup so "Fiber" / "Fibers" / "fibre" all match.
     const fiberSrc = (colorLog?.additives || []).find(i => /fiber|fibre/i.test(i?.name || ''));
-    const fiberAmt = fiberSrc?.weight ?? fiberSrc?.amount;
+    const fiberAmt = additiveAmount(fiberSrc);
     let fibers;
-    if (fiberSrc && fiberAmt !== '' && fiberAmt != null && !isNaN(Number(fiberAmt))) {
-        fibers = { qty: roundSig(Number(fiberAmt) * scaleFactor, 2), unit: fiberSrc.unit || 'oz', type: fiberSrc.note || '' };
+    if (fiberSrc && fiberAmt != null) {
+        fibers = { qty: roundSig(fiberAmt * scaleFactor, 2), unit: fiberSrc.unit || 'oz', type: fiberSrc.note || '' };
     } else {
         fibers = { qty: '-', unit: fiberSrc?.unit || 'oz', type: fiberSrc?.note || '' };
     }
@@ -6780,14 +6803,45 @@ function renderBatchTicketCard({
         fibers = { qty: roundSig(18 * (batchSandLbs / 250), 2), unit: 'lbs', type: 'Cemfill' };
     }
 
+    // ADDITIVES — fully dynamic. The color log stores Water + Forton as base
+    // ingredients and ADVA / Eclipse / Fibers (+ any custom) as additives, but the
+    // ticket lists every wet admixture here. Lead with Water, then every additive in
+    // its color-log order (fibers excluded — they print under DRY BATCH), then
+    // Forton. De-duped by name so a material entered in either list appears once,
+    // and rows with no value are skipped (matching the Mix Day Totals panel).
+    const admixtures = [];
+    const seenAdmix = new Set();
+    const addAdmix = (name, note, scaled) => {
+        const key = (name || '').trim().toLowerCase();
+        if (!key || seenAdmix.has(key) || scaled.qty === '-') return;
+        seenAdmix.add(key);
+        const label = name + (note ? ' (' + note + ')' : '');
+        admixtures.push({ label, qty: scaled.qty, unit: scaled.unit });
+    };
+
+    // 1. Water — base preferred, additive fallback.
     const waterBase = scaleBase('Water');
-    const waterAdd = scaleAdd('Water');
-    const water = waterBase.qty !== '-' ? waterBase : waterAdd;
-    const adva = scaleAdd('ADVA');
-    const eclipse = scaleAdd('Eclipse');
+    const waterSrc = findBase('Water') || findAdd('Water');
+    addAdmix(waterSrc?.name || 'Water', waterSrc?.note, waterBase.qty !== '-' ? waterBase : scaleAdd('Water'));
+
+    // 2. Every additive in order, scaled (skip fibers — shown under DRY BATCH).
+    for (const add of (colorLog?.additives || [])) {
+        if (!add || !add.name || /fiber|fibre/i.test(add.name)) continue;
+        const amt = additiveAmount(add);
+        if (amt == null) continue;
+        addAdmix(add.name, add.note, { qty: roundSig(amt * scaleFactor, 2), unit: add.unit || 'oz' });
+    }
+
+    // 3. Forton — base preferred, additive fallback (deduped if already listed).
     const fortonBase = scaleBase('Forton');
-    const fortonAdd = scaleAdd('Forton');
-    const forton = fortonBase.qty !== '-' ? fortonBase : fortonAdd;
+    const fortonSrc = findBase('Forton') || findAdd('Forton');
+    addAdmix(fortonSrc?.name || 'Forton', fortonSrc?.note, fortonBase.qty !== '-' ? fortonBase : scaleAdd('Forton'));
+
+    const additiveRowsHtml = admixtures.length
+        ? admixtures.map((a, i) =>
+            `<tr><td class="bt-label">Additive #${i + 1}:</td><td class="bt-type">TYPE: ${escapeHtml(a.label)}</td><td class="bt-qty-label">QTY:</td><td class="bt-qty">${a.qty}</td><td class="bt-unit">${escapeHtml(a.unit)}</td></tr>`
+          ).join('')
+        : `<tr><td class="bt-label">Additive #1:</td><td class="bt-type">TYPE:</td><td class="bt-qty-label">QTY:</td><td class="bt-qty"></td><td class="bt-unit"></td></tr>`;
 
     // Pigments (4 slots)
     const reducedLabel = (applyPigReduction && pigReductionPct > 0) ? ` (${pigReductionPct}% reduced)` : '';
@@ -6858,12 +6912,7 @@ function renderBatchTicketCard({
         <table class="bt-table">${pigRows}</table>
 
         <div class="bt-section-label">ADDITIVES</div>
-        <table class="bt-table">
-            <tr><td class="bt-label">Additive #1:</td><td class="bt-type">TYPE: Water</td><td class="bt-qty-label">QTY:</td><td class="bt-qty">${water.qty}</td><td class="bt-unit">${escapeHtml(water.unit)}</td></tr>
-            <tr><td class="bt-label">Additive #2:</td><td class="bt-type">TYPE: ${escapeHtml(adva.type || 'ADVA Flex')}</td><td class="bt-qty-label">QTY:</td><td class="bt-qty">${adva.qty}</td><td class="bt-unit">${escapeHtml(adva.unit)}</td></tr>
-            <tr><td class="bt-label">Additive #3:</td><td class="bt-type">TYPE: ${escapeHtml(eclipse.type || 'Eclipse')}</td><td class="bt-qty-label">QTY:</td><td class="bt-qty">${eclipse.qty}</td><td class="bt-unit">${escapeHtml(eclipse.unit)}</td></tr>
-            <tr><td class="bt-label">Additive #4:</td><td class="bt-type">TYPE: Forton</td><td class="bt-qty-label">QTY:</td><td class="bt-qty">${forton.qty}</td><td class="bt-unit">${escapeHtml(forton.unit)}</td></tr>
-        </table>
+        <table class="bt-table">${additiveRowsHtml}</table>
 
         <div class="bt-notes-title">NOTES:</div>
         <div class="bt-notes">${batchSandLbs} lbs Mix\nBatch ${num} of ${total}${notes ? '\n' + escapeHtml(notes) : ''}</div>
