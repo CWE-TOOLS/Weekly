@@ -85,30 +85,6 @@ export function hideError() {
 }
 
 /**
- * Show rendering status indicator during layout operations
- *
- * Displays a status message during expensive layout operations to provide
- * user feedback. Useful during height equalization and grid rendering.
- *
- * @param {boolean} show - Whether to show the rendering status
- * @param {string} [message='Optimizing layout...'] - Status message to display
- *
- * @example
- * showRenderingStatus(true, 'Calculating grid heights...');
- * // ... perform layout work ...
- * showRenderingStatus(false);
- */
-export function showRenderingStatus(show, message = 'Optimizing layout...') {
-    const statusElement = document.getElementById('rendering-status');
-    if (show) {
-        statusElement.textContent = message;
-        statusElement.style.display = 'block';
-    } else {
-        statusElement.style.display = 'none';
-    }
-}
-
-/**
  * Show success or error notification toast
  *
  * Displays a temporary toast notification in the top-right corner.

@@ -15,6 +15,22 @@
   height: 2rem;
 }
 
+/* Toolbar Buttons — neutral secondary style; accent stays on .editing-btn */
+.navigation-group button,
+.action-group button:not(.editing-btn),
+.action-group .icon-btn:not(.editing-btn) {
+  background-color: var(--background-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-secondary);
+}
+
+.navigation-group button:hover,
+.action-group button:not(.editing-btn):hover,
+.action-group .icon-btn:not(.editing-btn):hover {
+  background-color: #F3F4F6;
+  border-color: var(--border-secondary);
+}
+
 /* Task Card Buttons */
 .task-edit-btn {
   position: absolute;

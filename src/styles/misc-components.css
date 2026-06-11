@@ -124,21 +124,6 @@
   vertical-align: middle;
 }
 
-.rendering-status {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  background: var(--background-secondary);
-  border: 1px solid var(--border-primary);
-  border-radius: var(--border-radius-md);
-  padding: 0.5rem 1rem;
-  box-shadow: var(--shadow-md);
-  z-index: 1000;
-  font-size: 0.875rem;
-  color: var(--text-secondary);
-  display: none;
-}
-
 /* Animations */
 @keyframes spin {
   to {

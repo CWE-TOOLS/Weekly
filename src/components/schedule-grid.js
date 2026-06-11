@@ -27,7 +27,6 @@ import {
     setCurrentViewedWeekIndex
 } from '../core/state.js';
 import { emit, EVENTS } from '../core/event-bus.js';
-import { saveWeekIndex } from '../core/storage.js';
 import {
     equalizeAllCardHeights as equalizeHeights,
     scrollToWeek
@@ -53,7 +52,6 @@ export function navigateToWeek(weekIndex) {
     if (!wrapper || !container || weekIndex < 0 || weekIndex >= allWeekStartDates.length) return;
 
     setCurrentViewedWeekIndex(weekIndex);
-    saveWeekIndex(weekIndex);
 
     // Use layout manager to scroll to week
     scrollToWeek(wrapper, container, weekIndex);

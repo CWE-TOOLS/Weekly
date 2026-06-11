@@ -13,8 +13,6 @@ import { loadWeekIndex, loadWeekDate, removeState, STORAGE_KEYS } from './storag
 import { renderWeekGrid } from '../components/week-renderer.js';
 import { getMonday, parseDate, getLocalDateString, createWeekDates, clearParseDateCache } from '../utils/date-utils.js';
 import { equalizeAllCardHeights, setGridWidths, scrollToWeek } from '../utils/grid-layout-manager.js';
-import { showRenderingStatus } from '../utils/ui-utils.js';
-import { RENDER_DELAY } from '../config/timing-constants.js';
 import { emit, EVENTS } from './event-bus.js';
 import {
     canUseSmartUpdate,
@@ -128,7 +126,9 @@ function buildMaxTasksPerDept(filteredTasks) {
 
 /**
  * Resolve the current viewed week index using fallback chain:
- * existing state -> saved storage -> current Monday -> next future Monday -> last week.
+ * existing in-session state -> current Monday -> next future Monday -> last week.
+ * Saved week position from previous sessions is intentionally ignored —
+ * the app always opens on the current week.
  * @param {Date[]} allMondays - All available week start dates
  * @returns {number} Resolved week index
  */
@@ -142,36 +142,21 @@ function resolveWeekIndex(allMondays) {
     const currentMonday = getMonday(new Date());
     const currentMondayStr = getLocalDateString(currentMonday);
 
-    // 2. Try saved week date — but ONLY if it's the current week or a future week.
-    //    Past-dated saved weeks are stale (user navigated to an old week months ago,
-    //    closed the tab, and we don't want to strand them there on reopen).
-    const savedWeekDate = loadWeekDate();
-    if (savedWeekDate) {
-        if (savedWeekDate >= currentMondayStr) {
-            const idx = allMondays.findIndex(d => getLocalDateString(d) === savedWeekDate);
-            if (idx !== -1) {
-                return idx;
-            }
-        } else {
-            // Clear stale saved week so it doesn't keep getting reconsidered
-            removeState(STORAGE_KEYS.CURRENT_WEEK_DATE);
-        }
+    // Clear week-position keys persisted by older versions so they don't linger
+    if (loadWeekDate()) {
+        removeState(STORAGE_KEYS.CURRENT_WEEK_DATE);
     }
-
-    // Legacy positional index is intentionally ignored — it's unreliable across
-    // data updates (index 5 means a different week today than it did yesterday).
-    // Clear it if present so it doesn't linger forever.
     if (loadWeekIndex(null) !== null) {
         removeState(STORAGE_KEYS.CURRENT_WEEK_INDEX);
     }
 
-    // 3. Default to current week
+    // 2. Default to current week
     currentViewedWeekIndex = allMondays.findIndex(d => getLocalDateString(d) === currentMondayStr);
     if (currentViewedWeekIndex !== -1) {
         return currentViewedWeekIndex;
     }
 
-    // 4. Current week not in data — find nearest future week, or last week
+    // 3. Current week not in data — find nearest future week, or last week
     currentViewedWeekIndex = allMondays.findIndex(d => d > currentMonday);
     return currentViewedWeekIndex !== -1 ? currentViewedWeekIndex : allMondays.length - 1;
 }
@@ -216,7 +201,6 @@ export async function render() {
 
     isRendering = true;
     logger.info('Starting unified render...');
-    showRenderingStatus(true, 'Rendering schedule...');
 
     try {
         clearParseDateCache();
@@ -280,10 +264,6 @@ export async function render() {
                         });
                     });
 
-                    setTimeout(() => {
-                        showRenderingStatus(false);
-                    }, RENDER_DELAY.SCHEDULE);
-
                     isRendering = false;
                     return; // Early exit - skip full render (synthetic tasks preserved)
                 }
@@ -308,7 +288,6 @@ export async function render() {
             emptyMsg.textContent = 'No tasks found for the selected criteria.';
             container.replaceChildren(emptyMsg);
             emit(EVENTS.WEEK_CHANGED, { weekIndex: 0, weekDate: currentMonday });
-            showRenderingStatus(false);
             isRendering = false;
             return;
         }
@@ -332,10 +311,6 @@ export async function render() {
         state.setCurrentViewedWeekIndex(weekIndex);
 
         scheduleLayoutAndScroll(container, wrapper, weekIndex, allMondays, savedScrollTop);
-
-        setTimeout(() => {
-            showRenderingStatus(false);
-        }, RENDER_DELAY.SCHEDULE);
 
         emit(EVENTS.SCHEDULE_RENDERED);
 

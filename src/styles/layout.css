@@ -112,7 +112,7 @@ header p {
   padding: 1rem 0.75rem;
   color: var(--text-secondary);
   text-align: center;
-  border-bottom: 2px solid var(--border-secondary);
+  border-bottom: 1px solid var(--border-secondary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   line-height: 1.2;
@@ -155,8 +155,8 @@ header p {
 }
 
 .today-highlight {
-  background-color: #fde68a;
-  color: #92400e;
+  background-color: #FEF3C7;
+  color: #92400E;
   border-radius: 8px;
 }
 
@@ -166,9 +166,10 @@ header p {
 }
 
 .grid-cell {
-  padding: 0.35rem;
-  border-bottom: 2px solid var(--border-primary);
-  border-right: 2px solid var(--border-primary);
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--border-primary);
+  border-right: 1px solid var(--border-primary);
+  background-color: #F8F9FA;
 }
 
 .grid-cell:last-child {
@@ -202,8 +203,8 @@ body { top: 0 !important; }
   color: #6b7280;
   text-align: center;
   padding: 3px 6px;
-  border-bottom: 3px solid #d1d5db;
-  border-right: 2px solid var(--border-primary);
+  border-bottom: 2px solid var(--border-secondary);
+  border-right: 1px solid var(--border-primary);
   background: #f9fafb;
   min-height: 0;
   height: auto;
@@ -300,10 +301,12 @@ body { top: 0 !important; }
   background-color: var(--color-ship);
   color: var(--color-ship-text);
 }
+
 .department-label.department-samples {
   background-color: var(--color-samples);
   color: var(--color-samples-text);
 }
+
 .department-label.department-facilities {
   background-color: var(--color-facilities);
   color: var(--color-facilities-text);

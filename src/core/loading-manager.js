@@ -14,6 +14,9 @@ const activeOperations = new Map();
 let currentProgress = 0;
 let progressMessage = '';
 
+// Pending fade-out timer for the loading overlay
+let fadeTimeout = null;
+
 /**
  * Initialize loading manager
  */
@@ -45,7 +48,12 @@ export function showLoading(message = 'Loading...', operation = 'default') {
         messageEl.textContent = message;
     }
 
-    // Show overlay
+    // Cancel any pending fade-out and show overlay
+    if (fadeTimeout) {
+        clearTimeout(fadeTimeout);
+        fadeTimeout = null;
+    }
+    overlay.classList.remove('fading');
     overlay.classList.remove('hidden');
 
     logger.debug(`⏳ Loading started: ${operation} - ${message}`);
@@ -67,12 +75,24 @@ export function hideLoading(operation = 'default') {
     // Only hide overlay if no operations are active
     if (activeOperations.size === 0) {
         const overlay = document.getElementById('loading-overlay');
-        if (overlay) {
-            overlay.classList.add('hidden');
-        }
+        if (overlay && !overlay.classList.contains('hidden')) {
+            // Fade out, then hide after the transition completes
+            overlay.classList.add('fading');
+            if (fadeTimeout) {
+                clearTimeout(fadeTimeout);
+            }
+            fadeTimeout = setTimeout(() => {
+                fadeTimeout = null;
+                overlay.classList.add('hidden');
+                overlay.classList.remove('fading');
 
-        // Reset progress
-        resetProgress();
+                // Reset progress
+                resetProgress();
+            }, 250);
+        } else {
+            // Reset progress
+            resetProgress();
+        }
     } else {
         // Show the next active operation's message
         const nextOp = activeOperations.values().next().value;
@@ -101,19 +121,7 @@ export function updateProgress(percent, message = '') {
     const overlay = document.getElementById('loading-overlay');
     if (!overlay) return;
 
-    // Update progress bar if it exists
-    const progressBar = overlay.querySelector('.loading-progress-bar');
-    if (progressBar) {
-        progressBar.style.width = `${currentProgress}%`;
-    }
-
-    // Update progress text if it exists
-    const progressText = overlay.querySelector('.loading-progress-text');
-    if (progressText) {
-        progressText.textContent = `${Math.round(currentProgress)}%`;
-    }
-
-    // Update message if provided
+    // Update message if provided (progress bar is indeterminate — CSS-driven)
     if (message) {
         const messageEl = overlay.querySelector('.loading-message');
         if (messageEl) {
@@ -130,19 +138,6 @@ export function updateProgress(percent, message = '') {
 function resetProgress() {
     currentProgress = 0;
     progressMessage = '';
-
-    const overlay = document.getElementById('loading-overlay');
-    if (!overlay) return;
-
-    const progressBar = overlay.querySelector('.loading-progress-bar');
-    if (progressBar) {
-        progressBar.style.width = '0%';
-    }
-
-    const progressText = overlay.querySelector('.loading-progress-text');
-    if (progressText) {
-        progressText.textContent = '0%';
-    }
 }
 
 /**
@@ -256,9 +251,15 @@ export function clearAllLoading() {
     logger.debug('🧹 Clearing all loading states...');
     activeOperations.clear();
 
+    if (fadeTimeout) {
+        clearTimeout(fadeTimeout);
+        fadeTimeout = null;
+    }
+
     const overlay = document.getElementById('loading-overlay');
     if (overlay) {
         overlay.classList.add('hidden');
+        overlay.classList.remove('fading');
     }
 
     resetProgress();

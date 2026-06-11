@@ -51,12 +51,8 @@ export async function restoreState() {
     logger.debug('Restoring persisted state...');
 
     try {
-        // Restore week index
-        const savedWeekIndex = storage.loadWeekIndex();
-        if (savedWeekIndex !== -1) {
-            state.setCurrentViewedWeekIndex(savedWeekIndex, true);
-            logger.debug('  Restored week index:', savedWeekIndex);
-        }
+        // Week position is intentionally NOT restored — the app always opens
+        // on the current week (see resolveWeekIndex in core/renderer.js).
 
         // Restore editing mode
         const savedEditingMode = storage.loadEditingMode();
@@ -66,13 +62,6 @@ export async function restoreState() {
         }
 
         // Set up event listeners for state persistence
-        eventBus.on(eventBus.EVENTS.WEEK_CHANGED, (data) => {
-            storage.saveWeekIndex(data.weekIndex);
-            if (data.weekDate) {
-                storage.saveWeekDate(getLocalDateString(data.weekDate));
-            }
-        });
-
         eventBus.on(eventBus.EVENTS.EDITING_TOGGLED, (data) => {
             storage.saveEditingMode(data.unlocked);
         });

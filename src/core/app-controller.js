@@ -201,8 +201,7 @@ export async function initializeApp() {
         debug.log('[Startup] Starting Phase 1: Core Systems');
         debug.time('[Startup] Phase 1: Core Systems');
         performanceMonitor.mark('app-init-start');
-        loadingManager.showLoading('Initializing application...', 'init');
-        loadingManager.updateProgress(5, 'Starting core systems...');
+        loadingManager.showLoading('Loading schedule…', 'init');
 
         // Initialize core systems (performance monitor, loading manager, offline manager)
         initializeCoreSystems();
@@ -211,64 +210,54 @@ export async function initializeApp() {
         exposeModalFunctionsGlobally();
 
         debug.timeEnd('[Startup] Phase 1: Core Systems');
-        loadingManager.updateProgress(10, 'Core systems ready');
 
         // === Phase 2: State Restoration ===
         debug.log('[Startup] Starting Phase 2: State Restoration');
         debug.time('[Startup] Phase 2: State Restoration');
         logger.debug('\n=== Phase 2: State Restoration ===');
         performanceMonitor.mark('phase2-start');
-        loadingManager.updateProgress(15, 'Restoring state...');
 
         await restoreState();
         performanceMonitor.measure('phase2-state-restoration', 'phase2-start');
         debug.timeEnd('[Startup] Phase 2: State Restoration');
-        loadingManager.updateProgress(25, 'State restored');
 
         // === Phase 3: Services Initialization ===
         debug.log('[Startup] Starting Phase 3: Services');
         debug.time('[Startup] Phase 3: Services');
         logger.debug('\n=== Phase 3: Services ===');
         performanceMonitor.mark('phase3-start');
-        loadingManager.updateProgress(30, 'Initializing services...');
 
         await initializeServices();
         appState.servicesReady = true;
         performanceMonitor.measure('phase3-services-init', 'phase3-start');
         debug.timeEnd('[Startup] Phase 3: Services');
-        loadingManager.updateProgress(45, 'Services initialized');
 
         // === Phase 4: UI Components ===
         debug.log('[Startup] Starting Phase 4: UI Components');
         debug.time('[Startup] Phase 4: UI Components');
         logger.debug('\n=== Phase 4: UI Components ===');
         performanceMonitor.mark('phase4-start');
-        loadingManager.updateProgress(50, 'Initializing UI components...');
 
         await initializeComponents();
         appState.componentsReady = true;
         performanceMonitor.measure('phase4-components-init', 'phase4-start');
         debug.timeEnd('[Startup] Phase 4: UI Components');
-        loadingManager.updateProgress(70, 'UI components ready');
 
         // === Phase 5: Data Loading ===
         debug.log('[Startup] Starting Phase 5: Data Loading');
         debug.time('[Startup] Phase 5: Data Loading');
         logger.debug('\n=== Phase 5: Data Loading ===');
         performanceMonitor.mark('phase5-start');
-        loadingManager.updateProgress(75, 'Loading initial data...');
 
         await loadInitialData();
         performanceMonitor.measure('phase5-data-loading', 'phase5-start');
         debug.timeEnd('[Startup] Phase 5: Data Loading');
-        loadingManager.updateProgress(90, 'Data loaded');
 
         // === Phase 6: Global Listeners & Features ===
         debug.log('[Startup] Starting Phase 6: Global Features');
         debug.time('[Startup] Phase 6: Global Features');
         logger.debug('\n=== Phase 6: Global Features ===');
         performanceMonitor.mark('phase6-start');
-        loadingManager.updateProgress(95, 'Initializing global features...');
 
         globalListeners.initializeGlobalListeners();
         keyboardShortcuts.initializeKeyboardShortcuts();
@@ -280,7 +269,6 @@ export async function initializeApp() {
 
         performanceMonitor.measure('phase6-global-features', 'phase6-start');
         debug.timeEnd('[Startup] Phase 6: Global Features');
-        loadingManager.updateProgress(100, 'Application ready');
 
         // === Initialization Complete ===
         const endTime = performance.now();
@@ -291,7 +279,6 @@ export async function initializeApp() {
         performanceMonitor.measure('total-app-initialization', 'app-init-start');
 
         loadingManager.hideLoading('init');
-        loadingManager.showStatus('✅ Application ready', 'success', 3000);
 
         logger.info(`\n✅ Application initialized successfully in ${Math.round(appState.initializationTime)}ms`);
         logger.info('🎉 Phase 9: Performance Optimization Active!');

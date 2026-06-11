@@ -10,7 +10,6 @@ import {
     setCurrentViewedWeekIndex
 } from '../core/state.js';
 import { emit, on, EVENTS } from '../core/event-bus.js';
-import { saveWeekIndex } from '../core/storage.js';
 import { getMonday, getWeekMonth, getWeekOfMonth } from '../utils/date-utils.js';
 
 import { logger } from '../utils/logger.js';
@@ -113,7 +112,6 @@ function setupScrollListener() {
                 // Only update if week changed
                 if (weekIndex !== currentIndex) {
                     setCurrentViewedWeekIndex(weekIndex);
-                    saveWeekIndex(weekIndex);
                     emit(EVENTS.WEEK_CHANGED, { weekIndex, weekDate: allWeekStartDates[weekIndex] });
                 }
             }
