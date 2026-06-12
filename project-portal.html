@@ -169,6 +169,15 @@
                         </svg>
                         <span>Optimizer Hours</span>
                     </button>
+                    <button class="pp-tab-btn" data-tab="staging" type="button">
+                        <svg class="pp-tab-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="4" y="4" width="16" height="16" rx="2"/>
+                            <line x1="8" y1="9" x2="16" y2="9"/>
+                            <line x1="8" y1="13" x2="16" y2="13"/>
+                            <line x1="8" y1="17" x2="13" y2="17"/>
+                        </svg>
+                        <span>Staging</span>
+                    </button>
                     <button class="pp-tab-btn" data-tab="color-log" type="button">
                         <svg class="pp-tab-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <circle cx="13.5" cy="6.5" r="2.5"/>
@@ -734,6 +743,36 @@
                                     <span class="pp-opt-total-label">Grand Total</span>
                                     <span class="pp-opt-total-value"><strong id="pp-opt-grand-total">0</strong> hrs</span>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tab: Staging (pre-author task descriptions per casting) -->
+                    <div class="pp-tab-panel" data-panel="staging" hidden>
+                        <div class="pp-opt-wrap">
+                            <div class="pp-opt-header">
+                                <h2 class="pp-opt-title">Staging</h2>
+                                <p class="pp-muted pp-opt-sub">Pre-author task descriptions per casting, by department and day. Shared with the weekly board &mdash; descriptions match scheduled tasks by casting, department and day order.</p>
+                            </div>
+
+                            <!-- Empty state: project not saved yet -->
+                            <div id="pp-stg-needs-save" class="pp-castings-hint" hidden>
+                                Save the project first to use Staging.
+                            </div>
+
+                            <!-- Empty state: no castings -->
+                            <div id="pp-stg-no-castings" class="pp-opt-empty" hidden>
+                                <p>No castings yet.</p>
+                                <button class="pp-link-btn" type="button" data-action="goto-castings">Add a casting first &rarr;</button>
+                            </div>
+
+                            <!-- Active editor -->
+                            <div id="pp-stg-editor" hidden>
+                                <!-- Casting pills -->
+                                <div class="pp-opt-pills" id="pp-stg-pills"></div>
+
+                                <!-- Per-casting columns: department × day description grid -->
+                                <div class="pp-opt-columns" id="pp-stg-columns"></div>
                             </div>
                         </div>
                     </div>

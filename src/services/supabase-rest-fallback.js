@@ -8,7 +8,7 @@
 import { SUPABASE } from '../config/api-config.js';
 import { logger } from '../utils/logger.js';
 import { normalizeDepartment } from '../utils/ui-utils.js';
-import { normalizeProjectName } from '../utils/ui-utils.js';
+import { normalizeProjectName, taskDescCastingKey, taskDescNameKey } from '../utils/ui-utils.js';
 
 /**
  * Fetch task descriptions using REST API (fallback for old browsers)
@@ -43,12 +43,17 @@ export async function fetchTaskDescriptionsREST() {
 
         if (data && Array.isArray(data)) {
             data.forEach(function(row) {
-                const normalizedProject = normalizeProjectName(row.project);
-                const key = normalizedProject + '|' + row.department + '|' + row.day_number;
-                descriptionsMap.set(key, {
+                var pnum = (row.project_number != null ? String(row.project_number).trim() : '');
+                var cnum = (row.casting_number != null ? String(row.casting_number).trim() : '');
+                var value = {
                     description: row.description || '',
                     castingSide: row.casting_side || null
-                });
+                };
+                if (pnum && cnum) {
+                    descriptionsMap.set(taskDescCastingKey(pnum, cnum, row.department, row.day_number), value);
+                } else {
+                    descriptionsMap.set(taskDescNameKey(row.project, row.department, row.day_number), value);
+                }
             });
 
             logger.info('✅ Loaded ' + descriptionsMap.size + ' task descriptions via REST API');

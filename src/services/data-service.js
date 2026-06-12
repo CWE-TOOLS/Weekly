@@ -33,7 +33,7 @@ import { parseDate } from '../utils/date-utils.js';
 import { setAllTasks, getAllTasks } from '../core/state.js';
 
 import { logger } from '../utils/logger.js';
-import { normalizeProjectName } from '../utils/ui-utils.js';
+import { normalizeProjectName, taskDescCastingKey, taskDescNameKey } from '../utils/ui-utils.js';
 import { debug } from '../utils/debug.js';
 
 /**
@@ -215,10 +215,44 @@ export function mergeTasks(sheetsTasks, manualTasks) {
  * ]);
  * mergeTaskDescriptions(tasks, descriptions);
  */
+// Per-(project, casting, department) day index for the given task list — mirrors
+// sheets-service computeDayNumbers so the indices match what Staging writes. Computed
+// here (not read off task.castingDayNumber) so the weekly merge is robust even when the
+// shared task cache still holds tasks parsed before castingDayNumber existed.
+function computeCastingDayMap(tasks) {
+    const groups = new Map();
+    for (const t of tasks) {
+        if (t.isManual) continue;
+        const proj = (t.projectNumber || '').toString().trim();
+        const cast = (t.castingNumber || '').toString().trim();
+        if (!proj || !cast || !t.department) continue;
+        const key = `${proj}|${cast}|${t.department}`;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(t);
+    }
+    const dayByTask = new Map();
+    for (const list of groups.values()) {
+        list.sort((a, b) => {
+            const da = Date.parse(a.date) || 0;
+            const db = Date.parse(b.date) || 0;
+            if (da !== db) return da - db;
+            const ai = parseInt((a.id || '').replace('task-', ''), 10) || 0;
+            const bi = parseInt((b.id || '').replace('task-', ''), 10) || 0;
+            return ai - bi;
+        });
+        list.forEach((t, idx) => dayByTask.set(t, String(idx + 1)));
+    }
+    return dayByTask;
+}
+
 export function mergeTaskDescriptions(tasks, descriptionsMap) {
     let matchedCount = 0;
     let skippedManualCount = 0;
     let missingCount = 0;
+
+    // Per-casting day index, computed locally so the merge doesn't depend on cached tasks
+    // already carrying castingDayNumber. Same ordering as sheets-service computeDayNumbers.
+    const castingDayByTask = computeCastingDayMap(tasks);
 
     tasks.forEach(task => {
         // Skip manual tasks - they already have descriptions from weekly_tasks table
@@ -227,11 +261,22 @@ export function mergeTaskDescriptions(tasks, descriptionsMap) {
             return;
         }
 
-        // Build lookup key: "project|department|day_number"
-        // Normalize project name to match how it's stored and displayed
-        const normalizedProject = normalizeProjectName(task.project);
-        const key = `${normalizedProject}|${task.department}|${task.dayNumber}`;
-        const entry = descriptionsMap.get(key);
+        // Prefer the casting-aware key (a description pinned to this casting's day);
+        // fall back to the legacy name+global-day key for rows not yet upgraded.
+        const pnum = (task.projectNumber || '').toString().trim();
+        const cnum = (task.castingNumber || '').toString().trim();
+        const cday = castingDayByTask.get(task) || (task.castingDayNumber || '').toString().trim();
+        // Keep the task object consistent so a later weekly-card edit (saveToStaging)
+        // writes a casting-aware row rather than a legacy one when the cache is stale.
+        if (cday) task.castingDayNumber = cday;
+
+        let entry = null;
+        if (pnum && cnum && cday) {
+            entry = descriptionsMap.get(taskDescCastingKey(pnum, cnum, task.department, cday));
+        }
+        if (!entry) {
+            entry = descriptionsMap.get(taskDescNameKey(task.project, task.department, task.dayNumber));
+        }
 
         if (entry) {
             task.description = entry.description;

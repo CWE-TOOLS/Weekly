@@ -203,4 +203,35 @@ export function normalizeProjectName(projectName) {
     return projectName.replace(/\s+/g, ' ').trim();
 }
 
+/**
+ * Casting-aware lookup key for a task_descriptions row. Identifies a description
+ * by a specific casting's day, so the Project Portal optimizer and the weekly card
+ * edit the same row. The 'num:' prefix namespaces these keys so they never collide
+ * with the legacy name keys that share the same Map.
+ *
+ * @param {string} projectNumber - Google Sheet col H
+ * @param {string} castingNumber - Google Sheet col I
+ * @param {string} department
+ * @param {string|number} dayNumber - per-casting day index (castingDayNumber)
+ * @returns {string}
+ */
+export function taskDescCastingKey(projectNumber, castingNumber, department, dayNumber) {
+    return `num:${String(projectNumber).trim()}|${String(castingNumber).trim()}|${department}|${dayNumber}`;
+}
+
+/**
+ * Legacy lookup key for a task_descriptions row: normalized project name +
+ * department + global day number. Byte-identical to the long-standing key so
+ * descriptions written before casting-awareness still resolve (fallback) until
+ * they're next edited and upgraded to a casting key.
+ *
+ * @param {string} projectName
+ * @param {string} department
+ * @param {string|number} dayNumber - global per-(project, department) day index
+ * @returns {string}
+ */
+export function taskDescNameKey(projectName, department, dayNumber) {
+    return `${normalizeProjectName(projectName)}|${department}|${dayNumber}`;
+}
+
 export { normalizeDepartmentClass } from '../config/department-config.js';

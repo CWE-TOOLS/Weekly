@@ -217,7 +217,9 @@ export function parseSheetData(rows) {
                 projectNumber: (row[7] || '').toString().trim(),
                 castingNumber: (row[8] || '').toString().trim(),
                 dayNumber: '',
-                totalDays: ''
+                totalDays: '',
+                castingDayNumber: '',
+                castingTotalDays: ''
             };
             tasks.push(task);
         }
@@ -239,6 +241,18 @@ export function parseSheetData(rows) {
  * @param {Array<Object>} tasks
  */
 function computeDayNumbers(tasks) {
+    const byDateThenId = (a, b) => {
+        const da = Date.parse(a.date) || 0;
+        const db = Date.parse(b.date) || 0;
+        if (da !== db) return da - db;
+        const ai = parseInt((a.id || '').replace('task-', ''), 10) || 0;
+        const bi = parseInt((b.id || '').replace('task-', ''), 10) || 0;
+        return ai - bi;
+    };
+
+    // Global per-(project, department) day index. This is the long-standing sequence
+    // that the on-card "Day X of Y" counters and the actual_hours key both depend on,
+    // so it is deliberately left unchanged.
     const groups = new Map();
     for (const task of tasks) {
         if (!task.project || !task.department) continue;
@@ -246,20 +260,35 @@ function computeDayNumbers(tasks) {
         if (!groups.has(key)) groups.set(key, []);
         groups.get(key).push(task);
     }
-
     for (const list of groups.values()) {
-        list.sort((a, b) => {
-            const da = Date.parse(a.date) || 0;
-            const db = Date.parse(b.date) || 0;
-            if (da !== db) return da - db;
-            const ai = parseInt((a.id || '').replace('task-', ''), 10) || 0;
-            const bi = parseInt((b.id || '').replace('task-', ''), 10) || 0;
-            return ai - bi;
-        });
+        list.sort(byDateThenId);
         const total = list.length;
         list.forEach((t, idx) => {
             t.dayNumber = String(idx + 1);
             t.totalDays = String(total);
+        });
+    }
+
+    // Per-(project, casting, department) day index. Used to key task_descriptions so a
+    // description belongs to a specific casting's day — letting it be pre-authored from
+    // the Project Portal before the sheet row exists, and shared with the weekly card.
+    // Requires both project and casting numbers; rows missing either keep empty
+    // casting-day fields and fall back to the legacy name+global-day description key.
+    const castGroups = new Map();
+    for (const task of tasks) {
+        const proj = (task.projectNumber || '').trim();
+        const cast = (task.castingNumber || '').trim();
+        if (!proj || !cast || !task.department) continue;
+        const key = `${proj}|${cast}|${task.department}`;
+        if (!castGroups.has(key)) castGroups.set(key, []);
+        castGroups.get(key).push(task);
+    }
+    for (const list of castGroups.values()) {
+        list.sort(byDateThenId);
+        const total = list.length;
+        list.forEach((t, idx) => {
+            t.castingDayNumber = String(idx + 1);
+            t.castingTotalDays = String(total);
         });
     }
 }
@@ -413,18 +442,39 @@ export async function saveToStaging(projectName, changedTasks) {
 
         const descriptions = changedTasks.map((entry) => {
             const { task, newText } = entry;
-            // Validate task has required fields
-            if (!task.department || !task.dayNumber) {
-                logger.warn('⚠️ Skipping task with missing department or dayNumber:', task);
+            if (!task.department) {
+                logger.warn('⚠️ Skipping task with missing department:', task);
                 return null;
             }
 
-            const record = {
-                project: normalizedProjectName, // Normalize to match display and lookup behavior
-                department: task.department,
-                day_number: task.dayNumber,
-                description: (newText != null ? newText : '') // Handle null/undefined descriptions (Chrome 76 compatible)
-            };
+            const projectNumber = (task.projectNumber || '').toString().trim();
+            const castingNumber = (task.castingNumber || '').toString().trim();
+            const castingDay = (task.castingDayNumber || '').toString().trim();
+
+            let record;
+            if (projectNumber && castingNumber && castingDay) {
+                // Casting-aware row — the same row the Project Portal optimizer writes.
+                // Keyed by (project_number, casting_number, department, castingDayNumber);
+                // no legacy `project` name so it can't collide across castings.
+                record = {
+                    project_number: projectNumber,
+                    casting_number: castingNumber,
+                    department: task.department,
+                    day_number: castingDay,
+                    description: (newText != null ? newText : '')
+                };
+            } else if (task.dayNumber) {
+                // Legacy fallback for rows without casting numbers.
+                record = {
+                    project: normalizedProjectName, // Normalize to match display and lookup behavior
+                    department: task.department,
+                    day_number: task.dayNumber,
+                    description: (newText != null ? newText : '') // Handle null/undefined (Chrome 76 compatible)
+                };
+            } else {
+                logger.warn('⚠️ Skipping task with no casting-day or day number:', task);
+                return null;
+            }
 
             // Pass casting_side through only when the caller included it (cast-task
             // edits). Property may be 'A' / 'B' / null — null clears the selection.

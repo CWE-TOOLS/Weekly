@@ -10,7 +10,7 @@ import { UI_DELAY, NOTIFICATION_DURATION, NETWORK_TIMING } from '../config/timin
 import { POSITION_OFFSET, Z_INDEX, INDICATOR_STYLE } from '../config/layout-constants.js';
 
 import { logger } from '../utils/logger.js';
-import { normalizeProjectName } from '../utils/ui-utils.js';
+import { normalizeProjectName, taskDescCastingKey, taskDescNameKey } from '../utils/ui-utils.js';
 import { isInDegradedMode } from '../utils/browser-compat.js';
 import { fetchTaskDescriptionsREST, loadManualTasksREST } from './supabase-rest-fallback.js';
 // Supabase client and channel state
@@ -321,7 +321,7 @@ export async function fetchTaskDescriptions() {
 
         const { data, error } = await supabaseClient
             .from('task_descriptions')
-            .select('project, department, day_number, description, casting_side')
+            .select('project, project_number, casting_number, department, day_number, description, casting_side')
             .limit(10000); // Increase limit to fetch all descriptions (default is 1000)
 
         if (error) {
@@ -330,20 +330,25 @@ export async function fetchTaskDescriptions() {
 
         logger.info(`📊 Supabase returned ${data ? data.length : 0} rows (limit was set to 10000)`);
 
-        // Convert array to Map for fast lookup
-        // Key format: "project|department|day_number"
-        // Value: { description, castingSide } — castingSide is null unless set
-        // IMPORTANT: Do NOT trim project names - preserve exact match
+        // Convert array to Map for fast lookup. Casting-aware rows (project_number +
+        // casting_number set) emit the casting key; legacy rows emit the name key.
+        // mergeTaskDescriptions() then prefers the casting key and falls back to name.
+        // Value: { description, castingSide } — castingSide is null unless set.
         const descriptionsMap = new Map();
 
         if (data) {
             data.forEach(row => {
-                const normalizedProject = normalizeProjectName(row.project);
-                const key = `${normalizedProject}|${row.department}|${row.day_number}`;
-                descriptionsMap.set(key, {
+                const pnum = (row.project_number != null ? String(row.project_number).trim() : '');
+                const cnum = (row.casting_number != null ? String(row.casting_number).trim() : '');
+                const value = {
                     description: row.description || '',
                     castingSide: row.casting_side || null
-                });
+                };
+                if (pnum && cnum) {
+                    descriptionsMap.set(taskDescCastingKey(pnum, cnum, row.department, row.day_number), value);
+                } else {
+                    descriptionsMap.set(taskDescNameKey(row.project, row.department, row.day_number), value);
+                }
             });
 
             logger.info(`✅ Loaded ${descriptionsMap.size} task descriptions from Supabase`);
@@ -658,26 +663,47 @@ export async function saveTaskDescriptions(descriptions) {
             return true;
         }
 
-        // Transform and validate each description
-        const records = descriptions.map((desc, index) => {
-            // Validate required fields
-            if (!desc.project || !desc.department || !desc.day_number) {
-                logger.error(`❌ Invalid description at index ${index}:`, desc);
-                throw new Error(`Missing required fields in description at index ${index}`);
-            }
+        // Partition into casting-aware records (project_number + casting_number) and
+        // legacy name-keyed records, then upsert each with its own conflict target.
+        // A single weekly/optimizer edit is homogeneous; the project-modal bulk save
+        // can be mixed (some tasks have casting numbers, some don't).
+        const castingRecords = [];
+        const legacyRecords = [];
 
-            // Handle empty/null descriptions (Chrome 76 compatible)
+        descriptions.forEach((desc, index) => {
             const description = (desc.description != null ? desc.description : '');
+            const pnum = (desc.project_number != null ? String(desc.project_number).trim() : '');
+            const cnum = (desc.casting_number != null ? String(desc.casting_number).trim() : '');
 
-            logger.debug(`  → [${index}] Project: "${desc.project}", Dept: "${desc.department}", Day: "${desc.day_number}", Desc length: ${description.length}`);
-
-            const record = {
-                project: desc.project, // IMPORTANT: Do NOT trim - preserve exact project name
-                department: desc.department,
-                day_number: desc.day_number,
-                description: description,
-                updated_at: new Date().toISOString()
-            };
+            let record;
+            if (pnum && cnum) {
+                if (!desc.department || !desc.day_number) {
+                    logger.error(`❌ Invalid casting description at index ${index}:`, desc);
+                    throw new Error(`Missing department/day_number in casting description at index ${index}`);
+                }
+                // Casting-aware row: no legacy `project` name, so it can't collide on
+                // the legacy (project, department, day_number) unique index across castings.
+                record = {
+                    project_number: pnum,
+                    casting_number: cnum,
+                    department: desc.department,
+                    day_number: desc.day_number,
+                    description: description,
+                    updated_at: new Date().toISOString()
+                };
+            } else {
+                if (!desc.project || !desc.department || !desc.day_number) {
+                    logger.error(`❌ Invalid description at index ${index}:`, desc);
+                    throw new Error(`Missing required fields in description at index ${index}`);
+                }
+                record = {
+                    project: desc.project, // IMPORTANT: Do NOT trim - preserve exact project name
+                    department: desc.department,
+                    day_number: desc.day_number,
+                    description: description,
+                    updated_at: new Date().toISOString()
+                };
+            }
 
             // Only include casting_side when the caller explicitly provided one
             // (cast-task edits). Omitting the column leaves the existing DB value
@@ -688,31 +714,42 @@ export async function saveTaskDescriptions(descriptions) {
                     : null;
             }
 
-            return record;
+            (pnum && cnum ? castingRecords : legacyRecords).push(record);
         });
 
-        // Use upsert to insert/update records
-        // The composite primary key (project, department, day_number) handles deduplication
-        const { data, error } = await supabaseClient
-            .from('task_descriptions')
-            .upsert(records, {
-                onConflict: 'project,department,day_number',
-                returning: 'minimal' // Don't return data to reduce payload size
-            });
+        if (castingRecords.length) {
+            const { error } = await supabaseClient
+                .from('task_descriptions')
+                .upsert(castingRecords, {
+                    onConflict: 'project_number,casting_number,department,day_number',
+                    returning: 'minimal'
+                });
+            if (error) {
+                logger.error('❌ Supabase casting upsert error:', error);
+                throw error;
+            }
+        }
 
-        if (error) {
-            logger.error('❌ Supabase upsert error:', error);
-            throw error;
+        if (legacyRecords.length) {
+            const { error } = await supabaseClient
+                .from('task_descriptions')
+                .upsert(legacyRecords, {
+                    onConflict: 'project,department,day_number',
+                    returning: 'minimal'
+                });
+            if (error) {
+                logger.error('❌ Supabase legacy upsert error:', error);
+                throw error;
+            }
         }
 
         const saveTime = (performance.now() - startTime).toFixed(0);
-        logger.info(`✅ Successfully saved ${descriptions.length} task descriptions in ${saveTime}ms`);
+        logger.info(`✅ Successfully saved ${castingRecords.length} casting + ${legacyRecords.length} legacy task descriptions in ${saveTime}ms`);
 
         // Send refresh signal to other clients
         await sendRefreshSignal({
             action: 'task_descriptions_updated',
-            count: descriptions.length,
-            project: (descriptions[0] && descriptions[0].project) || undefined
+            count: descriptions.length
         });
 
         return true;
