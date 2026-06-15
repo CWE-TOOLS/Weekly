@@ -86,6 +86,7 @@ export const TRACKING_ITEMS = [
   'Inflow Sales Ticket',
   '3D Drawings/Parts List',
   'Toolpath Program',
+  'Jig List',
   'Staging'
 ];
 

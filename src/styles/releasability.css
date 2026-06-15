@@ -53,7 +53,8 @@
   --tracking-14-color: #A5D6A7;  /* Inflow Sales Ticket */
   --tracking-15-color: #A5D6A7;  /* 3D Drawings/Parts List */
   --tracking-16-color: #A5D6A7;  /* Toolpath Program */
-  --tracking-17-color: #A5D6A7;  /* Staging */
+  --tracking-17-color: #A5D6A7;  /* Jig List */
+  --tracking-18-color: #A5D6A7;  /* Staging */
 }
 
 /* ============================================================================
@@ -617,7 +618,7 @@ html {
   grid-template-columns:
     260px
     70px
-    repeat(18, minmax(50px, 1fr));
+    repeat(19, minmax(50px, 1fr));
   gap: var(--grid-cell-gap);
   background-color: #E8E7E4;
   width: fit-content;
@@ -752,7 +753,8 @@ html {
 .tracking-item-header[data-tracking-index="14"] { background-color: var(--tracking-14-color); } /* Inflow Sales Ticket */
 .tracking-item-header[data-tracking-index="15"] { background-color: var(--tracking-15-color); } /* 3D Drawings/Parts List */
 .tracking-item-header[data-tracking-index="16"] { background-color: var(--tracking-16-color); } /* Toolpath Program */
-.tracking-item-header[data-tracking-index="17"] { background-color: var(--tracking-17-color); } /* Staging */
+.tracking-item-header[data-tracking-index="17"] { background-color: var(--tracking-17-color); } /* Jig List */
+.tracking-item-header[data-tracking-index="18"] { background-color: var(--tracking-18-color); } /* Staging */
 
 /* Week Section */
 .week-section {
