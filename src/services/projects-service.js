@@ -39,6 +39,9 @@ const PROJECT_COLUMNS = [
     'color_log_notes',
     'tracking_phases',
     'ship_qty_mode',
+    'target_slump_face',
+    'target_slump_first_backup',
+    'target_slump_final_backup',
     'created_at',
     'updated_at'
 ];
@@ -176,6 +179,38 @@ export async function setProjectShipQtyMode(projectNumber, value) {
 
     if (error) {
         logger.error('[projects-service] setProjectShipQtyMode error:', error);
+        throw error;
+    }
+}
+
+/**
+ * Targeted update: persist the project-wide per-batch-type slump targets (inches).
+ * Lightweight write — avoids round-tripping the full project record.
+ * @param {string} projectNumber
+ * @param {{face:(number|string), firstBackUp:(number|string), finalBackUp:(number|string)}} targets
+ */
+export async function setProjectSlumpTargets(projectNumber, targets) {
+    if (!projectNumber) return;
+    const client = await getClient();
+    if (!client) throw new Error('Supabase client unavailable');
+
+    // Coerce to a positive number; null lets the column DEFAULT (5) stand on read.
+    const num = (v) => {
+        const n = Number(v);
+        return (isFinite(n) && n > 0) ? n : null;
+    };
+    const t = targets || {};
+    const { error } = await client
+        .from(PROJECTS_TABLE)
+        .update({
+            target_slump_face: num(t.face),
+            target_slump_first_backup: num(t.firstBackUp),
+            target_slump_final_backup: num(t.finalBackUp)
+        })
+        .eq('project_number', projectNumber);
+
+    if (error) {
+        logger.error('[projects-service] setProjectSlumpTargets error:', error);
         throw error;
     }
 }

@@ -3510,6 +3510,65 @@ body.pp-printing .pp-tab-panel[data-panel="color-log"] { display: none !importan
     max-width: 850px;
 }
 
+/* Project-wide slump targets panel (Batch Tickets tab). Warm tint echoes the
+   orange slump graphic on the printed ticket. */
+.pp-bt-slump-targets {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 18px;
+    padding: 10px 14px;
+    background: #fff7ed;
+    border: 1px solid #fed7aa;
+    border-radius: 10px;
+}
+.pp-bt-slump-targets-head {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.15;
+    margin-right: 4px;
+}
+.pp-bt-slump-targets-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #9a3412;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.pp-bt-slump-targets-sub { font-size: 11px; color: #c2683a; }
+.pp-bt-slump-targets-fields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 16px;
+    align-items: center;
+}
+.pp-bt-slump-target {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #475569;
+}
+.pp-bt-slump-target-label { text-transform: uppercase; letter-spacing: 0.03em; }
+.pp-bt-slump-target-input { display: inline-flex; align-items: baseline; gap: 3px; }
+.pp-bt-slump-target-input input {
+    width: 56px;
+    padding: 4px 6px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 700;
+    color: #0f172a;
+    text-align: right;
+}
+.pp-bt-slump-target-input input:focus {
+    outline: none;
+    border-color: #ea580c;
+    box-shadow: 0 0 0 2px rgba(234, 88, 12, 0.15);
+}
+.pp-bt-slump-unit { font-size: 13px; font-weight: 700; color: #64748b; }
+
 .pp-bt-pills {
     display: flex;
     flex-wrap: wrap;
@@ -4059,6 +4118,62 @@ body.pp-printing .pp-tab-panel[data-panel="color-log"] { display: none !importan
     line-height: 1.5;
     white-space: pre-wrap;
 }
+
+/* ---- Batch ticket footer: handwrite mix conditions (left) + slump test (right) ---- */
+.bt-footer {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+    margin-top: 30px;
+    padding-right: 10px;
+    align-items: start;
+}
+.bt-footer-col { min-width: 0; }
+.bt-cond-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 10px 0 4px;
+}
+.bt-cond-label {
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+    min-width: 70px;
+}
+.bt-cond-line {
+    flex: 0 0 100px;
+    border-bottom: 1px solid #000;
+    height: 14px;
+}
+.bt-cond-line-sm { flex: 0 0 34px; }
+.bt-cond-unit { font-size: 10px; font-weight: 700; color: #334155; }
+.bt-cond-slash { font-size: 12px; font-weight: 700; }
+.bt-footer-right { text-align: center; }
+.bt-slump-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding-top: 6px;
+}
+.bt-slump-svg { width: 180px; height: 180px; display: block; flex: 0 0 auto; }
+.bt-slump-side { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 20px; }
+.bt-slump-readout { display: flex; gap: 16px; align-items: flex-start; }
+.bt-readout { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.05; }
+.bt-readout-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #475569; }
+.bt-readout-val { font-size: 34px; font-weight: 800; color: #ea580c; line-height: 1; display: flex; align-items: flex-end; gap: 3px; }
+.bt-readout-actual { color: #0f172a; font-weight: 700; }
+.bt-readout-blank { width: 42px; height: 30px; border-bottom: 2px solid #000; }
+.bt-passfail { display: flex; flex-direction: column; gap: 12px; }
+.bt-pf { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 700; }
+.bt-pf-text { min-width: 42px; }
+.bt-slump-fields { display: flex; flex-direction: column; gap: 10px; }
+.bt-slump-field { display: flex; align-items: baseline; gap: 8px; }
+.bt-slump-field-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #475569; white-space: nowrap; min-width: 34px; }
+.bt-time-input { display: inline-flex; align-items: baseline; gap: 4px; }
+.bt-time-blank { width: 26px; border-bottom: 1.5px solid #000; height: 16px; }
+.bt-time-colon { font-size: 16px; font-weight: 800; }
 
 body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !important; }
 

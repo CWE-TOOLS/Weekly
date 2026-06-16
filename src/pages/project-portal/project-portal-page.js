@@ -12,7 +12,8 @@ import {
     upsertProject,
     deleteProject,
     createEmptyProject,
-    setProjectShipQtyMode
+    setProjectShipQtyMode,
+    setProjectSlumpTargets
 } from '../../services/projects-service.js';
 import {
     loadCastings,
@@ -194,6 +195,8 @@ let currentColorLog = null;                // form-shaped record (id null = unsa
 let currentColorLogs = [];                 // all non-preset color logs for this project (>=1 when project has any)
 let currentColorLogId = null;              // id of the active log being edited in the Color Log tab
 let currentMultiColorEnabled = false;      // mirrors projects.multi_color_enabled for the active project
+let currentSlumpTargets = { face: 5, firstBackUp: 5, finalBackUp: 5 }; // project-wide slump targets (in), by batch type
+let slumpTargetSaveTimer = null;           // debounce handle for persisting slump targets
 let colorLogPresets = [];                  // cached preset rows
 let colorLogSaveTimer = null;              // debounce timer
 let colorLogLoadedFor = null;              // project_number we last loaded for
@@ -376,6 +379,11 @@ async function showFormView(projectNumber, draftOverrides = null) {
     currentPhasesEnabled = !!project.phases_enabled;
     currentMultiColorEnabled = !!project.multi_color_enabled;
     shipQtyModeGlobal = !!project.ship_qty_mode;
+    currentSlumpTargets = {
+        face: clampSlumpTarget(project.target_slump_face),
+        firstBackUp: clampSlumpTarget(project.target_slump_first_backup),
+        finalBackUp: clampSlumpTarget(project.target_slump_final_backup)
+    };
     if (isExisting && currentPhasesEnabled) {
         try {
             currentPhases = await loadPhasesForProject(project.project_number);
@@ -6548,6 +6556,17 @@ function wireEvents() {
         handleSelectBatchCasting(pill.dataset.castingId);
     });
 
+    // Batch Tickets: project-wide slump targets (one input per batch type)
+    const slumpPanel = document.getElementById('pp-bt-slump-targets');
+    slumpPanel?.addEventListener('input', (e) => {
+        const t = e.target;
+        const key = t.id === 'pp-bt-slump-face' ? 'face'
+            : t.id === 'pp-bt-slump-first' ? 'firstBackUp'
+            : t.id === 'pp-bt-slump-final' ? 'finalBackUp'
+            : null;
+        if (key) handleSlumpTargetInput(key, t.value);
+    });
+
     // Batch Tickets: active-casting form (delegation)
     const btContent = document.getElementById('pp-bt-content');
     btContent?.addEventListener('input', (e) => {
@@ -6741,8 +6760,11 @@ async function activateBatchTicketsTab() {
     const noCastings   = document.getElementById('pp-bt-no-castings');
     const pills        = document.getElementById('pp-bt-pills');
     const content      = document.getElementById('pp-bt-content');
+    const slumpPanel   = document.getElementById('pp-bt-slump-targets');
 
     if (!content) return;
+    // Project-wide slump panel: hidden by default; revealed only on the success path.
+    if (slumpPanel) slumpPanel.hidden = true;
 
     // Project not saved yet
     if (!currentProjectNumber) {
@@ -6810,6 +6832,17 @@ async function activateBatchTicketsTab() {
     // Default active casting: first in active phase if not chosen or fell out of scope.
     if (!currentBatchCastingId || !phaseScoped.some(c => c.id === currentBatchCastingId)) {
         currentBatchCastingId = phaseScoped[0]?.id || null;
+    }
+
+    // Reveal + populate the project-wide slump targets now that tickets will render.
+    if (slumpPanel) {
+        const fFace  = document.getElementById('pp-bt-slump-face');
+        const fFirst = document.getElementById('pp-bt-slump-first');
+        const fFinal = document.getElementById('pp-bt-slump-final');
+        if (fFace)  fFace.value  = currentSlumpTargets.face;
+        if (fFirst) fFirst.value = currentSlumpTargets.firstBackUp;
+        if (fFinal) fFinal.value = currentSlumpTargets.finalBackUp;
+        slumpPanel.hidden = false;
     }
 
     renderBatchTickets();
@@ -7178,7 +7211,9 @@ function renderBatchTicketCards(casting, ticket, plan) {
             batchedBy: ticket.batchedBy,
             notes: ticket.notes,
             pigReductionPct,
-            reduceFirstBackup
+            reduceFirstBackup,
+            // Project-wide slump target for this batch's type (in inches).
+            targetSlump: clampSlumpTarget(currentSlumpTargets[b.type])
         })
     ).join('');
 }
@@ -7187,10 +7222,71 @@ function renderBatchTicketCards(casting, ticket, plan) {
  * Build a single batch ticket card HTML. Pure (DOM-free).
  * Mirrors Batchin Calc's renderBatchTicket().
  */
+// Normalize a slump target to a usable number of inches. Falls back to 5" (the
+// historic default) for blank/invalid input; caps at 10" (the graphic's outer ring).
+function clampSlumpTarget(v) {
+    const n = Number(v);
+    if (!isFinite(n) || n <= 0) return 5;
+    return Math.min(10, n);
+}
+
+// Display form of a slump target: whole numbers without a decimal, else up to 2 places.
+function formatSlumpLabel(v) {
+    const n = clampSlumpTarget(v);
+    return Number.isInteger(n) ? String(n) : String(Math.round(n * 100) / 100);
+}
+
+// A project-wide slump target changed in the Batch Tickets panel. Update state, refresh
+// the live preview so every ticket's graphic reflects it, then debounce-persist to the
+// project (applies to all castings' tickets).
+function handleSlumpTargetInput(key, value) {
+    if (!(key in currentSlumpTargets)) return;
+    currentSlumpTargets[key] = clampSlumpTarget(value);
+    renderBatchTicketsContent();
+    if (!currentProjectNumber) return;
+    if (slumpTargetSaveTimer) clearTimeout(slumpTargetSaveTimer);
+    slumpTargetSaveTimer = setTimeout(async () => {
+        try {
+            await setProjectSlumpTargets(currentProjectNumber, currentSlumpTargets);
+        } catch (err) {
+            logger.error('[batch-tickets] save slump targets failed:', err);
+            showToast('Could not save slump targets — check connection.', 'error');
+        }
+    }, 600);
+}
+
+// Slump-test target board: concentric rings from 1" to 10" diameter with the target
+// ring highlighted and a translucent disc filling the target diameter. The target is the
+// project-wide value for this card's batch type (see currentSlumpTargets); the highlighted
+// ring appears when the target lands on a whole inch, while the disc scales continuously.
+function renderSlumpGraphic(targetIn = 5) {
+    const cx = 100, cy = 100, step = 9; // radius px per 1" of diameter (10" → r 90 in a 200 viewBox)
+    // Translucent disc fills the target diameter so the goal zone reads at a glance,
+    // drawn first so the inner ring lines stay visible on top of it.
+    const targetDisc = `<circle cx="${cx}" cy="${cy}" r="${targetIn * step}" fill="#ea580c" fill-opacity="0.12"/>`;
+    let rings = '';
+    let labels = '';
+    for (let d = 1; d <= 10; d++) {
+        const r = d * step;
+        const target = d === targetIn;
+        rings += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${target ? '#ea580c' : '#cbd5e1'}" stroke-width="${target ? 3 : 1}"/>`;
+        // White mask + number at the top of each ring so the diameter scale reads cleanly.
+        // Mask kept tight so an inner label never clips the digit on the next ring out.
+        const ly = cy - r;
+        labels += `<rect x="${cx - 6}" y="${ly - 5}" width="12" height="9" fill="#fff"/>`
+            + `<text x="${cx}" y="${ly + 3}" text-anchor="middle" font-size="9.5" font-weight="${target ? 800 : 600}" fill="${target ? '#ea580c' : '#475569'}">${d}</text>`;
+    }
+    const cross = `<line x1="${cx - 6}" y1="${cy}" x2="${cx + 6}" y2="${cy}" stroke="#94a3b8" stroke-width="1.5"/>`
+        + `<line x1="${cx}" y1="${cy - 6}" x2="${cx}" y2="${cy + 6}" stroke="#94a3b8" stroke-width="1.5"/>`;
+    return `<svg class="bt-slump-svg" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Slump target ${targetIn} inch spread">${targetDisc}${rings}${cross}${labels}</svg>`;
+}
+
 function renderBatchTicketCard({
     colorLog, batch, project, sampleName, castMethod, castNumber, castDate,
-    batchedBy, notes, pigReductionPct = FINAL_BACKUP_PIG_REDUCTION_PCT, reduceFirstBackup = false
+    batchedBy, notes, pigReductionPct = FINAL_BACKUP_PIG_REDUCTION_PCT, reduceFirstBackup = false,
+    targetSlump = 5
 }) {
+    const slumpTarget = clampSlumpTarget(targetSlump);
     const { batchSandLbs, scaleFactor, num, total, type: batchType } = batch;
     const applyPigReduction = batchType === 'finalBackUp' || (batchType === 'firstBackUp' && reduceFirstBackup);
     const pigMultiplier = applyPigReduction ? (1 - pigReductionPct / 100) : 1;
@@ -7367,8 +7463,40 @@ function renderBatchTicketCard({
         <div class="bt-section-label">ADDITIVES</div>
         <table class="bt-table">${additiveRowsHtml}</table>
 
-        <div class="bt-notes-title">NOTES:</div>
-        <div class="bt-notes">${batchSandLbs} lbs Mix\nBatch ${num} of ${total}${notes ? '\n' + escapeHtml(notes) : ''}</div>
+        <div class="bt-footer">
+            <div class="bt-footer-col bt-footer-left">
+                <div class="bt-section-label">MIX CONDITIONS</div>
+                <div class="bt-cond-row"><span class="bt-cond-label">AIR Temp</span><span class="bt-cond-line"></span><span class="bt-cond-unit">&deg;F</span></div>
+                <div class="bt-cond-row"><span class="bt-cond-label">WATER Temp</span><span class="bt-cond-line"></span><span class="bt-cond-unit">&deg;F</span></div>
+                <div class="bt-cond-row"><span class="bt-cond-label">ICE / WATER</span><span class="bt-cond-line bt-cond-line-sm"></span><span class="bt-cond-unit">LB</span><span class="bt-cond-slash">/</span><span class="bt-cond-line bt-cond-line-sm"></span><span class="bt-cond-unit">LB</span></div>
+            </div>
+            <div class="bt-footer-col bt-footer-right">
+                <div class="bt-section-label">SLUMP TEST</div>
+                <div class="bt-slump-wrap">
+                    ${renderSlumpGraphic(slumpTarget)}
+                    <div class="bt-slump-side">
+                        <div class="bt-slump-readout">
+                            <div class="bt-readout">
+                                <span class="bt-readout-label">Target</span>
+                                <span class="bt-readout-val">${formatSlumpLabel(slumpTarget)}&Prime;</span>
+                            </div>
+                            <div class="bt-readout">
+                                <span class="bt-readout-label">Actual</span>
+                                <span class="bt-readout-val bt-readout-actual"><span class="bt-readout-blank"></span>&Prime;</span>
+                            </div>
+                        </div>
+                        <div class="bt-passfail">
+                            <span class="bt-pf"><span class="bt-pf-text">PASS</span>${cb(false)}</span>
+                            <span class="bt-pf"><span class="bt-pf-text">FAIL</span>${cb(false)}</span>
+                        </div>
+                        <div class="bt-slump-fields">
+                            <div class="bt-slump-field"><span class="bt-slump-field-label">Time</span><span class="bt-time-input"><span class="bt-time-blank"></span><span class="bt-time-colon">:</span><span class="bt-time-blank"></span></span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        ${notes ? '<div class="bt-notes-title">NOTES:</div><div class="bt-notes">' + escapeHtml(notes) + '</div>' : ''}
     </div>`;
 }
 
@@ -9442,8 +9570,35 @@ body { font-family: 'Segoe UI', Arial, sans-serif; color:#000; font-size:11pt; -
 .bt-table .bt-qty { width: 18%; text-align: right; font-style: italic; }
 .bt-table .bt-unit { width: 12%; padding-left: 4pt; }
 .bt-notes-title { font-size: 9.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5pt; margin-top: 6pt; margin-bottom: 2pt; }
-/* flex: 1 inside the fixed-height .bt-page lets this absorb leftover vertical space and fill the page. */
-.bt-notes { border: 1pt solid #000; padding: 6pt 8pt; flex: 1 1 auto; min-height: 70pt; font-size: 10pt; line-height: 1.4; white-space: pre-wrap; }
+.bt-notes { border: 1pt solid #000; padding: 6pt 8pt; flex: 0 0 auto; min-height: 28pt; font-size: 10pt; line-height: 1.4; white-space: pre-wrap; }
+/* Footer: handwrite mix conditions (left) + slump test (right). flex: 1 lets it
+   absorb leftover vertical space so each ticket still fills its fixed-height page. */
+.bt-footer { display: grid; grid-template-columns: 1fr auto; gap: 10pt; margin-top: 30pt; padding-right: 10pt; align-items: start; flex: 1 1 auto; }
+.bt-cond-row { display: flex; align-items: baseline; gap: 8pt; padding: 12pt 0 5pt; }
+.bt-cond-label { font-size: 10pt; font-weight: 700; white-space: nowrap; min-width: 66pt; }
+.bt-cond-line { flex: 0 0 100pt; border-bottom: 1pt solid #000; height: 14pt; }
+.bt-cond-line-sm { flex: 0 0 34pt; }
+.bt-cond-unit { font-size: 9pt; font-weight: 700; }
+.bt-cond-slash { font-size: 11pt; font-weight: 700; }
+.bt-footer-right { text-align: center; }
+.bt-slump-wrap { display: flex; align-items: center; justify-content: center; gap: 10pt; }
+.bt-slump-svg { width: 2.0in; height: 2.0in; display: block; flex: 0 0 auto; }
+.bt-slump-side { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 22pt; }
+.bt-slump-readout { display: flex; gap: 18pt; align-items: flex-start; }
+.bt-readout { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.05; }
+.bt-readout-label { font-size: 10pt; font-weight: 700; text-transform: uppercase; letter-spacing: 1pt; }
+.bt-readout-val { font-size: 34pt; font-weight: 800; color: #ea580c; line-height: 1; display: flex; align-items: flex-end; gap: 3pt; }
+.bt-readout-actual { color: #000; font-weight: 700; }
+.bt-readout-blank { width: 44pt; height: 30pt; border-bottom: 1.5pt solid #000; }
+.bt-passfail { display: flex; flex-direction: column; gap: 16pt; }
+.bt-pf { display: flex; align-items: center; gap: 12pt; font-size: 13pt; font-weight: 700; }
+.bt-pf-text { min-width: 42pt; }
+.bt-slump-fields { display: flex; flex-direction: column; gap: 12pt; }
+.bt-slump-field { display: flex; align-items: baseline; gap: 8pt; }
+.bt-slump-field-label { font-size: 10.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5pt; min-width: 34pt; }
+.bt-time-input { display: inline-flex; align-items: baseline; gap: 4pt; }
+.bt-time-blank { width: 26pt; border-bottom: 1pt solid #000; height: 16pt; }
+.bt-time-colon { font-size: 15pt; font-weight: 800; }
 `;
 
 function handlePrintBatchTickets(castingId) {
@@ -9493,7 +9648,10 @@ function handlePrintBatchTickets(castingId) {
                 batchedBy: ticket.batchedBy,
                 notes: ticket.notes,
                 pigReductionPct,
-                reduceFirstBackup
+                reduceFirstBackup,
+                // Project-wide slump target for this batch's type — mirror the on-screen
+                // preview (renderBatchTicketCards) so print isn't stuck on the 5" default.
+                targetSlump: clampSlumpTarget(currentSlumpTargets[b.type])
             })}
         </div>
     `).join('');
