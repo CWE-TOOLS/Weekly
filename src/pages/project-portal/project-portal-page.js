@@ -221,6 +221,7 @@ let currentStagingCastingId = null;          // active casting column in the Sta
 let currentStagingDescriptions = new Map();  // `${castingNumber}|${dept}|${day}` -> {description, castingSide}
 let currentStagingScaffold = new Map();      // castingNumber -> Array<{ department, days:number }>
 let stagingGridSaveTimers = new Map();       // `${castingNumber}|${dept}|${day}` -> debounce handle
+let copiedStaging = null;                    // { fromCastNum, scaffold:[{department,days}], descById:{`${dept}|${day}`:desc} } from a copy action
 
 function getPhasesFor(castingId) {
     return currentCastingPhases.get(castingId) || [];
@@ -2540,6 +2541,15 @@ function renderStgColumn(casting) {
             </select>`
         : '';
 
+    const hasStgClipboard = !!(copiedStaging && Array.isArray(copiedStaging.scaffold));
+    const stgCopyTitle = `Copy staging cards from Cast ${castNum}`;
+    const stgPasteTitle = hasStgClipboard
+        ? (copiedStaging.fromCastNum === castNum
+            ? 'This casting was copied — paste into another'
+            : `Replace Cast ${castNum}'s staging with the copy from Cast ${copiedStaging.fromCastNum}`)
+        : 'Nothing copied yet';
+    const stgPasteDisabled = (!hasStgClipboard || copiedStaging.fromCastNum === castNum) ? 'disabled' : '';
+
     return `
         <div class="${colClass}" data-casting-id="${escapeAttr(casting.id)}" data-casting-number="${escapeAttr(castNum)}">
             <div class="pp-opt-col-headerbar">
@@ -2547,6 +2557,20 @@ function renderStgColumn(casting) {
                     <span class="pp-opt-col-label">Cast</span>
                     <span class="pp-opt-col-num">${escapeHtml(castNum)}</span>
                 </button>
+                <div class="pp-opt-col-actions">
+                    <button type="button" class="pp-opt-col-action" data-action="copy-staging" data-casting-number="${escapeAttr(castNum)}" aria-label="${escapeAttr(stgCopyTitle)}" title="${escapeAttr(stgCopyTitle)}">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                        </svg>
+                    </button>
+                    <button type="button" class="pp-opt-col-action" data-action="paste-staging" data-casting-number="${escapeAttr(castNum)}" ${stgPasteDisabled} aria-label="${escapeAttr(stgPasteTitle)}" title="${escapeAttr(stgPasteTitle)}">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+                            <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+                        </svg>
+                    </button>
+                </div>
             </div>
             <div class="pp-opt-deptgrid" data-casting-number="${escapeAttr(castNum)}">
                 ${sectionsHtml}
@@ -2560,6 +2584,107 @@ async function handleSelectStgCasting(castingId) {
     if (castingId === currentStagingCastingId) return;
     currentStagingCastingId = castingId;
     renderStaging();
+}
+
+// Snapshot a casting's staging grid (department/day shape + every non-empty description)
+// to the in-memory clipboard so it can be pasted onto another casting.
+function handleCopyStaging(castNum) {
+    if (!castNum) return;
+    const scaffold = currentStagingScaffold.get(castNum) || [];
+    const descById = {};
+    let count = 0;
+    for (const sec of scaffold) {
+        for (let d = 1; d <= sec.days; d++) {
+            const entry = currentStagingDescriptions.get(`${castNum}|${sec.department}|${d}`);
+            const desc = entry ? (entry.description || '') : '';
+            if (desc.trim()) {
+                descById[`${sec.department}|${d}`] = desc;
+                count++;
+            }
+        }
+    }
+    copiedStaging = {
+        fromCastNum: castNum,
+        scaffold: scaffold.map(s => ({ department: s.department, days: s.days })),
+        descById
+    };
+    showToast(`Copied staging from Cast ${castNum} (${count} description${count === 1 ? '' : 's'}).`);
+    renderStgColumns();   // re-render so the Paste buttons enable on the other columns
+}
+
+// Replace a target casting's staging grid with the clipboard copy: clear cells the source
+// doesn't cover (or leaves blank), then write the source's descriptions onto it, and match
+// the target's department/day shape to the source. casting_side is left untouched.
+async function handlePasteStaging(targetCastNum) {
+    if (!copiedStaging || !Array.isArray(copiedStaging.scaffold)) return;
+    if (!targetCastNum || !currentProjectNumber) return;
+    if (targetCastNum === copiedStaging.fromCastNum) return;
+
+    // Source cells (department/day shape) + the description for each.
+    const srcKeySet = new Set();   // `${dept}|${day}`
+    const srcCells = [];           // { department, day, description }
+    for (const sec of copiedStaging.scaffold) {
+        for (let d = 1; d <= sec.days; d++) {
+            const lk = `${sec.department}|${d}`;
+            srcKeySet.add(lk);
+            srcCells.push({ department: sec.department, day: d, description: copiedStaging.descById[lk] || '' });
+        }
+    }
+
+    // Existing saved descriptions on the target.
+    const targetKeys = [];   // full `${targetCastNum}|${dept}|${day}` keys
+    let hasContent = false;
+    for (const [k, v] of currentStagingDescriptions) {
+        if (k.indexOf(targetCastNum + '|') !== 0) continue;
+        targetKeys.push(k);
+        if (v && (v.description || '').trim()) hasContent = true;
+    }
+
+    if (hasContent && !window.confirm(
+        `Replace all staging descriptions for Cast ${targetCastNum} with the copy from Cast ${copiedStaging.fromCastNum}? This overwrites its current descriptions.`
+    )) {
+        return;
+    }
+
+    try {
+        // 1. Clear target cells the source doesn't cover, or that the source leaves blank.
+        for (const fullKey of targetKeys) {
+            const parts = fullKey.split('|');           // [castNum, dept, day]
+            const lk = `${parts[1]}|${parts[2]}`;
+            const srcDesc = srcKeySet.has(lk) ? (copiedStaging.descById[lk] || '') : '';
+            if (!srcDesc.trim()) {
+                await deleteTaskDescription({
+                    projectNumber: currentProjectNumber,
+                    castingNumber: targetCastNum,
+                    department: parts[1],
+                    dayNumber: parts[2]
+                });
+                currentStagingDescriptions.delete(fullKey);
+            }
+        }
+        // 2. Write the source's non-empty descriptions onto the target.
+        for (const cell of srcCells) {
+            if (!(cell.description || '').trim()) continue;
+            await upsertTaskDescription({
+                projectNumber: currentProjectNumber,
+                castingNumber: targetCastNum,
+                department: cell.department,
+                dayNumber: String(cell.day),
+                description: cell.description
+            });
+            const fk = `${targetCastNum}|${cell.department}|${cell.day}`;
+            const prevSide = (currentStagingDescriptions.get(fk) || {}).castingSide || null;
+            currentStagingDescriptions.set(fk, { description: cell.description, castingSide: prevSide });
+        }
+        // 3. Match the target's grid shape to the source.
+        currentStagingScaffold.set(targetCastNum, copiedStaging.scaffold.map(s => ({ department: s.department, days: s.days })));
+
+        renderStaging();
+        showToast(`Pasted staging from Cast ${copiedStaging.fromCastNum} into Cast ${targetCastNum}.`);
+    } catch (err) {
+        logger.error('[project-portal] paste staging failed:', err);
+        showToast('Paste failed: ' + (err.message || err), 'error');
+    }
 }
 
 function scheduleStagingGridSave(castNum, dept, day, text) {
@@ -6277,6 +6402,17 @@ function wireEvents() {
             const headerBtn = e.target.closest('button[data-action="select-col"]');
             if (headerBtn) {
                 handleSelectStgCasting(headerBtn.dataset.castingId);
+                return;
+            }
+            const copyBtn = e.target.closest('button[data-action="copy-staging"]');
+            if (copyBtn) {
+                handleCopyStaging(copyBtn.dataset.castingNumber);
+                return;
+            }
+            const pasteBtn = e.target.closest('button[data-action="paste-staging"]');
+            if (pasteBtn) {
+                if (pasteBtn.disabled) return;
+                handlePasteStaging(pasteBtn.dataset.castingNumber);
                 return;
             }
             const addDayBtn = e.target.closest('button[data-action="add-day"]');
