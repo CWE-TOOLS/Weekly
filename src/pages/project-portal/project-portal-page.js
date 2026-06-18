@@ -8292,7 +8292,7 @@ async function handleDeleteCrate(crateId) {
 // Override the print-header label for specific phases. Anything not listed
 // here prints with its default phase name from TRACKING_PHASES.
 const TRACK_PRINT_PHASE_LABELS = {
-    LOAD: 'LOAD/CRATE #'
+    LOAD: 'Crate #'
 };
 
 const TRACK_PRINT_CSS = `
