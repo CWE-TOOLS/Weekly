@@ -8513,11 +8513,26 @@ function buildTrackPrintHtml(casting, components, projectNumber, projectName) {
         ? (100 - panelIdPct - colorPct) / selectedPhases.length
         : 0;
 
+    // ---------- LOAD/CRATE # leads the table ----------
+    // The LOAD column (printed as "LOAD/CRATE #") is pulled out of the phase grid
+    // and rendered as the FIRST column, to the LEFT of Panel ID, rather than at the
+    // far right where its TRACKING_PHASES order would otherwise place it. It keeps
+    // its workflow sequence badge (LOAD is always the final step). When LOAD isn't a
+    // selected phase there's no leading column at all.
+    const loadSelected = selectedPhases.includes('LOAD');
+    const loadSeq = selectedPhases.length;                 // LOAD sorts last in TRACKING_PHASES
+    const gridPhases = loadSelected ? selectedPhases.filter(p => p !== 'LOAD') : selectedPhases;
+    const loadHeaderCell = loadSelected
+        ? `<th class="tp-col-load" style="width:${phasePct}%;">${escapeHtml(TRACK_PRINT_PHASE_LABELS.LOAD)}<span class="tp-seq">${loadSeq}</span></th>`
+        : '';
+    const loadBodyCell = loadSelected ? `<td class="tp-col-load"></td>` : '';
+
     // ---------- Header cells (single <thead>; browser repeats it per print page) ----------
     const headerCells = [
+        loadHeaderCell,
         `<th class="tp-col-panel" style="width:${panelIdPct}%;">Panel ID</th>`,
         `<th class="tp-col-color" style="width:${colorPct}%;">Color</th>`,
-        ...selectedPhases.map((p, i) => {
+        ...gridPhases.map((p, i) => {
             const isFinal = p === 'FINAL';
             const label = escapeHtml(TRACK_PRINT_PHASE_LABELS[p] || p);
             const seq = `${i + 1}${isFinal ? ' · QC' : ''}`;
@@ -8551,7 +8566,7 @@ function buildTrackPrintHtml(casting, components, projectNumber, projectName) {
     // Three PASS cells then one F, then blank cells. FINAL cell gets tp-hold.
     const exampleColor = escapeHtml(castColor || 'Fairfield #12');
     const exampleSamples = ['MD', 'MD', 'RT', 'F'];
-    const exampleCells = selectedPhases.map((p, i) => {
+    const exampleCells = gridPhases.map((p, i) => {
         const isFinal = p === 'FINAL';
         const sample = exampleSamples[i];
         if (sample === undefined) {
@@ -8566,6 +8581,7 @@ function buildTrackPrintHtml(casting, components, projectNumber, projectName) {
     }).join('');
     const exampleRow = `
         <tr class="tp-group tp-example">
+            ${loadBodyCell}
             <td class="tp-col-panel">EXAMPLE<br><span style="font-weight:400;font-style:italic;color:#5b6470;">EJEMPLO</span></td>
             <td class="tp-col-color">${exampleColor}</td>
             ${exampleCells}
@@ -8593,7 +8609,7 @@ function buildTrackPrintHtml(casting, components, projectNumber, projectName) {
             if (rowNum % 2 === 0) classes.push('tp-band');
             const rowClass = classes.length ? ` class="${classes.join(' ')}"` : '';
 
-            const phaseCells = selectedPhases.map(p => {
+            const phaseCells = gridPhases.map(p => {
                 const isFinal = p === 'FINAL';
                 const cls = isFinal ? 'tp-hold' : 'tp-col-phase';
                 return `<td class="${cls}"></td>`;
@@ -8601,6 +8617,7 @@ function buildTrackPrintHtml(casting, components, projectNumber, projectName) {
 
             return `
                 <tr${rowClass}>
+                    ${loadBodyCell}
                     <td class="tp-col-panel">${escapeHtml(comp.panel_id || '')}</td>
                     <td class="tp-col-color">${escapeHtml(resolveComponentColorName(comp) || '')}</td>
                     ${phaseCells}
