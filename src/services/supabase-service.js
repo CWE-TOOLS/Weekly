@@ -319,16 +319,27 @@ export async function fetchTaskDescriptions() {
     try {
         logger.debug('📥 Fetching task descriptions from Supabase...');
 
-        const { data, error } = await supabaseClient
-            .from('task_descriptions')
-            .select('project, project_number, casting_number, department, day_number, description, casting_side')
-            .limit(10000); // Increase limit to fetch all descriptions (default is 1000)
+        // PostgREST caps any single response at the server's max-rows (5000 here),
+        // so .limit(10000) silently returns only the first 5000 rows. Once the table
+        // grows past that the newest rows fall off and their descriptions vanish from
+        // the weekly view. Page through with .range() until a short page is returned.
+        const PAGE_SIZE = 1000;
+        const data = [];
+        for (let from = 0; ; from += PAGE_SIZE) {
+            const { data: page, error } = await supabaseClient
+                .from('task_descriptions')
+                .select('project, project_number, casting_number, department, day_number, description, casting_side')
+                .range(from, from + PAGE_SIZE - 1);
 
-        if (error) {
-            throw error;
+            if (error) {
+                throw error;
+            }
+            if (!page || page.length === 0) break;
+            for (const row of page) data.push(row);
+            if (page.length < PAGE_SIZE) break;
         }
 
-        logger.info(`📊 Supabase returned ${data ? data.length : 0} rows (limit was set to 10000)`);
+        logger.info(`📊 Supabase returned ${data.length} task description rows (paginated)`);
 
         // Convert array to Map for fast lookup. Casting-aware rows (project_number +
         // casting_number set) emit the casting key; legacy rows emit the name key.

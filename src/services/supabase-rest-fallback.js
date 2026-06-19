@@ -19,24 +19,33 @@ export async function fetchTaskDescriptionsREST() {
     try {
         logger.debug('📥 Fetching task descriptions via REST API (fallback mode)...');
 
-        const url = SUPABASE.URL + '/rest/v1/task_descriptions?limit=10000';
+        // PostgREST caps any single response at the server's max-rows (5000 here), so a
+        // one-shot limit=10000 silently drops everything past row 5000 — including the
+        // newest projects. Page through with limit/offset until a short page comes back.
+        var PAGE_SIZE = 1000;
+        var data = [];
+        for (var offset = 0; ; offset += PAGE_SIZE) {
+            var url = SUPABASE.URL + '/rest/v1/task_descriptions?limit=' + PAGE_SIZE + '&offset=' + offset;
+            var response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'apikey': SUPABASE.ANON_KEY,
+                    'Authorization': 'Bearer ' + SUPABASE.ANON_KEY,
+                    'Content-Type': 'application/json',
+                    'Prefer': 'return=representation'
+                }
+            });
 
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: {
-                'apikey': SUPABASE.ANON_KEY,
-                'Authorization': 'Bearer ' + SUPABASE.ANON_KEY,
-                'Content-Type': 'application/json',
-                'Prefer': 'return=representation'
+            if (!response.ok) {
+                throw new Error('REST API request failed: ' + response.status + ' ' + response.statusText);
             }
-        });
 
-        if (!response.ok) {
-            throw new Error('REST API request failed: ' + response.status + ' ' + response.statusText);
+            var page = await response.json();
+            if (!page || !Array.isArray(page) || page.length === 0) break;
+            for (var i = 0; i < page.length; i++) data.push(page[i]);
+            if (page.length < PAGE_SIZE) break;
         }
-
-        const data = await response.json();
-        logger.info('📊 REST API returned ' + (data ? data.length : 0) + ' task descriptions');
+        logger.info('📊 REST API returned ' + data.length + ' task descriptions (paginated)');
 
         // Convert array to Map for fast lookup
         const descriptionsMap = new Map();
