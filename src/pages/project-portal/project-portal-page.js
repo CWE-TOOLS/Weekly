@@ -5900,6 +5900,36 @@ function wireEvents() {
         formEl.addEventListener('change', scheduleProjectInfoSave);
     }
 
+    // Need By Date: calendar button summons the native date picker, which writes a
+    // MM/DD/YYYY value into the free-text field (typing a loose value still works).
+    const needByPickBtn = document.getElementById('pp-need_by_date-pick');
+    const needByPicker = document.getElementById('pp-need_by_date-picker');
+    const needByText = document.getElementById('pp-f-need_by_date');
+    if (needByPickBtn && needByPicker && needByText) {
+        needByPickBtn.addEventListener('click', () => {
+            // Open the calendar on the month already typed in the field, if parseable.
+            const existing = parseDate(needByText.value);
+            if (existing) {
+                const y = existing.getFullYear();
+                const m = String(existing.getMonth() + 1).padStart(2, '0');
+                const d = String(existing.getDate()).padStart(2, '0');
+                needByPicker.value = `${y}-${m}-${d}`;
+            }
+            if (typeof needByPicker.showPicker === 'function') {
+                try { needByPicker.showPicker(); return; } catch (e) { /* fall back below */ }
+            }
+            needByPicker.focus();
+            needByPicker.click();
+        });
+        needByPicker.addEventListener('change', () => {
+            if (!needByPicker.value) return;              // value is YYYY-MM-DD
+            const [y, m, d] = needByPicker.value.split('-');
+            needByText.value = `${m}/${d}/${y}`;
+            // Trigger the form's debounced auto-save (listens for input/change).
+            needByText.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+    }
+
     // CR Notes panel: lives outside #pp-form, so it needs its own auto-save listener.
     // Fields are still part of FORM_FIELDS, so populate/read pick them up.
     const crNotesPanel = document.querySelector('.pp-tab-panel[data-panel="cr-notes"]');

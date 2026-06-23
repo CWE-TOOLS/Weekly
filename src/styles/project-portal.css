@@ -613,6 +613,60 @@ body { overflow: visible; }
     color: #475569;
 }
 
+/* ---------- Date field + calendar picker button ---------- */
+.pp-date-combo {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.pp-date-combo input[type="text"] {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.pp-date-pick-btn {
+    flex: 0 0 auto;
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 1px solid #cbd5e1;
+    border-radius: 5px;
+    background: #ffffff;
+    color: #475569;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.pp-date-pick-btn:hover {
+    background: #dbeafe;
+    color: #1d4ed8;
+    border-color: #1d4ed8;
+}
+.pp-date-pick-btn:focus-visible {
+    outline: none;
+    border-color: #1d4ed8;
+    box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.15);
+}
+.pp-date-pick-btn svg {
+    width: 16px;
+    height: 16px;
+}
+/* Native date input is only a hidden trigger for the OS calendar — kept in the
+   DOM (not display:none) so showPicker()/click() can summon it. */
+.pp-date-pick-native {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    border: 0;
+    opacity: 0;
+    pointer-events: none;
+}
+
 .pp-phases-placeholder { opacity: 0.7; }
 .pp-muted { color: #94a3b8; font-size: 13px; }
 
