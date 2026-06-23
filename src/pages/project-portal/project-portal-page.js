@@ -8629,7 +8629,8 @@ function buildTrackPrintHtml(casting, components, projectNumber, projectName) {
     const headerMeta = [
         castLabel ? `<span><b>Cast&nbsp;#</b>&nbsp;${escapeHtml(String(num) || '')}${desc ? ` ${escapeHtml(desc)}` : ''}</span>` : '',
         castColor ? `<span><b>Color</b>&nbsp;${escapeHtml(castColor)}</span>` : '',
-        `<span><b>Date</b>&nbsp;${escapeHtml(dateLabel)}</span>`
+        `<span><b>Date</b>&nbsp;${escapeHtml(dateLabel)}</span>`,
+        `<span><b>Total&nbsp;Panels</b>&nbsp;${components.length}</span>`
     ].filter(Boolean).join('');
 
     // One sheet: header + instruction band once, then a single long table.
