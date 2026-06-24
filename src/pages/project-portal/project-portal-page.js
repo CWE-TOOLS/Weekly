@@ -9094,6 +9094,17 @@ body { font-family: 'Segoe UI', Arial, sans-serif; color: #000; font-size: 10pt;
 .cv-fullbar-content { padding: 8pt 8pt; min-height: 36pt; white-space: pre-wrap; text-align: center; }
 .cv-fullbar-content.cv-empty { color: #6b7280; font-style: italic; }
 .cv-section { margin-bottom: 10pt; }
+.cv-folder { width: 3.8in; margin-top: 12pt; }
+.cv-folder-title { background: #e5e7eb; color: #000; padding: 3pt 8pt; font-size: 9pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3pt; margin-bottom: 5pt; }
+.cv-check { list-style: none; }
+.cv-check li { position: relative; padding-left: 14pt; margin-bottom: 2pt; font-size: 8pt; line-height: 1.25; }
+.cv-check li::before { content: ''; position: absolute; left: 0; top: 1.5pt; width: 8pt; height: 8pt; border: 1px solid #000; }
+.cv-check-top { margin-bottom: 6pt; }
+.cv-check-top li { font-weight: 700; font-size: 8.5pt; }
+.cv-folder-tabs { display: flex; flex-direction: column; gap: 4pt; }
+.cv-tab { break-inside: avoid; }
+.cv-tab-head { font-size: 8pt; font-weight: 700; text-decoration: underline; margin-bottom: 1.5pt; }
+.cv-note { display: block; font-size: 7.5pt; font-style: italic; color: #374151; line-height: 1.2; }
 `;
 
 function statusSlug(value) {
@@ -9144,9 +9155,6 @@ function buildCoverPrintHtml(f) {
 
     const scopeBody = f.scope_of_work
         ? `<div class="cv-fullbar-content">${escapeHtml(f.scope_of_work)}</div>`
-        : `<div class="cv-fullbar-content cv-empty">—</div>`;
-    const impBody = f.imperative_information
-        ? `<div class="cv-fullbar-content">${escapeHtml(f.imperative_information)}</div>`
         : `<div class="cv-fullbar-content cv-empty">—</div>`;
 
     return `<!doctype html><html><head><meta charset="utf-8"><title>Cover — ${escapeHtml(f.project_number || '')} ${escapeHtml(f.project_name || '')}</title><style>${COVER_PRINT_CSS}</style></head><body>
@@ -9206,9 +9214,67 @@ function buildCoverPrintHtml(f) {
             ${scopeBody}
         </div>
 
-        <div class="cv-section">
-            <div class="cv-fullbar">Imperative Information</div>
-            ${impBody}
+        <div class="cv-folder">
+            <div class="cv-folder-title">Folder Standard Contents</div>
+            <ol class="cv-check cv-check-top">
+                <li>Cover Sheet Printed and Applied</li>
+                <li>Sticker Printed and Applied</li>
+            </ol>
+            <div class="cv-folder-tabs">
+                <div class="cv-tab">
+                    <div class="cv-tab-head">1st Tab — Left Hand / Inside Cover</div>
+                    <ul class="cv-check">
+                        <li>Shop Drawing / Tickets<span class="cv-note">To contain all dimensional information about concrete components</span></li>
+                    </ul>
+                </div>
+                <div class="cv-tab">
+                    <div class="cv-tab-head">1st Tab — Right Hand</div>
+                    <ul class="cv-check">
+                        <li>Tracking Sheet</li>
+                        <li>Stickers Stapled Behind Tracking Sheet</li>
+                    </ul>
+                </div>
+                <div class="cv-tab">
+                    <div class="cv-tab-head">2nd Tab — Left Hand</div>
+                    <ul class="cv-check">
+                        <li>Formwork 3D Drawings</li>
+                        <li>Jig List</li>
+                    </ul>
+                </div>
+                <div class="cv-tab">
+                    <div class="cv-tab-head">2nd Tab — Right Hand</div>
+                    <ul class="cv-check">
+                        <li>Sales Order</li>
+                        <li>Formout Instructions if Needed</li>
+                    </ul>
+                </div>
+                <div class="cv-tab">
+                    <div class="cv-tab-head">3rd Tab — Left Hand</div>
+                    <ul class="cv-check">
+                        <li>Casting Layout</li>
+                        <li>Casting Instructions</li>
+                    </ul>
+                </div>
+                <div class="cv-tab">
+                    <div class="cv-tab-head">3rd Tab — Right Hand</div>
+                    <ul class="cv-check">
+                        <li>Batching Ticket</li>
+                        <li>Color Log</li>
+                    </ul>
+                </div>
+                <div class="cv-tab">
+                    <div class="cv-tab-head">4th Tab — Left Hand</div>
+                    <ul class="cv-check">
+                        <li>Build Crate Ticket</li>
+                    </ul>
+                </div>
+                <div class="cv-tab">
+                    <div class="cv-tab-head">4th Tab — Right Hand</div>
+                    <ul class="cv-check">
+                        <li>Optimizer Hours</li>
+                    </ul>
+                </div>
+            </div>
         </div>
     </body></html>`;
 }
