@@ -6921,6 +6921,27 @@ function getBatchTicketFor(castingId) {
     return batchTickets.get(castingId);
 }
 
+/**
+ * Re-pull this project's color logs from the DB. Batch scaling reads ingredient
+ * weights (sand lbs, etc.) straight off these logs, so they must be fresh: a log
+ * edited elsewhere this session would otherwise leave the batch math stale.
+ * Only seeds a default active log when none is selected — never clobbers an
+ * in-progress Color Log tab selection.
+ */
+async function refreshBatchColorLogs() {
+    if (!currentProjectNumber) return;
+    try {
+        const list = await loadColorLogsForProject(currentProjectNumber);
+        currentColorLogs = list;
+        if (list.length > 0 && !currentColorLog?.id) {
+            currentColorLogId = list[0].id;
+            currentColorLog = list[0];
+        }
+    } catch (err) {
+        logger.error('[batch-tickets] color-log refresh failed', err);
+    }
+}
+
 async function activateBatchTicketsTab() {
     const needsSave    = document.getElementById('pp-bt-needs-save');
     const needsCL      = document.getElementById('pp-bt-needs-color-log');
@@ -6944,21 +6965,11 @@ async function activateBatchTicketsTab() {
     }
     if (needsSave) needsSave.hidden = true;
 
-    // Make sure color logs are loaded — we need ingredients to scale.
-    // Don't set colorLogLoadedFor — leave that to activateColorLogTab so its
-    // first activation still triggers renderColorLog + refreshPresetPicker.
-    if (currentColorLogs.length === 0) {
-        try {
-            const list = await loadColorLogsForProject(currentProjectNumber);
-            currentColorLogs = list;
-            if (list.length > 0 && !currentColorLog?.id) {
-                currentColorLogId = list[0].id;
-                currentColorLog = list[0];
-            }
-        } catch (err) {
-            logger.error('[batch-tickets] color-log load failed', err);
-        }
-    }
+    // Always re-pull color logs — they drive batch scaling and may have been
+    // edited (sand weight, ingredients) since we last loaded. Don't set
+    // colorLogLoadedFor — leave that to activateColorLogTab so its first
+    // activation still triggers renderColorLog + refreshPresetPicker.
+    await refreshBatchColorLogs();
 
     // No color log yet → block until they create one.
     if (currentColorLogs.length === 0) {
@@ -7723,6 +7734,9 @@ async function handleSelectBatchCasting(castingId) {
         try { await saveBatchTicketNow(prev); } catch (e) { /* logged */ }
     }
     currentBatchCastingId = castingId;
+    // Re-pull color logs first so the recalc reflects any edits made since the
+    // tab opened — selecting a casting always recomputes from fresh data.
+    await refreshBatchColorLogs();
     renderBatchTickets();
 }
 
