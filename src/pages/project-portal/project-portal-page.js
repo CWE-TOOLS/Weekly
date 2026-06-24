@@ -195,7 +195,8 @@ let currentColorLog = null;                // form-shaped record (id null = unsa
 let currentColorLogs = [];                 // all non-preset color logs for this project (>=1 when project has any)
 let currentColorLogId = null;              // id of the active log being edited in the Color Log tab
 let currentMultiColorEnabled = false;      // mirrors projects.multi_color_enabled for the active project
-let currentSlumpTargets = { face: 5, firstBackUp: 5, finalBackUp: 5 }; // project-wide slump targets (in), by batch type
+const SLUMP_TARGET_DEFAULTS = { face: 6, firstBackUp: 5, finalBackUp: 5 }; // starting slump targets (in), by batch type
+let currentSlumpTargets = { ...SLUMP_TARGET_DEFAULTS }; // project-wide slump targets (in), by batch type
 let slumpTargetSaveTimer = null;           // debounce handle for persisting slump targets
 let colorLogPresets = [];                  // cached preset rows
 let colorLogSaveTimer = null;              // debounce timer
@@ -381,9 +382,9 @@ async function showFormView(projectNumber, draftOverrides = null) {
     currentMultiColorEnabled = !!project.multi_color_enabled;
     shipQtyModeGlobal = !!project.ship_qty_mode;
     currentSlumpTargets = {
-        face: clampSlumpTarget(project.target_slump_face),
-        firstBackUp: clampSlumpTarget(project.target_slump_first_backup),
-        finalBackUp: clampSlumpTarget(project.target_slump_final_backup)
+        face: clampSlumpTarget(project.target_slump_face, SLUMP_TARGET_DEFAULTS.face),
+        firstBackUp: clampSlumpTarget(project.target_slump_first_backup, SLUMP_TARGET_DEFAULTS.firstBackUp),
+        finalBackUp: clampSlumpTarget(project.target_slump_final_backup, SLUMP_TARGET_DEFAULTS.finalBackUp)
     };
     if (isExisting && currentPhasesEnabled) {
         try {
@@ -7388,11 +7389,12 @@ function renderBatchTicketCards(casting, ticket, plan) {
  * Build a single batch ticket card HTML. Pure (DOM-free).
  * Mirrors Batchin Calc's renderBatchTicket().
  */
-// Normalize a slump target to a usable number of inches. Falls back to 5" (the
-// historic default) for blank/invalid input; caps at 10" (the graphic's outer ring).
-function clampSlumpTarget(v) {
+// Normalize a slump target to a usable number of inches. Falls back to the given
+// default (5" historically; 6" for face — see SLUMP_TARGET_DEFAULTS) for
+// blank/invalid input; caps at 10" (the graphic's outer ring).
+function clampSlumpTarget(v, fallback = 5) {
     const n = Number(v);
-    if (!isFinite(n) || n <= 0) return 5;
+    if (!isFinite(n) || n <= 0) return fallback;
     return Math.min(10, n);
 }
 
@@ -7407,7 +7409,7 @@ function formatSlumpLabel(v) {
 // project (applies to all castings' tickets).
 function handleSlumpTargetInput(key, value) {
     if (!(key in currentSlumpTargets)) return;
-    currentSlumpTargets[key] = clampSlumpTarget(value);
+    currentSlumpTargets[key] = clampSlumpTarget(value, SLUMP_TARGET_DEFAULTS[key]);
     renderBatchTicketsContent();
     if (!currentProjectNumber) return;
     if (slumpTargetSaveTimer) clearTimeout(slumpTargetSaveTimer);
