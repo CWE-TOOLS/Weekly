@@ -1064,6 +1064,39 @@ body { overflow: visible; }
     font-style: italic;
     padding: 24px 0;
 }
+/* ---------- Print Folder Labels modal ---------- */
+.pp-print-label-all {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #334155;
+    cursor: pointer;
+    margin-bottom: 4px;
+}
+.pp-print-label-all input { cursor: pointer; }
+.pp-print-label-list {
+    max-height: 320px;
+    overflow-y: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 4px;
+}
+.pp-print-label-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 5px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.pp-print-label-row:hover { background: #f3f4f6; }
+.pp-print-label-row input { cursor: pointer; flex: 0 0 auto; }
+.pp-pl-cast { font-weight: 600; color: #1e293b; }
+.pp-pl-desc { font-weight: 400; color: #64748b; }
+.pp-pl-color { margin-left: auto; color: #475569; font-size: 0.85rem; }
+.pp-pl-color.pp-pl-color-empty { color: #9ca3af; font-style: italic; }
 .pp-inv-input {
     width: 100%;
     padding: 4px 6px;

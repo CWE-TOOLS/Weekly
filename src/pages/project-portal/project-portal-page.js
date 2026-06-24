@@ -547,6 +547,9 @@ function setActiveTab(tab) {
             else printBtn.textContent = 'Print';
         }
     }
+    // Print Label (folder labels) lives beside Print Cover — Info tab only.
+    const printLabelBtn = document.getElementById('pp-print-label-btn');
+    if (printLabelBtn) printLabelBtn.hidden = (tab !== 'info');
 
     if (tab === 'shipping' && currentProjectNumber) {
         activateShippingTab();
@@ -6014,6 +6017,12 @@ function wireEvents() {
         handlePrint();
     });
 
+    // Print Label (folder labels) — Info tab.
+    document.getElementById('pp-print-label-btn')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        openPrintLabelModal();
+    });
+
     // Print Tracking modal: close handlers
     document.getElementById('pp-track-print-modal-close').addEventListener('click', closeTrackPrintModal);
     document.getElementById('pp-track-print-modal-cancel').addEventListener('click', closeTrackPrintModal);
@@ -6809,6 +6818,21 @@ function wireEvents() {
     document.getElementById('pp-import-remakes-modal')?.addEventListener('click', (e) => {
         if (e.target.id === 'pp-import-remakes-modal') closeImportRemakesModal();
     });
+
+    // Project Info: print folder labels (modal close/cancel/backdrop/submit/select-all)
+    document.getElementById('pp-print-label-close')?.addEventListener('click', closePrintLabelModal);
+    document.getElementById('pp-print-label-cancel')?.addEventListener('click', closePrintLabelModal);
+    document.getElementById('pp-print-label-submit')?.addEventListener('click', handlePrintLabelConfirm);
+    document.getElementById('pp-print-label-modal')?.addEventListener('click', (e) => {
+        if (e.target.id === 'pp-print-label-modal') closePrintLabelModal();
+    });
+    document.getElementById('pp-print-label-all')?.addEventListener('change', (e) => {
+        const list = document.getElementById('pp-print-label-list');
+        if (!list) return;
+        list.querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.checked = e.target.checked; });
+        updatePrintLabelSubmitState();
+    });
+    document.getElementById('pp-print-label-list')?.addEventListener('change', updatePrintLabelSubmitState);
 
     // Castings: row actions (delegation)
     const castingsList = document.getElementById('pp-castings-list');
@@ -9311,6 +9335,177 @@ function handlePrintCoverPage() {
             win.print();
         } catch (err) {
             logger.error('[project-portal] print cover failed:', err);
+            showToast('Print failed', 'error');
+            cleanup();
+        }
+        setTimeout(cleanup, 60000);
+    }, { once: true });
+
+    const doc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (!doc) {
+        showToast('Print failed — could not open frame', 'error');
+        iframe.remove();
+        return;
+    }
+    doc.open();
+    doc.write(html);
+    doc.close();
+}
+
+// ---------- Print Folder Labels (Project Info) ----------
+// One adhesive label per selected casting for the project folder. Same label
+// stock as the tracking stickers (4in x 0.75in): project name + casting # on
+// top, color log name below.
+
+const FOLDER_LABEL_CSS = `
+@page { size: 4in 0.75in; margin: 0; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', Arial, sans-serif; color: #000; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.fl-label {
+    width: 4in;
+    height: 0.75in;
+    overflow: hidden;
+    page-break-after: always;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 0.04in 0.1in;
+    text-align: center;
+}
+.fl-label:last-child { page-break-after: auto; }
+.fl-head { font-weight: bold; font-size: 12pt; letter-spacing: 0.01em; line-height: 1.1; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fl-color { font-size: 13pt; line-height: 1.1; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 0.03in; }
+.fl-color.fl-empty { color: #666; font-style: italic; font-size: 10pt; }
+`;
+
+// Single color-log name to print for a casting: the most-common color log among
+// its components, else the project's active log (see getActiveBatchColorLog).
+function folderLabelColorName(casting) {
+    const log = getActiveBatchColorLog(casting, null);
+    return (log?.name || '').trim();
+}
+
+function buildFolderLabelHtml(castings, projectName) {
+    const cleanProject = (projectName || '').trim().replace(/\s*\n\s*/g, ' ') || 'PROJECT NAME';
+    const labels = castings.map(c => {
+        const castLabel = formatStickerCasting(c.casting_number);
+        const colorName = folderLabelColorName(c);
+        const colorHtml = colorName
+            ? `<div class="fl-color">${escapeHtml(colorName)}</div>`
+            : `<div class="fl-color fl-empty">No color log</div>`;
+        return `
+            <div class="fl-label">
+                <div class="fl-head">${escapeHtml(cleanProject)} : ${escapeHtml(castLabel)}</div>
+                ${colorHtml}
+            </div>
+        `;
+    }).join('');
+    return `<!doctype html><html><head><meta charset="utf-8"><title>Folder Labels — ${escapeHtml(cleanProject)}</title><style>${FOLDER_LABEL_CSS}</style></head><body>
+        ${labels}
+    </body></html>`;
+}
+
+async function openPrintLabelModal() {
+    if (!currentProjectNumber) {
+        showToast('Save the project first', 'error');
+        return;
+    }
+    const modal = document.getElementById('pp-print-label-modal');
+    const list  = document.getElementById('pp-print-label-list');
+    const allCb = document.getElementById('pp-print-label-all');
+    if (!modal || !list) return;
+
+    // The user can open this straight from the Info tab, so make sure the data
+    // the labels need is loaded + fresh: color logs (names may have changed) and
+    // each casting's components (drive the per-casting color resolution).
+    try {
+        await refreshBatchColorLogs();
+        if (!currentCastings || currentCastings.length === 0) {
+            currentCastings = await loadCastings(currentProjectNumber);
+        }
+        const ids = (currentCastings || []).map(c => c.id);
+        if (ids.length > 0) {
+            currentCastingComponents = await loadAllComponentsForProject(ids);
+        }
+    } catch (err) {
+        logger.error('[project-portal] print-label preload failed:', err);
+    }
+
+    const castings = currentCastings || [];
+    if (castings.length === 0) {
+        list.innerHTML = '<p class="pp-import-remakes-empty">No castings yet — add castings first.</p>';
+    } else {
+        list.innerHTML = castings.map(c => {
+            const castLabel = formatStickerCasting(c.casting_number);
+            const desc = (c.description || '').trim();
+            const colorName = folderLabelColorName(c);
+            return `<label class="pp-print-label-row">
+                    <input type="checkbox" value="${escapeAttr(c.id)}" checked>
+                    <span class="pp-pl-cast">${escapeHtml(castLabel)}${desc ? ` <span class="pp-pl-desc">${escapeHtml(desc)}</span>` : ''}</span>
+                    <span class="pp-pl-color${colorName ? '' : ' pp-pl-color-empty'}">${escapeHtml(colorName || 'No color log')}</span>
+                </label>`;
+        }).join('');
+    }
+    if (allCb) allCb.checked = castings.length > 0;
+    updatePrintLabelSubmitState();
+    modal.hidden = false;
+}
+
+function closePrintLabelModal() {
+    const modal = document.getElementById('pp-print-label-modal');
+    if (modal) modal.hidden = true;
+}
+
+function updatePrintLabelSubmitState() {
+    const list   = document.getElementById('pp-print-label-list');
+    const submit = document.getElementById('pp-print-label-submit');
+    const allCb  = document.getElementById('pp-print-label-all');
+    if (!list || !submit) return;
+    const boxes = Array.from(list.querySelectorAll('input[type="checkbox"]'));
+    const checked = boxes.filter(b => b.checked);
+    submit.disabled = checked.length === 0;
+    if (allCb) allCb.checked = boxes.length > 0 && checked.length === boxes.length;
+}
+
+function handlePrintLabelConfirm() {
+    const list = document.getElementById('pp-print-label-list');
+    if (!list) return;
+    const ids = Array.from(list.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.value);
+    if (ids.length === 0) return;
+    const castings = ids
+        .map(id => (currentCastings || []).find(c => c.id === id))
+        .filter(Boolean);
+    if (castings.length === 0) return;
+
+    const projectName = (document.getElementById('pp-f-project_name')?.value || '').trim();
+    const html = buildFolderLabelHtml(castings, projectName);
+    closePrintLabelModal();
+
+    const prior = document.getElementById('pp-folder-label-frame');
+    if (prior) prior.remove();
+
+    const iframe = document.createElement('iframe');
+    iframe.id = 'pp-folder-label-frame';
+    iframe.setAttribute('aria-hidden', 'true');
+    iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;';
+    document.body.appendChild(iframe);
+
+    let cleaned = false;
+    const cleanup = () => {
+        if (cleaned) return;
+        cleaned = true;
+        setTimeout(() => { iframe.remove(); }, 500);
+    };
+
+    iframe.addEventListener('load', () => {
+        try {
+            const win = iframe.contentWindow;
+            win.addEventListener('afterprint', cleanup);
+            win.focus();
+            win.print();
+        } catch (err) {
+            logger.error('[project-portal] print folder labels failed:', err);
             showToast('Print failed', 'error');
             cleanup();
         }

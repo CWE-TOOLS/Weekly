@@ -104,6 +104,7 @@
                 </div>
                 <div class="pp-form-actions">
                     <span id="pp-form-save-status" class="pp-cl-save-status" aria-live="polite"></span>
+                    <button id="pp-print-label-btn" class="pp-secondary-btn" hidden>Print Label</button>
                     <button id="pp-print-btn" class="pp-secondary-btn">Print</button>
                     <button id="pp-delete-btn" class="pp-danger-btn">Delete</button>
                 </div>
@@ -1082,6 +1083,25 @@
                 <div class="pp-modal-actions">
                     <button type="button" class="pp-secondary-btn" id="pp-import-remakes-cancel">Cancel</button>
                     <button type="button" class="pp-primary-btn" id="pp-import-remakes-submit" disabled>Import Selected</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Print Folder Labels Modal -->
+        <div class="pp-modal-backdrop" id="pp-print-label-modal" role="dialog" aria-modal="true" aria-labelledby="pp-print-label-title" hidden>
+            <div class="pp-modal">
+                <div class="pp-modal-header">
+                    <h2 id="pp-print-label-title">Print Folder Labels</h2>
+                    <button type="button" class="pp-modal-close" id="pp-print-label-close" aria-label="Close">&times;</button>
+                </div>
+                <div class="pp-modal-body">
+                    <p class="pp-modal-hint">Pick the castings to print a folder label for. Each label shows the project name and casting&nbsp;# on top, with the color log below.</p>
+                    <label class="pp-print-label-all"><input type="checkbox" id="pp-print-label-all"> Select all</label>
+                    <div class="pp-print-label-list" id="pp-print-label-list"></div>
+                </div>
+                <div class="pp-modal-actions">
+                    <button type="button" class="pp-secondary-btn" id="pp-print-label-cancel">Cancel</button>
+                    <button type="button" class="pp-primary-btn" id="pp-print-label-submit" disabled>Print Selected</button>
                 </div>
             </div>
         </div>
