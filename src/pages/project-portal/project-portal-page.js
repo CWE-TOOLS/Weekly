@@ -9369,8 +9369,8 @@ body { font-family: 'Segoe UI', Arial, sans-serif; color: #000; background: #fff
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    padding: 0.04in 0.1in;
+    justify-content: flex-start;
+    padding: 0 0.1in;
     text-align: center;
 }
 .fl-label:last-child { page-break-after: auto; }
