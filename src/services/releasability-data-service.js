@@ -444,6 +444,11 @@ export async function loadAllReleasabilityData(forceRefresh = false) {
     // Track old records that need to be deleted after migration
     const migratedKeys = new Set();
 
+    // Map of new-week key -> old-week key for migrated projects. Used to persist
+    // the migrated tracking status under the NEW week before deleting the stale
+    // old-week row, so the state never disappears from the DB mid-reschedule.
+    const migratedNewKeys = new Map();
+
     // Merge tracking statuses into Sheets projects
     const projects = sheetsProjects.map(project => {
       const key = generateProjectKey(project.project, project.weekMonday);
@@ -460,8 +465,10 @@ export async function loadAllReleasabilityData(forceRefresh = false) {
           const mostRecent = oldRecords[0];
           saved = mostRecent.record;
 
-          // Track the old key for deletion
+          // Track the old key for deletion, and remember which new-week key it
+          // maps to so we can persist the migrated state before deleting it.
           migratedKeys.add(mostRecent.key);
+          migratedNewKeys.set(key, mostRecent.key);
 
           // Log the date change detection
           logger.debug(`  🔄 Date change detected for "${project.project}": ${mostRecent.record.weekMonday} → ${project.weekMonday}`);
@@ -525,20 +532,34 @@ export async function loadAllReleasabilityData(forceRefresh = false) {
       }
     });
 
-    // Delete old week records that were migrated
-    if (migratedKeys.size > 0) {
-      logger.debug(`🗑️ Deleting ${migratedKeys.size} old week records after migration...`);
+    // Migrate rescheduled projects durably: persist the tracking status under the
+    // NEW week key first, THEN delete the stale old-week row. Saving first means
+    // the state is never absent from the DB — previously the old row was deleted
+    // without ever writing the new one, so any reload before the user's next edit
+    // (cache broadcast, refresh signal, tab focus, reopen) reset the casting's
+    // tracking to defaults. That was the "we keep losing state when castings move
+    // from one month to another" bug.
+    if (migratedNewKeys.size > 0) {
+      logger.debug(`🔄 Persisting ${migratedNewKeys.size} migrated record(s) to their new week...`);
 
-      for (const oldKey of migratedKeys) {
-        const record = trackingStatuses.get(oldKey);
-        if (record) {
-          try {
+      for (const proj of projects) {
+        const newKey = generateProjectKey(proj.project, proj.weekMonday);
+        const oldKey = migratedNewKeys.get(newKey);
+        if (!oldKey) continue;
+
+        try {
+          // 1) Write the migrated state under the new week key first.
+          await saveTrackingStatus(proj);
+
+          // 2) Only after the new row is safely persisted, delete the old one.
+          const oldRecord = trackingStatuses.get(oldKey);
+          if (oldRecord && oldKey !== newKey) {
             // Use the original un-normalized project name from the database for deletion
-            await deleteTrackingStatus(record.originalProject, record.weekMonday);
-            logger.debug(`  ✓ Deleted old record: "${record.originalProject}" (${record.weekMonday})`);
-          } catch (error) {
-            logger.error(`  ✗ Failed to delete old record: "${record.originalProject}" (${record.weekMonday})`, error);
+            await deleteTrackingStatus(oldRecord.originalProject, oldRecord.weekMonday);
+            logger.debug(`  ✓ Migrated "${proj.project}" → ${proj.weekMonday}, removed old week ${oldRecord.weekMonday}`);
           }
+        } catch (error) {
+          logger.error(`  ✗ Failed to migrate "${proj.project}" to new week ${proj.weekMonday}:`, error);
         }
       }
     }
