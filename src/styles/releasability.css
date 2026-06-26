@@ -900,7 +900,7 @@ html {
 
 .project-name-cell {
   background-color: var(--surface-container);
-  padding: 0.4rem 0.75rem;
+  padding: 0.4rem 3rem 0.4rem 0.75rem; /* extra right room for the stacked controls */
   font-weight: 500;
   font-size: 0.875rem;
   color: var(--text-primary);
@@ -932,7 +932,7 @@ html {
 }
 
 .project-name {
-  flex: 1;
+  flex: 1 1 auto; /* Take all available width; cast tag sits by the controls */
   text-align: left;
   overflow-wrap: break-word;
   word-wrap: break-word;
@@ -956,14 +956,33 @@ html {
   line-height: 1.4;
 }
 
-/* Fixed-width slot for the project#/cast# badges so the project title starts at
-   the same x on every row regardless of how wide the badges are. */
+/* Fixed-width slot for the project# badge so the project title starts at the
+   same x on every row regardless of the project number width. */
 .project-badges {
-  flex: 0 0 92px;
+  flex: 0 0 52px;
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
   overflow: visible;
+}
+
+/* Cast # in a fixed-width column at the right of the name cell, with the label
+   left-aligned so every "Cast #.." starts at the same x (tidy column). The
+   stacked controls sit in the cell's reserved right padding, beside it. */
+.cast-number-wrap {
+  flex: 0 0 88px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.25rem;
+}
+
+.cast-number-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-secondary, #555);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 
 /* Cast number badge — accented so it reads distinctly from the project number */
@@ -1020,11 +1039,15 @@ html {
 
 .project-controls {
   display: flex;
-  gap: 0.15rem;
+  flex-direction: column; /* stack copy/paste vertically to save horizontal room */
+  gap: 0.1rem;
   opacity: 0;
   transition: opacity 0.2s;
-  flex-shrink: 0; /* Prevent controls from shrinking */
-  position: relative; /* For dropdown positioning */
+  position: absolute; /* overlay at the right so stacking doesn't grow the row */
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
 }
 
 .project-name-cell:hover .project-controls {

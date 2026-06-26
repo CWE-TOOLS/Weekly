@@ -382,33 +382,18 @@ function createProjectNameCell(project) {
     cell.appendChild(dragIcon);
   }
 
-  // Identifier badges (project# + cast#) go in a fixed-width slot so the project
-  // title always starts at the same x across rows, regardless of how wide the
-  // individual numbers are (e.g. "#1" vs "#13" vs "#1A").
-  if (project.projectNumber || project.castingNumber) {
-    const badges = document.createElement('span');
-    badges.className = 'project-badges';
-
-    // Project number badge (only when the board project matched a portal project)
-    if (project.projectNumber) {
-      const numBadge = document.createElement('span');
-      numBadge.className = 'project-number-badge';
-      numBadge.textContent = project.projectNumber;
-      numBadge.title = `Project #${project.projectNumber}`;
-      badges.appendChild(numBadge);
-    }
-
-    // Cast number badge — the per-casting identifier (Google Sheet col I).
-    if (project.castingNumber) {
-      const castBadge = document.createElement('span');
-      castBadge.className = 'cast-number-badge';
-      castBadge.textContent = `#${project.castingNumber}`;
-      castBadge.title = `Cast #${project.castingNumber}`;
-      badges.appendChild(castBadge);
-    }
-
-    cell.appendChild(badges);
+  // Project number badge in a fixed-width slot so titles start at the same x on
+  // every row. Always render the slot (even empty) to keep titles aligned.
+  const badges = document.createElement('span');
+  badges.className = 'project-badges';
+  if (project.projectNumber) {
+    const numBadge = document.createElement('span');
+    numBadge.className = 'project-number-badge';
+    numBadge.textContent = project.projectNumber;
+    numBadge.title = `Project #${project.projectNumber}`;
+    badges.appendChild(numBadge);
   }
+  cell.appendChild(badges);
 
   // Project name — prefer the authoritative portal name (looked up by project#),
   // falling back to the Google Sheet name. Surface the Sheet name in the tooltip
@@ -421,6 +406,25 @@ function createProjectNameCell(project) {
     ? displayName
     : `${displayName}\n(sheet: ${project.project})`;
   cell.appendChild(nameSpan);
+
+  // Cast # to the RIGHT of the title: a small "Cast" label + the colored tag.
+  if (project.castingNumber) {
+    const castWrap = document.createElement('span');
+    castWrap.className = 'cast-number-wrap';
+
+    const castLabel = document.createElement('span');
+    castLabel.className = 'cast-number-label';
+    castLabel.textContent = 'Cast';
+    castWrap.appendChild(castLabel);
+
+    const castBadge = document.createElement('span');
+    castBadge.className = 'cast-number-badge';
+    castBadge.textContent = `#${project.castingNumber}`;
+    castBadge.title = `Cast #${project.castingNumber}`;
+    castWrap.appendChild(castBadge);
+
+    cell.appendChild(castWrap);
+  }
 
   // Project controls (copy/paste for all projects, delete for manual only)
   const controls = createProjectControls(project);
