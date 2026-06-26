@@ -89,8 +89,8 @@ export function renderReleasabilityGrid(projects, manualWeeks = []) {
  */
 const COLUMN_GROUPS = [
   { label: 'Classroom', startIndex: 0, endIndex: 2, className: 'group-classroom' },
-  { label: 'Project Manager', startIndex: 3, endIndex: 9, className: 'group-pm' },
-  { label: 'Engineering', startIndex: 10, endIndex: 18, className: 'group-engineering' }
+  { label: 'Project Manager', startIndex: 3, endIndex: 8, className: 'group-pm' },
+  { label: 'Engineering', startIndex: 9, endIndex: 17, className: 'group-engineering' }
 ];
 
 /**
@@ -382,20 +382,44 @@ function createProjectNameCell(project) {
     cell.appendChild(dragIcon);
   }
 
-  // Project number badge (only when the board project matched a portal project)
-  if (project.projectNumber) {
-    const numBadge = document.createElement('span');
-    numBadge.className = 'project-number-badge';
-    numBadge.textContent = project.projectNumber;
-    numBadge.title = `Project #${project.projectNumber}`;
-    cell.appendChild(numBadge);
+  // Identifier badges (project# + cast#) go in a fixed-width slot so the project
+  // title always starts at the same x across rows, regardless of how wide the
+  // individual numbers are (e.g. "#1" vs "#13" vs "#1A").
+  if (project.projectNumber || project.castingNumber) {
+    const badges = document.createElement('span');
+    badges.className = 'project-badges';
+
+    // Project number badge (only when the board project matched a portal project)
+    if (project.projectNumber) {
+      const numBadge = document.createElement('span');
+      numBadge.className = 'project-number-badge';
+      numBadge.textContent = project.projectNumber;
+      numBadge.title = `Project #${project.projectNumber}`;
+      badges.appendChild(numBadge);
+    }
+
+    // Cast number badge — the per-casting identifier (Google Sheet col I).
+    if (project.castingNumber) {
+      const castBadge = document.createElement('span');
+      castBadge.className = 'cast-number-badge';
+      castBadge.textContent = `#${project.castingNumber}`;
+      castBadge.title = `Cast #${project.castingNumber}`;
+      badges.appendChild(castBadge);
+    }
+
+    cell.appendChild(badges);
   }
 
-  // Project name
+  // Project name — prefer the authoritative portal name (looked up by project#),
+  // falling back to the Google Sheet name. Surface the Sheet name in the tooltip
+  // when it differs, so name mismatches stay visible.
+  const displayName = project.displayName || project.project;
   const nameSpan = document.createElement('span');
   nameSpan.className = 'project-name';
-  nameSpan.textContent = project.project;
-  nameSpan.title = project.project; // Tooltip with full name
+  nameSpan.textContent = displayName;
+  nameSpan.title = (displayName === project.project)
+    ? displayName
+    : `${displayName}\n(sheet: ${project.project})`;
   cell.appendChild(nameSpan);
 
   // Project controls (copy/paste for all projects, delete for manual only)

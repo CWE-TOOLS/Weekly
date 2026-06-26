@@ -180,10 +180,17 @@ export function getFilteredProjects() {
     );
   }
 
-  // Apply search query (fuzzy match)
+  // Apply search query (fuzzy match). Match the displayed portal name, the Sheet
+  // name, and the project#/cast# so castings can be found by what's shown on the
+  // board or by their numbers.
   if (_searchQuery.trim()) {
     const query = _searchQuery.toLowerCase();
-    filtered = filtered.filter(p => fuzzyMatch(p.project.toLowerCase(), query));
+    filtered = filtered.filter(p =>
+      fuzzyMatch((p.displayName || '').toLowerCase(), query) ||
+      fuzzyMatch((p.project || '').toLowerCase(), query) ||
+      fuzzyMatch(String(p.projectNumber || '').toLowerCase(), query) ||
+      fuzzyMatch(String(p.castingNumber || '').toLowerCase(), query)
+    );
   }
 
   // Apply hide completed filter
@@ -283,7 +290,9 @@ export function addProject(project, silent = false) {
   const newProject = {
     id: project.id || generateProjectId(),
     project: project.project,
+    displayName: project.displayName || project.project,
     projectNumber: project.projectNumber || null,
+    castingNumber: project.castingNumber || null,
     weekMonday: project.weekMonday,
     actualStartDate: project.actualStartDate || project.weekMonday,
     department: project.department || null,

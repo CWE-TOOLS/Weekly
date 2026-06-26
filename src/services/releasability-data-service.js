@@ -16,6 +16,7 @@ import { logger } from '../utils/logger.js';
 import { parseDate, getMonday, getLocalDateString } from '../utils/date-utils.js';
 import { DEFAULT_TRACKING_STATUS, PROJECT_SOURCE } from '../config/releasability-config.js';
 import { normalizeProjectName } from '../utils/ui-utils.js';
+import { loadAllProjects } from './projects-service.js';
 
 // Supabase tables for releasability tracking
 const RELEASABILITY_TABLE = 'releasability_tracking';
@@ -34,6 +35,94 @@ const MANUAL_WEEKS_TABLE = 'releasability_manual_weeks';
 function generateProjectKey(projectName, weekMonday) {
   const normalized = normalizeProjectName(projectName);
   return `${normalized}|${weekMonday}`;
+}
+
+/**
+ * Normalize a project number for keys and storage (trim only — leading zeros
+ * like '0383' are significant).
+ * @param {*} value
+ * @returns {string}
+ */
+function normalizeNumberField(value) {
+  return (value || '').toString().trim();
+}
+
+/**
+ * Normalize a cast number for keys and storage. Trim + upper-case so '1a' and
+ * '1A' collapse to one casting.
+ * @param {*} value
+ * @returns {string}
+ */
+function normalizeCastingNumber(value) {
+  return (value || '').toString().trim().toUpperCase();
+}
+
+/**
+ * Generate a stable casting key from the structured project/cast numbers.
+ *
+ * Unlike generateProjectKey (which is schedule-dependent because it embeds the
+ * week), this key is derived only from the Google Sheet's project number (col H)
+ * and cast number (col I) — so it survives reschedules AND project renames.
+ *
+ * Returns null when either number is missing; callers fall back to the legacy
+ * name+week key in that case, so un-numbered castings are never stranded.
+ *
+ * @param {string} projectNumber - Project number (e.g. '0383')
+ * @param {string} castingNumber - Cast number (e.g. '13', '1A')
+ * @returns {string|null} Stable key "projectNumber#castNumber" or null
+ */
+function generateCastingKey(projectNumber, castingNumber) {
+  const p = normalizeNumberField(projectNumber);
+  const c = normalizeCastingNumber(castingNumber);
+  if (!p || !c) return null;
+  return `${p}#${c}`;
+}
+
+/**
+ * Whether a board project resolves to a stable casting key (has both project#
+ * and cast#). Exported so UI move handlers can decide whether a reschedule needs
+ * a legacy delete-then-save (un-numbered: the key is name+week, so it changes) or
+ * can rely on the in-place casting-key upsert (numbered: the key is unchanged).
+ *
+ * @param {Object} project - A board project object
+ * @returns {string|null} The casting key, or null when both numbers aren't present
+ */
+export function getCastingKey(project) {
+  return generateCastingKey(project && project.projectNumber, project && project.castingNumber);
+}
+
+/**
+ * Backfill a legacy tracking row with its stable project#/cast# numbers, IN PLACE.
+ *
+ * This is the zero-data-loss migration step: it UPDATEs the existing row (matched
+ * by its current name+week) to stamp the structured numbers and refresh the week,
+ * instead of deleting and re-inserting. The row's tracking_status is untouched, so
+ * milestone state is preserved and never absent from the DB.
+ *
+ * @param {Object} bf - { originalProject, oldWeekMonday, newWeekMonday, projectNumber, castingNumber }
+ * @returns {Promise<boolean>}
+ */
+async function backfillCastingNumbers(bf) {
+  if (!getSupabaseClient()) {
+    await initializeSupabase();
+  }
+  const client = getSupabaseClient();
+
+  const { error } = await client
+    .from(RELEASABILITY_TABLE)
+    .update({
+      project_number: normalizeNumberField(bf.projectNumber),
+      casting_number: normalizeCastingNumber(bf.castingNumber),
+      week_monday: bf.newWeekMonday,
+      updated_at: new Date().toISOString()
+    })
+    .eq('project', bf.originalProject)
+    .eq('week_monday', bf.oldWeekMonday);
+
+  if (error) {
+    throw error;
+  }
+  return true;
 }
 
 /**
@@ -128,16 +217,22 @@ export async function loadProjectsFromSheets(forceRefresh = false) {
       // Get department from the earliest Mill or Form Out task
       const department = sortedByActual[0].task.department;
 
-      // Project number comes straight from the Google Sheet import (column 8).
-      // Use the first task that carries one; null if the sheet left it blank.
+      // Project number (col H) and cast number (col I) come straight from the
+      // Google Sheet import. Use the first task that carries each; null if the
+      // sheet left it blank. These structured numbers are the durable identity
+      // for tracking state (see generateCastingKey) — names and weeks can change,
+      // the numbers don't.
       const numberTask = projectTasks.find(t => t.projectNumber);
       const projectNumber = numberTask ? numberTask.projectNumber : null;
+      const castTask = projectTasks.find(t => t.castingNumber);
+      const castingNumber = castTask ? castTask.castingNumber : null;
 
       // Add project to releasability board
       if (true) { // Always true now since we already filtered for Mill/Form Out
         projects.push({
           project: projectName,
           projectNumber: projectNumber,
+          castingNumber: castingNumber,
           weekMonday: earliestWeek,
           actualStartDate: earliestActualDate,
           department: department,
@@ -223,7 +318,14 @@ export async function loadTrackingStatuses() {
     data.forEach(record => {
       // Normalize project name for consistent lookups
       const normalizedProject = normalizeProjectName(record.project);
-      const key = generateProjectKey(record.project, record.week_monday);
+
+      // Prefer the stable casting key (project#+cast#) when the row has been
+      // stamped with both numbers; fall back to the legacy name+week key for
+      // rows that predate the re-key (they get backfilled on load — see
+      // loadAllReleasabilityData).
+      const castingKey = generateCastingKey(record.project_number, record.casting_number);
+      const key = castingKey || generateProjectKey(record.project, record.week_monday);
+
       statusMap.set(key, {
         trackingStatus: record.tracking_status,
         updatedAt: record.updated_at,
@@ -231,6 +333,8 @@ export async function loadTrackingStatuses() {
         department: record.department,
         weekMonday: record.week_monday,
         manualWeekId: record.manual_week_id || null,
+        projectNumber: record.project_number || null,
+        castingNumber: record.casting_number || null,
         project: normalizedProject,  // Normalized name for display/comparison
         originalProject: record.project  // Keep original DB name for deletion
       });
@@ -276,19 +380,30 @@ export async function saveTrackingStatus(project) {
     // Normalize project name for consistent database storage
     const normalizedProjectName = normalizeProjectName(project.project);
 
-    // Upsert tracking status
+    // Structured identity (project#+cast#). When present, it's the conflict
+    // target so state stays attached to the casting across reschedules/renames.
+    // When absent (sheet left a number blank), fall back to the legacy name+week
+    // target so the row is never stranded.
+    const castingKey = generateCastingKey(project.projectNumber, project.castingNumber);
+    const onConflict = castingKey ? 'project_number,casting_number' : 'project,week_monday';
+
+    // Upsert tracking status. We always write BOTH the legacy columns
+    // (project, week_monday — still NOT NULL) and the structured numbers, so a
+    // row is complete regardless of which key it's matched on.
     const { data, error } = await client
       .from(RELEASABILITY_TABLE)
       .upsert({
         project: normalizedProjectName,
         week_monday: project.weekMonday,
+        project_number: normalizeNumberField(project.projectNumber) || null,
+        casting_number: normalizeCastingNumber(project.castingNumber) || null,
         manual_week_id: project.manualWeekId || null,
         tracking_status: project.trackingStatus,
         department: project.department,
         source: project.source,
         updated_at: new Date().toISOString()
       }, {
-        onConflict: 'project,week_monday' // Update if exists
+        onConflict: onConflict // casting key when numbered, else name+week
       });
 
     if (error) {
@@ -324,7 +439,7 @@ export async function saveTrackingStatus(project) {
  * @example
  * await deleteTrackingStatus('Project A', '2025-01-13');
  */
-export async function deleteTrackingStatus(projectName, weekMonday) {
+export async function deleteTrackingStatus(projectName, weekMonday, projectNumber = null, castingNumber = null) {
   logger.debug(`🗑️ Deleting tracking status for "${projectName}" (${weekMonday})...`);
 
   try {
@@ -335,7 +450,35 @@ export async function deleteTrackingStatus(projectName, weekMonday) {
 
     const client = getSupabaseClient();
 
-    // Try deleting with normalized name first (for new records)
+    // Preferred: delete by the stable casting key when we have both numbers —
+    // that targets the row regardless of its current name/week.
+    const castingKey = generateCastingKey(projectNumber, castingNumber);
+    if (castingKey) {
+      const { error, count } = await client
+        .from(RELEASABILITY_TABLE)
+        .delete({ count: 'exact' })
+        .eq('project_number', normalizeNumberField(projectNumber))
+        .eq('casting_number', normalizeCastingNumber(castingNumber));
+
+      if (error) {
+        throw error;
+      }
+
+      if (count > 0) {
+        logger.debug(`  → Tracking status deleted successfully (casting key ${castingKey})`);
+        await sendRefreshSignal({
+          action: 'releasability_project_deleted',
+          project: normalizeProjectName(projectName),
+          weekMonday: weekMonday
+        });
+        return true;
+      }
+
+      logger.warn(`  ⚠️ No casting-keyed record for ${castingKey}; trying legacy name+week...`);
+    }
+
+    // Legacy fallback: delete by normalized name + week (then original name + week
+    // for old non-normalized rows).
     const normalizedProjectName = normalizeProjectName(projectName);
     let { error, count } = await client
       .from(RELEASABILITY_TABLE)
@@ -432,63 +575,94 @@ export async function loadAllReleasabilityData(forceRefresh = false) {
   logger.debug(`🔄 Loading all releasability data${forceRefresh ? ' (force refresh)' : ''}...`);
 
   try {
-    // Load projects from Google Sheets and tracking statuses from Supabase in parallel
-    const [sheetsProjects, trackingStatuses] = await Promise.all([
+    // Load Sheets projects, Supabase tracking, and the portal's master project
+    // list (project# → authoritative name) in parallel. loadAllProjects() returns
+    // [] on any failure, so a portal outage degrades to the Sheet name, never an error.
+    const [sheetsProjects, trackingStatuses, portalProjects] = await Promise.all([
       loadProjectsFromSheets(forceRefresh),
-      loadTrackingStatuses()
+      loadTrackingStatuses(),
+      loadAllProjects()
     ]);
 
-    // Track which Supabase records we've used
+    // Map project number → authoritative portal name for display lookups. The
+    // portal `projects` table is the source of truth for names; the Google Sheet
+    // name is only a fallback when a casting has no project# or no portal match.
+    const portalNameByNumber = new Map();
+    (portalProjects || []).forEach(p => {
+      const num = normalizeNumberField(p.project_number);
+      if (num && p.project_name) {
+        portalNameByNumber.set(num, p.project_name);
+      }
+    });
+
+    // Track which Supabase records we've consumed for a Sheets casting, so the
+    // manual-projects pass below doesn't re-add them as phantom rows.
     const usedSupabaseKeys = new Set();
 
-    // Track old records that need to be deleted after migration
-    const migratedKeys = new Set();
-
-    // Map of new-week key -> old-week key for migrated projects. Used to persist
-    // the migrated tracking status under the NEW week before deleting the stale
-    // old-week row, so the state never disappears from the DB mid-reschedule.
-    const migratedNewKeys = new Map();
+    // Legacy rows recognized as belonging to a numbered casting but not yet
+    // stamped with project#/cast#. We backfill these IN PLACE (UPDATE, never
+    // delete) so existing milestone state is upgraded onto the stable casting key
+    // with zero data loss. Keyed by casting key to avoid stamping a casting twice
+    // in one load.
+    const pendingBackfills = new Map();
 
     // Merge tracking statuses into Sheets projects
     const projects = sheetsProjects.map(project => {
-      const key = generateProjectKey(project.project, project.weekMonday);
+      const castingKey = generateCastingKey(project.projectNumber, project.castingNumber);
+      const legacyKey = generateProjectKey(project.project, project.weekMonday);
 
-      // First, try exact match lookup
-      let saved = trackingStatuses.get(key);
+      let saved = null;
 
-      // If no exact match, check if project exists with a different week (date change migration)
-      if (!saved) {
-        const oldRecords = findProjectByName(project.project, trackingStatuses);
-
-        if (oldRecords.length > 0) {
-          // Use the most recent record's tracking status
-          const mostRecent = oldRecords[0];
-          saved = mostRecent.record;
-
-          // Track the old key for deletion, and remember which new-week key it
-          // maps to so we can persist the migrated state before deleting it.
-          migratedKeys.add(mostRecent.key);
-          migratedNewKeys.set(key, mostRecent.key);
-
-          // Log the date change detection
-          logger.debug(`  🔄 Date change detected for "${project.project}": ${mostRecent.record.weekMonday} → ${project.weekMonday}`);
-          logger.debug(`     Migrating tracking status: ${JSON.stringify(saved.trackingStatus)}`);
-          logger.debug(`     Old record key: ${mostRecent.key}, Will delete: ${mostRecent.record.originalProject} (${mostRecent.record.weekMonday})`);
-        } else {
-          logger.debug(`  ℹ️ No existing tracking status found for "${project.project}" (new project or first time in this week)`);
-        }
+      // 1) Preferred: exact match on the stable casting key (project#+cast#).
+      if (castingKey && trackingStatuses.has(castingKey)) {
+        saved = trackingStatuses.get(castingKey);
+        usedSupabaseKeys.add(castingKey);
       } else {
-        // Exact match found - mark as used (no logging for each match)
-        usedSupabaseKeys.add(key);
+        // 2) Legacy exact match on name+week.
+        saved = trackingStatuses.get(legacyKey);
+        if (saved) {
+          usedSupabaseKeys.add(legacyKey);
+        } else {
+          // 3) Legacy cross-week match by name (reschedule that happened before
+          //    this casting was re-keyed).
+          const oldRecords = findProjectByName(project.project, trackingStatuses);
+          if (oldRecords.length > 0) {
+            saved = oldRecords[0].record;
+            usedSupabaseKeys.add(oldRecords[0].key);
+            logger.debug(`  🔄 Reschedule detected for "${project.project}": ${saved.weekMonday} → ${project.weekMonday}`);
+          } else {
+            logger.debug(`  ℹ️ No existing tracking status for "${project.project}" (new casting or first time)`);
+          }
+        }
+
+        // We matched a legacy row but it isn't on the casting key yet. If we now
+        // have structured numbers, schedule an in-place backfill so the row gains
+        // the stable key (and refreshes to the current week).
+        if (saved && castingKey && !pendingBackfills.has(castingKey)) {
+          pendingBackfills.set(castingKey, {
+            originalProject: saved.originalProject,
+            oldWeekMonday: saved.weekMonday,
+            newWeekMonday: project.weekMonday,
+            projectNumber: project.projectNumber,
+            castingNumber: project.castingNumber,
+            projectName: project.project
+          });
+        }
       }
 
       // Generate unique ID
       const id = `project_${project.project}_${project.weekMonday}`.replace(/\s+/g, '_');
 
+      // Authoritative name from the portal (looked up by project#), falling back
+      // to the Sheet name when there's no project# or no portal match.
+      const portalName = portalNameByNumber.get(normalizeNumberField(project.projectNumber));
+
       return {
         id,
         project: project.project,
+        displayName: portalName || project.project,
         projectNumber: project.projectNumber || null,
+        castingNumber: project.castingNumber || null,
         weekMonday: project.weekMonday,
         actualStartDate: project.actualStartDate,
         department: project.department,
@@ -496,30 +670,28 @@ export async function loadAllReleasabilityData(forceRefresh = false) {
         manualWeekId: saved && saved.manualWeekId ? saved.manualWeekId : null,
         trackingStatus: saved ? saved.trackingStatus : { ...DEFAULT_TRACKING_STATUS },
         createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString() // Update timestamp when migrating
+        updatedAt: new Date().toISOString()
       };
     });
 
     // Add manual projects from Supabase that don't exist in Sheets
     trackingStatuses.forEach((record, key) => {
-      // Skip if this record was already used for a Sheets project
+      // Skip if this record was already used for a Sheets casting
       if (usedSupabaseKeys.has(key)) {
-        return;
-      }
-
-      // Skip if this record was migrated (will be deleted)
-      if (migratedKeys.has(key)) {
         return;
       }
 
       // Only add if it's a manual project
       if (record.source === PROJECT_SOURCE.MANUAL) {
         const id = `project_${record.project}_${record.weekMonday}`.replace(/\s+/g, '_');
+        const portalName = portalNameByNumber.get(normalizeNumberField(record.projectNumber));
 
         projects.push({
           id,
           project: record.project,
-          projectNumber: null, // Manual projects have no Google Sheet row
+          displayName: portalName || record.project,
+          projectNumber: record.projectNumber || null,
+          castingNumber: record.castingNumber || null,
           weekMonday: record.weekMonday,
           actualStartDate: record.weekMonday, // Manual projects use weekMonday as start date
           department: record.department,
@@ -532,34 +704,22 @@ export async function loadAllReleasabilityData(forceRefresh = false) {
       }
     });
 
-    // Migrate rescheduled projects durably: persist the tracking status under the
-    // NEW week key first, THEN delete the stale old-week row. Saving first means
-    // the state is never absent from the DB — previously the old row was deleted
-    // without ever writing the new one, so any reload before the user's next edit
-    // (cache broadcast, refresh signal, tab focus, reopen) reset the casting's
-    // tracking to defaults. That was the "we keep losing state when castings move
-    // from one month to another" bug.
-    if (migratedNewKeys.size > 0) {
-      logger.debug(`🔄 Persisting ${migratedNewKeys.size} migrated record(s) to their new week...`);
+    // Durably upgrade legacy rows onto the stable casting key — IN PLACE.
+    // For each recognized-but-unstamped casting, UPDATE its existing row to set
+    // project_number/casting_number (and refresh week_monday). The row keeps its
+    // tracking_status, so milestone state is never lost and is never absent from
+    // the DB (no delete-then-insert window). Future loads then exact-match on the
+    // casting key and skip this path entirely (self-healing). This replaces the
+    // old delete-then-resave reschedule migration.
+    if (pendingBackfills.size > 0) {
+      logger.debug(`🔑 Backfilling ${pendingBackfills.size} casting(s) onto stable project#+cast# key...`);
 
-      for (const proj of projects) {
-        const newKey = generateProjectKey(proj.project, proj.weekMonday);
-        const oldKey = migratedNewKeys.get(newKey);
-        if (!oldKey) continue;
-
+      for (const [castingKey, bf] of pendingBackfills) {
         try {
-          // 1) Write the migrated state under the new week key first.
-          await saveTrackingStatus(proj);
-
-          // 2) Only after the new row is safely persisted, delete the old one.
-          const oldRecord = trackingStatuses.get(oldKey);
-          if (oldRecord && oldKey !== newKey) {
-            // Use the original un-normalized project name from the database for deletion
-            await deleteTrackingStatus(oldRecord.originalProject, oldRecord.weekMonday);
-            logger.debug(`  ✓ Migrated "${proj.project}" → ${proj.weekMonday}, removed old week ${oldRecord.weekMonday}`);
-          }
+          await backfillCastingNumbers(bf);
+          logger.debug(`  ✓ Stamped "${bf.projectName}" with ${castingKey} (week ${bf.newWeekMonday})`);
         } catch (error) {
-          logger.error(`  ✗ Failed to migrate "${proj.project}" to new week ${proj.weekMonday}:`, error);
+          logger.error(`  ✗ Failed to backfill "${bf.projectName}" → ${castingKey}:`, error);
         }
       }
     }

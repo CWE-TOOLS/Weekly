@@ -41,12 +41,14 @@ import {
   loadAllReleasabilityData,
   saveTrackingStatus,
   deleteTrackingStatus,
+  getCastingKey,
   loadManualWeeks,
   saveManualWeek,
   deleteManualWeek,
   updateManualWeekPositions,
   updateManualWeekName
 } from '../../services/releasability-data-service.js';
+import { loadProject } from '../../services/projects-service.js';
 import {
   setupCacheSubscription,
   removeCacheSubscription
@@ -320,17 +322,28 @@ function setupEventListeners() {
   // Clear filters button - REMOVED (UI element deleted)
   // document.getElementById('clear-filters-btn')?.addEventListener('click', handleClearFilters);
 
-  // Modal controls - REMOVED (modal deleted)
-  // document.getElementById('close-modal-btn')?.addEventListener('click', closeAddProjectModal);
-  // document.getElementById('cancel-add-btn')?.addEventListener('click', closeAddProjectModal);
-  // document.getElementById('add-project-form')?.addEventListener('submit', handleAddProjectSubmit);
+  // Add Casting modal controls
+  const castingCloseBtn = document.getElementById('add-casting-close-btn');
+  if (castingCloseBtn) castingCloseBtn.addEventListener('click', closeAddCastingModal);
 
-  // Close modal on background click - REMOVED (modal deleted)
-  // document.getElementById('add-project-modal')?.addEventListener('click', (e) => {
-  //   if (e.target.id === 'add-project-modal') {
-  //     closeAddProjectModal();
-  //   }
-  // });
+  const castingCancelBtn = document.getElementById('add-casting-cancel-btn');
+  if (castingCancelBtn) castingCancelBtn.addEventListener('click', closeAddCastingModal);
+
+  const castingForm = document.getElementById('add-casting-form');
+  if (castingForm) castingForm.addEventListener('submit', handleAddCastingSubmit);
+
+  const castingNumberInput = document.getElementById('casting-project-number');
+  if (castingNumberInput) castingNumberInput.addEventListener('input', handleCastingProjectNumberInput);
+
+  // Close modal on background (overlay) click
+  const castingModal = document.getElementById('add-casting-modal');
+  if (castingModal) {
+    castingModal.addEventListener('click', (e) => {
+      if (e.target.id === 'add-casting-modal') {
+        closeAddCastingModal();
+      }
+    });
+  }
 
 }
 
@@ -1130,8 +1143,13 @@ async function handleProjectDrop(projectId, projectData, targetWeekMonday, targe
   const oldManualWeekId = project.manualWeekId;
 
   try {
-    // Delete old tracking record
-    await deleteTrackingStatus(project.project, oldWeekMonday);
+    // For a numbered casting the stable key (project#+cast#) doesn't change when
+    // the week changes — the upsert below relocates the row in place, so we must
+    // NOT delete first (that would briefly drop the state). Only legacy
+    // (un-numbered) castings are keyed by name+week and need the old row removed.
+    if (!getCastingKey(project)) {
+      await deleteTrackingStatus(project.project, oldWeekMonday);
+    }
 
     // Update project with new week
     if (targetWeekId) {
@@ -1265,58 +1283,196 @@ function handleProjectControlClick(button) {
  * @param {HTMLElement} button - The clicked add button
  */
 async function handleWeekAddProjectClick(button) {
-  // Handle both manual weeks (weekId) and date-based weeks (weekMonday)
-  const weekMonday = button.dataset.weekMonday;
-  const weekId = button.dataset.weekId;
+  // Stash which week the "+" belongs to, then open the Add Casting modal. The
+  // project name is resolved from the portal by Project #, so the modal only
+  // needs the two number boxes.
+  _pendingAddWeek = {
+    weekMonday: button.dataset.weekMonday || null,
+    weekId: button.dataset.weekId || null
+  };
+  openAddCastingModal();
+}
 
-  // Prompt for project name
-  const projectName = prompt('Enter project name:');
-  if (!projectName || !projectName.trim()) {
-    return; // User cancelled or entered empty name
+// ============================================================================
+// ADD CASTING MODAL (Project # + Cast #; name auto-resolved from the portal)
+// ============================================================================
+
+// Which week the casting is being added to (set when a week's "+" is clicked).
+let _pendingAddWeek = null;
+// Debounce timer + last successfully resolved portal name for the # lookup.
+let _castingNameTimer = null;
+let _resolvedCastingName = null;
+
+/**
+ * Open the Add Casting modal: reset fields, clear the name preview, focus Project #.
+ */
+function openAddCastingModal() {
+  const modal = document.getElementById('add-casting-modal');
+  if (!modal) return;
+
+  const form = document.getElementById('add-casting-form');
+  if (form) form.reset();
+  _resolvedCastingName = null;
+  setResolvedCastingName('', 'empty');
+
+  modal.style.display = 'flex';
+  setTimeout(() => {
+    const numInput = document.getElementById('casting-project-number');
+    if (numInput) numInput.focus();
+  }, 50);
+}
+
+/**
+ * Close the Add Casting modal and clear its transient state.
+ */
+function closeAddCastingModal() {
+  const modal = document.getElementById('add-casting-modal');
+  if (modal) modal.style.display = 'none';
+
+  const form = document.getElementById('add-casting-form');
+  if (form) form.reset();
+
+  _pendingAddWeek = null;
+  _resolvedCastingName = null;
+  if (_castingNameTimer) {
+    clearTimeout(_castingNameTimer);
+    _castingNameTimer = null;
   }
+}
 
-  // Normalize the project name for consistent storage
-  const normalizedProjectName = normalizeProjectName(projectName);
+/**
+ * Render the resolved-name preview area.
+ * @param {string} text - Name (or message) to show
+ * @param {'empty'|'loading'|'found'|'not-found'} state
+ */
+function setResolvedCastingName(text, state) {
+  const el = document.getElementById('casting-resolved-name');
+  if (!el) return;
 
-  // For manual weeks, we still need a weekMonday for database storage
-  // Use current week's Monday as the base date
-  let effectiveWeekMonday = weekMonday;
-  if (!effectiveWeekMonday && weekId) {
-    // If adding to a manual week, use current week's Monday
-    const today = new Date();
-    const currentMonday = getMonday(today);
-    effectiveWeekMonday = currentMonday.toISOString().split('T')[0];
+  el.classList.remove('is-empty', 'not-found');
+  if (state === 'empty') {
+    el.textContent = 'Enter a Project # to look up the name…';
+    el.classList.add('is-empty');
+  } else if (state === 'loading') {
+    el.textContent = 'Looking up…';
+    el.classList.add('is-empty');
+  } else if (state === 'not-found') {
+    el.textContent = text || 'No matching project in the portal';
+    el.classList.add('not-found');
+  } else {
+    el.textContent = text;
   }
+}
 
-  if (!effectiveWeekMonday) {
-    console.error('❌ ERROR: effectiveWeekMonday is still null/undefined!');
-    alert('Error: Could not determine week. Please refresh and try again.');
+/**
+ * Look up the portal project name from the entered Project # and show it.
+ * Debounced; bound to the Project # input's 'input' event.
+ */
+function handleCastingProjectNumberInput() {
+  const numInput = document.getElementById('casting-project-number');
+  const projectNumber = numInput ? numInput.value.trim() : '';
+
+  _resolvedCastingName = null;
+  if (_castingNameTimer) clearTimeout(_castingNameTimer);
+
+  if (!projectNumber) {
+    setResolvedCastingName('', 'empty');
     return;
   }
 
-  // Create new manual project
+  setResolvedCastingName('', 'loading');
+  _castingNameTimer = setTimeout(async () => {
+    try {
+      const portalProject = await loadProject(projectNumber);
+
+      // Ignore stale results if the field changed while we were fetching.
+      const current = document.getElementById('casting-project-number');
+      if (!current || current.value.trim() !== projectNumber) return;
+
+      if (portalProject && portalProject.project_name) {
+        _resolvedCastingName = portalProject.project_name;
+        setResolvedCastingName(portalProject.project_name, 'found');
+      } else {
+        _resolvedCastingName = null;
+        setResolvedCastingName(`No portal match for #${projectNumber} — you can still add it`, 'not-found');
+      }
+    } catch (error) {
+      console.error('❌ Portal name lookup failed:', error);
+      _resolvedCastingName = null;
+      setResolvedCastingName('Lookup failed — you can still add it', 'not-found');
+    }
+  }, 350);
+}
+
+/**
+ * Submit the Add Casting modal: create a manual casting keyed by project#+cast#
+ * so it merges seamlessly when the real casting arrives from Sheets.
+ */
+async function handleAddCastingSubmit(e) {
+  e.preventDefault();
+
+  const numEl = document.getElementById('casting-project-number');
+  const castEl = document.getElementById('casting-cast-number');
+  const projectNumber = numEl ? numEl.value.trim() : '';
+  const castingNumber = castEl ? castEl.value.trim() : '';
+
+  if (!projectNumber) {
+    showError('Please enter a Project #.');
+    return;
+  }
+  if (!castingNumber) {
+    showError('Please enter a Cast #.');
+    return;
+  }
+
+  // Resolve the name from the portal (reuse the previewed value when we have it).
+  let resolvedName = _resolvedCastingName;
+  if (!resolvedName) {
+    try {
+      const portalProject = await loadProject(projectNumber);
+      if (portalProject && portalProject.project_name) {
+        resolvedName = portalProject.project_name;
+      }
+    } catch (error) {
+      console.error('❌ Portal name lookup failed on submit:', error);
+    }
+  }
+  // Fall back to a readable placeholder; displayName resolves from the portal on
+  // the next load if/when the project exists there.
+  const name = resolvedName || `Project ${projectNumber}`;
+
+  // Resolve the target week from the "+" that opened the modal.
+  const ctx = _pendingAddWeek || {};
+  let effectiveWeekMonday = ctx.weekMonday || null;
+  if (!effectiveWeekMonday) {
+    const today = new Date();
+    effectiveWeekMonday = getMonday(today).toISOString().split('T')[0];
+  }
+
   const newProject = {
-    project: normalizedProjectName,
-    weekMonday: effectiveWeekMonday, // Always provide a valid weekMonday for database
-    manualWeekId: weekId || null, // Use weekId for manual weeks (for display grouping)
-    actualStartDate: effectiveWeekMonday, // Use the effective week Monday as start date
+    project: name,
+    displayName: name,
+    projectNumber: projectNumber, // keyed by project#+cast# → seamless merge from Sheets
+    castingNumber: castingNumber,
+    weekMonday: effectiveWeekMonday,
+    manualWeekId: ctx.weekId || null,
+    actualStartDate: effectiveWeekMonday,
     department: null,
     source: PROJECT_SOURCE.MANUAL
   };
 
-  // Add project to state
   const addedProject = addProject(newProject);
-
   if (addedProject) {
-    // Save to Supabase
     try {
       await saveTrackingStatus(addedProject);
-      showNotification(`Added project "${normalizedProjectName}"`);
+      showNotification(`Added casting ${projectNumber} #${castingNumber} — "${name}"`);
     } catch (error) {
-      console.error('❌ Failed to save manual project to Supabase:', error);
-      showError('Failed to save project. Please try again.');
+      console.error('❌ Failed to save manual casting to Supabase:', error);
+      showError('Failed to save casting. Please try again.');
     }
   }
+
+  closeAddCastingModal();
 }
 
 /**
@@ -1341,9 +1497,14 @@ async function handleMoveProjectWeek(projectId, weekOffset) {
   const updatedProject = updateProjectWeek(projectId, newMondayStr);
 
   if (updatedProject) {
-    // Delete old tracking record and create new one
+    // Relocate the tracking record. Numbered castings keep their stable key, so
+    // the upsert moves the row in place — no delete (which would drop state).
+    // Legacy (un-numbered) castings are keyed by name+week and need the old row
+    // deleted before the new one is saved.
     try {
-      await deleteTrackingStatus(project.project, oldWeekMonday);
+      if (!getCastingKey(project)) {
+        await deleteTrackingStatus(project.project, oldWeekMonday);
+      }
       await saveTrackingStatus(updatedProject);
     } catch (error) {
       console.error('❌ Failed to update project week in Supabase:', error);
@@ -1362,9 +1523,10 @@ export async function handleDeleteProject(projectId) {
   const project = getAllProjects().find(p => p.id === projectId);
   if (!project) return;
 
-  // Delete from Supabase first
+  // Delete from Supabase first. Pass the numbers so a numbered casting is removed
+  // by its stable key (project#+cast#) regardless of its current week.
   try {
-    await deleteTrackingStatus(project.project, project.weekMonday);
+    await deleteTrackingStatus(project.project, project.weekMonday, project.projectNumber, project.castingNumber);
   } catch (error) {
     console.error('❌ Failed to delete from Supabase:', error);
     // Continue with local deletion anyway

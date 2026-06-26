@@ -24,7 +24,7 @@
   --status-not-applicable-text: #999999; /* Gray text */
 
   /* Grid Dimensions */
-  --grid-project-column-width: 260px;
+  --grid-project-column-width: 350px;
   --grid-tracking-column-width: 100px;
   --grid-cell-gap: 2px;
   --grid-row-height: 34px;
@@ -36,25 +36,28 @@
   --legend-height: 40px;
 
   /* Tracking Item Header Colors - Saturated, grouped by category */
+  /* Tracking column header colors — POSITIONAL by data-tracking-index, which is
+     the item's position in TRACKING_ITEMS. Keep in sync with that array and with
+     COLUMN_GROUPS (Classroom 0-2, Project Manager 3-8, Engineering 9-17). */
   --tracking-0-color: #B39DDB;   /* Classroom #1 - Purple */
   --tracking-1-color: #B39DDB;   /* Classroom #2 - Purple */
   --tracking-2-color: #B39DDB;   /* Classroom #3 - Purple */
-  --tracking-3-color: #80CBC4;   /* Shop Folder Built - Teal */
-  --tracking-4-color: #80CBC4;   /* Work Order */
-  --tracking-5-color: #80CBC4;   /* Approved SDs */
-  --tracking-6-color: #80CBC4;   /* Sample Approval */
-  --tracking-7-color: #80CBC4;   /* Color Log */
-  --tracking-8-color: #80CBC4;   /* Final Optimizer HRS */
-  --tracking-9-color: #80CBC4;   /* Rebar/Drilling Layout - Teal (PM) */
-  --tracking-10-color: #A5D6A7;  /* Labels - Green (Engineering) */
-  --tracking-11-color: #A5D6A7;  /* Final Tracking - Green (Engineering) */
-  --tracking-12-color: #A5D6A7;  /* Batching Sheets */
-  --tracking-13-color: #A5D6A7;  /* Casting Layout */
-  --tracking-14-color: #A5D6A7;  /* Inflow Sales Ticket */
-  --tracking-15-color: #A5D6A7;  /* 3D Drawings/Parts List */
-  --tracking-16-color: #A5D6A7;  /* Toolpath Program */
-  --tracking-17-color: #A5D6A7;  /* Jig List */
-  --tracking-18-color: #A5D6A7;  /* Staging */
+  --tracking-3-color: #80CBC4;   /* Shop Folder Built - Teal (PM) */
+  --tracking-4-color: #80CBC4;   /* Approved SDs - Teal (PM) */
+  --tracking-5-color: #80CBC4;   /* Sample Approval - Teal (PM) */
+  --tracking-6-color: #80CBC4;   /* Color Log - Teal (PM) */
+  --tracking-7-color: #80CBC4;   /* Final Optimizer HRS - Teal (PM) */
+  --tracking-8-color: #80CBC4;   /* Rebar/Drilling Layout - Teal (PM) */
+  --tracking-9-color: #A5D6A7;   /* Labels - Green (Engineering) */
+  --tracking-10-color: #A5D6A7;  /* Final Tracking - Green (Engineering) */
+  --tracking-11-color: #A5D6A7;  /* Batching Sheets - Green (Engineering) */
+  --tracking-12-color: #A5D6A7;  /* Casting Layout - Green (Engineering) */
+  --tracking-13-color: #A5D6A7;  /* Inflow Sales Ticket - Green (Engineering) */
+  --tracking-14-color: #A5D6A7;  /* 3D Drawings/Parts List - Green (Engineering) */
+  --tracking-15-color: #A5D6A7;  /* Toolpath Program - Green (Engineering) */
+  --tracking-16-color: #A5D6A7;  /* Jig List - Green (Engineering) */
+  --tracking-17-color: #A5D6A7;  /* Staging - Green (Engineering) */
+  --tracking-18-color: #A5D6A7;  /* (unused - 18 items, indices 0-17) */
 }
 
 /* ============================================================================
@@ -616,9 +619,9 @@ html {
 .releasability-grid-body {
   display: grid;
   grid-template-columns:
-    260px
+    var(--grid-project-column-width)
     70px
-    repeat(19, minmax(50px, 1fr));
+    repeat(18, minmax(50px, 1fr));
   gap: var(--grid-cell-gap);
   background-color: #E8E7E4;
   width: fit-content;
@@ -707,7 +710,7 @@ html {
   justify-content: center;
   font-size: 0.8rem;
   position: sticky;
-  left: 260px;
+  left: var(--grid-project-column-width);
   z-index: 24;
   background-color: var(--surface-container-low);
   box-shadow: 2px 0 6px 0 rgb(0 0 0 / 0.08);
@@ -740,21 +743,20 @@ html {
 .tracking-item-header[data-tracking-index="1"] { background-color: var(--tracking-1-color); }   /* Classroom #2 */
 .tracking-item-header[data-tracking-index="2"] { background-color: var(--tracking-2-color); }   /* Classroom #3 */
 .tracking-item-header[data-tracking-index="3"] { background-color: var(--tracking-3-color); }   /* Shop Folder Built */
-.tracking-item-header[data-tracking-index="4"] { background-color: var(--tracking-4-color); }   /* Work Order */
-.tracking-item-header[data-tracking-index="5"] { background-color: var(--tracking-5-color); }   /* Approved SDs */
-.tracking-item-header[data-tracking-index="6"] { background-color: var(--tracking-6-color); }   /* Sample Approval */
-.tracking-item-header[data-tracking-index="7"] { background-color: var(--tracking-7-color); }   /* Color Log */
-.tracking-item-header[data-tracking-index="8"] { background-color: var(--tracking-8-color); }   /* Final Optimizer HRS */
-.tracking-item-header[data-tracking-index="9"] { background-color: var(--tracking-9-color); }   /* Rebar/Drilling Layout */
-.tracking-item-header[data-tracking-index="10"] { background-color: var(--tracking-10-color); } /* Labels */
-.tracking-item-header[data-tracking-index="11"] { background-color: var(--tracking-11-color); } /* Final Tracking */
-.tracking-item-header[data-tracking-index="12"] { background-color: var(--tracking-12-color); } /* Batching Sheets */
-.tracking-item-header[data-tracking-index="13"] { background-color: var(--tracking-13-color); } /* Casting Layout */
-.tracking-item-header[data-tracking-index="14"] { background-color: var(--tracking-14-color); } /* Inflow Sales Ticket */
-.tracking-item-header[data-tracking-index="15"] { background-color: var(--tracking-15-color); } /* 3D Drawings/Parts List */
-.tracking-item-header[data-tracking-index="16"] { background-color: var(--tracking-16-color); } /* Toolpath Program */
-.tracking-item-header[data-tracking-index="17"] { background-color: var(--tracking-17-color); } /* Jig List */
-.tracking-item-header[data-tracking-index="18"] { background-color: var(--tracking-18-color); } /* Staging */
+.tracking-item-header[data-tracking-index="4"] { background-color: var(--tracking-4-color); }   /* Approved SDs */
+.tracking-item-header[data-tracking-index="5"] { background-color: var(--tracking-5-color); }   /* Sample Approval */
+.tracking-item-header[data-tracking-index="6"] { background-color: var(--tracking-6-color); }   /* Color Log */
+.tracking-item-header[data-tracking-index="7"] { background-color: var(--tracking-7-color); }   /* Final Optimizer HRS */
+.tracking-item-header[data-tracking-index="8"] { background-color: var(--tracking-8-color); }   /* Rebar/Drilling Layout */
+.tracking-item-header[data-tracking-index="9"] { background-color: var(--tracking-9-color); }   /* Labels (Engineering) */
+.tracking-item-header[data-tracking-index="10"] { background-color: var(--tracking-10-color); } /* Final Tracking */
+.tracking-item-header[data-tracking-index="11"] { background-color: var(--tracking-11-color); } /* Batching Sheets */
+.tracking-item-header[data-tracking-index="12"] { background-color: var(--tracking-12-color); } /* Casting Layout */
+.tracking-item-header[data-tracking-index="13"] { background-color: var(--tracking-13-color); } /* Inflow Sales Ticket */
+.tracking-item-header[data-tracking-index="14"] { background-color: var(--tracking-14-color); } /* 3D Drawings/Parts List */
+.tracking-item-header[data-tracking-index="15"] { background-color: var(--tracking-15-color); } /* Toolpath Program */
+.tracking-item-header[data-tracking-index="16"] { background-color: var(--tracking-16-color); } /* Jig List */
+.tracking-item-header[data-tracking-index="17"] { background-color: var(--tracking-17-color); } /* Staging */
 
 /* Week Section */
 .week-section {
@@ -931,6 +933,7 @@ html {
 
 .project-name {
   flex: 1;
+  text-align: left;
   overflow-wrap: break-word;
   word-wrap: break-word;
   word-break: break-word;
@@ -947,6 +950,31 @@ html {
   border-radius: 999px;
   background-color: var(--surface-container-high, #e0e0e0);
   color: var(--text-secondary, #555);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.4;
+}
+
+/* Fixed-width slot for the project#/cast# badges so the project title starts at
+   the same x on every row regardless of how wide the badges are. */
+.project-badges {
+  flex: 0 0 92px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  overflow: visible;
+}
+
+/* Cast number badge — accented so it reads distinctly from the project number */
+.cast-number-badge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background-color: var(--primary-container, #d7e3ff);
+  color: var(--on-primary-container, #1b3a6b);
   font-size: 0.7rem;
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -1014,7 +1042,7 @@ html {
   text-align: center;
   min-height: var(--grid-row-height);
   position: sticky;
-  left: 260px;
+  left: var(--grid-project-column-width);
   z-index: 14;
   box-shadow: 3px 0 6px 0 rgb(0 0 0 / 0.08);
   font-variant-numeric: tabular-nums;
@@ -1333,6 +1361,28 @@ html {
   border-color: var(--accent-primary);
   box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
   background-color: white;
+}
+
+/* Read-only display of the portal name resolved from the entered Project # */
+.resolved-name {
+  padding: 0.5rem 0.75rem;
+  border: 1px dashed var(--border-secondary);
+  border-radius: var(--border-radius-md);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  background-color: var(--background-primary);
+  min-height: 1.2em;
+}
+
+.resolved-name.is-empty {
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+.resolved-name.not-found {
+  color: var(--status-incomplete, #b00020);
+  font-weight: 500;
 }
 
 .form-help {
