@@ -856,7 +856,10 @@ function executePrintFolderBoard(projects, projectsByWeek, selectedWeeks, getWee
       // Fixed-width marker slot keeps every title left-aligned, whether it's a star or a rectangle.
       const hasGreenSticker = !!(p.trackingStatus && p.trackingStatus['Green Sticker'] === STATUS.COMPLETE);
       const inner = hasGreenSticker ? '<span class="fb-green"></span>' : '<span class="fb-star">★</span>';
-      return `<tr><td class="fb-name"><span class="fb-marker">${inner}</span>${name}</td><td class="fb-start">${start}</td></tr>`;
+      // Casting # flag — mirrors the blue "Cast #N" pill from the live tiles; omitted when unset.
+      const castNum = p.castingNumber == null ? '' : String(p.castingNumber).trim();
+      const castTag = castNum ? `<span class="fb-cast">Cast #${esc(castNum)}</span>` : '';
+      return `<tr><td class="fb-name"><span class="fb-marker">${inner}</span>${name}${castTag}</td><td class="fb-start">${start}</td></tr>`;
     }).join('');
 
     pages += `
@@ -896,6 +899,7 @@ function executePrintFolderBoard(projects, projectsByWeek, selectedWeeks, getWee
   .fb-marker { display: inline-block; width: 52px; margin-right: 18px; text-align: center; vertical-align: middle; }
   .fb-star { color: #e53935; font-size: 42px; line-height: 1; vertical-align: middle; }
   .fb-green { display: inline-block; width: 40px; height: 28px; background: #43a047; border-radius: 3px; vertical-align: middle; }
+  .fb-cast { display: inline-block; margin-left: 18px; padding: 4px 16px; border-radius: 999px; background: #d7e3ff; color: #1b3a6b; font-size: 24px; font-weight: 700; letter-spacing: 0.5px; line-height: 1.2; vertical-align: middle; white-space: nowrap; }
   table.fb-list td.fb-start { text-align: right; white-space: nowrap; font-size: 28px; font-variant-numeric: tabular-nums; width: 180px; }
   th.fb-start { text-align: right; }
 </style></head><body>
