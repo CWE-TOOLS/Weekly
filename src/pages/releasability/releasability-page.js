@@ -510,7 +510,7 @@ function handleRefresh() {
     });
 }
 
-function handlePrint() {
+function openWeekSelectionModal({ title = 'Print', confirmLabel = 'Print Selected' } = {}) {
   const projects = getFilteredProjects();
   if (projects.length === 0) return;
 
@@ -628,10 +628,18 @@ function handlePrint() {
   modal.innerHTML = `
     <div class="modal-content" style="max-width: 460px;">
       <div class="modal-header">
-        <h2>Print Report</h2>
+        <h2>${title}</h2>
         <button class="modal-close">&times;</button>
       </div>
       <div class="modal-body">
+        <div class="print-format-toggle" style="display: flex; gap: 8px; margin-bottom: 14px;">
+          <label class="print-format-opt" data-format="report" style="flex: 1; display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 2px solid #2563eb; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500; color: #1d4ed8; background: #eff4ff;">
+            <input type="radio" name="print-format" value="report" checked style="margin: 0;" /> Releasability Report
+          </label>
+          <label class="print-format-opt" data-format="folder" style="flex: 1; display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 2px solid #e5e7eb; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500; color: #555; background: #fff;">
+            <input type="radio" name="print-format" value="folder" style="margin: 0;" /> Folder Board
+          </label>
+        </div>
         <div style="display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap;">
           <button class="print-preset" data-preset="next-month" style="padding: 6px 12px; border: 1px solid #2563eb; border-radius: 999px; background: #2563eb; color: white; cursor: pointer; font-size: 12px; font-weight: 500;">Next Month</button>
           <button class="print-preset" data-preset="current-month" style="padding: 6px 12px; border: 1px solid #ccc; border-radius: 999px; background: white; color: #333; cursor: pointer; font-size: 12px; font-weight: 500;">Current Month</button>
@@ -644,7 +652,7 @@ function handlePrint() {
         <div id="print-summary" style="margin-top: 10px; font-size: 12px; color: #666; text-align: center;"></div>
         <div style="display: flex; gap: 8px; margin-top: 12px; justify-content: flex-end; align-items: center;">
           <button id="print-cancel-btn" style="padding: 8px 16px; border: 1px solid #ccc; border-radius: 6px; background: white; color: #333; cursor: pointer; font-size: 13px;">Cancel</button>
-          <button id="print-confirm-btn" style="padding: 8px 16px; border: none; border-radius: 6px; background: #2563eb; color: white; cursor: pointer; font-size: 13px; font-weight: 500;">Print Selected</button>
+          <button id="print-confirm-btn" style="padding: 8px 16px; border: none; border-radius: 6px; background: #2563eb; color: white; cursor: pointer; font-size: 13px; font-weight: 500;">${confirmLabel}</button>
         </div>
       </div>
     </div>
@@ -723,6 +731,25 @@ function handlePrint() {
     });
   });
 
+  // ---- Format toggle (Releasability Report vs Folder Board) ----
+  const formatOpts = modal.querySelectorAll('.print-format-opt');
+  function syncFormat() {
+    const selected = modal.querySelector('input[name="print-format"]:checked');
+    const fmt = selected ? selected.value : 'report';
+    formatOpts.forEach(opt => {
+      const active = opt.dataset.format === fmt;
+      opt.style.borderColor = active ? '#2563eb' : '#e5e7eb';
+      opt.style.background = active ? '#eff4ff' : '#fff';
+      opt.style.color = active ? '#1d4ed8' : '#555';
+    });
+    const cBtn = modal.querySelector('#print-confirm-btn');
+    if (cBtn) cBtn.textContent = fmt === 'folder' ? 'Print Folder Board' : 'Print Selected';
+  }
+  formatOpts.forEach(opt => {
+    const input = opt.querySelector('input[type="radio"]');
+    if (input) input.addEventListener('change', syncFormat);
+  });
+
   // ---- Preset buttons ----
   modal.querySelectorAll('.print-preset').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -759,13 +786,127 @@ function handlePrint() {
     const selectedWeeks = new Set();
     modal.querySelectorAll('.print-week-row input[type="checkbox"]:checked').forEach(cb => selectedWeeks.add(cb.value));
     if (selectedWeeks.size === 0) return;
+    const fmtEl = modal.querySelector('input[name="print-format"]:checked');
+    const fmt = fmtEl ? fmtEl.value : 'report';
     closeModal();
-    executePrint(projects, projectsByWeek, selectedWeeks, getWeekLabel);
+    if (fmt === 'folder') {
+      executePrintFolderBoard(projects, projectsByWeek, selectedWeeks, getWeekLabel);
+    } else {
+      executePrint(projects, projectsByWeek, selectedWeeks, getWeekLabel);
+    }
   });
 
   // Initial render
   syncAllMasters();
   updateSummary();
+  syncFormat();
+}
+
+function handlePrint() {
+  openWeekSelectionModal();
+}
+
+function executePrintFolderBoard(projects, projectsByWeek, selectedWeeks, getWeekLabel) {
+  const weekKeys = Array.from(selectedWeeks).sort();
+  const mNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+  const esc = (s) => String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  // Banner: "July Week 1 - 6th-21st" (full month + week-of-month + ordinal day range)
+  // for real (date-keyed) weeks; manual-week name otherwise.
+  const fullMonths = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const ordinal = (n) => {
+    const s = ['th','st','nd','rd'], v = n % 100;
+    return n + (s[(v - 20) % 10] || s[v] || s[0]);
+  };
+  function bannerTitle(weekKey) {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(weekKey)) {
+      const monday = new Date(weekKey + 'T00:00:00');
+      const sat = new Date(monday); sat.setDate(monday.getDate() + 5);
+      const weekMonth = getWeekMonth(monday); // 0-11 — month this week "belongs to"
+      const weekNum = getWeekOfMonth(monday, weekMonth);
+      const range = monday.getMonth() === sat.getMonth()
+        ? `${ordinal(monday.getDate())}-${ordinal(sat.getDate())}`
+        : `${mNames[monday.getMonth()]} ${ordinal(monday.getDate())}-${mNames[sat.getMonth()]} ${ordinal(sat.getDate())}`;
+      return `${fullMonths[weekMonth]} Week ${weekNum} - ${range}`;
+    }
+    return getWeekLabel(weekKey);
+  }
+
+  function fmtStart(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso + 'T00:00:00');
+    return `${dayNames[d.getDay()]} ${d.getMonth() + 1}/${d.getDate()}`;
+  }
+
+  let pages = '';
+  weekKeys.forEach(weekKey => {
+    const weekProjects = (projectsByWeek[weekKey] || []).slice().sort((a, b) => {
+      const dateA = a.actualStartDate || a.weekMonday || '';
+      const dateB = b.actualStartDate || b.weekMonday || '';
+      return dateA.localeCompare(dateB) || (a.project || '').localeCompare(b.project || '');
+    });
+    if (weekProjects.length === 0) return;
+
+    const rows = weekProjects.map(p => {
+      const name = esc(p.displayName || p.project || '');
+      const start = esc(fmtStart(p.actualStartDate));
+      // Fixed-width marker slot keeps every title left-aligned, whether it's a star or a rectangle.
+      const hasGreenSticker = !!(p.trackingStatus && p.trackingStatus['Green Sticker'] === STATUS.COMPLETE);
+      const inner = hasGreenSticker ? '<span class="fb-green"></span>' : '<span class="fb-star">★</span>';
+      return `<tr><td class="fb-name"><span class="fb-marker">${inner}</span>${name}</td><td class="fb-start">${start}</td></tr>`;
+    }).join('');
+
+    pages += `
+      <section class="folder-page">
+        <div class="fb-banner">
+          <h1>${esc(bannerTitle(weekKey))}</h1>
+          <div class="fb-sub">${weekProjects.length} casting${weekProjects.length === 1 ? '' : 's'}</div>
+        </div>
+        <table class="fb-list">
+          <thead><tr><th class="fb-name">Project</th><th class="fb-start">Start</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </section>`;
+  });
+
+  if (!pages) return;
+
+  const today = new Date();
+  const dateStr = today.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+
+  const printHtml = `<!DOCTYPE html>
+<html><head><title>Folder Board - ${dateStr}</title>
+<style>
+  @page { size: letter landscape; margin: 0.5in; }
+  * { box-sizing: border-box; }
+  body { font-family: Arial, Helvetica, sans-serif; margin: 0; color: #111; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .folder-page { page-break-after: always; }
+  .folder-page:last-child { page-break-after: auto; }
+  .fb-banner { text-align: center; border-bottom: 3px solid #111; padding-bottom: 14px; margin-bottom: 24px; }
+  .fb-banner h1 { font-size: 46px; line-height: 1.05; margin: 0; text-transform: uppercase; letter-spacing: 1px; font-weight: 800; }
+  .fb-banner .fb-sub { font-size: 14px; color: #666; margin-top: 8px; text-transform: uppercase; letter-spacing: 1.5px; }
+  table.fb-list { width: 100%; border-collapse: collapse; }
+  table.fb-list th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; color: #555; border-bottom: 2px solid #999; padding: 6px 12px; }
+  table.fb-list td { padding: 6px 12px; border-bottom: 1px solid #ddd; vertical-align: middle; }
+  table.fb-list tr { page-break-inside: avoid; }
+  table.fb-list td.fb-name { font-size: 52px; font-weight: 700; line-height: 1.05; }
+  .fb-marker { display: inline-block; width: 52px; margin-right: 18px; text-align: center; vertical-align: middle; }
+  .fb-star { color: #e53935; font-size: 42px; line-height: 1; vertical-align: middle; }
+  .fb-green { display: inline-block; width: 40px; height: 28px; background: #43a047; border-radius: 3px; vertical-align: middle; }
+  table.fb-list td.fb-start { text-align: right; white-space: nowrap; font-size: 28px; font-variant-numeric: tabular-nums; width: 180px; }
+  th.fb-start { text-align: right; }
+</style></head><body>
+${pages}
+</body></html>`;
+
+  const printWindow = window.open('', '_blank');
+  printWindow.document.write(printHtml);
+  printWindow.document.close();
+  printWindow.focus();
+  printWindow.print();
 }
 
 function executePrint(projects, projectsByWeek, selectedWeeks, getWeekLabel) {

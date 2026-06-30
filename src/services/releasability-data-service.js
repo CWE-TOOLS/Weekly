@@ -385,29 +385,60 @@ export async function saveTrackingStatus(project) {
     // When absent (sheet left a number blank), fall back to the legacy name+week
     // target so the row is never stranded.
     const castingKey = generateCastingKey(project.projectNumber, project.castingNumber);
-    const onConflict = castingKey ? 'project_number,casting_number' : 'project,week_monday';
 
-    // Upsert tracking status. We always write BOTH the legacy columns
+    // The row we want to persist. We always write BOTH the legacy columns
     // (project, week_monday — still NOT NULL) and the structured numbers, so a
     // row is complete regardless of which key it's matched on.
-    const { data, error } = await client
-      .from(RELEASABILITY_TABLE)
-      .upsert({
-        project: normalizedProjectName,
-        week_monday: project.weekMonday,
-        project_number: normalizeNumberField(project.projectNumber) || null,
-        casting_number: normalizeCastingNumber(project.castingNumber) || null,
-        manual_week_id: project.manualWeekId || null,
-        tracking_status: project.trackingStatus,
-        department: project.department,
-        source: project.source,
-        updated_at: new Date().toISOString()
-      }, {
-        onConflict: onConflict // casting key when numbered, else name+week
-      });
+    const row = {
+      project: normalizedProjectName,
+      week_monday: project.weekMonday,
+      project_number: normalizeNumberField(project.projectNumber) || null,
+      casting_number: normalizeCastingNumber(project.castingNumber) || null,
+      manual_week_id: project.manualWeekId || null,
+      tracking_status: project.trackingStatus,
+      department: project.department,
+      source: project.source,
+      updated_at: new Date().toISOString()
+    };
 
-    if (error) {
-      throw error;
+    if (castingKey) {
+      // The casting key (project#+cast#) is the preferred identity. But a plain
+      // upsert(onConflict: project_number,casting_number) breaks when an UN-KEYED
+      // legacy row already sits at this (project, week_monday): the casting key
+      // doesn't match it, so Postgres tries to INSERT and trips the
+      // (project, week_monday) primary key (error 23505). So reconcile by hand:
+      //   (a) update the row that already owns this casting key, else
+      //   (b) attach the key to the legacy name+week row in place, else
+      //   (c) insert a brand-new casting.
+      const byKey = await client
+        .from(RELEASABILITY_TABLE)
+        .update(row)
+        .eq('project_number', row.project_number)
+        .eq('casting_number', row.casting_number)
+        .select('project');
+      if (byKey.error) throw byKey.error;
+
+      if (!byKey.data || byKey.data.length === 0) {
+        const byNameWeek = await client
+          .from(RELEASABILITY_TABLE)
+          .update(row)
+          .eq('project', normalizedProjectName)
+          .eq('week_monday', project.weekMonday)
+          .select('project');
+        if (byNameWeek.error) throw byNameWeek.error;
+
+        if (!byNameWeek.data || byNameWeek.data.length === 0) {
+          const inserted = await client.from(RELEASABILITY_TABLE).insert(row);
+          if (inserted.error) throw inserted.error;
+        }
+      }
+    } else {
+      // No structured number yet — fall back to the legacy name+week key so the
+      // row is never stranded.
+      const { error } = await client
+        .from(RELEASABILITY_TABLE)
+        .upsert(row, { onConflict: 'project,week_monday' });
+      if (error) throw error;
     }
 
     logger.debug(`  → Tracking status saved successfully`);
