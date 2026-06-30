@@ -14,7 +14,7 @@ import { loadFromCacheOrFetch } from './sheets-cache-service.js';
 import { initializeSupabase, getSupabaseClient, sendRefreshSignal } from './supabase-service.js';
 import { logger } from '../utils/logger.js';
 import { parseDate, getMonday, getLocalDateString } from '../utils/date-utils.js';
-import { DEFAULT_TRACKING_STATUS, PROJECT_SOURCE } from '../config/releasability-config.js';
+import { DEFAULT_TRACKING_STATUS, PROJECT_SOURCE, STATUS } from '../config/releasability-config.js';
 import { normalizeProjectName } from '../utils/ui-utils.js';
 import { loadAllProjects } from './projects-service.js';
 
@@ -92,12 +92,92 @@ export function getCastingKey(project) {
 }
 
 /**
- * Backfill a legacy tracking row with its stable project#/cast# numbers, IN PLACE.
+ * How "advanced" each milestone status is, so that when two rows for the same
+ * casting are collapsed we keep the most-progressed value per item. Mirrors the
+ * one-time SQL merge used to heal the first duplicate that surfaced this bug.
+ */
+const STATUS_RANK = {
+  [STATUS.COMPLETE]: 4,
+  [STATUS.IN_PROGRESS]: 3,
+  [STATUS.NOT_APPLICABLE]: 2,
+  [STATUS.INCOMPLETE]: 1
+};
+
+/**
+ * Merge two tracking_status objects, keeping the most-advanced value per item.
+ * Used when folding a duplicate casting row into the row that owns the stable
+ * key, so no milestone progress from either row is lost.
  *
- * This is the zero-data-loss migration step: it UPDATEs the existing row (matched
- * by its current name+week) to stamp the structured numbers and refresh the week,
- * instead of deleting and re-inserting. The row's tracking_status is untouched, so
- * milestone state is preserved and never absent from the DB.
+ * @param {Object} primary
+ * @param {Object} secondary
+ * @returns {Object} merged status (most-advanced wins per item)
+ */
+function mergeTrackingStatus(primary, secondary) {
+  const a = primary && typeof primary === 'object' ? primary : {};
+  const b = secondary && typeof secondary === 'object' ? secondary : {};
+  const merged = {};
+  for (const item of new Set([...Object.keys(a), ...Object.keys(b)])) {
+    const ra = STATUS_RANK[a[item]] || 0;
+    const rb = STATUS_RANK[b[item]] || 0;
+    merged[item] = ra >= rb ? (a[item] != null ? a[item] : b[item]) : b[item];
+  }
+  return merged;
+}
+
+/**
+ * Collapse a duplicate casting: merge `loser`'s milestone progress into `keeper`
+ * (most-advanced wins per item), stamp `keeper` with the stable casting key, then
+ * delete `loser`. No progress from either row is lost, and because `keeper` keeps
+ * its own (project, week_monday) the primary-key and casting-unique constraints
+ * are never violated. The DELETE is filtered on the loser's full PK so it can only
+ * ever match that one row.
+ *
+ * @returns {Promise<boolean>}
+ */
+async function mergeAndDeleteLegacy(client, keeper, loser, key) {
+  const merged = mergeTrackingStatus(keeper.tracking_status, loser.tracking_status);
+
+  const upd = await client
+    .from(RELEASABILITY_TABLE)
+    .update({
+      project_number: key.project_number,
+      casting_number: key.casting_number,
+      tracking_status: merged,
+      updated_at: new Date().toISOString()
+    })
+    .eq('project', keeper.project)
+    .eq('week_monday', keeper.week_monday);
+  if (upd.error) throw upd.error;
+
+  const del = await client
+    .from(RELEASABILITY_TABLE)
+    .delete()
+    .eq('project', loser.project)
+    .eq('week_monday', loser.week_monday);
+  if (del.error) throw del.error;
+
+  logger.debug(`  ⤵️ Merged duplicate "${loser.project}" (${loser.week_monday}) into "${keeper.project}" (${keeper.week_monday})`);
+  return true;
+}
+
+/**
+ * Backfill a legacy tracking row with its stable project#/cast# numbers, IN PLACE,
+ * with zero data loss and no constraint collisions.
+ *
+ * The naive version simply UPDATEd the legacy row to stamp the numbers and refresh
+ * the week. That throws 409 whenever the upgrade would collide with another row:
+ *   - refreshing week_monday hits the primary key (project, week_monday) if a
+ *     current-week row with the same name already exists; or
+ *   - stamping (project_number, casting_number) hits the casting-unique constraint
+ *     if another row already owns that key.
+ * Either way the legacy row was left stranded as an orphan duplicate (the root
+ * cause of the "failed to save" 23505 we had to clean up by hand).
+ *
+ * This version reconciles first: if a different row already owns the target week
+ * or the casting key, it folds the legacy row's progress into that row and deletes
+ * the legacy duplicate (self-healing). Only when there's no conflict does it do the
+ * plain in-place UPDATE. Future loads then exact-match the casting key and skip
+ * this path entirely.
  *
  * @param {Object} bf - { originalProject, oldWeekMonday, newWeekMonday, projectNumber, castingNumber }
  * @returns {Promise<boolean>}
@@ -108,16 +188,67 @@ async function backfillCastingNumbers(bf) {
   }
   const client = getSupabaseClient();
 
+  const projectNumber = normalizeNumberField(bf.projectNumber);
+  const castingNumber = normalizeCastingNumber(bf.castingNumber);
+  const newWeek = bf.newWeekMonday;
+  const key = { project_number: projectNumber, casting_number: castingNumber };
+
+  // The legacy row we intend to upgrade, matched by its name+week as it stood when
+  // this load began. If it's already gone (healed by a prior load or another tab),
+  // there's nothing to do.
+  const legacyRes = await client
+    .from(RELEASABILITY_TABLE)
+    .select('*')
+    .eq('project', bf.originalProject)
+    .eq('week_monday', bf.oldWeekMonday);
+  if (legacyRes.error) throw legacyRes.error;
+  const legacy = legacyRes.data && legacyRes.data[0];
+  if (!legacy) return true;
+
+  const sameRow = (row) =>
+    !!row && row.project === legacy.project && row.week_monday === legacy.week_monday;
+
+  // 1) Casting key already owned by a different row → stamping it here would
+  //    violate the casting-unique constraint. Fold progress into the owner instead.
+  const keyRes = await client
+    .from(RELEASABILITY_TABLE)
+    .select('*')
+    .eq('project_number', projectNumber)
+    .eq('casting_number', castingNumber);
+  if (keyRes.error) throw keyRes.error;
+  const keyHolder = keyRes.data && keyRes.data[0];
+  if (keyHolder && !sameRow(keyHolder)) {
+    return mergeAndDeleteLegacy(client, keyHolder, legacy, key);
+  }
+
+  // 2) We'd refresh the legacy row's week to the current schedule, but a different
+  //    row already sits at (project, newWeek) → moving it there violates the
+  //    primary key. Fold progress into that current-week row instead.
+  if (newWeek && newWeek !== legacy.week_monday) {
+    const weekRes = await client
+      .from(RELEASABILITY_TABLE)
+      .select('*')
+      .eq('project', legacy.project)
+      .eq('week_monday', newWeek);
+    if (weekRes.error) throw weekRes.error;
+    const weekHolder = weekRes.data && weekRes.data[0];
+    if (weekHolder && !sameRow(weekHolder)) {
+      return mergeAndDeleteLegacy(client, weekHolder, legacy, key);
+    }
+  }
+
+  // 3) No conflict — upgrade the legacy row in place onto the stable key and
+  //    refresh its week. Next load exact-matches the casting key and skips this.
   const { error } = await client
     .from(RELEASABILITY_TABLE)
     .update({
-      project_number: normalizeNumberField(bf.projectNumber),
-      casting_number: normalizeCastingNumber(bf.castingNumber),
-      week_monday: bf.newWeekMonday,
+      project_number: projectNumber,
+      casting_number: castingNumber,
+      week_monday: newWeek,
       updated_at: new Date().toISOString()
     })
-    .eq('project', bf.originalProject)
-    .eq('week_monday', bf.oldWeekMonday);
+    .eq('project', legacy.project)
+    .eq('week_monday', legacy.week_monday);
 
   if (error) {
     throw error;
