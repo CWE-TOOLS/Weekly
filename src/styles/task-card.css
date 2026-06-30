@@ -238,6 +238,19 @@
   color: inherit;
 }
 
+/* Pieces count — casting inventory total (qty + extras) for casting-linked
+   tasks, rendered as a slimmer, lighter band flush beneath the day counter. */
+.task-pieces-count {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-align: center;
+  padding: 0.15rem 0;
+  margin: -0.15rem -0.35rem 0.15rem -0.35rem;
+  background-color: rgba(0, 0, 0, 0.04);
+  color: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
 .task-card-placeholder {
   min-height: 140px;
   background: transparent;

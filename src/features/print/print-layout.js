@@ -135,6 +135,13 @@ function createPrintTaskCard(task, departmentClass) {
         ? `<div class="print-task-casting-side">Side ${task.castingSide}</div>`
         : '';
 
+    // Pieces count (casting inventory qty + extras) for casting-linked tasks —
+    // mirrors the on-screen card, sitting just below the day counter. Set during
+    // data load by enrichTasksWithPieces; omitted when the casting has no inventory.
+    const piecesHtml = (typeof task.piecesCount === 'number' && task.piecesCount > 0)
+        ? `<div class="print-task-pieces-count">${task.piecesCount} pcs</div>`
+        : '';
+
     card.innerHTML = `
         <div class="print-task-title" style="background-color: ${colors.bg} !important; color: ${colors.text} !important;">
             ${task.project || 'Unknown Project'}
@@ -143,6 +150,7 @@ function createPrintTaskCard(task, departmentClass) {
         <div class="print-task-day-counter">
             ${task.dayCounter || ''}
         </div>
+        ${piecesHtml}
         <div class="print-task-description">
             ${task.description && task.description.trim() ? task.description : '<span class="print-missing-description">Staging Missing</span>'}
         </div>

@@ -29,6 +29,8 @@
 import { fetchTasks as fetchSheetsTasks } from './sheets-service.js';
 import { loadManualTasks, fetchTaskDescriptions } from './supabase-service.js';
 import { loadAllProjects } from './projects-service.js';
+import { loadCastingsForProjects } from './castings-service.js';
+import { loadAllInventoryForProject } from './inventory-service.js';
 import { parseDate } from '../utils/date-utils.js';
 import { setAllTasks, getAllTasks } from '../core/state.js';
 
@@ -137,6 +139,14 @@ export async function fetchAllTasks(suppressEvents = false) {
 
         // Resolve project names from the projects table by project_number
         enrichTasksWithProject(allTasks, projects);
+
+        // For tasks linked to a casting in the project portal, attach the
+        // casting's total inventory pieces (qty + extras). Non-fatal: on any
+        // failure the schedule still renders without pieces counts.
+        debug.log('[Startup] Starting pieces enrichment');
+        debug.time('[Startup] Pieces enrichment');
+        await enrichTasksWithPieces(allTasks);
+        debug.timeEnd('[Startup] Pieces enrichment');
 
         // Calculate day counts
         debug.log('[Startup] Starting day count calculation');
@@ -395,6 +405,70 @@ export function enrichTasksWithProject(tasks, projects) {
     }
 
     logger.info(`🔗 Project linking: ${matched} tasks matched to projects table (of ${tasks.length} total)`);
+}
+
+/**
+ * Attach a pieces count to tasks that are linked to a casting in the project
+ * portal. A task is "casting-linked" when it carries both a projectNumber and a
+ * castingNumber (sheet columns H/I). The lookup chain is:
+ *   (project_number, casting_number) -> project_castings.id -> casting_inventory
+ * and pieces = SUM(quantity + extras) across the casting's inventory rows —
+ * mirroring the "X pcs" total shown on the project-portal casting cards.
+ *
+ * Sets `task.piecesCount` (number) only when the linked casting has inventory.
+ * Resilient by design: any failure is logged and swallowed so a Supabase hiccup
+ * never blocks the weekly schedule from rendering.
+ *
+ * @param {Array<Object>} tasks - All tasks (modified in-place)
+ */
+export async function enrichTasksWithPieces(tasks) {
+    try {
+        // Candidates: tasks linked to a casting (both project# and casting#).
+        const linked = (tasks || []).filter(t =>
+            String(t.projectNumber || '').trim() && String(t.castingNumber || '').trim()
+        );
+        if (linked.length === 0) return;
+
+        // Resolve (project#, casting#) -> casting id via one bulk castings query.
+        const projectNumbers = [...new Set(linked.map(t => String(t.projectNumber).trim()))];
+        const castings = await loadCastingsForProjects(projectNumbers);
+        if (!castings || castings.length === 0) return;
+
+        const idByKey = new Map();
+        for (const c of castings) {
+            const key = `${String(c.project_number || '').trim()}|${String(c.casting_number || '').trim()}`;
+            if (c.id) idByKey.set(key, c.id);
+        }
+
+        // Only fetch inventory for castings actually referenced by a task in view.
+        const referencedIds = new Set();
+        for (const t of linked) {
+            const id = idByKey.get(`${String(t.projectNumber).trim()}|${String(t.castingNumber).trim()}`);
+            if (id) referencedIds.add(id);
+        }
+        if (referencedIds.size === 0) return;
+
+        // Sum quantity + extras per casting (same formula as the portal "pcs" total).
+        const inventoryByCasting = await loadAllInventoryForProject([...referencedIds]);
+        const piecesById = new Map();
+        for (const [castingId, rows] of inventoryByCasting) {
+            const total = (rows || []).reduce(
+                (sum, r) => sum + (parseInt(r.quantity, 10) || 0) + (parseInt(r.extras, 10) || 0),
+                0
+            );
+            if (total > 0) piecesById.set(castingId, total);
+        }
+
+        let matched = 0;
+        for (const t of linked) {
+            const id = idByKey.get(`${String(t.projectNumber).trim()}|${String(t.castingNumber).trim()}`);
+            const total = id ? piecesById.get(id) : undefined;
+            if (total) { t.piecesCount = total; matched++; }
+        }
+        logger.info(`🧱 Pieces linking: ${matched} tasks given a pieces count (of ${linked.length} casting-linked)`);
+    } catch (err) {
+        logger.error('[data-service] enrichTasksWithPieces failed (non-fatal):', err);
+    }
 }
 
 /**

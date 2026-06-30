@@ -49,6 +49,36 @@ export async function loadCastings(projectNumber) {
 }
 
 /**
+ * Bulk-load castings for many projects in a single query. Mirrors loadCastings()
+ * but filters by a set of project numbers and returns only the columns needed to
+ * resolve a (project_number, casting_number) pair to its casting `id` — used when
+ * enriching the weekly schedule with casting-linked data (e.g. pieces counts).
+ * @param {string[]} projectNumbers
+ * @returns {Promise<Array<{id: string, project_number: string, casting_number: string}>>}
+ */
+export async function loadCastingsForProjects(projectNumbers) {
+    if (!Array.isArray(projectNumbers) || projectNumbers.length === 0) return [];
+    const client = await getClient();
+    if (!client) return [];
+
+    try {
+        const { data, error } = await client
+            .from(CASTINGS_TABLE)
+            .select('id, project_number, casting_number')
+            .in('project_number', projectNumbers);
+
+        if (error) {
+            logger.error('[castings-service] loadCastingsForProjects error:', error);
+            throw error;
+        }
+        return data || [];
+    } catch (err) {
+        logger.error('[castings-service] loadCastingsForProjects failed:', err);
+        return [];
+    }
+}
+
+/**
  * Insert a new casting.
  * @param {{project_number:string, casting_number:string, description?:string}} casting
  * @returns {Promise<Object>} inserted row

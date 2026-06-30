@@ -99,6 +99,16 @@ export function createTaskCard(task, rowClass, isEditingUnlocked) {
     dayCounterDiv.textContent = task.dayCounter || '';
     card.appendChild(dayCounterDiv);
 
+    // Pieces count — for tasks linked to a casting in the project portal, show
+    // the casting's total inventory pieces (quantity + extras) as a slim band
+    // directly below the day counter. Set during load by enrichTasksWithPieces.
+    if (typeof task.piecesCount === 'number' && task.piecesCount > 0) {
+        const piecesDiv = document.createElement('div');
+        piecesDiv.className = 'task-pieces-count';
+        piecesDiv.textContent = `${task.piecesCount} pcs`;
+        card.appendChild(piecesDiv);
+    }
+
     // Task description
     const descDiv = document.createElement('div');
     descDiv.className = 'task-description';
