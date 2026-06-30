@@ -57,7 +57,7 @@
   --tracking-15-color: #A5D6A7;  /* Toolpath Program - Green (Engineering) */
   --tracking-16-color: #A5D6A7;  /* Jig List - Green (Engineering) */
   --tracking-17-color: #A5D6A7;  /* Staging - Green (Engineering) */
-  --tracking-18-color: #A5D6A7;  /* (unused - 18 items, indices 0-17) */
+  --tracking-18-color: #66BB6A;  /* Green Sticker - Release */
 }
 
 /* ============================================================================
@@ -621,7 +621,7 @@ html {
   grid-template-columns:
     var(--grid-project-column-width)
     70px
-    repeat(18, minmax(50px, 1fr));
+    repeat(19, minmax(50px, 1fr));
   gap: var(--grid-cell-gap);
   background-color: #E8E7E4;
   width: fit-content;
@@ -673,6 +673,12 @@ html {
 
 .group-header-cell.group-engineering {
   background-color: #A5D6A7;
+  color: #000;
+  border-radius: 4px 4px 0 0;
+}
+
+.group-header-cell.group-release {
+  background-color: #66BB6A;
   color: #000;
   border-radius: 4px 4px 0 0;
 }
@@ -757,6 +763,7 @@ html {
 .tracking-item-header[data-tracking-index="15"] { background-color: var(--tracking-15-color); } /* Toolpath Program */
 .tracking-item-header[data-tracking-index="16"] { background-color: var(--tracking-16-color); } /* Jig List */
 .tracking-item-header[data-tracking-index="17"] { background-color: var(--tracking-17-color); } /* Staging */
+.tracking-item-header[data-tracking-index="18"] { background-color: var(--tracking-18-color); } /* Green Sticker */
 
 /* Week Section */
 .week-section {
@@ -954,6 +961,12 @@ html {
   font-weight: 700;
   letter-spacing: 0.02em;
   line-height: 1.4;
+}
+
+/* Green Sticker complete → flag the project# badge green */
+.project-number-badge.green-sticker-complete {
+  background-color: #66BB6A;
+  color: #fff;
 }
 
 /* Fixed-width slot for the project# badge so the project title starts at the

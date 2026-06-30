@@ -32,6 +32,7 @@ import {
   TRACKING_ITEMS,
   PROJECT_SOURCE,
   VALIDATION,
+  STATUS,
   STATUS_DISPLAY
 } from '../../config/releasability-config.js';
 import { renderReleasabilityGrid, getUniqueDepartments, setProjectActions } from './releasability-grid.js';
@@ -1201,6 +1202,16 @@ async function handleStatusCellClick(cell) {
   if (updatedProject) {
     // Update cell visual immediately (optimistic update)
     updateCellVisual(cell, nextStatus);
+
+    // The Green Sticker drives the project# flag color — update it live so the
+    // flag turns green (or reverts) without waiting for a full re-render.
+    if (trackingItem === 'Green Sticker') {
+      const nameCell = document.querySelector(`.project-name-cell[data-project-id="${projectId}"]`);
+      const badge = nameCell && nameCell.querySelector('.project-number-badge');
+      if (badge) {
+        badge.classList.toggle('green-sticker-complete', nextStatus === STATUS.COMPLETE);
+      }
+    }
 
     // Save to Supabase
     try {

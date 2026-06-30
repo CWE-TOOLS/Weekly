@@ -86,7 +86,8 @@ export const TRACKING_ITEMS = [
   '3D Drawings/Parts List',
   'Toolpath Program',
   'Jig List',
-  'Staging'
+  'Staging',
+  'Green Sticker'
 ];
 
 /**

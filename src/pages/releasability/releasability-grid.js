@@ -90,7 +90,8 @@ export function renderReleasabilityGrid(projects, manualWeeks = []) {
 const COLUMN_GROUPS = [
   { label: 'Classroom', startIndex: 0, endIndex: 2, className: 'group-classroom' },
   { label: 'Project Manager', startIndex: 3, endIndex: 8, className: 'group-pm' },
-  { label: 'Engineering', startIndex: 9, endIndex: 17, className: 'group-engineering' }
+  { label: 'Engineering', startIndex: 9, endIndex: 17, className: 'group-engineering' },
+  { label: 'Release', startIndex: 18, endIndex: 18, className: 'group-release' }
 ];
 
 /**
@@ -389,6 +390,10 @@ function createProjectNameCell(project) {
   if (project.projectNumber) {
     const numBadge = document.createElement('span');
     numBadge.className = 'project-number-badge';
+    // Turn the project# flag green once the project's Green Sticker is complete.
+    if (project.trackingStatus && project.trackingStatus['Green Sticker'] === STATUS.COMPLETE) {
+      numBadge.classList.add('green-sticker-complete');
+    }
     numBadge.textContent = project.projectNumber;
     numBadge.title = `Project #${project.projectNumber}`;
     badges.appendChild(numBadge);
