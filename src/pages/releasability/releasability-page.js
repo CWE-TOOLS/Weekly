@@ -7,7 +7,7 @@
  * @module pages/releasability/releasability-page
  */
 
-import { on, EVENTS } from '../../core/event-bus.js';
+import { on } from '../../core/event-bus.js';
 import {
   RELEASABILITY_EVENTS,
   getAllProjects,
@@ -302,10 +302,10 @@ function setupEventListeners() {
     }
   });
 
-  // Tab visibility change - refresh data when tab becomes visible
-  on(EVENTS.PAGE_VISIBLE, () => {
-    handleSilentRefresh();
-  });
+  // Tab-return refresh is handled by startVisiblePolling() in auto-refresh.js,
+  // whose own visibilitychange listener re-runs handleSilentRefresh the instant
+  // the tab becomes visible. (This page never initializes global-listeners, so
+  // PAGE_VISIBLE was never emitted here and the old hook below was dead.)
 
   // Hide completed toggle
   const hideCompletedToggle = document.getElementById('hide-completed-toggle');

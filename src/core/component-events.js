@@ -70,11 +70,8 @@ export function setupComponentEvents() {
     });
     on('actual-hours-updated', (data) => patchActualHoursDom(data?.taskId));
 
-    // Tab visibility change - silent refresh when tab becomes visible (parity
-    // with the releasability board, which already refreshes on tab-return).
-    on(EVENTS.PAGE_VISIBLE, () => {
-        if (window.dataService && window.dataService.fetchAllTasks) {
-            window.dataService.fetchAllTasks(false);
-        }
-    });
+    // Tab-return refresh is handled by startVisiblePolling() in auto-refresh.js
+    // (its visibilitychange listener re-runs fetchAllTasks the moment the tab
+    // becomes visible). Subscribing to PAGE_VISIBLE here too would double-fetch
+    // on every return, so it's intentionally not wired.
 }

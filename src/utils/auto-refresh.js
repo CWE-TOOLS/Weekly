@@ -30,6 +30,8 @@ let lastUpdated = null;       // epoch ms of last successful load
 let labelEl = null;           // the chip element, if attached
 let labelTimer = null;        // interval that re-renders the relative label
 let pollTimer = null;         // the visible-tab poll interval
+let visibilityHandler = null; // visibilitychange listener for tab-return catch-up
+let lastVisibilityRefresh = 0;// epoch ms of last tab-return refresh (flicker dedup)
 
 /**
  * Record that data just loaded successfully. Resets the freshness chip.
@@ -85,19 +87,53 @@ function renderLabel() {
  */
 export function startVisiblePolling(refreshFn, intervalMs = DEFAULT_POLL_INTERVAL_MS) {
   if (typeof refreshFn !== 'function') return;
+
+  // Visible-tab poll: re-run on an interval, but never while hidden — a
+  // backgrounded tab should cost nothing, and the tab-return listener below
+  // handles catch-up the instant the user comes back.
   if (pollTimer) clearInterval(pollTimer);
   pollTimer = setInterval(() => {
-    // Skip while hidden — a tab-return refresh handles catch-up, and a
-    // backgrounded tab should not poll.
     if (document.hidden) return;
-    try {
-      Promise.resolve(refreshFn()).catch(() => { /* swallow — silent refresh */ });
-    } catch (_) { /* ignore */ }
+    safeRun(refreshFn);
   }, intervalMs);
+
+  // Tab-return catch-up. Browsers throttle (and eventually freeze) timers in
+  // background tabs, so the poll above pauses while hidden and the data — plus
+  // the freshness chip — drifts stale (e.g. "Updated 55m ago"). The moment the
+  // tab becomes visible again, refresh immediately and resync the chip. This is
+  // self-contained here so it works on EVERY page that polls, with no reliance
+  // on the global-listeners / event-bus chain being initialized (the
+  // releasability board never initializes it, so its old PAGE_VISIBLE hook was
+  // dead).
+  if (visibilityHandler) document.removeEventListener('visibilitychange', visibilityHandler);
+  visibilityHandler = () => {
+    if (document.hidden) return;
+    // The chip's own re-render timer was frozen while hidden, so the displayed
+    // age can be far behind reality — correct it the instant we're back.
+    renderLabel();
+    // Collapse the rapid hidden→visible→hidden flicker some window managers emit
+    // so a single return triggers at most one refresh.
+    const now = Date.now();
+    if (now - lastVisibilityRefresh < 3000) return;
+    lastVisibilityRefresh = now;
+    safeRun(refreshFn);
+  };
+  document.addEventListener('visibilitychange', visibilityHandler);
 }
 
-/** Stop the poller and the label timer (e.g. on teardown). */
+/** Run a refresh fn defensively — never let a rejection or throw escape. */
+function safeRun(refreshFn) {
+  try {
+    Promise.resolve(refreshFn()).catch(() => { /* swallow — silent refresh */ });
+  } catch (_) { /* ignore */ }
+}
+
+/** Stop the poller, the label timer, and the tab-return listener (teardown). */
 export function stopAutoRefresh() {
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
   if (labelTimer) { clearInterval(labelTimer); labelTimer = null; }
+  if (visibilityHandler) {
+    document.removeEventListener('visibilitychange', visibilityHandler);
+    visibilityHandler = null;
+  }
 }
