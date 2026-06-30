@@ -55,6 +55,7 @@ import {
   removeCacheSubscription
 } from '../../services/sheets-cache-service.js';
 import { registerRefreshHandler } from '../../services/supabase-service.js';
+import { initFreshnessLabel, markDataUpdated, startVisiblePolling } from '../../utils/auto-refresh.js';
 import { debug } from '../../utils/debug.js';
 
 // ============================================================================
@@ -120,6 +121,13 @@ async function init() {
 
     // Initial render
     renderGrid();
+    markDataUpdated();
+
+    // Attach the freshness chip and start polling while the tab is visible.
+    // setupCacheSubscription(...) was wired above; handleSilentRefresh is
+    // silent/no-spinner and guards against running during a manual refresh.
+    initFreshnessLabel(document.getElementById('data-freshness'));
+    startVisiblePolling(() => handleSilentRefresh());
 
   } catch (error) {
     console.error('❌ Error initializing releasability board:', error);
@@ -189,6 +197,7 @@ async function handleCacheUpdate(payload) {
 
     // Re-render grid with fresh data
     renderGrid();
+    markDataUpdated();
 
     debug.log('✅ Data refreshed from cache update');
 
@@ -220,6 +229,7 @@ async function handleSilentRefresh(payload) {
 
     // Re-render grid with fresh data
     renderGrid();
+    markDataUpdated();
 
     debug.log('✅ Data synced from refresh signal');
 
@@ -487,6 +497,7 @@ function handleRefresh() {
   loadInitialData(true)
     .then(() => {
       renderGrid();
+      markDataUpdated();
       showNotification('Data refreshed successfully!');
     })
     .catch(error => {

@@ -20,6 +20,23 @@ let initializationPromise = null; // Guard against concurrent initialization
 let customRefreshHandler = null; // Custom refresh handler for different pages
 const tasksTable = SUPABASE.TASKS_TABLE;
 
+// Realtime reconnect state — the refresh-signal websocket can silently die
+// after sleep/network drops; reconnect with exponential backoff so cross-client
+// updates keep flowing without a manual page reload.
+let refreshReconnectAttempts = 0;
+let refreshReconnectTimer = null;
+
+function scheduleRefreshReconnect() {
+    if (refreshReconnectTimer) return; // one pending reconnect at a time
+    refreshReconnectAttempts += 1;
+    const delay = Math.min(30000, 1000 * Math.pow(2, refreshReconnectAttempts - 1)); // 1s,2s,4s… cap 30s
+    logger.warn(`Reconnecting refresh subscription in ${delay}ms (attempt ${refreshReconnectAttempts})`);
+    refreshReconnectTimer = setTimeout(() => {
+        refreshReconnectTimer = null;
+        setupRefreshSubscription();
+    }, delay);
+}
+
 /**
  * Initialize Supabase for task management and refresh signaling
  *
@@ -101,6 +118,10 @@ export function getSupabaseClient() {
  * Set up subscription to refresh signals
  */
 function setupRefreshSubscription() {
+    // Tear down any prior (likely dead) channel before re-subscribing.
+    if (refreshChannel) {
+        try { refreshChannel.unsubscribe(); } catch (_) { /* ignore */ }
+    }
     // Create a channel for refresh signals
     refreshChannel = supabaseClient
         .channel(REFRESH_CONFIG.CHANNEL_NAME)
@@ -111,10 +132,12 @@ function setupRefreshSubscription() {
         .subscribe((status) => {
             if (status === 'SUBSCRIBED') {
                 logger.debug('✅ Subscribed to refresh signals');
-            } else if (status === 'CLOSED') {
-                logger.warn('⚠️ Refresh subscription closed');
-            } else if (status === 'CHANNEL_ERROR') {
-                logger.error('❌ Refresh subscription error');
+                // Healthy again — reset backoff and cancel any pending reconnect.
+                refreshReconnectAttempts = 0;
+                if (refreshReconnectTimer) { clearTimeout(refreshReconnectTimer); refreshReconnectTimer = null; }
+            } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                logger.warn(`⚠️ Refresh subscription ${status} — scheduling reconnect`);
+                scheduleRefreshReconnect();
             }
         });
 }

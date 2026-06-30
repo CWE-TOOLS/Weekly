@@ -17,6 +17,7 @@ import { isEditingActive, queueRefresh } from './refresh-queue.js';
 import { logger } from '../utils/logger.js';
 import { getAllTasks } from './state.js';
 import { buildTaskDetailsHTML } from '../components/task-card.js';
+import { markDataUpdated } from '../utils/auto-refresh.js';
 
 /**
  * Render or queue a refresh depending on editing state
@@ -59,6 +60,21 @@ function patchActualHoursDom(taskId) {
  */
 export function setupComponentEvents() {
     on(EVENTS.TASKS_FILTERED, () => renderOrQueue('TASKS_FILTERED'));
-    on(EVENTS.TASKS_LOADED, () => renderOrQueue('TASKS_LOADED'));
+    on(EVENTS.TASKS_LOADED, () => {
+        // Single reliable hook for the freshness chip: TASKS_LOADED fires for
+        // every successful data load (initial, manual refresh, silent refresh,
+        // visible-tab poll, and remote-sync refresh) since they all flow through
+        // fetchAllTasks -> setAllTasks.
+        markDataUpdated();
+        renderOrQueue('TASKS_LOADED');
+    });
     on('actual-hours-updated', (data) => patchActualHoursDom(data?.taskId));
+
+    // Tab visibility change - silent refresh when tab becomes visible (parity
+    // with the releasability board, which already refreshes on tab-return).
+    on(EVENTS.PAGE_VISIBLE, () => {
+        if (window.dataService && window.dataService.fetchAllTasks) {
+            window.dataService.fetchAllTasks(false);
+        }
+    });
 }

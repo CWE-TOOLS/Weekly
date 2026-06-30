@@ -1560,3 +1560,26 @@ html {
     margin: 0.5in;
   }
 }
+
+/* Data freshness indicator (auto-refresh) */
+.data-freshness {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary, #555);
+  white-space: nowrap;
+  user-select: none;
+}
+.data-freshness::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: currentColor;
+  flex-shrink: 0;
+}
+.data-freshness.fresh { color: #2e7d32; }
+.data-freshness.aging { color: #b26a00; }
+.data-freshness.stale { color: #c62828; }

@@ -28,6 +28,26 @@ const CACHE_CONFIG = {
 let cacheSubscription = null;
 let clientId = generateClientId();
 
+// Realtime reconnect state — the websocket can silently die after the
+// laptop sleeps or the network blips; reconnect with exponential backoff so
+// the board keeps receiving cache updates without a manual page reload.
+let cacheOnUpdate = null;          // remembered callback so reconnect can re-wire it
+let cacheReconnectAttempts = 0;
+let cacheReconnectTimer = null;
+
+function scheduleCacheReconnect() {
+    // Don't reconnect if we've been intentionally torn down.
+    if (!cacheOnUpdate) return;
+    if (cacheReconnectTimer) return; // one pending reconnect at a time
+    cacheReconnectAttempts += 1;
+    const delay = Math.min(30000, 1000 * Math.pow(2, cacheReconnectAttempts - 1)); // 1s,2s,4s… cap 30s
+    logger.warn(`[Cache] Reconnecting cache subscription in ${delay}ms (attempt ${cacheReconnectAttempts})`);
+    cacheReconnectTimer = setTimeout(() => {
+        cacheReconnectTimer = null;
+        setupCacheSubscription(cacheOnUpdate);
+    }, delay);
+}
+
 /**
  * Generate unique client identifier for debugging
  * @returns {string} Unique client ID
@@ -461,6 +481,9 @@ export async function setupCacheSubscription(onUpdate) {
             return;
         }
 
+        // Remember the callback so an automatic reconnect can re-wire it.
+        cacheOnUpdate = onUpdate;
+
         // Remove existing subscription if any
         if (cacheSubscription) {
             cacheSubscription.unsubscribe();
@@ -482,10 +505,12 @@ export async function setupCacheSubscription(onUpdate) {
             .subscribe((status) => {
                 if (status === 'SUBSCRIBED') {
                     logger.info('[Cache] Subscribed to real-time cache updates');
-                } else if (status === 'CLOSED') {
-                    logger.debug('[Cache] Cache subscription closed');
-                } else if (status === 'CHANNEL_ERROR') {
-                    logger.error('[Cache] Cache subscription error');
+                    // Healthy again — reset backoff and cancel any pending reconnect.
+                    cacheReconnectAttempts = 0;
+                    if (cacheReconnectTimer) { clearTimeout(cacheReconnectTimer); cacheReconnectTimer = null; }
+                } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                    logger.warn(`[Cache] Cache subscription ${status} — scheduling reconnect`);
+                    scheduleCacheReconnect();
                 }
             });
     } catch (error) {
@@ -497,6 +522,9 @@ export async function setupCacheSubscription(onUpdate) {
  * Remove cache subscription
  */
 export function removeCacheSubscription() {
+    // Intentional teardown — stop reconnect attempts.
+    cacheOnUpdate = null;
+    if (cacheReconnectTimer) { clearTimeout(cacheReconnectTimer); cacheReconnectTimer = null; }
     if (cacheSubscription) {
         cacheSubscription.unsubscribe();
         cacheSubscription = null;

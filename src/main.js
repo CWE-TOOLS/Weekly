@@ -9,6 +9,7 @@
 import { initializeApp, setupBackwardCompatibility, getAppStatus } from './core/app-controller.js';
 import { initializeErrorHandler } from './core/error-handler.js';
 import { logger } from './utils/logger.js';
+import { initFreshnessLabel, startVisiblePolling } from './utils/auto-refresh.js';
 logger.debug('📋 Weekly Schedule Viewer - Phase 8');
 logger.debug('⚡ ES6 Modules: Loading...');
 
@@ -21,6 +22,11 @@ setupBackwardCompatibility();
 // Start the application
 initializeApp()
     .then(() => {
+        // Auto-refresh + data-freshness: attach the chip and start the
+        // visible-tab poller now that initial data has loaded. markDataUpdated()
+        // itself is invoked from the TASKS_LOADED handler (component-events.js).
+        initFreshnessLabel(document.getElementById('data-freshness'));
+        startVisiblePolling(() => { if (window.dataService && window.dataService.fetchAllTasks) window.dataService.fetchAllTasks(false); });
     })
     .catch(error => {
     logger.error('💥 Failed to initialize application:', error);
