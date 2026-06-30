@@ -6,12 +6,13 @@
 
 import { logger } from '../../utils/logger.js';
 import { emit } from '../../core/event-bus.js';
-import { saveActualHours as persistActualHours } from '../../services/actual-hours-service.js';
+import { saveActualHours as persistActualHours, taskHoursKey } from '../../services/actual-hours-service.js';
 
-// In-memory render cache (Map: taskId -> hours). Repopulated on app startup
-// from Supabase via seedActualHoursStorage(). task.id is positional and not
-// stable across sheet edits, so we never persist by it — only use it here
-// for fast lookup during render.
+// In-memory render cache (Map: stableCompositeKey -> hours). Repopulated on app
+// startup from Supabase via seedActualHoursStorage(). Keyed by the STABLE
+// composite (taskHoursKey), NOT the positional task.id: task.id is reassigned
+// on every sheet re-parse, so caching by it makes a saved value slide onto a
+// different card after a refresh.
 const actualHoursStorage = new Map();
 
 // Current state
@@ -20,23 +21,26 @@ let currentValue = '0';
 
 /**
  * Get actual hours for a task
- * @param {string} taskId - Task identifier
+ * @param {Object} task - Weekly-schedule task object
  * @returns {number|null} Actual hours or null if not set
  */
-export function getActualHours(taskId) {
-    return actualHoursStorage.get(taskId) || null;
+export function getActualHours(task) {
+    if (!task) return null;
+    return actualHoursStorage.get(taskHoursKey(task)) || null;
 }
 
 /**
  * Set actual hours for a task
- * @param {string} taskId - Task identifier
+ * @param {Object} task - Weekly-schedule task object
  * @param {number} hours - Actual hours worked
  */
-export function setActualHours(taskId, hours) {
+export function setActualHours(task, hours) {
+    if (!task) return;
+    const key = taskHoursKey(task);
     if (hours === null || hours === undefined) {
-        actualHoursStorage.delete(taskId);
+        actualHoursStorage.delete(key);
     } else {
-        actualHoursStorage.set(taskId, hours);
+        actualHoursStorage.set(key, hours);
     }
 }
 
@@ -146,7 +150,7 @@ async function handleConfirm() {
         return;
     }
 
-    setActualHours(taskAtConfirm.id, hours);
+    setActualHours(taskAtConfirm, hours);
     logger.info(`Set actual hours for task ${taskAtConfirm.id}: ${hours}`);
 
     emit('actual-hours-updated', {
@@ -180,7 +184,7 @@ export function showActualHoursModal(task) {
     currentTask = task;
 
     // Load existing value or default to 0
-    const existingHours = getActualHours(task.id);
+    const existingHours = getActualHours(task);
     currentValue = existingHours !== null ? existingHours.toString() : '0';
 
     // Update task name in header

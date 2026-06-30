@@ -20,7 +20,7 @@ export function buildTaskDetailsHTML(task) {
     if (task.missingDate) {
         html += '<strong>Date:</strong> Missing<br>';
     }
-    const actualHours = getActualHours(task.id);
+    const actualHours = getActualHours(task);
     if (actualHours !== null) {
         html += `<strong>Hours:</strong> ${task.hours} | <strong class="actual-hours">Actual:</strong> <span class="actual-hours-value">${actualHours}</span>`;
     } else {

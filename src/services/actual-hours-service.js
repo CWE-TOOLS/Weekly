@@ -64,6 +64,18 @@ function keyString(k) {
     return [k.task_date, k.project_number, k.casting_number, k.department, k.day_number].join('|');
 }
 
+/**
+ * Stable composite-key string for a task — the canonical identity of an
+ * actual-hours entry. The in-memory render cache keys on THIS, never on the
+ * positional `task.id` (which is reassigned on every sheet re-parse, so caching
+ * by it makes a saved value slide onto a different card after a refresh).
+ * @param {Object} task — weekly-schedule task object
+ * @returns {string}
+ */
+export function taskHoursKey(task) {
+    return keyString(buildTaskKey(task));
+}
+
 /** Composite key derived from a DB row (snake_case fields). */
 function rowKey(row) {
     return keyString({
@@ -212,9 +224,10 @@ export async function loadActualHoursForProject(projectNumber) {
 }
 
 /**
- * Build a Map<task.id, actualHours:number> by matching DB rows against
- * a list of tasks via composite key. Tasks without a saved row are absent
- * from the map.
+ * Build a Map<compositeKey, actualHours:number> by matching DB rows against
+ * a list of tasks via composite key. Keyed by the STABLE composite (see
+ * taskHoursKey), never by positional task.id, so the seeded cache survives a
+ * sheet re-parse that reshuffles ids. Tasks without a saved row are absent.
  * @param {Array<Object>} tasks
  * @param {Array<Object>} rows
  * @returns {Map<string, number>}
@@ -228,9 +241,10 @@ export function buildTaskHoursMap(tasks, rows) {
         rowsByKey.set(rowKey(row), Number(row.actual_hours));
     }
     for (const task of tasks) {
-        const hours = rowsByKey.get(keyString(buildTaskKey(task)));
+        const compositeKey = keyString(buildTaskKey(task));
+        const hours = rowsByKey.get(compositeKey);
         if (hours != null && Number.isFinite(hours)) {
-            out.set(task.id, hours);
+            out.set(compositeKey, hours);
         }
     }
     return out;
