@@ -5768,6 +5768,12 @@ function wireEvents() {
         openNewProjectModal();
     });
 
+    // List: print projects grouped into one column per PM (excludes shipped)
+    document.getElementById('pp-print-list-btn').addEventListener('click', (e) => {
+        e.preventDefault();
+        handlePrintList();
+    });
+
     // New Project modal: close handlers
     document.getElementById('pp-new-modal-close').addEventListener('click', closeNewProjectModal);
     document.getElementById('pp-new-modal-cancel').addEventListener('click', closeNewProjectModal);
@@ -9335,6 +9341,144 @@ function handlePrintCoverPage() {
             win.print();
         } catch (err) {
             logger.error('[project-portal] print cover failed:', err);
+            showToast('Print failed', 'error');
+            cleanup();
+        }
+        setTimeout(cleanup, 60000);
+    }, { once: true });
+
+    const doc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (!doc) {
+        showToast('Print failed — could not open frame', 'error');
+        iframe.remove();
+        return;
+    }
+    doc.open();
+    doc.write(html);
+    doc.close();
+}
+
+// ---------- Print PM List (project list view) ----------
+// Prints active projects — excluding shipped and closed-out jobs, and projects
+// with no PM assigned — arranged into one column per project manager on an
+// 11x17 portrait sheet. Uses the same hidden-iframe pattern as the cover-page
+// print so the on-screen page is untouched.
+const LIST_PRINT_EXCLUDED_STATUSES = new Set(['shipped', 'closed out']);
+
+const LIST_PRINT_CSS = `
+@page { size: 11in 17in; margin: 0.5in; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', Arial, sans-serif; color: #000; font-size: 15pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; line-height: 1.35; }
+.pl-header { margin-bottom: 16pt; border-bottom: 2pt solid #1d4ed8; padding-bottom: 6pt; }
+.pl-header h1 { font-size: 24pt; font-weight: 700; color: #1d4ed8; }
+.pl-meta { font-size: 11pt; color: #555; margin-top: 3pt; }
+.pl-grid { display: grid; gap: 0.35in; align-items: start; }
+.pl-col { break-inside: avoid; }
+.pl-col-head { font-size: 17pt; font-weight: 700; color: #fff; background: #1d4ed8; padding: 6pt 10pt; border-radius: 4pt; margin-bottom: 8pt; }
+.pl-count { font-weight: 500; font-size: 13pt; opacity: 0.85; }
+.pl-list { list-style: none; }
+.pl-proj { padding: 6pt 1pt; border-bottom: 0.5pt solid #e2e8f0; break-inside: avoid; font-size: 19pt; font-weight: 600; }
+`;
+
+function buildListPrintHtml(rows) {
+    // Group by PM (rows are pre-filtered to those with a PM assigned).
+    const groups = new Map();
+    rows.forEach(r => {
+        const pm = (r.pm || '').trim();
+        if (!groups.has(pm)) groups.set(pm, []);
+        groups.get(pm).push(r);
+    });
+
+    // PM columns alphabetical.
+    const pmNames = Array.from(groups.keys()).sort((a, b) =>
+        a.localeCompare(b, undefined, { sensitivity: 'base' }));
+
+    // Within a column, order by portal creation order (earliest first). ISO
+    // created_at strings sort chronologically as plain strings. Rows missing a
+    // created_at sort to the end, tie-broken by project number.
+    pmNames.forEach(pm => {
+        groups.get(pm).sort((a, b) => {
+            const at = a.created_at || '';
+            const bt = b.created_at || '';
+            if (at && bt) {
+                if (at < bt) return -1;
+                if (at > bt) return 1;
+            } else if (at !== bt) {
+                return at ? -1 : 1;
+            }
+            return (a.project_number || '').localeCompare(
+                b.project_number || '', undefined, { numeric: true, sensitivity: 'base' });
+        });
+    });
+
+    const columnsHtml = pmNames.map(pm => {
+        const list = groups.get(pm);
+        const items = list.map(r => `
+                <li class="pl-proj">${escapeHtml(r.project_name || '')}</li>`).join('');
+        return `
+            <div class="pl-col">
+                <div class="pl-col-head">${escapeHtml(pm)} <span class="pl-count">(${list.length})</span></div>
+                <ul class="pl-list">${items}</ul>
+            </div>`;
+    }).join('');
+
+    const printedOn = new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Projects by PM</title>
+<style>${LIST_PRINT_CSS}</style>
+</head>
+<body>
+    <div class="pl-header">
+        <h1>Active Projects by PM</h1>
+        <div class="pl-meta">Excludes shipped &amp; closed out &middot; ${rows.length} project(s) &middot; ${escapeHtml(printedOn)}</div>
+    </div>
+    <div class="pl-grid" style="grid-template-columns: repeat(${pmNames.length}, 1fr);">
+        ${columnsHtml}
+    </div>
+</body>
+</html>`;
+}
+
+function handlePrintList() {
+    const rows = allProjectRows.filter(r =>
+        (r.pm || '').trim() &&
+        !LIST_PRINT_EXCLUDED_STATUSES.has((r.status || '').toLowerCase()));
+
+    if (rows.length === 0) {
+        showToast('No projects to print', 'error');
+        return;
+    }
+
+    const html = buildListPrintHtml(rows);
+
+    const prior = document.getElementById('pp-list-print-frame');
+    if (prior) prior.remove();
+
+    const iframe = document.createElement('iframe');
+    iframe.id = 'pp-list-print-frame';
+    iframe.setAttribute('aria-hidden', 'true');
+    iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;';
+    document.body.appendChild(iframe);
+
+    let cleaned = false;
+    const cleanup = () => {
+        if (cleaned) return;
+        cleaned = true;
+        setTimeout(() => { iframe.remove(); }, 500);
+    };
+
+    iframe.addEventListener('load', () => {
+        try {
+            const win = iframe.contentWindow;
+            win.addEventListener('afterprint', cleanup);
+            win.focus();
+            win.print();
+        } catch (err) {
+            logger.error('[project-portal] print list failed:', err);
             showToast('Print failed', 'error');
             cleanup();
         }
