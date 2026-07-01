@@ -122,8 +122,8 @@ import {
     deleteClassroomTask,
     setClassroomTasksOrder
 } from '../../services/classroom-tasks-service.js';
-import { renderCastingLayout } from './casting-layout.js?v=20260521-01';
-import { attachLayoutDrag } from './casting-layout-drag.js?v=20260521-01';
+import { renderCastingLayout } from './casting-layout.js?v=20260701-01';
+import { attachLayoutDrag } from './casting-layout-drag.js?v=20260701-01';
 import {
     loadLayoutPositions,
     snapshotLayout,

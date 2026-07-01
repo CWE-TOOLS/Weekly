@@ -19,7 +19,7 @@
  * @module pages/project-portal/casting-layout-drag
  */
 
-import { rectsOverlap, isRectInsideTables } from './casting-layout.js?v=20260521-01';
+import { rectsOverlap, isRectInsideTables } from './casting-layout.js?v=20260701-01';
 
 /** Pixels the pointer must travel before a press counts as a drag. */
 const DRAG_THRESHOLD = 3;
@@ -223,6 +223,19 @@ function attachMoldHandlers(ctx, g, rec) {
     // until the caller re-renders.
     rec.sx = finalRect.sx;
     rec.sy = finalRect.sy;
+
+    // A mold dragged out of the overflow strip onto a table becomes a placed
+    // mold: move it into the on-table set (so it's saved, counts for future
+    // overlap checks, and is snapshotted with the rest) and drop its overflow
+    // styling. The molds left in the strip stay staged.
+    if (rec.staged) {
+      rec.staged = false;
+      const i = ctx.staged.indexOf(rec);
+      if (i >= 0) ctx.staged.splice(i, 1);
+      ctx.placed.push(rec);
+      g.classList.remove('clay-mold-overflow');
+    }
+
     commit(ctx, rec);
   }
 
@@ -259,15 +272,20 @@ function attachMoldHandlers(ctx, g, rec) {
 export function attachLayoutDrag(handle, opts) {
   if (!handle || !handle.svg || !Array.isArray(handle.placed)) return;
 
+  const staged = Array.isArray(handle.staged) ? handle.staged : [];
   const recById = new Map();
   for (const rec of handle.placed) {
+    if (rec.componentId) recById.set(rec.componentId, rec);
+  }
+  for (const rec of staged) {
     if (rec.componentId) recById.set(rec.componentId, rec);
   }
 
   const transform = handle.transform || {};
   const ctx = {
     svg: handle.svg,
-    placed: handle.placed,
+    placed: handle.placed,   // on-table molds: the overlap set and the auto-mode snapshot
+    staged,                  // overflow molds waiting to be dragged onto a table
     tableDefs: handle.tableDefs,
     scale: transform.scale || 1,
     offsetX: transform.offsetX || 0,

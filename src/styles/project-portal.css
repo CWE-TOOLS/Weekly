@@ -5595,6 +5595,16 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
     stroke-width: 1.6;
     stroke-dasharray: 4 2;
 }
+/* Overflow molds sit in the staging strip below the tables until dragged on. */
+.clay-mold-overflow > rect {
+    stroke: #dc2626;
+    stroke-width: 0.9;
+    stroke-dasharray: 3 2;
+}
+.clay-mold-overflow:hover > rect {
+    stroke: #2563eb;
+    stroke-dasharray: none;
+}
 .clay-mold-invalid > rect {
     animation: clay-mold-flash 0.45s ease-in-out;
 }

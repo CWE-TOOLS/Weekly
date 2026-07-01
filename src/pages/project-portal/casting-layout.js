@@ -387,43 +387,82 @@ function layoutAuto(molds, tableDefs, gapBetween, bottomJustify = false) {
       });
     }
   }
-  return { placed, unplaced };
+  // Molds the packer couldn't fit become "staged" records — no on-table
+  // position yet; the render lays them into the overflow strip and they can be
+  // dragged straight onto a table.
+  const staged = unplaced.map(mold => makeStagedRec(mold));
+  return { placed, staged };
 }
 
 /**
  * Manual layout — place each mold at its saved position. A mold with no saved
- * position (a component added after the layout was customized) is cascaded at
- * the first table's corner so it stays visible and draggable.
+ * position (a component added after the layout was customized, or one that was
+ * left in overflow) is staged into the overflow strip so it stays visible and
+ * can be dragged onto a table.
  */
 function layoutManual(molds, posForArea, tableDefs) {
   const byComponent = new Map();
   for (const p of posForArea) byComponent.set(p.component_id, p);
 
-  const origin = tableDefs[0] ? getTableScreenRect(tableDefs[0]) : { x: 0, y: 0 };
   const placed = [];
-  let cascade = 0;
+  const staged = [];
 
   for (const mold of molds) {
     const pos = byComponent.get(mold.componentId);
-    let sx, sy, rotation;
     if (pos) {
-      sx = Number(pos.pos_x) || 0;
-      sy = Number(pos.pos_y) || 0;
-      rotation = Number(pos.rotation) === 90 ? 90 : 0;
+      const rotation = Number(pos.rotation) === 90 ? 90 : 0;
+      const { sw, sh } = moldScreenSize(mold, rotation);
+      placed.push({
+        componentId: mold.componentId,
+        mold,
+        sx: Number(pos.pos_x) || 0,
+        sy: Number(pos.pos_y) || 0,
+        sw, sh, rotation,
+      });
     } else {
-      sx = origin.x + cascade * 6;
-      sy = origin.y + cascade * 6;
-      rotation = 0;
-      cascade++;
+      staged.push(makeStagedRec(mold));
     }
-    const { sw, sh } = moldScreenSize(mold, rotation);
-    placed.push({
-      componentId: mold.componentId,
-      mold, sx, sy, sw, sh, rotation,
-      isNew: !pos,
-    });
   }
-  return { placed, unplaced: [] };
+  return { placed, staged };
+}
+
+/** A mold that isn't on a table yet. Position is filled in by layoutStaging(). */
+function makeStagedRec(mold) {
+  return {
+    componentId: mold.componentId,
+    mold,
+    sx: 0, sy: 0, sw: mold.outerW, sh: mold.outerL,
+    rotation: 0,
+    staged: true,
+  };
+}
+
+/**
+ * Lay staged molds into an inch-space strip below the tables. Molds flow
+ * left-to-right and wrap to a new row when they run past `maxWidth`, so they
+ * share the tables' coordinate space (and thus the drag math) at 1:1 scale.
+ * @returns {number} the largest y reached, so the caller can size the diagram.
+ */
+function layoutStaging(staged, maxWidth, startY, gapBetween = 0) {
+  const pad = Math.max(gapBetween, 6);
+  let x = 0, y = startY, rowH = 0;
+  for (const rec of staged) {
+    const w = rec.mold.outerW;
+    const h = rec.mold.outerL;
+    if (x > 0 && x + w > maxWidth) { // wrap to the next row
+      x = 0;
+      y += rowH + pad;
+      rowH = 0;
+    }
+    rec.sx = x;
+    rec.sy = y;
+    rec.sw = w;
+    rec.sh = h;
+    rec.rotation = 0;
+    x += w + pad;
+    rowH = Math.max(rowH, h);
+  }
+  return y + rowH;
 }
 
 // ============================================================================
@@ -441,7 +480,7 @@ function layoutManual(molds, posForArea, tableDefs) {
  */
 function buildMoldGroup(NS, rec, tx, ty, ts, fontSize, offsetPerSide) {
   const g = document.createElementNS(NS, 'g');
-  g.setAttribute('class', rec.isNew ? 'clay-mold clay-mold-new' : 'clay-mold');
+  g.setAttribute('class', rec.staged ? 'clay-mold clay-mold-overflow' : 'clay-mold');
   if (rec.componentId) g.setAttribute('data-component-id', rec.componentId);
   const mx = tx(rec.sx), my = ty(rec.sy), mw = ts(rec.sw), mh = ts(rec.sh);
   g.appendChild(svgRect(NS, mx, my, mw, mh, rec.mold.color, '#333', 0.4));
@@ -499,7 +538,7 @@ export function renderCastingLayout({ container, errorEl, components, title, are
   // Manual mode whenever saved positions exist for this area; otherwise auto-pack.
   const posForArea = (positions || []).filter(p => (p.area === 'A' ? 'A' : 'B') === area);
   const mode = posForArea.length > 0 ? 'manual' : 'auto';
-  const { placed, unplaced } = mode === 'manual'
+  const { placed, staged } = mode === 'manual'
     ? layoutManual(molds, posForArea, tableDefs)
     : layoutAuto(molds, tableDefs, gapBetween, area === 'A');
 
@@ -514,12 +553,22 @@ export function renderCastingLayout({ container, errorEl, components, title, are
     contentMaxY = Math.max(contentMaxY, r.y + r.h);
   }
 
+  // Lay any overflow molds into an inch-space strip below the tables, then grow
+  // the diagram bounds to include them so everything scales to fit the page.
+  const stagingLabelY = contentMaxY + 16;
+  const stagingStartY = contentMaxY + 34;
+  let overallMaxX = contentMaxX;
+  let overallMaxY = contentMaxY;
+  if (staged.length > 0) {
+    overallMaxY = layoutStaging(staged, contentMaxX, stagingStartY, gapBetween);
+    for (const rec of staged) overallMaxX = Math.max(overallMaxX, rec.sx + rec.sw);
+  }
+
   const availW = pageW - 40;
   const availH = pageH - headerH - 40;
-  const scale = Math.min(availW / contentMaxX, availH / contentMaxY);
-  const offsetX = (pageW - contentMaxX * scale) / 2;
-  const offsetY = headerH + (availH - contentMaxY * scale) / 2;
-  const overflowY = offsetY + contentMaxY * scale + 20;
+  const scale = Math.min(availW / overallMaxX, availH / overallMaxY);
+  const offsetX = (pageW - overallMaxX * scale) / 2;
+  const offsetY = headerH + (availH - overallMaxY * scale) / 2;
 
   const NS = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(NS, 'svg');
@@ -549,40 +598,18 @@ export function renderCastingLayout({ container, errorEl, components, title, are
     svg.appendChild(svgText(NS, tx(r.x) + ts(r.w) / 2, ty(r.y) + ts(r.h) + fontSize * 1.2, dimStr, fontSize * 0.7, '#888', 'normal'));
   }
 
-  // Draw molds — each as a <g class="clay-mold"> so the drag layer can grab it.
+  // Draw placed molds — each as a <g class="clay-mold"> so the drag layer can grab it.
   for (const rec of placed) {
     svg.appendChild(buildMoldGroup(NS, rec, tx, ty, ts, fontSize, offsetPerSide));
   }
 
-  // Draw unplaced (overflow) molds — auto mode only.
-  if (unplaced.length > 0) {
-    svg.appendChild(svgText(NS, pageW / 2, overflowY, 'OVERFLOW — Does not fit on tables', fontSize * 1.1, '#dc2626', 'bold'));
-
-    let totalOW = 0;
-    for (const mold of unplaced) totalOW += mold.outerW + 10;
-    const oScale = Math.min(scale, (pageW - 40) / totalOW);
-    let ux = 20;
-
-    for (const mold of unplaced) {
-      const drawW = mold.outerW * oScale;
-      const drawH = mold.outerL * oScale;
-      const oy = overflowY + fontSize;
-
-      const mr = svgRect(NS, ux, oy, drawW, drawH, mold.color, '#dc2626', 0.6);
-      mr.setAttribute('stroke-dasharray', '3,2');
-      svg.appendChild(mr);
-
-      // Inner concrete rectangle — same convention as the on-table molds.
-      const oInset = offsetPerSide * oScale;
-      if (oInset > 0 && drawW > oInset * 2 && drawH > oInset * 2) {
-        const innerR = svgRect(NS, ux + oInset, oy + oInset, drawW - oInset * 2, drawH - oInset * 2, 'none', '#dc2626', 0.3);
-        innerR.setAttribute('stroke-dasharray', '2 2');
-        svg.appendChild(innerR);
-      }
-
-      svg.appendChild(svgText(NS, ux + drawW / 2, oy + drawH / 2 - fontSize * 0.2, mold.label, fontSize * 0.75, '#dc2626', 'bold'));
-      svg.appendChild(svgText(NS, ux + drawW / 2, oy + drawH / 2 + fontSize * 0.5, `${frac(mold.concreteW)} x ${frac(mold.concreteL)}`, fontSize * 0.6, '#dc2626', 'normal'));
-      ux += drawW + 8;
+  // Draw the overflow staging strip: a label plus each unplaced mold as a
+  // draggable clay-mold in the same coordinate space as the tables. Drag one
+  // onto a table to place it.
+  if (staged.length > 0) {
+    svg.appendChild(svgText(NS, tx(overallMaxX / 2), ty(stagingLabelY), 'OVERFLOW — drag a form onto a table to place it', fontSize * 1.05, '#dc2626', 'bold'));
+    for (const rec of staged) {
+      svg.appendChild(buildMoldGroup(NS, rec, tx, ty, ts, fontSize, offsetPerSide));
     }
   }
 
@@ -590,21 +617,22 @@ export function renderCastingLayout({ container, errorEl, components, title, are
   const totalMolds = molds.length;
   const summaryStr = (mode === 'manual'
       ? `${totalMolds} molds — manual layout`
-      : `${totalMolds} molds — ${totalMolds - unplaced.length} on tables`
-        + (unplaced.length > 0 ? ` — ${unplaced.length} overflow` : ''))
+        + (staged.length > 0 ? ` — ${staged.length} not placed` : '')
+      : `${totalMolds} molds — ${totalMolds - staged.length} on tables`
+        + (staged.length > 0 ? ` — ${staged.length} overflow` : ''))
     + ` — +${frac(offsetPerSide)}/side mold offset`;
   svg.appendChild(svgText(NS, pageW / 2, 18, title || 'Casting Layout', fontSize * 1.5, '#222', 'bold'));
-  svg.appendChild(svgText(NS, pageW / 2, 38, summaryStr, fontSize, unplaced.length > 0 ? '#dc2626' : '#555', 'normal'));
+  svg.appendChild(svgText(NS, pageW / 2, 38, summaryStr, fontSize, staged.length > 0 ? '#dc2626' : '#555', 'normal'));
 
   container.appendChild(svg);
 
   // Status line
   if (errorEl) {
     const parts = [];
-    if (unplaced.length > 0) parts.push(`${unplaced.length} mold(s) do not fit on the casting tables.`);
+    if (staged.length > 0) parts.push(`${staged.length} mold(s) not on a table — drag them from the overflow strip onto a table.`);
     if (skipped.length > 0) parts.push(`${skipped.length} panel(s) skipped — missing or unreadable dimensions.`);
     errorEl.textContent = parts.join(' ');
   }
 
-  return { mode, area, svg, transform: { scale, offsetX, offsetY }, tableDefs, placed, unplaced };
+  return { mode, area, svg, transform: { scale, offsetX, offsetY }, tableDefs, placed, staged, unplaced: staged };
 }
