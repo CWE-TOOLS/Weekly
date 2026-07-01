@@ -241,7 +241,7 @@
 /* Pieces count — casting inventory total (qty + extras) for casting-linked
    tasks, rendered as a slimmer, lighter band flush beneath the day counter. */
 .task-pieces-count {
-  font-size: 0.7rem;
+  font-size: 0.85rem;
   font-weight: 600;
   text-align: center;
   padding: 0.15rem 0;
