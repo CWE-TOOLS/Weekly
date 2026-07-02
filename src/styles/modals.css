@@ -944,6 +944,12 @@
   color: #222 !important;
   text-align: center;
   line-height: 1.3;
+  /* Clamp long descriptions so a single task can't overrun the sheet */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  overflow: hidden;
 }
 
 .print-preview-viewport .print-task-details {
