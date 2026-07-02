@@ -115,19 +115,28 @@ async function init() {
     loadHideCompletedPreference();
     loadCollapsedWeeksPreference();
 
-    // TODO: Load data from services (will implement in later steps)
-    // For now, show empty state or test data
-    await loadInitialData();
+    // Initial load. A failure here must NOT alert (an unattended shop display
+    // would freeze behind the modal) and must NOT markDataUpdated — leaving
+    // the data age at "never loaded" makes the refresh engine below retry
+    // within its first tick, so a bad-network startup self-heals.
+    let initialLoadOk = true;
+    try {
+      await loadInitialData();
+    } catch (error) {
+      initialLoadOk = false;
+      console.error('❌ Initial releasability load failed (auto-refresh will retry):', error);
+    }
 
     // Initial render
     renderGrid();
-    markDataUpdated();
+    if (initialLoadOk) markDataUpdated();
 
-    // Attach the freshness chip and start polling while the tab is visible.
-    // setupCacheSubscription(...) was wired above; handleSilentRefresh is
-    // silent/no-spinner and guards against running during a manual refresh.
+    // Attach the freshness chip and start the refresh engine. The sync
+    // promise is RETURNED (and rejects on failure) so the engine can show
+    // "retrying" and try again; during a manual refresh it resolves as a
+    // no-op — the manual path stamps freshness itself.
     initFreshnessLabel(document.getElementById('data-freshness'));
-    startVisiblePolling(() => handleSilentRefresh());
+    startVisiblePolling(() => isManualRefreshing ? Promise.resolve() : syncData());
 
   } catch (error) {
     console.error('❌ Error initializing releasability board:', error);
@@ -138,38 +147,63 @@ async function init() {
 }
 
 /**
- * Load initial data from services
+ * Reject if `promise` hasn't settled within `ms`. The underlying fetches keep
+ * running — this just stops a hung request from wedging the refresh cycle
+ * (and the isManualRefreshing guard) indefinitely.
+ */
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(
+      () => reject(new Error(`${label} timed out after ${ms}ms`)), ms))
+  ]);
+}
+
+/**
+ * Load initial data from services. THROWS on failure or timeout — callers keep
+ * the last good render and let the auto-refresh engine retry. (This used to
+ * swallow errors, which made a failed reload look like a success: the stale —
+ * or wiped — data got re-rendered and stamped "Updated just now", and the
+ * engine's staleness-driven retry never fired.)
  * @param {boolean} forceRefresh - If true, bypass cache and fetch fresh data from Google Sheets
  */
 async function loadInitialData(forceRefresh = false) {
-  try {
-    // If we have cached data and not forcing refresh, reuse it
-    if (!forceRefresh && cachedProjects !== null) {
-      debug.log('🔄 Reusing cached projects data (skipping duplicate load)');
-      setProjects(cachedProjects);
-      return;
-    }
-
-    // Load all data in parallel (projects + manual weeks)
-    const [projects, weeks] = await Promise.all([
-      loadAllReleasabilityData(forceRefresh),
-      loadManualWeeks()
-    ]);
-
-    // Cache the loaded projects
-    cachedProjects = projects;
-
-    // Set projects in state
-    setProjects(projects);
-
-    // Store manual weeks
-    manualWeeks = weeks;
-
-  } catch (error) {
-    console.error('❌ Error loading releasability data:', error);
-    // Don't throw - allow app to start with empty state
-    // User can still add manual projects
+  // If we have cached data and not forcing refresh, reuse it
+  if (!forceRefresh && cachedProjects !== null) {
+    debug.log('🔄 Reusing cached projects data (skipping duplicate load)');
+    setProjects(cachedProjects);
+    return;
   }
+
+  // Load all data in parallel (projects + manual weeks). 45s ceiling matches
+  // the weekly view's Google Sheets timeout.
+  const [projects, weeks] = await withTimeout(Promise.all([
+    loadAllReleasabilityData(forceRefresh),
+    loadManualWeeks()
+  ]), 45000, 'Releasability data load');
+
+  // Cache the loaded projects
+  cachedProjects = projects;
+
+  // Set projects in state
+  setProjects(projects);
+
+  // Store manual weeks
+  manualWeeks = weeks;
+}
+
+/**
+ * One silent sync cycle: bypass the page cache, reload everything, re-render,
+ * and stamp freshness. THROWS on failure so the caller decides: the broadcast
+ * handlers swallow (a missed broadcast just waits for the next poll), while
+ * the auto-refresh engine propagates it — showing "retrying" on the chip and
+ * trying again on its next tick.
+ */
+async function syncData() {
+  cachedProjects = null;
+  await loadInitialData();
+  renderGrid();
+  markDataUpdated();
 }
 
 /**
@@ -189,21 +223,13 @@ async function handleCacheUpdate(payload) {
   }
 
   try {
-    // Invalidate local cache to force fresh load
-    cachedProjects = null;
-
-    // Reload data without showing loading spinner
-    await loadInitialData();
-
-    // Re-render grid with fresh data
-    renderGrid();
-    markDataUpdated();
-
+    // Reload without a loading spinner
+    await syncData();
     debug.log('✅ Data refreshed from cache update');
-
   } catch (error) {
     console.error('❌ Error refreshing data after cache update:', error);
-    // Silently fail - don't disrupt user experience
+    // Swallow: the last good render stays up, and because markDataUpdated()
+    // wasn't reached the auto-refresh engine retries within its next tick.
   }
 }
 
@@ -221,21 +247,13 @@ async function handleSilentRefresh(payload) {
   }
 
   try {
-    // Invalidate local cache to force fresh load
-    cachedProjects = null;
-
-    // Reload data without showing loading spinner
-    await loadInitialData();
-
-    // Re-render grid with fresh data
-    renderGrid();
-    markDataUpdated();
-
+    // Reload without a loading spinner
+    await syncData();
     debug.log('✅ Data synced from refresh signal');
-
   } catch (error) {
     console.error('❌ Error syncing data after refresh signal:', error);
-    // Silently fail - don't disrupt user experience
+    // Swallow: the last good render stays up, and because markDataUpdated()
+    // wasn't reached the auto-refresh engine retries within its next tick.
   }
 }
 

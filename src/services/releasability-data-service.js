@@ -476,8 +476,11 @@ export async function loadTrackingStatuses() {
 
   } catch (error) {
     logger.error('❌ Failed to load tracking statuses:', error);
-    // Don't throw - return empty map so the app can continue
-    return new Map();
+    // Throw rather than degrade: returning an empty map used to render the
+    // board with every milestone unchecked — actively misleading — while the
+    // freshness chip claimed the data was current. Failing the load keeps the
+    // last good render and lets the auto-refresh engine retry.
+    throw error;
   }
 }
 
@@ -937,8 +940,10 @@ export async function loadManualWeeks() {
 
   } catch (error) {
     logger.error('❌ Failed to load manual weeks:', error);
-    // Don't throw - return empty array so the app can continue
-    return [];
+    // Throw rather than degrade: silently dropping the manual week dividers
+    // made a failed reload indistinguishable from success. Failing the load
+    // keeps the last good render and lets the auto-refresh engine retry.
+    throw error;
   }
 }
 
