@@ -126,17 +126,23 @@ function buildMaxTasksPerDept(filteredTasks) {
 
 /**
  * Resolve the current viewed week index using fallback chain:
- * existing in-session state -> current Monday -> next future Monday -> last week.
+ * previously viewed week (matched by date) -> current Monday -> next future Monday -> last week.
  * Saved week position from previous sessions is intentionally ignored —
  * the app always opens on the current week.
  * @param {Date[]} allMondays - All available week start dates
+ * @param {Date|null} previousViewedMonday - Monday of the week viewed before this render
  * @returns {number} Resolved week index
  */
-function resolveWeekIndex(allMondays) {
-    // 1. Use in-session state if already set (handles re-renders within a session)
-    let currentViewedWeekIndex = state.getCurrentViewedWeekIndex();
-    if (currentViewedWeekIndex >= 0 && currentViewedWeekIndex < allMondays.length) {
-        return currentViewedWeekIndex;
+function resolveWeekIndex(allMondays, previousViewedMonday) {
+    // 1. Keep the week the user was viewing, matched by DATE — the weeks list
+    //    can grow or shrink between renders, so a bare index would silently
+    //    land on a different week (or stay pinned to 0 after an empty render).
+    if (previousViewedMonday) {
+        const previousMondayStr = getLocalDateString(previousViewedMonday);
+        const preservedIndex = allMondays.findIndex(d => getLocalDateString(d) === previousMondayStr);
+        if (preservedIndex !== -1) {
+            return preservedIndex;
+        }
     }
 
     const currentMonday = getMonday(new Date());
@@ -151,7 +157,7 @@ function resolveWeekIndex(allMondays) {
     }
 
     // 2. Default to current week
-    currentViewedWeekIndex = allMondays.findIndex(d => getLocalDateString(d) === currentMondayStr);
+    let currentViewedWeekIndex = allMondays.findIndex(d => getLocalDateString(d) === currentMondayStr);
     if (currentViewedWeekIndex !== -1) {
         return currentViewedWeekIndex;
     }
@@ -292,6 +298,11 @@ export async function render() {
             return;
         }
 
+        // Capture the viewed week's DATE before the weeks list is replaced,
+        // so resolveWeekIndex can restore the same week even when the new
+        // list has different indexes for the same Mondays.
+        const previousViewedMonday = state.getCurrentWeekDate();
+
         const { tasksByWeek, allMondays } = groupTasksByWeek(filteredTasks);
         state.setAllWeekStartDates(allMondays);
 
@@ -307,7 +318,7 @@ export async function render() {
         // Atomic swap: removes old children and appends new in one operation
         container.replaceChildren(fragment);
 
-        const weekIndex = resolveWeekIndex(allMondays);
+        const weekIndex = resolveWeekIndex(allMondays, previousViewedMonday);
         state.setCurrentViewedWeekIndex(weekIndex);
 
         scheduleLayoutAndScroll(container, wrapper, weekIndex, allMondays, savedScrollTop);
