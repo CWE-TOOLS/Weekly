@@ -31,20 +31,21 @@ let clientId = generateClientId();
 // Realtime reconnect state — the websocket can silently die after the
 // laptop sleeps or the network blips; reconnect with exponential backoff so
 // the board keeps receiving cache updates without a manual page reload.
-let cacheOnUpdate = null;          // remembered callback so reconnect can re-wire it
+let cacheOnUpdate = null;          // the app's PERSISTENT callback (setupCacheSubscription)
+let oneShotWaiters = [];           // waitForCacheUpdate resolvers — fired once, then dropped
 let cacheReconnectAttempts = 0;
 let cacheReconnectTimer = null;
 
 function scheduleCacheReconnect() {
-    // Don't reconnect if we've been intentionally torn down.
-    if (!cacheOnUpdate) return;
+    // Don't reconnect if we've been intentionally torn down and nobody waits.
+    if (!cacheOnUpdate && oneShotWaiters.length === 0) return;
     if (cacheReconnectTimer) return; // one pending reconnect at a time
     cacheReconnectAttempts += 1;
     const delay = Math.min(30000, 1000 * Math.pow(2, cacheReconnectAttempts - 1)); // 1s,2s,4s… cap 30s
     logger.warn(`[Cache] Reconnecting cache subscription in ${delay}ms (attempt ${cacheReconnectAttempts})`);
     cacheReconnectTimer = setTimeout(() => {
         cacheReconnectTimer = null;
-        setupCacheSubscription(cacheOnUpdate);
+        ensureCacheChannel(true); // force a fresh channel; handlers re-resolve from module state
     }, delay);
 }
 
@@ -438,6 +439,9 @@ async function waitForCacheUpdate(timeoutMs = 30000, cacheKey = 'primary') {
         const timeout = setTimeout(() => {
             if (!resolved) {
                 resolved = true;
+                // Drop our waiter so it can't linger in the list forever.
+                const i = oneShotWaiters.indexOf(handleUpdate);
+                if (i >= 0) oneShotWaiters.splice(i, 1);
                 logger.warn(`[Cache:${cacheKey}] ⚠️ Wait timeout - fetching cache anyway`);
                 getCache(cacheKey).then(cache => {
                     resolve(cache ? cache.tasks_data : null);
@@ -445,7 +449,10 @@ async function waitForCacheUpdate(timeoutMs = 30000, cacheKey = 'primary') {
             }
         }, timeoutMs);
 
-        // Subscribe to cache updates
+        // One-shot waiter, notified by the shared broadcast handler. Must NOT
+        // replace the app's persistent subscription callback — doing so used to
+        // permanently kill the page's realtime cache updates the first time it
+        // lost a lock election to another client.
         const handleUpdate = async () => {
             if (!resolved) {
                 resolved = true;
@@ -459,15 +466,48 @@ async function waitForCacheUpdate(timeoutMs = 30000, cacheKey = 'primary') {
             }
         };
 
-        setupCacheSubscription(handleUpdate);
+        oneShotWaiters.push(handleUpdate);
+        ensureCacheChannel();
     });
 }
 
 /**
- * Setup real-time subscription for cache updates
- * @param {Function} onUpdate - Callback when cache is updated
+ * Shared broadcast handler: invalidates the local copy, notifies the app's
+ * persistent callback, and flushes any one-shot waiters. Reads module state
+ * at dispatch time so the channel never needs re-wiring when callbacks change.
+ * @param {Object} payload - Broadcast payload
  */
-export async function setupCacheSubscription(onUpdate) {
+function dispatchCacheUpdate(payload) {
+    logger.debug('[Cache] Received cache update broadcast:', payload);
+    // Invalidate local copy so the next read pulls fresh data
+    const broadcastedKey = payload && payload.payload && payload.payload.cache_key;
+    if (broadcastedKey) {
+        clearLocalCache(broadcastedKey);
+    }
+    if (cacheOnUpdate) {
+        try {
+            cacheOnUpdate(payload);
+        } catch (err) {
+            logger.error('[Cache] onUpdate callback threw:', err);
+        }
+    }
+    if (oneShotWaiters.length > 0) {
+        const waiters = oneShotWaiters.splice(0);
+        for (const waiter of waiters) {
+            try {
+                waiter(payload);
+            } catch (_) { /* waiter already guards itself */ }
+        }
+    }
+}
+
+/**
+ * Subscribe to the broadcast channel if not already subscribed. All consumers
+ * (the app's persistent callback and one-shot waiters) share this single
+ * channel via dispatchCacheUpdate.
+ * @param {boolean} recreate - Tear down and re-subscribe (reconnect path)
+ */
+async function ensureCacheChannel(recreate = false) {
     try {
         // Ensure Supabase is initialized
         if (!getSupabaseClient()) {
@@ -481,27 +521,15 @@ export async function setupCacheSubscription(onUpdate) {
             return;
         }
 
-        // Remember the callback so an automatic reconnect can re-wire it.
-        cacheOnUpdate = onUpdate;
-
-        // Remove existing subscription if any
         if (cacheSubscription) {
+            if (!recreate) return;
             cacheSubscription.unsubscribe();
+            cacheSubscription = null;
         }
 
         cacheSubscription = supabase
             .channel(CACHE_CONFIG.BROADCAST_CHANNEL)
-            .on('broadcast', { event: 'cache_updated' }, (payload) => {
-                logger.debug('[Cache] Received cache update broadcast:', payload);
-                // Invalidate local copy so the next read pulls fresh data
-                const broadcastedKey = payload && payload.payload && payload.payload.cache_key;
-                if (broadcastedKey) {
-                    clearLocalCache(broadcastedKey);
-                }
-                if (onUpdate) {
-                    onUpdate(payload);
-                }
-            })
+            .on('broadcast', { event: 'cache_updated' }, dispatchCacheUpdate)
             .subscribe((status) => {
                 if (status === 'SUBSCRIBED') {
                     logger.info('[Cache] Subscribed to real-time cache updates');
@@ -516,6 +544,15 @@ export async function setupCacheSubscription(onUpdate) {
     } catch (error) {
         logger.error('[Cache] Failed to setup cache subscription:', error);
     }
+}
+
+/**
+ * Setup real-time subscription for cache updates
+ * @param {Function} onUpdate - Persistent callback when cache is updated
+ */
+export async function setupCacheSubscription(onUpdate) {
+    cacheOnUpdate = onUpdate;
+    await ensureCacheChannel();
 }
 
 /**

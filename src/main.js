@@ -23,10 +23,14 @@ setupBackwardCompatibility();
 initializeApp()
     .then(() => {
         // Auto-refresh + data-freshness: attach the chip and start the
-        // visible-tab poller now that initial data has loaded. markDataUpdated()
+        // refresh engine now that initial data has loaded. markDataUpdated()
         // itself is invoked from the TASKS_LOADED handler (component-events.js).
+        // The fetch promise is RETURNED so the engine can retry failed attempts
+        // (e.g. the network still reconnecting right after a sleep wake).
         initFreshnessLabel(document.getElementById('data-freshness'));
-        startVisiblePolling(() => { if (window.dataService && window.dataService.fetchAllTasks) window.dataService.fetchAllTasks(false); });
+        startVisiblePolling(() => (window.dataService && window.dataService.fetchAllTasks)
+            ? window.dataService.fetchAllTasks(false)
+            : Promise.resolve());
     })
     .catch(error => {
     logger.error('💥 Failed to initialize application:', error);
