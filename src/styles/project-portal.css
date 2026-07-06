@@ -346,6 +346,11 @@ body { overflow: visible; }
     background: #ffffff;
     border-bottom: 1px solid #e2e8f0;
     gap: 16px;
+    /* Stick just below the ~60px .pp-header; 59px tucks the top edge under
+       the header (z-index 10 > 9) so no content sliver shows between the bars. */
+    position: sticky;
+    top: 59px;
+    z-index: 9;
 }
 .pp-form-context {
     display: flex;
@@ -406,12 +411,13 @@ body { overflow: visible; }
     flex-direction: column;
     gap: 2px;
     position: sticky;
-    top: 56px;
+    /* Below both sticky bars: ~60px .pp-header + ~62px .pp-form-controls */
+    top: 121px;
     align-self: flex-start;
     /* Keep tabs reachable while scrolling long lists.
-       Cap height to viewport minus the sticky header so the sidebar
+       Cap height to viewport minus the sticky bars so the sidebar
        can scroll internally on short viewports instead of being cut off. */
-    max-height: calc(100vh - 56px);
+    max-height: calc(100vh - 121px);
     overflow-y: auto;
 }
 .pp-tab-btn {
