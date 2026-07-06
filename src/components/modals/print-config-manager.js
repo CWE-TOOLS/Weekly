@@ -6,7 +6,7 @@
 
 import { getAllTasks, getAllWeekStartDates, getCurrentViewedWeekIndex } from '../../core/state.js';
 import { normalizeDepartmentClass } from '../../utils/ui-utils.js';
-import { getMonday, getWeekMonth, getWeekOfMonth, DAYS_IN_WORK_WEEK } from '../../utils/date-utils.js';
+import { getMonday, getLocalDateString, getWeekMonth, getWeekOfMonth, DAYS_IN_WORK_WEEK } from '../../utils/date-utils.js';
 import { DEPARTMENT_ORDER, SYNTHETIC_DEPARTMENT_NAMES, DEPARTMENT_COLORS } from '../../config/department-config.js';
 
 import { logger } from '../../utils/logger.js';
@@ -168,6 +168,29 @@ export function populateWeekSelect(weekSelectElement) {
         if (index === currentViewedWeekIndex) option.selected = true;
         weekSelectElement.appendChild(option);
     });
+}
+
+/**
+ * Preselect the week AFTER the current calendar week in the week dropdown.
+ * Buy-in sheets are hand-fill planning forms printed ahead of time, so they
+ * default to next week rather than the currently viewed week. Matches by
+ * date (current Monday + 7 days) — if that week isn't in the schedule, the
+ * existing selection (current viewed week) is left untouched.
+ * @param {HTMLSelectElement} weekSelectElement - Week select dropdown element
+ */
+export function selectNextCalendarWeek(weekSelectElement) {
+    if (!weekSelectElement) return;
+
+    const nextMonday = getMonday(new Date());
+    nextMonday.setDate(nextMonday.getDate() + 7);
+    const nextMondayKey = getLocalDateString(nextMonday);
+
+    const nextWeekIndex = getAllWeekStartDates().findIndex(
+        date => getLocalDateString(getMonday(date)) === nextMondayKey
+    );
+    if (nextWeekIndex !== -1) {
+        weekSelectElement.value = nextWeekIndex.toString();
+    }
 }
 
 /**

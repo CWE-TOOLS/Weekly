@@ -21,6 +21,7 @@ import {
     setIncludeBoardSaturday,
     getCurrentPrintWeekDates,
     populateWeekSelect,
+    selectNextCalendarWeek,
     setDefaultDate,
     populateDepartmentsGrid,
     saveDepartmentSelection,
@@ -264,6 +265,11 @@ function updatePrintTypeDisplay() {
             frozenDailySectionElement.style.display = 'none';
             departmentsSectionElement.style.display = 'block';
             orientationSectionElement.style.display = 'none';
+
+            // Buy-in sheets are filled out ahead of time — default the week
+            // selector to next calendar week (falls back to the standard
+            // viewed-week default if that week isn't in the schedule).
+            selectNextCalendarWeek(weekSelectElement);
         } else if (printType === 'day') {
             weekSectionElement.style.display = 'none';
             daySectionElement.style.display = 'block';
