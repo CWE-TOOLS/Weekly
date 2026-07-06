@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SOP — Create Sales Quote</title>
+<style>
+  @page { size: Letter portrait; margin: 0.5in; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    font-family: "Segoe UI", Arial, sans-serif;
+    color: #1a1a1a; font-size: 10.5pt; line-height: 1.4;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  .sheet { width: 100%; }
+
+  /* Header */
+  .head {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    border-bottom: 3px solid #1f2937; padding-bottom: 8px; margin-bottom: 12px;
+  }
+  .head h1 { font-size: 25pt; letter-spacing: -0.3px; line-height: 1.05; }
+  .head h1 .eyebrow { display:block; font-size: 10pt; font-weight: 700; color:#6b7280; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 3px; }
+  .head .meta { font-size: 8.5pt; color: #555; text-align: right; line-height: 1.4; }
+  .head .meta b { color:#111827; }
+
+  .lead {
+    font-size: 9.6pt; color:#374151; background:#f3f4f6; border-left:4px solid #1f2937;
+    padding: 7px 12px; border-radius: 3px; margin-bottom: 14px;
+  }
+
+  /* Steps */
+  .step { display: flex; gap: 10px; align-items: flex-start; padding: 7px 0; break-inside: avoid; }
+  .step + .step { border-top: 1px solid #e5e7eb; }
+  .n {
+    flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+    width: 23px; height: 23px; border-radius: 50%;
+    background: #1f2937; color: #fff; font-size: 11pt; font-weight: 700; margin-top: 1px;
+  }
+  .body p { font-size: 9.8pt; color:#1f2937; }
+  .body .note { font-size: 8.7pt; color:#6b7280; margin-top: 3px; }
+  b { color:#111827; }
+
+  /* UI chip + example chip */
+  .ui { display:inline-block; font-weight:700; padding:0 6px; border-radius:3px; font-size:9pt; border:1px solid #cbd5e1; background:#f1f5f9; color:#334155; }
+  .ex { display:inline-block; font-weight:700; padding:1px 7px; border-radius:3px; font-size:9pt; border:1px solid #93c5fd; background:#eff6ff; color:#1e40af; }
+
+  /* RED circle for the critical steps */
+  .hot .n { background:#b91c1c; }
+
+  .foot {
+    margin-top: 14px; border-top: 2px solid #1f2937; padding-top: 7px;
+    font-size: 8.5pt; color: #555; display:flex; justify-content:space-between;
+  }
+
+  /* Print button (screen only) */
+  .printbar { position: fixed; top: 14px; right: 14px; z-index: 50; }
+  .printbar button {
+    font-family: "Segoe UI", Arial, sans-serif; font-size: 11pt; font-weight: 700;
+    color: #fff; background: #1f2937; border: none; border-radius: 6px;
+    padding: 9px 16px; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,.25);
+    display: inline-flex; align-items: center; gap: 7px;
+  }
+  .printbar button:hover { background: #374151; }
+  .printbar button svg { width: 15px; height: 15px; }
+
+  @media screen {
+    body { background: #e5e7eb; padding: 24px 0; }
+    .sheet { width: 8.5in; min-height: 11in; margin: 0 auto; background: #fff; padding: 0.5in; box-shadow: 0 4px 18px rgba(0,0,0,.18); }
+  }
+  @media print { .printbar { display: none !important; } }
+</style>
+</head>
+<body>
+
+<div class="printbar">
+  <button onclick="window.print()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+         stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="6 9 6 2 18 2 18 9"></polyline>
+      <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+      <rect x="6" y="14" width="12" height="8"></rect>
+    </svg>
+    Print
+  </button>
+</div>
+
+<div class="sheet">
+
+  <div class="head">
+    <h1><span class="eyebrow">Standard Operating Procedure</span>
+        Create Sales Quote</h1>
+    <div class="meta">
+      <b>Rev:</b> 1.0<br>
+      <b>Cadence:</b> One per casting<br>
+      <b>Owner:</b> ____________
+    </div>
+  </div>
+
+  <div class="lead">
+    Create a <b>Sales Quote for each casting</b> in a project. Every quote must include <b>all material
+    from Mill through Shipping</b> — nothing left off.
+  </div>
+
+  <div class="step">
+    <span class="n">1</span>
+    <div class="body"><p>Open <b>Inflow</b>.</p></div>
+  </div>
+
+  <div class="step">
+    <span class="n">2</span>
+    <div class="body"><p>Click the <span class="ui">+</span> icon, then click <span class="ui">Sales Quote</span>.</p></div>
+  </div>
+
+  <div class="step">
+    <span class="n">3</span>
+    <div class="body"><p>For <span class="ui">Customer</span>, select the <b>project</b> you are creating the quote for.</p></div>
+  </div>
+
+  <div class="step">
+    <span class="n">4</span>
+    <div class="body"><p>Name the quote with the <b>project name and Cast #</b> — ex. <span class="ex">St Hilda's Cast #5</span></p></div>
+  </div>
+
+  <div class="step hot">
+    <span class="n">5</span>
+    <div class="body">
+      <p>Add <b>all material required</b> for this casting.</p>
+      <p class="note">Wood, caulk, casting ingredients, sealers, acid, crating materials, etc. — everything from Mill through Shipping.</p>
+      <p class="note">If <b>batching has been created</b> for a casting, the material totals are listed <b>above the batch tickets</b> in the Project Portal.</p>
+    </div>
+  </div>
+
+  <div class="step hot">
+    <span class="n">6</span>
+    <div class="body">
+      <p>Set the <span class="ui">Ordered on</span> date to the <b>first of the month the casting starts</b>.</p>
+      <p class="note">This can be shifted later when adjusting the quote for an end-of-month material order report.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <span class="n">7</span>
+    <div class="body"><p>Click <span class="ui">Save</span> — the Sales Quote is complete.</p></div>
+  </div>
+
+  <div class="foot">
+    <span><b>Bottom line:</b> One quote per casting in Inflow, customer = the project, named "Project + Cast #", every material from Mill through Shipping, "Ordered on" = the 1st of the start month, then Save.</span>
+    <span>Create Sales Quote</span>
+  </div>
+
+</div>
+</body>
+</html>

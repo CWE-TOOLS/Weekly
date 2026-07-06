@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SOP — Generate Pic Lists</title>
+<style>
+  @page { size: Letter portrait; margin: 0.5in; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    font-family: "Segoe UI", Arial, sans-serif;
+    color: #1a1a1a; font-size: 10.5pt; line-height: 1.35;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  .sheet { width: 100%; }
+
+  /* Header */
+  .head {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    border-bottom: 3px solid #1f2937; padding-bottom: 8px; margin-bottom: 11px;
+  }
+  .head h1 { font-size: 25pt; letter-spacing: -0.3px; line-height: 1.05; }
+  .head h1 .eyebrow { display:block; font-size: 10pt; font-weight: 700; color:#6b7280; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 3px; }
+  .head .meta { font-size: 8.5pt; color: #555; text-align: right; line-height: 1.4; }
+  .head .meta b { color:#111827; }
+
+  .lead {
+    font-size: 9.5pt; color:#374151; background:#f3f4f6; border-left:4px solid #1f2937;
+    padding: 6px 11px; border-radius: 3px; margin-bottom: 11px;
+  }
+
+  /* Steps */
+  .step { display: flex; gap: 10px; align-items: flex-start; padding: 5.5px 0; break-inside: avoid; }
+  .step + .step { border-top: 1px solid #e5e7eb; }
+  .n {
+    flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: #1f2937; color: #fff; font-size: 10.5pt; font-weight: 700; margin-top: 1px;
+  }
+  .body p { font-size: 9.7pt; color:#1f2937; }
+  .body .note { font-size: 8.6pt; color:#6b7280; margin-top: 2px; }
+  b { color:#111827; }
+
+  /* UI chip + department chips */
+  .ui { display:inline-block; font-weight:700; padding:0 6px; border-radius:3px; font-size:9pt; border:1px solid #cbd5e1; background:#f1f5f9; color:#334155; }
+  .dept { display:inline-block; font-weight:700; padding:0 6px; border-radius:10px; font-size:8.6pt; border:1px solid #c7b6ee; background:#ede9fe; color:#5b21b6; margin:2px 3px 0 0; }
+
+  /* RED circle for critical / gate steps */
+  .hot .n { background:#b91c1c; }
+
+  .foot {
+    margin-top: 11px; border-top: 2px solid #1f2937; padding-top: 6px;
+    font-size: 8.5pt; color: #555; display:flex; justify-content:space-between;
+  }
+
+  /* Print button (screen only) */
+  .printbar { position: fixed; top: 14px; right: 14px; z-index: 50; }
+  .printbar button {
+    font-family: "Segoe UI", Arial, sans-serif; font-size: 11pt; font-weight: 700;
+    color: #fff; background: #1f2937; border: none; border-radius: 6px;
+    padding: 9px 16px; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,.25);
+    display: inline-flex; align-items: center; gap: 7px;
+  }
+  .printbar button:hover { background: #374151; }
+  .printbar button svg { width: 15px; height: 15px; }
+
+  @media screen {
+    body { background: #e5e7eb; padding: 24px 0; }
+    .sheet { width: 8.5in; min-height: 11in; margin: 0 auto; background: #fff; padding: 0.5in; box-shadow: 0 4px 18px rgba(0,0,0,.18); }
+  }
+  @media print { .printbar { display: none !important; } }
+</style>
+</head>
+<body>
+
+<div class="printbar">
+  <button onclick="window.print()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+         stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="6 9 6 2 18 2 18 9"></polyline>
+      <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+      <rect x="6" y="14" width="12" height="8"></rect>
+    </svg>
+    Print
+  </button>
+</div>
+
+<div class="sheet">
+
+  <div class="head">
+    <h1><span class="eyebrow">Standard Operating Procedure</span>
+        Generate Pic Lists</h1>
+    <div class="meta">
+      <b>Rev:</b> 1.0<br>
+      <b>Cadence:</b> Weekly<br>
+      <b>Owner:</b> ____________
+    </div>
+  </div>
+
+  <div class="lead">
+    After the weekly Sales Orders are done, generate the material <b>pic lists</b> from Inflow for the
+    following week — the <b>Facilities master report</b> plus a list per department <b>Team Leader</b> — and
+    place them for staging.
+  </div>
+
+  <div class="step hot">
+    <span class="n">1</span>
+    <div class="body"><p>Complete and verify all Sales Orders per the <b>Generate Weekly Project Sales Orders</b> SOP.</p></div>
+  </div>
+
+  <div class="step">
+    <span class="n">2</span>
+    <div class="body"><p>Open <b>Inflow</b>.</p></div>
+  </div>
+
+  <div class="step">
+    <span class="n">3</span>
+    <div class="body"><p>Hover over <span class="ui">Reports</span> and click <span class="ui">Sales</span> in the left sidebar.</p></div>
+  </div>
+
+  <div class="step">
+    <span class="n">4</span>
+    <div class="body"><p>Click <span class="ui">Product Sales</span>.</p></div>
+  </div>
+
+  <div class="step">
+    <span class="n">5</span>
+    <div class="body"><p>Click <span class="ui">Details</span>, then click <span class="ui">Select</span>.</p></div>
+  </div>
+
+  <div class="step">
+    <span class="n">6</span>
+    <div class="body"><p>Click <span class="ui">Status</span> and check <b>Unfulfilled</b>, <b>Started</b>, and <b>Fulfilled</b> only; click <span class="ui">Apply</span>.</p></div>
+  </div>
+
+  <div class="step">
+    <span class="n">7</span>
+    <div class="body"><p>Click the <span class="ui">Date</span> filter, then <span class="ui">Custom</span>; set the <b>start and end</b> to the <b>following Monday</b> and click <span class="ui">Apply</span>.</p></div>
+  </div>
+
+  <div class="step">
+    <span class="n">8</span>
+    <div class="body"><p>Click <span class="ui">Generate</span> in the center of the screen.</p></div>
+  </div>
+
+  <div class="step">
+    <span class="n">9</span>
+    <div class="body">
+      <p>Print this report, <b>staple</b> it, and label it <b>"Facilities"</b> + the week (ex. <b>June Week 1</b>).</p>
+      <p class="note">This is the <b>master report</b> Facilities uses to distribute all material the following week and stage material on Friday.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <span class="n">10</span>
+    <div class="body">
+      <p>Now generate a pic list for each <b>Team Leader</b> — with the <b>same Status and date settings</b>, click the
+      <span class="ui">Category</span> filter and print a report for <b>each of the 4 departments</b>. Label each with the week and department.</p>
+      <p class="note">
+        <span class="dept">Casting / Demold</span>
+        <span class="dept">Crating / Special</span>
+        <span class="dept">Finishing / Sealing</span>
+        <span class="dept">Formout / Mill</span>
+      </p>
+    </div>
+  </div>
+
+  <div class="step">
+    <span class="n">11</span>
+    <div class="body">
+      <p>Also print several copies of these lists and staple them to any department that would receive items on them:</p>
+      <p class="note">
+        <span class="dept">Non-Stocked</span>
+        <span class="dept">Tool / Equip / Maint / Safety</span>
+      </p>
+    </div>
+  </div>
+
+  <div class="step hot">
+    <span class="n">12</span>
+    <div class="body"><p>Once all pic lists are printed, place the <b>Team Leader lists</b> in the metal rack under the
+    <b>"Staging Team Leaders Next Day"</b> sign near the door to the production office.</p></div>
+  </div>
+
+  <div class="foot">
+    <span><b>Bottom line:</b> With Sales Orders verified, run the Product Sales report (Unfulfilled/Started/Fulfilled, dated next Monday): print the Facilities master, a list per department, and the Non-Stocked / Tool lists — then rack the Team Leader lists for staging.</span>
+    <span>Generate Pic Lists</span>
+  </div>
+
+</div>
+</body>
+</html>

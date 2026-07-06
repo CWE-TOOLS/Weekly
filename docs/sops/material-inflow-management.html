@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SOP — Material Inflow Management</title>
+<style>
+  @page { size: Letter portrait; margin: 0.5in; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    font-family: "Segoe UI", Arial, sans-serif;
+    color: #1a1a1a; font-size: 10.5pt; line-height: 1.4;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  .sheet { width: 100%; }
+
+  /* Header */
+  .head {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    border-bottom: 3px solid #1f2937; padding-bottom: 8px; margin-bottom: 14px;
+  }
+  .head h1 { font-size: 24pt; letter-spacing: -0.3px; line-height: 1.05; }
+  .head h1 .eyebrow { display:block; font-size: 10pt; font-weight: 700; color:#6b7280; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 3px; }
+  .head .meta { font-size: 8.5pt; color: #555; text-align: right; line-height: 1.4; }
+  .head .meta b { color:#111827; }
+
+  .lead {
+    font-size: 9.8pt; color:#374151; background:#f3f4f6; border-left:4px solid #1f2937;
+    padding: 8px 12px; border-radius: 3px; margin-bottom: 22px;
+  }
+  b { color:#111827; }
+
+  /* ===== Process block ===== */
+  .process { margin-bottom: 26px; break-inside: avoid; }
+
+  .phead { display:flex; align-items:center; gap:11px; margin-bottom:12px; }
+  .ppill {
+    font-weight:800; font-size:11pt; text-transform:uppercase; letter-spacing:.8px;
+    color:#fff; border-radius:22px; padding:5px 18px; flex:0 0 auto;
+  }
+  .month .ppill { background:#b45309; }
+  .week  .ppill { background:#0d9488; }
+  .phead .ptag { font-size:10pt; font-weight:700; color:#374151; }
+  .month .phead .ptag { color:#92400e; }
+  .week  .phead .ptag { color:#115e59; }
+
+  /* Flow row */
+  .flow { display:flex; align-items:stretch; gap:0; }
+  .fcard {
+    flex:1 1 0; background:#fff; border:2px solid #d6d3d1; border-radius:8px;
+    padding:9px 8px; text-align:center; display:flex; flex-direction:column; justify-content:center;
+    position:relative;
+  }
+  .month .fcard { border-color:#fcd34d; }
+  .week  .fcard { border-color:#5eead4; }
+  .fcard .step {
+    position:absolute; top:-9px; left:50%; transform:translateX(-50%);
+    width:18px; height:18px; border-radius:50%; color:#fff; font-size:8.5pt; font-weight:800;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .month .fcard .step { background:#b45309; }
+  .week  .fcard .step { background:#0d9488; }
+  .fcard .ftitle { font-weight:800; font-size:9pt; color:#111827; line-height:1.15; margin-top:3px; }
+  .fcard .fsub { font-size:7.8pt; color:#6b7280; margin-top:3px; line-height:1.2; }
+  .arr { flex:0 0 auto; align-self:center; font-size:15pt; font-weight:800; padding:0 5px; }
+  .month .arr { color:#f59e0b; }
+  .week  .arr { color:#2dd4bf; }
+
+  /* Explanation under each chart */
+  .explain {
+    margin-top:13px; border-left:4px solid #d6d3d1; padding:2px 0 2px 13px;
+  }
+  .month .explain { border-left-color:#f59e0b; }
+  .week  .explain { border-left-color:#2dd4bf; }
+  .explain p { font-size:10pt; color:#374151; line-height:1.5; }
+  .explain p + p { margin-top:7px; }
+  .explain b { color:#111827; }
+  .date { display:inline-block; font-weight:800; padding:0 6px; border-radius:3px; font-size:8.8pt; border:1px solid #93c5fd; background:#eff6ff; color:#1e40af; }
+
+  .sops { margin-top:9px; font-size:8.6pt; color:#6b7280; }
+  .sops .lbl { font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:#9ca3af; margin-right:5px; }
+  .sopref { display:inline-block; font-weight:700; font-size:8.4pt; color:#5b21b6; background:#ede9fe; border:1px solid #c7b6ee; border-radius:10px; padding:1px 8px; margin:2px 4px 0 0; }
+
+  .foot {
+    margin-top: 16px; border-top: 2px solid #1f2937; padding-top: 7px;
+    font-size: 8.5pt; color: #555; display:flex; justify-content:space-between;
+  }
+
+  /* Print button (screen only) */
+  .printbar { position: fixed; top: 14px; right: 14px; z-index: 50; }
+  .printbar button {
+    font-family: "Segoe UI", Arial, sans-serif; font-size: 11pt; font-weight: 700;
+    color: #fff; background: #1f2937; border: none; border-radius: 6px;
+    padding: 9px 16px; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,.25);
+    display: inline-flex; align-items: center; gap: 7px;
+  }
+  .printbar button:hover { background: #374151; }
+  .printbar button svg { width: 15px; height: 15px; }
+
+  @media screen {
+    body { background: #e5e7eb; padding: 24px 0; }
+    .sheet { width: 8.5in; min-height: 11in; margin: 0 auto; background: #fff; padding: 0.5in; box-shadow: 0 4px 18px rgba(0,0,0,.18); }
+  }
+  @media print { .printbar { display:none !important; } }
+</style>
+</head>
+<body>
+
+<div class="printbar">
+  <button onclick="window.print()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+         stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="6 9 6 2 18 2 18 9"></polyline>
+      <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+      <rect x="6" y="14" width="12" height="8"></rect>
+    </svg>
+    Print
+  </button>
+</div>
+
+<div class="sheet">
+
+  <div class="head">
+    <h1><span class="eyebrow">Process Overview</span>
+        Material Inflow Management</h1>
+    <div class="meta">
+      <b>Rev:</b> 1.0<br>
+      <b>System:</b> Inflow<br>
+      <b>Owner:</b> ____________
+    </div>
+  </div>
+
+  <div class="lead">
+    Material runs on <b>two clocks</b>. Each month we <b>buy</b> the coming month's material in bulk; each week we
+    <b>pull</b> and distribute the material for that week's work — then report what was actually used. Both read from
+    the Sales Quotes in <b>Inflow</b>.
+  </div>
+
+  <!-- MONTHLY -->
+  <div class="process month">
+    <div class="phead">
+      <span class="ppill">Monthly</span>
+      <span class="ptag">Two plan meetings → one bulk order</span>
+    </div>
+
+    <div class="flow">
+      <div class="fcard"><span class="step">1</span><div class="ftitle">1st-Half Plan Meeting</div><div class="fsub">prepare Sales Quotes</div></div>
+      <span class="arr">›</span>
+      <div class="fcard"><span class="step">2</span><div class="ftitle">2nd-Half Plan Meeting</div><div class="fsub">prepare Sales Quotes</div></div>
+      <span class="arr">›</span>
+      <div class="fcard"><span class="step">3</span><div class="ftitle">Final Reconcile</div><div class="fsub">match Releasability exactly</div></div>
+      <span class="arr">›</span>
+      <div class="fcard"><span class="step">4</span><div class="ftitle">Generate Order</div><div class="fsub">Quotes report</div></div>
+      <span class="arr">›</span>
+      <div class="fcard"><span class="step">5</span><div class="ftitle">Send Order</div><div class="fsub">email Ops + Acct</div></div>
+    </div>
+
+    <div class="explain">
+      <p>The month revolves around <b>two plan meetings</b> — a <b>1st-half</b> and a <b>2nd-half</b> plan meeting. Ahead of each,
+      prepare the <b>Sales Quotes</b> for that half's castings: one quote per casting, all its material (Mill → Shipping),
+      dated <span class="date">Ordered-on = the 1st of the month</span>.</p>
+      <p>Before the order ships, reconcile the quotes <b>one final time</b> against the month's <b>Releasability report</b> — the
+      list must match <b>exactly, nothing extra or missing</b>. Then generate the Quotes report and
+      <b>email it to the Director of Operations and Accounting</b> by the second-half plan meeting.</p>
+      <div class="sops"><span class="lbl">SOPs</span>
+        <span class="sopref">Create Sales Quote</span>
+        <span class="sopref">Preparing Monthly Material Order</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- WEEKLY -->
+  <div class="process week">
+    <div class="phead">
+      <span class="ppill">Weekly</span>
+      <span class="ptag">Pull, distribute &amp; report the week's material</span>
+    </div>
+
+    <div class="flow">
+      <div class="fcard"><span class="step">1</span><div class="ftitle">Phase Start Report</div><div class="fsub">verify the week</div></div>
+      <span class="arr">›</span>
+      <div class="fcard"><span class="step">2</span><div class="ftitle">Weekly Sales Orders</div><div class="fsub">1 per casting, next Mon</div></div>
+      <span class="arr">›</span>
+      <div class="fcard"><span class="step">3</span><div class="ftitle">Generate Pic Lists</div><div class="fsub">Facilities + per dept</div></div>
+      <span class="arr">›</span>
+      <div class="fcard"><span class="step">4</span><div class="ftitle">Stage &amp; Distribute</div><div class="fsub">rack for Team Leaders</div></div>
+      <span class="arr">›</span>
+      <div class="fcard"><span class="step">5</span><div class="ftitle">Usage Email</div><div class="fsub">actual, this week</div></div>
+    </div>
+
+    <div class="explain">
+      <p>Verify the coming week is fully scheduled and print the <b>Phase Start report</b>, then create <b>one Inflow Sales
+      Order per casting</b> — all the material for that week's work, dated the <span class="date">following Monday</span>.</p>
+      <p>Run those orders into <b>pic lists</b> — a <b>Facilities master</b> plus a list per department <b>Team Leader</b> — and
+      rack them under the "Staging Team Leaders Next Day" sign. Finally, email the week's <b>Actual Material Usage</b> to Ops
+      and Accounting to <b>close the loop</b> back to planning.</p>
+      <div class="sops"><span class="lbl">SOPs</span>
+        <span class="sopref">Generate Weekly Project Sales Orders</span>
+        <span class="sopref">Generate Pic Lists</span>
+        <span class="sopref">Send Weekly Material Usage Email</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <span><b>Bottom line:</b> Quote every casting once (dated the 1st) → buy the month in bulk → each week cut Sales Orders (next Monday) into pic lists to stage the floor → email actual usage. Quotes procure monthly; orders pull weekly.</span>
+    <span>Material Inflow Management</span>
+  </div>
+
+</div>
+</body>
+</html>
