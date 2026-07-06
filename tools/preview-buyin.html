@@ -32,10 +32,10 @@ html, body {
     display: block !important;
     justify-content: flex-start !important;
     align-items: stretch !important;
-    padding: 0.3in 0.6in 0.3in 0.6in !important;
+    padding: 0.2in 0.6in 0.2in 0.6in !important;
     width: 100%;
     height: 100%;
-    min-height: 7.5in;
+    min-height: 6.8in;
     box-sizing: border-box;
     background: white;
     font-family: 'Calibri', 'Arial', Helvetica, sans-serif;
@@ -46,7 +46,7 @@ html, body {
     font-size: 11pt;
     font-weight: 500;
     letter-spacing: 0.02em;
-    margin-bottom: 0.2in;
+    margin-bottom: 0.12in;
 }
 .buy-in-summary {
     display: flex;
@@ -54,7 +54,7 @@ html, body {
     align-items: baseline;
     font-size: 14pt;
     font-weight: 700;
-    margin-bottom: 0.28in;
+    margin-bottom: 0.18in;
 }
 .buy-in-summary-item {
     display: inline-flex;
@@ -74,7 +74,7 @@ html, body {
     display: flex;
     justify-content: space-between;
     gap: 0.6in;
-    margin-bottom: 0.18in;
+    margin-bottom: 0.12in;
     font-size: 12pt;
 }
 .buy-in-meta-row {
@@ -113,7 +113,7 @@ html, body {
     display: flex;
     align-items: baseline;
     gap: 0.12in;
-    margin-bottom: 0.28in;
+    margin-bottom: 0.18in;
     font-size: 12pt;
 }
 .buy-in-members .buy-in-fill-wide {
@@ -126,6 +126,11 @@ html, body {
     border-collapse: collapse;
     font-size: 11pt;
     table-layout: fixed;
+}
+/* Never slice a row across pages if the sheet still overflows on an outlier printer */
+.buy-in-table tr {
+    page-break-inside: avoid;
+    break-inside: avoid;
 }
 .buy-in-table th {
     font-size: 10pt;
@@ -156,7 +161,7 @@ html, body {
     color: #333;
 }
 .buy-in-table tbody td {
-    padding: 0.22in 0.12in 0.06in 0.12in;
+    padding: 0.17in 0.12in 0.06in 0.12in;
     font-weight: 500;
     vertical-align: bottom;
     font-size: 11pt;
@@ -238,11 +243,11 @@ html, body {
     font-weight: 700;
 }
 .buy-in-table tbody tr:last-child td {
-    padding-bottom: 0.16in;
+    padding-bottom: 0.12in;
 }
 .buy-in-total-row td {
     font-weight: 700;
-    padding: 0.16in 0.12in 0.12in 0.12in !important;
+    padding: 0.12in 0.12in 0.1in 0.12in !important;
     background-color: #DCDCDC;
     border-top: 2px solid #000;
     border-bottom: 1.5px solid #000;
