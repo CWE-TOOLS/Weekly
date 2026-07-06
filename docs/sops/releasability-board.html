@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SOP — Releasability Board</title>
+<style>
+  @page { size: Letter portrait; margin: 0.5in; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    font-family: "Segoe UI", Arial, sans-serif;
+    color: #1a1a1a;
+    font-size: 10.5pt;
+    line-height: 1.4;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .sheet { width: 100%; }
+
+  /* Header */
+  .head {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    border-bottom: 3px solid #1f2937; padding-bottom: 8px; margin-bottom: 12px;
+  }
+  .head h1 { font-size: 25pt; letter-spacing: -0.3px; line-height: 1.05; }
+  .head h1 .eyebrow { display:block; font-size: 10pt; font-weight: 700; color:#6b7280; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 3px; }
+  .head .meta { font-size: 8.5pt; color: #555; text-align: right; line-height: 1.4; }
+  .head .meta b { color:#111827; }
+
+  .lead {
+    font-size: 9.8pt; color:#374151; background:#f3f4f6; border-left:4px solid #1f2937;
+    padding: 8px 12px; border-radius: 3px; margin-bottom: 16px;
+  }
+  b { color:#111827; }
+
+  /* Section */
+  .section { margin-bottom: 15px; break-inside: avoid; }
+  .section > h2 {
+    font-size: 12pt; color:#fff; background:#1f2937; padding: 5px 11px;
+    border-radius: 4px; letter-spacing: .4px; display:flex; align-items:center; gap:8px;
+  }
+  .section > h2 .num {
+    display:inline-flex; align-items:center; justify-content:center;
+    width:19px; height:19px; border-radius:50%; background:#b91c1c; color:#fff;
+    font-size:10pt; font-weight:800; flex:0 0 auto;
+  }
+  .section .inner { padding: 9px 2px 2px; }
+  p.body { font-size: 9.8pt; margin-bottom: 7px; }
+
+  /* Definition rows (toolbar / features) */
+  .defs { display:grid; grid-template-columns: 155px 1fr; gap: 0; }
+  .defs .k {
+    font-weight:700; color:#111827; font-size:9.6pt; padding:6px 10px 6px 0;
+    border-top:1px solid #e5e7eb;
+  }
+  .defs .v {
+    font-size:9.6pt; color:#374151; padding:6px 0; border-top:1px solid #e5e7eb;
+  }
+  .defs .k:first-of-type, .defs .v:nth-of-type(2) { border-top:none; }
+
+  /* Status key */
+  .statuskey { display:flex; gap:10px; flex-wrap:wrap; margin: 4px 0 8px; }
+  .skey {
+    flex:1 1 0; min-width:150px; border:1px solid #e5e7eb; border-radius:6px;
+    padding:8px 10px; display:flex; gap:9px; align-items:center;
+  }
+  .cell {
+    flex:0 0 auto; width:30px; height:24px; border-radius:4px;
+    display:flex; align-items:center; justify-content:center;
+    color:#fff; font-weight:800; font-size:12pt;
+  }
+  .c-done { background:#16a34a; }
+  .c-prog { background:#f59e0b; }
+  .c-inc  { background:#ef4444; }
+  .c-na   { background:#d1d5db; color:#4b5563; font-size:8pt; }
+  .skey .lab b { display:block; font-size:9.8pt; }
+  .skey .lab span { font-size:8.5pt; color:#6b7280; }
+
+  .cyclebox {
+    background:#fffbeb; border:1px solid #fde68a; border-radius:6px;
+    padding:8px 11px; font-size:9.6pt; color:#7c2d12; margin-top:4px;
+  }
+  .cyclebox b { color:#7c2d12; }
+  .arrow { color:#b45309; font-weight:800; padding:0 2px; }
+
+  /* Column guide groups */
+  .grp { border:1px solid #e5e7eb; border-radius:6px; overflow:hidden; margin-bottom:9px; break-inside:avoid; }
+  .grp .ghead { color:#fff; font-weight:800; font-size:10pt; padding:5px 11px; letter-spacing:.5px; text-transform:uppercase; }
+  .g-class .ghead { background:#7c3aed; }
+  .g-pm    .ghead { background:#0d9488; }
+  .g-eng   .ghead { background:#16a34a; }
+  .g-rel   .ghead { background:#15803d; }
+  .grp table { width:100%; border-collapse:collapse; }
+  .grp td { font-size:9.4pt; padding:4px 11px; vertical-align:top; border-top:1px solid #eef0f2; }
+  .grp td.col { font-weight:700; color:#111827; width:170px; }
+  .grp td.mean { color:#374151; }
+  .g-class tr:first-child td, .g-pm tr:first-child td,
+  .g-eng tr:first-child td, .g-rel tr:first-child td { border-top:none; }
+
+  .tagrow { display:flex; gap:6px; flex-wrap:wrap; margin:2px 0 8px; }
+  .tag { display:inline-block; font-weight:700; font-size:8.8pt; padding:1px 7px; border-radius:10px; }
+  .t-num { background:#dcfce7; color:#166534; border:1px solid #86efac; }
+  .t-numg{ background:#e5e7eb; color:#374151; border:1px solid #d1d5db; }
+  .t-cast{ background:#dbeafe; color:#1e40af; border:1px solid #93c5fd; }
+  .t-manual { background:#ffedd5; color:#9a3412; border:1px solid #fdba74; }
+
+  .foot {
+    margin-top: 14px; border-top: 2px solid #1f2937; padding-top: 7px;
+    font-size: 8.5pt; color: #555; display:flex; justify-content:space-between;
+  }
+
+  /* Print button (screen only) */
+  .printbar { position: fixed; top: 14px; right: 14px; z-index: 50; }
+  .printbar button {
+    font-family: "Segoe UI", Arial, sans-serif; font-size: 11pt; font-weight: 700;
+    color: #fff; background: #1f2937; border: none; border-radius: 6px;
+    padding: 9px 16px; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,.25);
+    display: inline-flex; align-items: center; gap: 7px;
+  }
+  .printbar button:hover { background: #374151; }
+  .printbar button svg { width: 15px; height: 15px; }
+
+  @media screen {
+    body { background: #e5e7eb; padding: 24px 0; }
+    .sheet {
+      width: 8.5in; margin: 0 auto;
+      background: #fff; padding: 0.5in;
+      box-shadow: 0 4px 18px rgba(0,0,0,.18);
+    }
+  }
+  @media print { .printbar { display:none !important; } }
+</style>
+</head>
+<body>
+
+<div class="printbar">
+  <button onclick="window.print()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+         stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="6 9 6 2 18 2 18 9"></polyline>
+      <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+      <rect x="6" y="14" width="12" height="8"></rect>
+    </svg>
+    Print
+  </button>
+</div>
+
+<div class="sheet">
+
+  <div class="head">
+    <h1><span class="eyebrow">Standard Operating Procedure</span>
+        Releasability Board</h1>
+    <div class="meta">
+      <b>Rev:</b> 1.0<br>
+      <b>Type:</b> Reference / how-to<br>
+      <b>Owner:</b> ____________
+    </div>
+  </div>
+
+  <div class="lead">
+    The Releasability Board answers one question: <b>is this project ready to release to production?</b>
+    Every casting is a row; every column is a milestone that must be done before the job can move.
+    Scan it to see at a glance what is <b>ready</b> (green), what is <b>in progress</b> (yellow), and what
+    still <b>needs work</b> (red). This sheet explains everything you see and can do on the board.
+  </div>
+
+  <!-- 1 -->
+  <div class="section">
+    <h2><span class="num">1</span> What the board is for</h2>
+    <div class="inner">
+      <p class="body">Each row is one <b>casting</b> (a specific production job). Moving left to right, the columns
+      are the approvals and prep steps owned by <b>Classroom</b>, the <b>Project Manager</b>, and <b>Engineering</b>.
+      When every column is green — ending with the <b>Green Sticker</b> — the project is cleared to build and its
+      project number turns green. The board updates live and is shared, so what you mark is seen by everyone.</p>
+    </div>
+  </div>
+
+  <!-- 2 -->
+  <div class="section">
+    <h2><span class="num">2</span> The toolbar (top of the page)</h2>
+    <div class="inner">
+      <div class="defs">
+        <div class="k">Search projects</div>
+        <div class="v">Type a project name or number to filter the board to matching rows. Click the <b>×</b> to clear.</div>
+        <div class="k">STATUS legend</div>
+        <div class="v">Reminder of what the four cell colors mean (see section 4).</div>
+        <div class="k">TASKS legend</div>
+        <div class="v">Shows which columns are owned by <b>PM</b> (teal) vs. <b>Engineering</b> (green).</div>
+        <div class="k">Hide Completed Projects</div>
+        <div class="v">Check to hide any project that is all-green, so you only see work that is still open.</div>
+        <div class="k">+ Add Week</div>
+        <div class="v">Creates a custom (manual) week you can name — for rush jobs or groupings that aren't on the calendar schedule.</div>
+        <div class="k">Printer icon</div>
+        <div class="v">Opens the print menu (see section 7): choose a format and which weeks to print.</div>
+        <div class="k">"Updated just now"</div>
+        <div class="v">How fresh the data is. <b>Green dot</b> = current, <b>yellow</b> = aging, <b>red</b> = stale/possible network issue.</div>
+        <div class="k">Refresh icon</div>
+        <div class="v">Forces an immediate sync. Use it if the board feels out of date.</div>
+        <div class="k">Fullscreen icon</div>
+        <div class="v">Expands the board to fill the screen — good for a wall display or large monitor.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3 -->
+  <div class="section">
+    <h2><span class="num">3</span> Reading a row</h2>
+    <div class="inner">
+      <p class="body">Projects are grouped under <b>week headers</b> (e.g. "Week 2: Jul 6–11"). Click the
+      <b>▼ / ▶ arrow</b> on a week header to collapse or expand that week; the board remembers it on refresh.
+      Each row shows, left to right:</p>
+      <div class="tagrow">
+        <span class="tag t-numg">0383</span>
+        <span class="tag t-num">0814 (green = released)</span>
+        <span class="tag t-cast">Cast #19</span>
+        <span class="tag t-manual">orange edge = manual project</span>
+      </div>
+      <div class="defs">
+        <div class="k">Project number</div>
+        <div class="v">The job's ID (e.g. <b>0383</b>). Grey by default; turns <b>green</b> once the Green Sticker is marked complete.</div>
+        <div class="k">Project name</div>
+        <div class="v">Pulled from the portal by project number. If the number isn't found, the schedule name is used instead.</div>
+        <div class="k">Cast badge</div>
+        <div class="v">Blue tag (e.g. <b>Cast #19</b>, <b>#MU1</b>, <b>#MOCKUP</b>) identifying which casting/run this row is.</div>
+        <div class="k">Start Date</div>
+        <div class="v">Scheduled start (e.g. "Wed 24"). Manual projects with no date show "<b>--</b>".</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4 -->
+  <div class="section">
+    <h2><span class="num">4</span> Status key &amp; updating a cell</h2>
+    <div class="inner">
+      <div class="statuskey">
+        <div class="skey"><div class="cell c-done">✓</div><div class="lab"><b>Complete</b><span>Done and verified</span></div></div>
+        <div class="skey"><div class="cell c-prog">/</div><div class="lab"><b>In Progress</b><span>Work underway</span></div></div>
+        <div class="skey"><div class="cell c-inc">–</div><div class="lab"><b>Incomplete</b><span>Not started / not done</span></div></div>
+        <div class="skey"><div class="cell c-na">N/A</div><div class="lab"><b>Not Applicable</b><span>Doesn't apply to this job</span></div></div>
+      </div>
+      <div class="cyclebox">
+        <b>To change a status, click the cell.</b> It cycles:
+        Incomplete <span class="arrow">→</span> In Progress <span class="arrow">→</span> Complete
+        <span class="arrow">→</span> Not Applicable <span class="arrow">→</span> back to Incomplete.
+        The change saves automatically and syncs to everyone. <b>Hover</b> a cell to see a tooltip with the
+        project and milestone name.
+      </div>
+      <p class="body" style="margin-top:8px">Hover a <b>project name</b> to reveal <b>copy</b> and <b>paste</b> buttons — copy one
+      project's whole row of statuses and paste the same pattern onto another. (Paste is greyed out until you've copied.)</p>
+    </div>
+  </div>
+
+  <!-- 5 -->
+  <div class="section" style="break-before:page">
+    <h2><span class="num">5</span> Column guide</h2>
+    <div class="inner">
+
+      <div class="grp g-class">
+        <div class="ghead">Classroom</div>
+        <table>
+          <tr><td class="col">Classroom #1 / #2 / #3</td><td class="mean">Design reviews / kickoff meetings held in the classrooms. A job may run through one, two, or all three.</td></tr>
+        </table>
+      </div>
+
+      <div class="grp g-pm">
+        <div class="ghead">Project Manager</div>
+        <table>
+          <tr><td class="col">Shop Folder Built</td><td class="mean">The project folder on the shared drive is set up and ready.</td></tr>
+          <tr><td class="col">Approved SDs</td><td class="mean">Shop Drawings reviewed and approved.</td></tr>
+          <tr><td class="col">Sample Approval</td><td class="mean">Sample casting approved for production quality.</td></tr>
+          <tr><td class="col">Color Log</td><td class="mean">Color / finish selections documented and confirmed.</td></tr>
+          <tr><td class="col">Final Optimizer HRS</td><td class="mean">Optimizer hours finalized in the production estimate.</td></tr>
+          <tr><td class="col">Rebar/Drilling Layout</td><td class="mean">Reinforcement and hole-drilling layouts complete.</td></tr>
+        </table>
+      </div>
+
+      <div class="grp g-eng">
+        <div class="ghead">Engineering</div>
+        <table>
+          <tr><td class="col">Labels</td><td class="mean">Production labels designed and ready to print.</td></tr>
+          <tr><td class="col">Final Tracking</td><td class="mean">Tracking sheet finalized and ready for the shop.</td></tr>
+          <tr><td class="col">Batching Sheets</td><td class="mean">Concrete batch recipes and quantities documented.</td></tr>
+          <tr><td class="col">Casting Layout</td><td class="mean">Layout diagrams for the casting form finalized.</td></tr>
+          <tr><td class="col">Inflow Sales Ticket</td><td class="mean">Sales order entered in the Inflow system.</td></tr>
+          <tr><td class="col">3D Drawings/Parts List</td><td class="mean">All 3D models and parts lists complete.</td></tr>
+          <tr><td class="col">Toolpath Program</td><td class="mean">CNC toolpath programs written and tested.</td></tr>
+          <tr><td class="col">Jig List</td><td class="mean">Custom jigs and tooling identified or built.</td></tr>
+          <tr><td class="col">Staging</td><td class="mean">Materials and forms staged and ready to cast.</td></tr>
+        </table>
+      </div>
+
+      <div class="grp g-rel">
+        <div class="ghead">Release</div>
+        <table>
+          <tr><td class="col">Green Sticker</td><td class="mean">The final all-clear. When complete, the whole project is approved for production and the project number turns green.</td></tr>
+        </table>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 6 -->
+  <div class="section">
+    <h2><span class="num">6</span> Weeks &amp; manual projects</h2>
+    <div class="inner">
+      <div class="defs">
+        <div class="k">Add a project</div>
+        <div class="v">On a week header, click <b>+ Add Project</b>. Enter a <b>Project #</b> (name is looked up automatically) and a <b>Cast #</b>.</div>
+        <div class="k">Manual projects</div>
+        <div class="v">Projects you add by hand show a <b>left orange edge</b>. Hover to reveal a drag handle and a <b>×</b> to delete.</div>
+        <div class="k">Move a project</div>
+        <div class="v">Drag a manual project by its handle onto another week header (highlights blue) to reschedule it.</div>
+        <div class="k">Manual weeks</div>
+        <div class="v">Custom weeks from <b>+ Add Week</b> can be renamed, moved up/down, or deleted from the week header.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 7 -->
+  <div class="section">
+    <h2><span class="num">7</span> Printing</h2>
+    <div class="inner">
+      <p class="body">Click the <b>printer icon</b> to open the print menu, then pick a format and the weeks to include:</p>
+      <div class="defs">
+        <div class="k">Releasability Report</div>
+        <div class="v">Simple portrait table of projects and start dates, grouped by week.</div>
+        <div class="k">Folder Board</div>
+        <div class="v">Large landscape print for the shop board — bold names, cast numbers, dates, with released / not-released flags.</div>
+        <div class="k">Week selection</div>
+        <div class="v">Check individual weeks, or use the presets: <b>Next Month</b>, <b>Current Month</b>, <b>All</b>, <b>None</b>.</div>
+        <div class="k">Print</div>
+        <div class="v">Click <b>Print Selected</b> / <b>Print Folder Board</b>; a new tab opens the layout — use your browser's print dialog (Ctrl+P).</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8 -->
+  <div class="section">
+    <h2><span class="num">8</span> Where the data comes from</h2>
+    <div class="inner">
+      <p class="body">Projects and schedule info come from the <b>Google Sheets schedule</b>; the status cells and any manual
+      projects are saved in the <b>database</b> and persist between sessions. The board <b>auto-refreshes</b> in the
+      background, so other people's changes appear on their own. Switching back to the tab syncs immediately, and the
+      <b>Refresh</b> icon forces a sync any time. Watch the <b>"Updated just now"</b> dot to confirm the board is current.</p>
+    </div>
+  </div>
+
+  <div class="foot">
+    <span><b>Bottom line:</b> Rows are castings, columns are milestones. Click a cell to update its status; all green + Green Sticker = released (project number turns green). The board is live and shared.</span>
+    <span>Releasability Board</span>
+  </div>
+
+</div>
+</body>
+</html>

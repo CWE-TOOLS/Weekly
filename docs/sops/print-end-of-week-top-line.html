@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SOP — Print End-of-Week Top Line</title>
+<style>
+  @page { size: Letter portrait; margin: 0.5in; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    font-family: "Segoe UI", Arial, sans-serif;
+    color: #1a1a1a;
+    font-size: 10.5pt;
+    line-height: 1.35;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .sheet { width: 100%; }
+
+  /* Header */
+  .head {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    border-bottom: 3px solid #1f2937; padding-bottom: 8px; margin-bottom: 12px;
+  }
+  .head h1 { font-size: 25pt; letter-spacing: -0.3px; line-height: 1.05; }
+  .head h1 .eyebrow { display:block; font-size: 10pt; font-weight: 700; color:#6b7280; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 3px; }
+  .head .meta { font-size: 8.5pt; color: #555; text-align: right; line-height: 1.4; }
+  .head .meta b { color:#111827; }
+
+  .lead {
+    font-size: 9.5pt; color:#374151; background:#f3f4f6; border-left:4px solid #1f2937;
+    padding: 6px 11px; border-radius: 3px; margin-bottom: 12px;
+  }
+
+  /* Steps */
+  .step {
+    display: flex; gap: 10px; align-items: flex-start;
+    padding: 6px 0; break-inside: avoid;
+  }
+  .step + .step { border-top: 1px solid #e5e7eb; }
+  .n {
+    flex: 0 0 auto;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 23px; height: 23px; border-radius: 50%;
+    background: #1f2937; color: #fff; font-size: 11pt; font-weight: 700;
+    margin-top: 1px;
+  }
+  .body h2 {
+    font-size: 10pt; text-transform: uppercase; letter-spacing: 0.3px;
+    color: #111827; margin-bottom: 2px;
+  }
+  .body p { font-size: 9.8pt; color:#1f2937; }
+  .body .note { font-size: 8.6pt; color:#6b7280; margin-top: 2px; }
+  b { color:#111827; }
+
+  /* Sleeve label chips */
+  .sleeve {
+    display:inline-block; font-weight:700; padding:0 6px; border-radius:3px;
+    font-size:9pt; border:1px solid;
+  }
+  .s-actual { background:#dcfce7; color:#166534; border-color:#86efac; }
+  .s-frozen { background:#dbeafe; color:#1e40af; border-color:#93c5fd; }
+  .s-delta  { background:#fef9c3; color:#854d0e; border-color:#fde047; }
+  .s-cogs   { background:#fee2e2; color:#b91c1c; border-color:#fca5a5; }
+  .clip {
+    display:inline-block; background:#166534; color:#fff; font-weight:700;
+    padding:0 6px; border-radius:3px; font-size:9pt;
+  }
+
+  /* Critical / write step highlight */
+  .hot .n { background:#b91c1c; }
+
+  .foot {
+    margin-top: 12px; border-top: 2px solid #1f2937; padding-top: 7px;
+    font-size: 8.5pt; color: #555; display:flex; justify-content:space-between;
+  }
+
+  /* Print button (screen only) */
+  .printbar { position: fixed; top: 14px; right: 14px; z-index: 50; }
+  .printbar button {
+    font-family: "Segoe UI", Arial, sans-serif; font-size: 11pt; font-weight: 700;
+    color: #fff; background: #1f2937; border: none; border-radius: 6px;
+    padding: 9px 16px; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,.25);
+    display: inline-flex; align-items: center; gap: 7px;
+  }
+  .printbar button:hover { background: #374151; }
+  .printbar button svg { width: 15px; height: 15px; }
+
+  /* Screen framing so it reads like a sheet of paper */
+  @media screen {
+    body { background: #e5e7eb; padding: 24px 0; }
+    .sheet {
+      width: 8.5in; min-height: 11in; margin: 0 auto;
+      background: #fff; padding: 0.5in;
+      box-shadow: 0 4px 18px rgba(0,0,0,.18);
+    }
+  }
+
+  @media print {
+    .printbar { display: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="printbar">
+  <button onclick="window.print()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+         stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="6 9 6 2 18 2 18 9"></polyline>
+      <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+      <rect x="6" y="14" width="12" height="8"></rect>
+    </svg>
+    Print
+  </button>
+</div>
+
+<div class="sheet">
+
+  <div class="head">
+    <h1><span class="eyebrow">Standard Operating Procedure</span>
+        Print End-of-Week Top Line</h1>
+    <div class="meta">
+      <b>Rev:</b> 1.0<br>
+      <b>Cadence:</b> Weekly — end of week<br>
+      <b>Owner:</b> ____________
+    </div>
+  </div>
+
+  <div class="lead">
+    Do this <b>after clearing the previous week's board</b>. You will print the week's
+    revenue, post the <b>Actual</b>, <b>Frozen</b>, <b>Delta</b>, and <b>COGS</b> sheets to their
+    wall sleeves, and set up next week's Frozen print for the green clipboard.
+  </div>
+
+  <div class="step">
+    <span class="n">1</span>
+    <div class="body">
+      <p>Go to the <b>Optimizer</b> for the <b>current month</b>.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <span class="n">2</span>
+    <div class="body">
+      <p>Go to the <b>Dunham's Rev</b> tab.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <span class="n">3</span>
+    <div class="body">
+      <p>Select <b>all revenue cells for the current week</b>.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <span class="n">4</span>
+    <div class="body">
+      <p>Print on <b>Letter-size landscape</b> paper, set to <b>Selected Cells Only</b>.</p>
+    </div>
+  </div>
+
+  <div class="step hot">
+    <span class="n">5</span>
+    <div class="body">
+      <p>With a marker, write <b>"Actual"</b> and the <b>total revenue for this week</b> in
+      <b>large letters</b> across the bottom of the sheet.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <span class="n">6</span>
+    <div class="body">
+      <p>Place it in the sleeve labeled <span class="sleeve s-actual">ACTUAL</span> at the top of the wall.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <span class="n">7</span>
+    <div class="body">
+      <p>Take the <b>"Frozen" print-out of last week</b> from the <span class="clip">GREEN clipboard</span>
+      under the <b>Frozen Attendance</b> sign on the wall.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <span class="n">8</span>
+    <div class="body">
+      <p>Place it in the sleeve marked <span class="sleeve s-frozen">FROZEN</span>.</p>
+    </div>
+  </div>
+
+  <div class="step hot">
+    <span class="n">9</span>
+    <div class="body">
+      <p>Print <b>next week</b> the same way you printed Actual (steps 3–4). With a marker,
+      label the bottom <b>"Frozen"</b> and write the <b>revenue total</b> in large letters.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <span class="n">10</span>
+    <div class="body">
+      <p>Put it on the <span class="clip">GREEN clipboard</span> for use the following week.</p>
+    </div>
+  </div>
+
+  <div class="step hot">
+    <span class="n">11</span>
+    <div class="body">
+      <p>On a blank sheet of letter paper, write <b>% Performance</b> in large letters —
+      <b>Actual revenue ÷ Frozen</b> as a percentage. <span class="note">(Example: 95%)</span></p>
+    </div>
+  </div>
+
+  <div class="step">
+    <span class="n">12</span>
+    <div class="body">
+      <p>Place it in the sleeve marked <span class="sleeve s-delta">DELTA</span>.</p>
+    </div>
+  </div>
+
+  <div class="step hot">
+    <span class="n">13</span>
+    <div class="body">
+      <p>On a blank sheet of letter paper, write in large letters the <b>COGS percentage</b> from the
+      <b>bottom-right of the current week</b> on the Dunham's Rev tab in the Optimizer.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <span class="n">14</span>
+    <div class="body">
+      <p>Place the sheet in the sleeve labeled <span class="sleeve s-cogs">COGS</span>.</p>
+    </div>
+  </div>
+
+  <div class="foot">
+    <span><b>Bottom line:</b> Print this week = Actual, last week's Frozen goes up, print next week's Frozen for the clipboard, then post Delta (%) and COGS (%).</span>
+    <span>End-of-Week Top Line</span>
+  </div>
+
+</div>
+</body>
+</html>

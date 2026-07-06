@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>CWE — SOP Binder Cover</title>
+<style>
+  @page { size: Letter portrait; margin: 0.25in; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    font-family: "Segoe UI", Arial, sans-serif;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Full-page cover panel */
+  .cover {
+    position: relative;
+    width: 100%; min-height: 10.5in;
+    background: #1f2937;
+    color: #fff;
+    border: 3px solid #0f172a;
+    border-radius: 6px;
+    padding: 0.7in 0.7in 0.55in;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  /* subtle corner accent bars */
+  .cover::before, .cover::after {
+    content: ""; position: absolute; background: #b91c1c;
+  }
+  .cover::before { top: 0; left: 0; width: 100%; height: 12px; }
+  .cover::after  { bottom: 0; left: 0; width: 100%; height: 12px; }
+
+  .eyebrow {
+    font-size: 13pt; font-weight: 700; letter-spacing: 4px;
+    text-transform: uppercase; color: #9ca3af; text-align: center;
+    margin-top: 8px;
+  }
+
+  .mark {
+    text-align: center; margin: auto 0;
+  }
+  .mark .cwe {
+    font-size: 150pt; font-weight: 800; letter-spacing: 4px; line-height: 0.9;
+    color: #fff;
+  }
+  .mark .expand {
+    font-size: 12pt; font-weight: 600; letter-spacing: 2px; color:#cbd5e1;
+    text-transform: uppercase; margin-top: 6px;
+  }
+  .rule {
+    width: 120px; height: 4px; background:#b91c1c; margin: 22px auto;
+    border-radius: 2px;
+  }
+  .sop {
+    text-align: center; font-size: 24pt; font-weight: 700; letter-spacing: 1px;
+    color:#fff;
+  }
+  .sop .sub {
+    display:block; font-size: 12pt; font-weight: 600; color:#9ca3af;
+    letter-spacing: 3px; text-transform: uppercase; margin-top: 8px;
+  }
+
+  /* Contents */
+  .contents {
+    margin-top: auto;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 6px;
+    padding: 14px 20px;
+  }
+  .contents h3 {
+    font-size: 9.5pt; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
+    color:#9ca3af; margin-bottom: 8px; text-align:center;
+  }
+  .contents ol {
+    list-style: none; counter-reset: c;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 4px 26px;
+  }
+  .contents li {
+    counter-increment: c;
+    font-size: 11pt; color:#e5e7eb; padding: 3px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    display:flex; align-items:baseline; gap:8px;
+  }
+  .contents li::before {
+    content: counter(c); color:#f87171; font-weight:800; font-size:10pt;
+    min-width: 14px;
+  }
+
+  .foot {
+    margin-top: 14px; text-align:center;
+    font-size: 8.5pt; color:#9ca3af; letter-spacing: 1px;
+  }
+
+  /* Print button (screen only) */
+  .printbar { position: fixed; top: 14px; right: 14px; z-index: 50; }
+  .printbar button {
+    font-family: "Segoe UI", Arial, sans-serif; font-size: 11pt; font-weight: 700;
+    color: #fff; background: #1f2937; border: none; border-radius: 6px;
+    padding: 9px 16px; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,.25);
+    display: inline-flex; align-items: center; gap: 7px;
+  }
+  .printbar button:hover { background: #374151; }
+  .printbar button svg { width: 15px; height: 15px; }
+
+  @media screen {
+    body { background: #e5e7eb; padding: 24px 0; }
+    .page {
+      width: 8.5in; min-height: 11in; margin: 0 auto;
+      background: #fff; padding: 0.25in;
+      box-shadow: 0 4px 18px rgba(0,0,0,.18);
+    }
+  }
+  @media print {
+    .printbar { display: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="printbar">
+  <button onclick="window.print()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+         stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="6 9 6 2 18 2 18 9"></polyline>
+      <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+      <rect x="6" y="14" width="12" height="8"></rect>
+    </svg>
+    Print
+  </button>
+</div>
+
+<div class="page">
+  <div class="cover">
+
+    <div class="eyebrow">Production Office</div>
+
+    <div class="mark">
+      <div class="cwe">CWE</div>
+    </div>
+
+    <div class="rule"></div>
+
+    <div class="sop">Standard Operating Procedures
+      <span class="sub">Print-Ready Procedure Binder</span>
+    </div>
+
+    <div class="foot">Rev 1.0 &nbsp;·&nbsp; Keep current — replace pages when procedures change</div>
+
+  </div>
+</div>
+
+</body>
+</html>
