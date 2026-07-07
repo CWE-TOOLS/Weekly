@@ -572,10 +572,11 @@ function createEmptyGrid() {
 
 /**
  * Group projects by their week (Monday date or manual week ID)
+ * Exported so releasability-page.js can build the same grouping the grid renders
  * @param {Array<Object>} projects - Array of project objects
  * @returns {Object} Map of weekMonday/weekId -> array of projects
  */
-function groupProjectsByWeek(projects) {
+export function groupProjectsByWeek(projects) {
   const grouped = {};
 
   projects.forEach(project => {
@@ -619,11 +620,15 @@ function groupProjectsByWeek(projects) {
 
 /**
  * Get the range of weeks to display (1 past week + all future weeks + manual weeks)
+ * Manual week position semantics: position = insertion index into the merged
+ * displayed list. Each manual week (in ascending position order) is spliced in
+ * at its position; out-of-range positions are clamped to the end of the list.
+ * Exported so releasability-page.js can build the exact list the grid renders.
  * @param {Object} projectsByWeek - Map of weekMonday -> projects
  * @param {Array<Object|string>} manualWeeks - Array of manual week objects {id, name, position} or date strings
  * @returns {Array<string|Object>} Mixed array of date strings and manual week objects, sorted by position/date
  */
-function getWeekRange(projectsByWeek, manualWeeks = []) {
+export function getWeekRange(projectsByWeek, manualWeeks = []) {
   const today = new Date();
   const currentMonday = getMonday(today);
 
@@ -651,29 +656,17 @@ function getWeekRange(projectsByWeek, manualWeeks = []) {
     .sort()
     .filter(weekStr => weekStr >= previousMondayStr);
 
-  // Create a combined list with manual weeks inserted at their positions
-  const result = [];
-  let dateWeekIndex = 0;
+  // Create a combined list with manual weeks spliced in at their positions
+  const result = [...sortedDateWeeks];
 
   // Sort manual weeks by position
   const sortedManualWeeks = [...manualWeekObjects].sort((a, b) => a.position - b.position);
 
-  // Merge date weeks and manual weeks based on position
+  // Insert each manual week at its position (clamped to the end if out of range)
   sortedManualWeeks.forEach(manualWeek => {
-    // Add all date weeks before this manual week's position
-    while (dateWeekIndex < manualWeek.position && dateWeekIndex < sortedDateWeeks.length) {
-      result.push(sortedDateWeeks[dateWeekIndex]);
-      dateWeekIndex++;
-    }
-    // Add the manual week
-    result.push(manualWeek);
+    const insertIndex = Math.min(Math.max(0, manualWeek.position), result.length);
+    result.splice(insertIndex, 0, manualWeek);
   });
-
-  // Add remaining date weeks after all manual weeks
-  while (dateWeekIndex < sortedDateWeeks.length) {
-    result.push(sortedDateWeeks[dateWeekIndex]);
-    dateWeekIndex++;
-  }
 
   return result;
 }

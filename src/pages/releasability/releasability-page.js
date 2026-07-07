@@ -35,7 +35,7 @@ import {
   STATUS,
   STATUS_DISPLAY
 } from '../../config/releasability-config.js';
-import { renderReleasabilityGrid, getUniqueDepartments, setProjectActions } from './releasability-grid.js';
+import { renderReleasabilityGrid, getUniqueDepartments, setProjectActions, groupProjectsByWeek, getWeekRange } from './releasability-grid.js';
 import { getMonday, getWeekMonth, getWeekOfMonth } from '../../utils/date-utils.js';
 import { normalizeProjectName } from '../../utils/ui-utils.js';
 import {
@@ -1856,19 +1856,17 @@ async function handleAddWeekClick() {
     return; // User cancelled
   }
 
-  // Check if name already exists
-  if (manualWeeks.some(week => week.name === weekName.trim())) {
+  // Check if name already exists (case-insensitive, matching the DB's unique index)
+  const normalizedName = weekName.trim().toLowerCase();
+  if (manualWeeks.some(week => week.name.trim().toLowerCase() === normalizedName)) {
     showNotification(`Week named "${weekName.trim()}" already exists`);
     return;
   }
 
   // Calculate new position (append to end of entire grid)
-  // Find the maximum position among existing manual weeks and add 1
-  // This ensures the new week has a unique position at the very end
-  const maxPosition = manualWeeks.length > 0
-    ? Math.max(...manualWeeks.map(w => w.position))
-    : -1;
-  const newPosition = maxPosition + 1;
+  // Position = insertion index into the merged displayed list, so the current
+  // list length puts the new week at the very end
+  const newPosition = getFullWeekList().length;
 
   // Save to Supabase
   try {
@@ -1914,87 +1912,32 @@ function handleWeekControlClick(button) {
 
 /**
  * Get the full list of weeks as they appear in the grid (merged date-based and manual weeks)
- * This replicates the logic from getWeekRange in releasability-grid.js
+ * Uses the shared groupProjectsByWeek/getWeekRange from releasability-grid.js so this
+ * list is always identical to what the grid actually renders
  * @returns {Array<Object>} Array of week objects with { type: 'date'|'manual', value: string|Object, displayIndex: number }
  */
 function getFullWeekList() {
-  const projects = getAllProjects();
+  // Build the exact merged week list the grid renders
+  const projectsByWeek = groupProjectsByWeek(getAllProjects());
+  const weeks = getWeekRange(projectsByWeek, manualWeeks);
 
-  // Group projects by week
-  const projectsByWeek = {};
-  projects.forEach(project => {
-    const weekKey = project.manualWeekId || project.weekMonday;
-    if (!projectsByWeek[weekKey]) {
-      projectsByWeek[weekKey] = [];
-    }
-    projectsByWeek[weekKey].push(project);
-  });
-
-  // Get date-based weeks
-  const today = new Date();
-  const currentMonday = getMonday(today);
-  const previousMonday = new Date(currentMonday);
-  previousMonday.setDate(previousMonday.getDate() - 7);
-  const previousMondayStr = previousMonday.toISOString().split('T')[0];
-
-  // Get all weeks with projects (excluding manual week IDs)
-  const manualWeekObjects = manualWeeks.filter(w => typeof w === 'object');
-  const projectWeeks = Object.keys(projectsByWeek);
-
-  const dateWeeks = new Set([
-    previousMondayStr,
-    ...projectWeeks.filter(w => !manualWeekObjects.some(mw => mw.id === w))
-  ]);
-
-  // Filter and sort date weeks
-  const sortedDateWeeks = Array.from(dateWeeks)
-    .sort()
-    .filter(weekStr => weekStr >= previousMondayStr);
-
-  // Merge date weeks and manual weeks based on position
-  const result = [];
-  let dateWeekIndex = 0;
-
-  // Sort manual weeks by position
-  const sortedManualWeeks = [...manualWeekObjects].sort((a, b) => a.position - b.position);
-
-  // Merge based on position
-  sortedManualWeeks.forEach(manualWeek => {
-    // Add all date weeks before this manual week's position
-    while (dateWeekIndex < manualWeek.position && dateWeekIndex < sortedDateWeeks.length) {
-      result.push({
-        type: 'date',
-        value: sortedDateWeeks[dateWeekIndex],
-        displayIndex: result.length
-      });
-      dateWeekIndex++;
-    }
-    // Add the manual week
-    result.push({
-      type: 'manual',
-      value: manualWeek,
-      displayIndex: result.length
-    });
-  });
-
-  // Add remaining date weeks after all manual weeks
-  while (dateWeekIndex < sortedDateWeeks.length) {
-    result.push({
-      type: 'date',
-      value: sortedDateWeeks[dateWeekIndex],
-      displayIndex: result.length
-    });
-    dateWeekIndex++;
-  }
-
-  return result;
+  // Wrap entries in the { type, value, displayIndex } shape callers expect
+  return weeks.map((week, index) => ({
+    type: typeof week === 'string' ? 'date' : 'manual',
+    value: week,
+    displayIndex: index
+  }));
 }
 
 /**
- * Move a manual week up (swap position with previous week in the grid)
+ * Move a manual week up or down by swapping it with its neighbor in the grid,
+ * then normalizing every manual week's position to its index in the new display
+ * order (position = insertion index into the merged list). Normalizing on every
+ * move also self-heals any legacy duplicate/out-of-range positions in the DB.
  * @param {string} weekId - The manual week ID
+ * @param {number} direction - -1 to move up, +1 to move down
  */
-async function handleMoveWeekUp(weekId) {
+async function handleMoveWeek(weekId, direction) {
   // Get the full merged week list as displayed in the grid
   const fullWeekList = getFullWeekList();
 
@@ -2003,127 +1946,64 @@ async function handleMoveWeekUp(weekId) {
     w.type === 'manual' && w.value.id === weekId
   );
 
-  if (currentIndex <= 0) {
+  if (direction < 0 && currentIndex <= 0) {
     showNotification('Already at the top');
     return;
   }
-
-  const currentWeek = fullWeekList[currentIndex].value;
-  const prevWeek = fullWeekList[currentIndex - 1];
-
-  if (prevWeek.type === 'manual') {
-    // Swapping with another manual week - swap positions
-    const prevManualWeek = prevWeek.value;
-    const tempPosition = currentWeek.position;
-    currentWeek.position = prevManualWeek.position;
-    prevManualWeek.position = tempPosition;
-
-    try {
-      await updateManualWeekPositions([
-        { id: currentWeek.id, position: currentWeek.position },
-        { id: prevManualWeek.id, position: prevManualWeek.position }
-      ]);
-
-      // Update the original manualWeeks array
-      const currentWeekInOriginal = manualWeeks.find(w => w.id === currentWeek.id);
-      const prevWeekInOriginal = manualWeeks.find(w => w.id === prevManualWeek.id);
-      if (currentWeekInOriginal) currentWeekInOriginal.position = currentWeek.position;
-      if (prevWeekInOriginal) prevWeekInOriginal.position = prevManualWeek.position;
-
-      showNotification(`Moved week "${currentWeek.name}" up`);
-      renderGrid();
-    } catch (error) {
-      console.error('❌ Failed to move week up:', error);
-      showError('Failed to move week. Please try again.');
-    }
-  } else {
-    // Moving up past a date-based week - decrease position by 1
-    currentWeek.position = Math.max(0, currentWeek.position - 1);
-
-    try {
-      await updateManualWeekPositions([
-        { id: currentWeek.id, position: currentWeek.position }
-      ]);
-
-      // Update the original manualWeeks array
-      const currentWeekInOriginal = manualWeeks.find(w => w.id === currentWeek.id);
-      if (currentWeekInOriginal) currentWeekInOriginal.position = currentWeek.position;
-
-      showNotification(`Moved week "${currentWeek.name}" up`);
-      renderGrid();
-    } catch (error) {
-      console.error('❌ Failed to move week up:', error);
-      showError('Failed to move week. Please try again.');
-    }
-  }
-}
-
-/**
- * Move a manual week down (swap position with next week in the grid)
- * @param {string} weekId - The manual week ID
- */
-async function handleMoveWeekDown(weekId) {
-  // Get the full merged week list as displayed in the grid
-  const fullWeekList = getFullWeekList();
-
-  // Find the current manual week in the full list
-  const currentIndex = fullWeekList.findIndex(w =>
-    w.type === 'manual' && w.value.id === weekId
-  );
-
-  if (currentIndex >= fullWeekList.length - 1) {
+  if (direction > 0 && (currentIndex === -1 || currentIndex >= fullWeekList.length - 1)) {
     showNotification('Already at the bottom');
     return;
   }
 
   const currentWeek = fullWeekList[currentIndex].value;
-  const nextWeek = fullWeekList[currentIndex + 1];
 
-  if (nextWeek.type === 'manual') {
-    // Swapping with another manual week - swap positions
-    const nextManualWeek = nextWeek.value;
-    const tempPosition = currentWeek.position;
-    currentWeek.position = nextManualWeek.position;
-    nextManualWeek.position = tempPosition;
+  // Build the new display order by swapping with the neighbor
+  const newOrder = fullWeekList.map(w => w.value);
+  [newOrder[currentIndex], newOrder[currentIndex + direction]] =
+    [newOrder[currentIndex + direction], newOrder[currentIndex]];
 
-    try {
-      await updateManualWeekPositions([
-        { id: currentWeek.id, position: currentWeek.position },
-        { id: nextManualWeek.id, position: nextManualWeek.position }
-      ]);
-
-      // Update the original manualWeeks array
-      const currentWeekInOriginal = manualWeeks.find(w => w.id === currentWeek.id);
-      const nextWeekInOriginal = manualWeeks.find(w => w.id === nextManualWeek.id);
-      if (currentWeekInOriginal) currentWeekInOriginal.position = currentWeek.position;
-      if (nextWeekInOriginal) nextWeekInOriginal.position = nextManualWeek.position;
-
-      showNotification(`Moved week "${currentWeek.name}" down`);
-      renderGrid();
-    } catch (error) {
-      console.error('❌ Failed to move week down:', error);
-      showError('Failed to move week. Please try again.');
+  // Normalize: every manual week whose position differs from its new display
+  // index gets updated, so positions always match the rendered order
+  const updates = [];
+  newOrder.forEach((week, index) => {
+    if (typeof week === 'object' && week.position !== index) {
+      updates.push({ id: week.id, position: index });
     }
-  } else {
-    // Moving down past a date-based week - increase position by 1
-    currentWeek.position = currentWeek.position + 1;
+  });
 
-    try {
-      await updateManualWeekPositions([
-        { id: currentWeek.id, position: currentWeek.position }
-      ]);
-
-      // Update the original manualWeeks array
-      const currentWeekInOriginal = manualWeeks.find(w => w.id === currentWeek.id);
-      if (currentWeekInOriginal) currentWeekInOriginal.position = currentWeek.position;
-
-      showNotification(`Moved week "${currentWeek.name}" down`);
-      renderGrid();
-    } catch (error) {
-      console.error('❌ Failed to move week down:', error);
-      showError('Failed to move week. Please try again.');
+  try {
+    if (updates.length > 0) {
+      await updateManualWeekPositions(updates);
     }
+
+    // Update the original manualWeeks array
+    updates.forEach(update => {
+      const weekInOriginal = manualWeeks.find(w => w.id === update.id);
+      if (weekInOriginal) weekInOriginal.position = update.position;
+    });
+
+    showNotification(`Moved week "${currentWeek.name}" ${direction < 0 ? 'up' : 'down'}`);
+    renderGrid();
+  } catch (error) {
+    console.error(`❌ Failed to move week ${direction < 0 ? 'up' : 'down'}:`, error);
+    showError('Failed to move week. Please try again.');
   }
+}
+
+/**
+ * Move a manual week up (swap with the previous week in the grid)
+ * @param {string} weekId - The manual week ID
+ */
+async function handleMoveWeekUp(weekId) {
+  await handleMoveWeek(weekId, -1);
+}
+
+/**
+ * Move a manual week down (swap with the next week in the grid)
+ * @param {string} weekId - The manual week ID
+ */
+async function handleMoveWeekDown(weekId) {
+  await handleMoveWeek(weekId, 1);
 }
 
 /**
@@ -2183,7 +2063,9 @@ async function handleEditWeekName(weekId) {
   }
 
   // Validate: check if name already exists (excluding current week)
-  if (manualWeeks.some(w => w.id !== weekId && w.name === newName.trim())) {
+  // Case-insensitive to match the DB's unique index on LOWER(custom_name)
+  const normalizedName = newName.trim().toLowerCase();
+  if (manualWeeks.some(w => w.id !== weekId && w.name.trim().toLowerCase() === normalizedName)) {
     showNotification(`Week named "${newName.trim()}" already exists`);
     return;
   }
