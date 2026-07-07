@@ -7313,11 +7313,10 @@ function renderBatchPreview(casting, ticket) {
 
     if (!plan.batches.length) return '';
 
-    const pigReductionPct = parsePigReduction(ticket.pigReduction);
-    const reduceFirstBackup = !!ticket.pigReduceFirstBackup;
     const sectionHeader = renderBatchSectionHeader(plan);
     const assign = renderBatchAssignTable(plan);
-    const totalsPanel = renderBatchTotals(plan, activeLog, pigReductionPct, reduceFirstBackup);
+    // Day totals combine every color ticket on this casting, not just the one being viewed.
+    const totalsPanel = renderBatchTotals(buildBatchTotalsEntries(casting));
     const tickets = renderBatchTicketCards(casting, ticket, plan);
 
     return `
@@ -7327,6 +7326,38 @@ function renderBatchPreview(casting, ticket) {
         <div class="pp-bt-tickets">${tickets}</div>
         <div class="pp-bt-print-hint">Use <strong>Print Batch Tickets</strong> in the top bar to print these.</div>
     `;
+}
+
+/**
+ * One totals entry per color ticket on the casting that has a usable plan
+ * (cu ft entered and a color log with a sand weight). Feeds renderBatchTotals
+ * so the Mix Day Totals panel spans all colors, not just the active ticket.
+ */
+function buildBatchTotalsEntries(casting) {
+    const entries = [];
+    for (const t of getBatchTicketList(casting.id)) {
+        const totalCuFt = parseFloat(t.cuFt);
+        if (!totalCuFt || totalCuFt <= 0) continue;
+        const log = getActiveBatchColorLog(casting, t);
+        const sandLbs = getColorLogSandLbs(log);
+        if (!sandLbs) continue;
+        const plan = buildBatchPlan({
+            totalCuFt,
+            faceSqFt: parseFloat(t.faceSqFt) || 0,
+            cuFtPer250: parseFloat(t.cuFtPer250) || 4.28,
+            castMethod: log?.castMethod || 'sprayUp',
+            colorLogSandLbs: sandLbs,
+            manualOverrides: t.batchAssignments
+        });
+        if (!plan.batches.length) continue;
+        entries.push({
+            plan,
+            log,
+            pigReductionPct: parsePigReduction(t.pigReduction),
+            reduceFirstBackup: !!t.pigReduceFirstBackup
+        });
+    }
+    return entries;
 }
 
 function renderBatchSectionHeader(plan) {
@@ -7399,9 +7430,9 @@ function additiveAmount(item) {
  *   - Pigments multiplied by (1 - reduction%) on FINAL Back Up batches
  * Matches the totals table from Batchin Calc/index.html.
  */
-function renderBatchTotals(plan, log, pigReductionPct = FINAL_BACKUP_PIG_REDUCTION_PCT, reduceFirstBackup = false) {
-    if (!plan?.batches?.length) return '';
-    const isDirectCast = log?.castMethod === 'directCast';
+function renderBatchTotals(entries) {
+    entries = (entries || []).filter(e => e?.plan?.batches?.length && e.log);
+    if (!entries.length) return '';
 
     const totals = {};
     const orderKeys = [];
@@ -7415,78 +7446,91 @@ function renderBatchTotals(plan, log, pigReductionPct = FINAL_BACKUP_PIG_REDUCTI
         totals[k].total += parseFloat(qty);
     };
 
-    // Pre-seed base ingredient ordering, inserting bulk sand right after sand.
-    const hasBulkSand = !isDirectCast && plan.batches.some(b => b.type === 'firstBackUp' || b.type === 'finalBackUp');
-    for (const ing of (log?.baseIngredients || [])) {
-        if (!ing?.name) continue;
-        const unit = ing.unit || 'lbs';
-        const k = ing.name + '__' + unit;
-        if (!totals[k]) {
-            totals[k] = { name: ing.name + (ing.note ? ' (' + ing.note + ')' : ''), total: 0, unit, category: 'dry' };
-            orderKeys.push(k);
-        }
-        if ((ing.name || '').trim().toLowerCase() === 'sand' && hasBulkSand) {
-            const bk = 'Sand_bulk__' + unit;
-            if (!totals[bk]) {
-                totals[bk] = { name: 'Sand - Bulk (Cowbay)', total: 0, unit, category: 'dry' };
-                orderKeys.push(bk);
-            }
-        }
-    }
+    // Accumulate every color ticket's plan into one shared totals map — same-name
+    // materials (Portland, Sand, Water…) merge across colors, color-specific
+    // pigments/additives get their own rows.
+    for (const { plan, log, pigReductionPct = FINAL_BACKUP_PIG_REDUCTION_PCT, reduceFirstBackup = false } of entries) {
+        const isDirectCast = log?.castMethod === 'directCast';
 
-    plan.batches.forEach(b => {
-        const { batchSandLbs, scaleFactor, type: batchType } = b;
-        const applyPigReduction = batchType === 'finalBackUp' || (batchType === 'firstBackUp' && reduceFirstBackup);
-        const pigMultiplier = applyPigReduction ? (1 - pigReductionPct / 100) : 1;
-        const isBackup = batchType === 'firstBackUp' || batchType === 'finalBackUp';
-
-        // Base ingredients — split sand into Bulk Sand for sprayUp backup batches.
+        // Pre-seed base ingredient ordering, inserting bulk sand right after sand.
+        const hasBulkSand = !isDirectCast && plan.batches.some(b => b.type === 'firstBackUp' || b.type === 'finalBackUp');
         for (const ing of (log?.baseIngredients || [])) {
-            if (!ing?.weight || !ing?.name) continue;
-            const w = Number(ing.weight) * scaleFactor;
-            if ((ing.name || '').trim().toLowerCase() === 'sand' && !isDirectCast && isBackup) {
-                addTotal('Sand_bulk', 'Sand - Bulk (Cowbay)', roundSig(w, 4), ing.unit || 'lbs', 'dry');
+            if (!ing?.name) continue;
+            const unit = ing.unit || 'lbs';
+            const k = ing.name + '__' + unit;
+            if (!totals[k]) {
+                totals[k] = { name: ing.name + (ing.note ? ' (' + ing.note + ')' : ''), total: 0, unit, category: 'dry' };
+                orderKeys.push(k);
+            }
+            if ((ing.name || '').trim().toLowerCase() === 'sand' && hasBulkSand) {
+                const bk = 'Sand_bulk__' + unit;
+                if (!totals[bk]) {
+                    totals[bk] = { name: 'Sand - Bulk (Cowbay)', total: 0, unit, category: 'dry' };
+                    orderKeys.push(bk);
+                }
+            }
+        }
+
+        plan.batches.forEach(b => {
+            const { batchSandLbs, scaleFactor, type: batchType } = b;
+            const applyPigReduction = batchType === 'finalBackUp' || (batchType === 'firstBackUp' && reduceFirstBackup);
+            const pigMultiplier = applyPigReduction ? (1 - pigReductionPct / 100) : 1;
+            const isBackup = batchType === 'firstBackUp' || batchType === 'finalBackUp';
+
+            // Base ingredients — split sand into Bulk Sand for sprayUp backup batches.
+            for (const ing of (log?.baseIngredients || [])) {
+                if (!ing?.weight || !ing?.name) continue;
+                const w = Number(ing.weight) * scaleFactor;
+                if ((ing.name || '').trim().toLowerCase() === 'sand' && !isDirectCast && isBackup) {
+                    addTotal('Sand_bulk', 'Sand - Bulk (Cowbay)', roundSig(w, 4), ing.unit || 'lbs', 'dry');
+                } else {
+                    addTotal(ing.name, ing.name + (ing.note ? ' (' + ing.note + ')' : ''), roundSig(w, 4), ing.unit || 'lbs', 'dry');
+                }
+            }
+
+            // Aggregates — printed under DRY BATCH on every ticket card, so total them the same way.
+            for (const agg of (log?.aggregates || [])) {
+                if (!agg?.name || !agg.amount) continue;
+                addTotal('agg_' + agg.name, agg.name, roundSig(Number(agg.amount) * scaleFactor, 4), agg.unit || 'lbs', 'dry');
+            }
+
+            // Fibers override:
+            //   - Spray Up backup batches → Cemfill 18 lbs/250 lbs sand
+            //   - Direct Cast (all batches) → Cemfill 18 lbs/250 lbs sand
+            const cemfillOverride = isBackup || (isDirectCast && batchType === 'face');
+            if (cemfillOverride) {
+                const fibersLbs = 18 * (batchSandLbs / 250);
+                addTotal('Fibers_override', 'Fibers - Cemfill', roundSig(fibersLbs, 4), 'lbs', 'dry');
             } else {
-                addTotal(ing.name, ing.name + (ing.note ? ' (' + ing.note + ')' : ''), roundSig(w, 4), ing.unit || 'lbs', 'dry');
+                const fib = (log?.additives || []).find(a => /fiber|fibre/i.test(a?.name || ''));
+                const fibAmt = additiveAmount(fib);
+                if (fib && fibAmt != null) {
+                    addTotal('Fibers', 'Fibers' + (fib.note ? ' (' + fib.note + ')' : ''), roundSig(fibAmt * scaleFactor, 4), fib.unit || 'g', 'additive');
+                }
             }
-        }
 
-        // Fibers override:
-        //   - Spray Up backup batches → Cemfill 18 lbs/250 lbs sand
-        //   - Direct Cast (all batches) → Cemfill 18 lbs/250 lbs sand
-        const cemfillOverride = isBackup || (isDirectCast && batchType === 'face');
-        if (cemfillOverride) {
-            const fibersLbs = 18 * (batchSandLbs / 250);
-            addTotal('Fibers_override', 'Fibers - Cemfill', roundSig(fibersLbs, 4), 'lbs', 'dry');
-        } else {
-            const fib = (log?.additives || []).find(a => /fiber|fibre/i.test(a?.name || ''));
-            const fibAmt = additiveAmount(fib);
-            if (fib && fibAmt != null) {
-                addTotal('Fibers', 'Fibers' + (fib.note ? ' (' + fib.note + ')' : ''), roundSig(fibAmt * scaleFactor, 4), fib.unit || 'g', 'additive');
+            // Pigments
+            (log?.pigments || []).forEach(pig => {
+                if (!pig || pig.pct === '' || pig.pct == null) return;
+                const effectivePct = Number(pig.pct) * pigMultiplier;
+                const weightLbs = batchSandLbs * effectivePct / 100;
+                const unit = pig.unit || 'lbs';
+                const converted = weightLbs * (FROM_LBS[unit] || 1);
+                const label = (pig.name || '') + ' (' + roundSig(effectivePct, 2) + '%)';
+                addTotal('pig_' + (pig.name || '_'), label, roundSig(converted, 4), unit, 'pigment');
+            });
+
+            // Additives (skip fibers — handled above)
+            for (const add of (log?.additives || [])) {
+                if (!add?.name) continue;
+                if (/fiber|fibre/i.test(add.name)) continue;
+                const amt = additiveAmount(add);
+                if (amt == null) continue;
+                const a = amt * scaleFactor;
+                addTotal(add.name, add.name + (add.note ? ' (' + add.note + ')' : ''), roundSig(a, 4), add.unit || 'oz', 'additive');
             }
-        }
-
-        // Pigments
-        (log?.pigments || []).forEach(pig => {
-            if (!pig || pig.pct === '' || pig.pct == null) return;
-            const effectivePct = Number(pig.pct) * pigMultiplier;
-            const weightLbs = batchSandLbs * effectivePct / 100;
-            const unit = pig.unit || 'lbs';
-            const converted = weightLbs * (FROM_LBS[unit] || 1);
-            const label = (pig.name || '') + ' (' + roundSig(effectivePct, 2) + '%)';
-            addTotal('pig_' + (pig.name || '_'), label, roundSig(converted, 4), unit, 'pigment');
         });
-
-        // Additives (skip fibers — handled above)
-        for (const add of (log?.additives || [])) {
-            if (!add?.name) continue;
-            if (/fiber|fibre/i.test(add.name)) continue;
-            const amt = additiveAmount(add);
-            if (amt == null) continue;
-            const a = amt * scaleFactor;
-            addTotal(add.name, add.name + (add.note ? ' (' + add.note + ')' : ''), roundSig(a, 4), add.unit || 'oz', 'additive');
-        }
-    });
+    }
 
     const categories = [
         { key: 'dry', label: 'Dry Batch' },
@@ -7506,9 +7550,10 @@ function renderBatchTotals(plan, log, pigReductionPct = FINAL_BACKUP_PIG_REDUCTI
 
     if (!rows) return '';
 
+    const title = entries.length > 1 ? 'Mix Day Totals — All Colors & Batches' : 'Mix Day Totals — All Batches';
     return `
         <div class="pp-bt-totals-panel">
-            <div class="pp-bt-totals-title">Mix Day Totals — All Batches</div>
+            <div class="pp-bt-totals-title">${title}</div>
             <table class="pp-bt-totals-table">
                 <thead><tr><th>Material</th><th class="pp-bt-totals-num">Total Qty</th><th>Unit</th></tr></thead>
                 <tbody>${rows}</tbody>
