@@ -55,6 +55,7 @@ export function renderTaskCard(task, index) {
             <div class="task-title">${escapeHtml(task.project)}</div>
             <div class="project-description">${escapeHtml(task.projectDescription || '')}</div>
             <div class="task-day-counter">${escapeHtml(task.dayCounter || '')}</div>
+            ${typeof task.piecesCount === 'number' && task.piecesCount > 0 ? `<div class="task-pieces-count">${task.piecesCount} pcs</div>` : ''}
             <div class="task-description">${task.description && task.description.trim() ? sanitizeDescription(task.description) : '<span class="missing-description">Staging Missing</span>'}</div>
             <div class="task-details">
                 <strong>Date:</strong> ${escapeHtml(formattedDate)}<br>
