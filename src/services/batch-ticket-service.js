@@ -3,7 +3,8 @@
  * Persists per-casting batch ticket settings + manual batch-type overrides.
  *
  * Schema: batch_tickets
- *   - One row per casting (casting_id is UNIQUE).
+ *   - One row per (casting_id, color_log_id), plus at most one legacy row
+ *     with NULL color_log_id per casting (see migration/batch-tickets-multi-color.sql).
  *   - Cascades on casting delete.
  *
  * @module services/batch-ticket-service
@@ -89,33 +90,11 @@ export function emptyForm(castingId) {
 }
 
 /**
- * Load batch ticket for a single casting, or null.
- * @param {string} castingId
- * @returns {Promise<Object|null>}
- */
-export async function loadBatchTicketForCasting(castingId) {
-    if (!castingId) return null;
-    const client = await getClient();
-    if (!client) return null;
-
-    const { data, error } = await client
-        .from(TABLE)
-        .select('*')
-        .eq('casting_id', castingId)
-        .maybeSingle();
-
-    if (error) {
-        logger.error('[batch-ticket] loadForCasting error:', error);
-        throw error;
-    }
-    return rowToForm(data);
-}
-
-/**
  * Load all batch tickets whose casting belongs to a given list of casting IDs.
- * Used to bulk-prefetch when activating the tab.
+ * Used to bulk-prefetch when activating the tab. A casting may have several
+ * tickets (one per color log, plus an optional NULL-color legacy one).
  * @param {Array<string>} castingIds
- * @returns {Promise<Map<string, Object>>} keyed by casting_id
+ * @returns {Promise<Map<string, Array<Object>>>} keyed by casting_id, values ordered by created_at
  */
 export async function loadBatchTicketsForCastings(castingIds) {
     const map = new Map();
@@ -126,16 +105,38 @@ export async function loadBatchTicketsForCastings(castingIds) {
     const { data, error } = await client
         .from(TABLE)
         .select('*')
-        .in('casting_id', castingIds);
+        .in('casting_id', castingIds)
+        .order('created_at', { ascending: true });
 
     if (error) {
         logger.error('[batch-ticket] loadForCastings error:', error);
         throw error;
     }
     for (const row of data || []) {
-        map.set(row.casting_id, rowToForm(row));
+        if (!map.has(row.casting_id)) map.set(row.casting_id, []);
+        map.get(row.casting_id).push(rowToForm(row));
     }
     return map;
+}
+
+/**
+ * Delete a batch ticket by row id.
+ * @param {string} id
+ */
+export async function deleteBatchTicket(id) {
+    if (!id) return;
+    const client = await getClient();
+    if (!client) throw new Error('Supabase client unavailable');
+
+    const { error } = await client
+        .from(TABLE)
+        .delete()
+        .eq('id', id);
+
+    if (error) {
+        logger.error('[batch-ticket] delete error:', error);
+        throw error;
+    }
 }
 
 /**

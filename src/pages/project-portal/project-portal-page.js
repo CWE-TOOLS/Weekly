@@ -98,6 +98,7 @@ import { enableMultiColorForProject } from '../../services/multi-color-service.j
 import {
     loadBatchTicketsForCastings,
     saveBatchTicketForCasting,
+    deleteBatchTicket,
     emptyForm as emptyBatchTicketForm
 } from '../../services/batch-ticket-service.js';
 import {
@@ -204,10 +205,11 @@ let colorLogLoadedFor = null;              // project_number we last loaded for
 let currentJobMemos = [];                  // form-shaped memo records, sorted newest-first
 let jobMemosLoadedFor = null;              // project_number we last loaded memos for
 let jobMemoSaveTimers = new Map();         // memoId -> debounce handle (per-field edits)
-let batchTickets = new Map();              // castingId -> form-shaped batch ticket record
+let batchTickets = new Map();              // castingId -> Array<form-shaped batch ticket record> (saved + unsaved color tickets)
 let batchTicketsLoadedFor = null;          // project_number we last bulk-loaded for
 let currentBatchCastingId = null;          // active casting in batch tickets tab
-let batchTicketSaveTimers = new Map();     // castingId -> debounce handle
+let currentBatchColorSel = new Map();      // castingId -> active color ticket key (colorLogId, or '' for the NULL-color one)
+let batchTicketSaveTimers = new Map();     // ticket object -> { castingId, timer } debounce handle
 let projectInfoSaveTimer = null;           // debounce timer for project info form
 let castingSaveTimers = new Map();         // castingId -> debounce handle for castings tab
 let optimizerPhaseSaveTimers = new Map();  // phaseId -> debounce handle (hours / rename)
@@ -313,6 +315,7 @@ async function showListView() {
     batchTicketsLoadedFor = null;
     batchTickets.clear();
     currentBatchCastingId = null;
+    currentBatchColorSel.clear();
     jobMemosLoadedFor = null;
     currentJobMemos = [];
     await refreshList();
@@ -340,7 +343,8 @@ async function showFormView(projectNumber, draftOverrides = null) {
     batchTicketsLoadedFor = null;
     batchTickets.clear();
     currentBatchCastingId = null;
-    for (const t of batchTicketSaveTimers.values()) clearTimeout(t);
+    currentBatchColorSel.clear();
+    for (const p of batchTicketSaveTimers.values()) clearTimeout(p.timer);
     batchTicketSaveTimers.clear();
 
     // Invalidate job-memos cache.
@@ -6772,9 +6776,24 @@ function wireEvents() {
             handleBatchAssignChange(currentBatchCastingId, idx, target.value);
             return;
         }
+        if (target.matches('[data-bt-color-add]')) {
+            const v = target.value;
+            target.value = '';
+            if (v) handleAddBatchColorTicket(v);
+            return;
+        }
     });
     btContent?.addEventListener('click', (e) => {
         if (!currentBatchCastingId) return;
+        if (e.target.closest('[data-bt-color-remove]')) {
+            handleRemoveBatchColorTicket();
+            return;
+        }
+        const colorPill = e.target.closest('[data-bt-color-pill]');
+        if (colorPill) {
+            handleSelectBatchColor(colorPill.dataset.colorKey || '');
+            return;
+        }
         if (e.target.closest('[data-bt-import]')) {
             handleImportBatchFromTracking(currentBatchCastingId);
         }
@@ -6944,11 +6963,66 @@ function parsePigReduction(raw) {
     return Math.min(100, Math.max(0, n));
 }
 
-function getBatchTicketFor(castingId) {
-    if (!batchTickets.has(castingId)) {
-        batchTickets.set(castingId, emptyBatchTicketForm(castingId));
+// Distinct color_log_ids used by a casting's components (first-appearance order,
+// only ids that resolve to a loaded color log).
+function getCastingComponentColorIds(castingId) {
+    const comps = currentCastingComponents.get(castingId) || [];
+    const ids = [];
+    for (const c of comps) {
+        if (!c.color_log_id || ids.includes(c.color_log_id)) continue;
+        if (getColorLogByIdSync(c.color_log_id)) ids.push(c.color_log_id);
     }
-    return batchTickets.get(castingId);
+    return ids;
+}
+
+// True when a ticket is unsaved and has no user-entered content — safe to drop silently.
+function isPristineBatchTicket(t) {
+    return !t.id && t.cuFt === '' && t.faceSqFt === '' && t.batchedBy === '' && t.notes === ''
+        && t.cuFtPer250 === '4.28' && t.pigReduction === '50' && !t.pigReduceFirstBackup
+        && (!Array.isArray(t.batchAssignments) || t.batchAssignments.length === 0);
+}
+
+/**
+ * Effective ticket list for a casting: saved tickets plus a virtual (unsaved)
+ * ticket for each component-detected color that has no saved one yet. Virtual
+ * tickets are materialized into the per-casting array so edits stick across
+ * renders. Falls back to a single legacy NULL-color ticket when nothing else
+ * exists — same as the old one-ticket-per-casting behavior.
+ * Order: NULL-color first, then detected-color order, then remaining saved/added.
+ */
+function getBatchTicketList(castingId) {
+    let arr = batchTickets.get(castingId);
+    if (!arr) { arr = []; batchTickets.set(castingId, arr); }
+    const detected = getCastingComponentColorIds(castingId);
+    for (const id of detected) {
+        if (!arr.some(t => t.colorLogId === id)) {
+            const v = emptyBatchTicketForm(castingId);
+            v.colorLogId = id;
+            arr.push(v);
+        }
+    }
+    // A pristine legacy placeholder from before colors were detected just clutters
+    // the pill row — drop it once real colors exist.
+    if (detected.length) {
+        const idx = arr.findIndex(t => !t.colorLogId && isPristineBatchTicket(t));
+        if (idx !== -1) arr.splice(idx, 1);
+    }
+    if (!arr.length) arr.push(emptyBatchTicketForm(castingId));
+    const rank = (t) => {
+        if (!t.colorLogId) return -1;
+        const i = detected.indexOf(t.colorLogId);
+        return i === -1 ? detected.length : i;
+    };
+    return arr.slice().sort((a, b) => rank(a) - rank(b));
+}
+
+// Active ticket for a casting: the one matching the color-pill selection,
+// falling back to the first in the effective list.
+function getBatchTicketFor(castingId) {
+    const list = getBatchTicketList(castingId);
+    if (list.length === 1) return list[0];
+    const selKey = currentBatchColorSel.get(castingId);
+    return list.find(t => (t.colorLogId || '') === selKey) || list[0];
 }
 
 /**
@@ -7027,8 +7101,9 @@ async function activateBatchTicketsTab() {
             const ids = currentCastings.map(c => c.id);
             const map = await loadBatchTicketsForCastings(ids);
             batchTickets.clear();
+            currentBatchColorSel.clear();
             for (const c of currentCastings) {
-                batchTickets.set(c.id, map.get(c.id) || emptyBatchTicketForm(c.id));
+                batchTickets.set(c.id, map.get(c.id) || []);
             }
             batchTicketsLoadedFor = currentProjectNumber;
         } catch (err) {
@@ -7078,14 +7153,60 @@ function renderBatchTicketsContent() {
     if (!content) return;
     const casting = currentCastings.find(c => c.id === currentBatchCastingId);
     if (!casting) { content.innerHTML = ''; return; }
+    const list = getBatchTicketList(casting.id);
     const ticket = getBatchTicketFor(casting.id);
-    content.innerHTML = `<div data-casting-id="${escapeAttr(casting.id)}">${renderBatchTicketBody(casting, ticket)}</div>`;
+    // Show the color pill row for real multi-ticket castings, and also for a
+    // single ticket when more color tickets could be added — the "+ Color"
+    // select is the only way to split an untagged/one-color casting manually.
+    const canAddColor = currentMultiColorEnabled
+        && currentColorLogs.some(l => !list.some(t => t.colorLogId === l.id));
+    const showColorPills = list.length > 1 || canAddColor;
+    const colorPills = showColorPills ? renderBatchColorPills(list, ticket) : '';
+    content.innerHTML = `<div data-casting-id="${escapeAttr(casting.id)}">${colorPills}${renderBatchTicketBody(casting, ticket, showColorPills)}</div>`;
 }
 
-function renderBatchTicketBody(casting, ticket) {
+// Label for a ticket's color pill / static color display.
+function batchTicketColorLabel(ticket) {
+    if (!ticket.colorLogId) return 'No Color';
+    return getColorLogByIdSync(ticket.colorLogId)?.name || '(unnamed)';
+}
+
+// Second pill row (under the casting pills) — one pill per color ticket, plus
+// a "+ Color" select for project color logs that don't have a ticket yet.
+function renderBatchColorPills(list, activeTicket) {
+    const pills = list.map(t => {
+        const isActive = t === activeTicket;
+        const remove = isActive && list.length > 1
+            ? `<span class="pp-bt-color-pill-x" data-bt-color-remove title="Remove this color ticket">&times;</span>`
+            : '';
+        return `<button type="button" class="pp-bt-pill pp-bt-color-pill${isActive ? ' pp-bt-pill-active' : ''}" data-bt-color-pill data-color-key="${escapeAttr(t.colorLogId || '')}">${escapeHtml(batchTicketColorLabel(t))}${remove}</button>`;
+    }).join('');
+    let addSel = '';
+    if (currentMultiColorEnabled) {
+        const usedIds = new Set(list.map(t => t.colorLogId).filter(Boolean));
+        const avail = currentColorLogs.filter(l => !usedIds.has(l.id));
+        if (avail.length) {
+            addSel = `<select class="pp-bt-color-add" data-bt-color-add title="Add a batch ticket for another color log">
+                <option value="" selected disabled>+ Color</option>
+                ${avail.map(l => `<option value="${escapeAttr(l.id)}">${escapeHtml(l.name || '(unnamed)')}</option>`).join('')}
+            </select>`;
+        }
+    }
+    return `<div class="pp-bt-color-pills" data-bt-color-pills>${pills}${addSel}</div>`;
+}
+
+function renderBatchTicketBody(casting, ticket, multi = false) {
     const activeLog = getActiveBatchColorLog(casting, ticket);
-    const colorLogPicker = currentMultiColorEnabled && currentColorLogs.length > 0
+    // When the color pill row is shown the pills own the ticket's color — show
+    // it as static text so the form select can't fight the pill labels.
+    // No pill row: keep the editable Color Log select (today's behavior).
+    const colorLogPicker = multi
         ? `<div class="pp-bt-context-colorlog-group">
+                <span class="pp-bt-context-date-label">Color Log</span>
+                <span class="pp-bt-context-colorlog-static">${escapeHtml(batchTicketColorLabel(ticket))}</span>
+            </div>`
+        : (currentMultiColorEnabled && currentColorLogs.length > 0
+            ? `<div class="pp-bt-context-colorlog-group">
                 <label class="pp-bt-context-date-label" for="pp-bt-color-${escapeAttr(casting.id)}">Color Log</label>
                 <select id="pp-bt-color-${escapeAttr(casting.id)}" class="pp-bt-context-colorlog" data-bt-field="colorLogId">
                     ${currentColorLogs.map(l =>
@@ -7093,7 +7214,7 @@ function renderBatchTicketBody(casting, ticket) {
                     ).join('')}
                 </select>
             </div>`
-        : '';
+            : '');
     return `
         <div class="pp-bt-form">
             <div class="pp-bt-context">
@@ -7416,6 +7537,7 @@ function renderBatchTicketCards(casting, ticket, plan) {
             castMethod,
             castNumber,
             castDate,
+            colorName: ticket.colorLogId ? (activeLog?.name || '') : '',
             batchedBy: ticket.batchedBy,
             notes: ticket.notes,
             pigReductionPct,
@@ -7492,7 +7614,7 @@ function renderSlumpGraphic(targetIn = 5) {
 
 function renderBatchTicketCard({
     colorLog, batch, project, sampleName, castMethod, castNumber, castDate,
-    batchedBy, notes, pigReductionPct = FINAL_BACKUP_PIG_REDUCTION_PCT, reduceFirstBackup = false,
+    colorName = '', batchedBy, notes, pigReductionPct = FINAL_BACKUP_PIG_REDUCTION_PCT, reduceFirstBackup = false,
     targetSlump = 5
 }) {
     const slumpTarget = clampSlumpTarget(targetSlump);
@@ -7637,6 +7759,7 @@ function renderBatchTicketCard({
             <div class="bt-hrow"><span class="bt-hlabel">PROJECT:</span><span class="bt-hval">${escapeHtml(project || '')}</span></div>
             <div class="bt-hrow"><span class="bt-hlabel">Batched by:</span><span class="bt-hval">${escapeHtml(batchedBy || '')}</span></div>
             <div class="bt-hrow"><span class="bt-hlabel">Sample #:</span><span class="bt-hval">${escapeHtml(sampleName || '')}</span></div>
+            ${colorName ? `<div class="bt-hrow"><span class="bt-hlabel">Color:</span><span class="bt-hval">${escapeHtml(colorName)}</span></div>` : ''}
             <div class="bt-hrow"><span class="bt-hlabel">Cast #:</span><span class="bt-hval">${escapeHtml(castNumber || '')}</span></div>
             <div class="bt-hrow"><span class="bt-hlabel">Cast Date:</span><span class="bt-hval">${escapeHtml(castDate || '')}</span></div>
             <div class="bt-hrow"><span class="bt-hlabel">Batch:</span><span class="bt-hval">${num} of ${total}</span></div>
@@ -7722,19 +7845,18 @@ function setBatchTicketStatus(castingId, state) {
     else el.textContent = '';
 }
 
-function scheduleBatchTicketSave(castingId) {
-    if (!currentProjectNumber) return;
-    const existing = batchTicketSaveTimers.get(castingId);
-    if (existing) clearTimeout(existing);
+function scheduleBatchTicketSave(castingId, ticket) {
+    if (!currentProjectNumber || !ticket) return;
+    const existing = batchTicketSaveTimers.get(ticket);
+    if (existing) clearTimeout(existing.timer);
     setBatchTicketStatus(castingId, 'saving');
-    const t = setTimeout(() => saveBatchTicketNow(castingId), 700);
-    batchTicketSaveTimers.set(castingId, t);
+    const timer = setTimeout(() => saveBatchTicketNow(castingId, ticket), 700);
+    batchTicketSaveTimers.set(ticket, { castingId, timer });
 }
 
-async function saveBatchTicketNow(castingId) {
-    const ticket = batchTickets.get(castingId);
+async function saveBatchTicketNow(castingId, ticket) {
     if (!ticket) return;
-    batchTicketSaveTimers.delete(castingId);
+    batchTicketSaveTimers.delete(ticket);
     try {
         const saved = await saveBatchTicketForCasting(castingId, ticket);
         if (saved) ticket.id = saved.id;
@@ -7743,31 +7865,86 @@ async function saveBatchTicketNow(castingId) {
     } catch (err) {
         logger.error('[batch-tickets] save failed', err);
         setBatchTicketStatus(castingId, 'error');
+        if (err?.code === '23505') {
+            alert('Batch ticket save failed: the database still allows only one ticket per casting.\n\nRun migration/batch-tickets-multi-color.sql in the Supabase SQL editor to enable multi-color batch tickets.');
+        }
     }
 }
 
 async function flushAllBatchTicketSaves() {
     const pending = Array.from(batchTicketSaveTimers.entries());
     if (!pending.length) return;
-    for (const [, t] of pending) clearTimeout(t);
+    for (const [, p] of pending) clearTimeout(p.timer);
     batchTicketSaveTimers.clear();
-    await Promise.all(pending.map(([id]) => saveBatchTicketNow(id).catch(() => {})));
+    await Promise.all(pending.map(([ticket, p]) => saveBatchTicketNow(p.castingId, ticket).catch(() => {})));
 }
 
 async function handleSelectBatchCasting(castingId) {
     if (castingId === currentBatchCastingId) return;
-    // Flush any pending save on the casting we're leaving so its DB state matches the form.
+    // Flush any pending saves on the casting we're leaving so its DB state matches the form.
     const prev = currentBatchCastingId;
-    if (prev && batchTicketSaveTimers.has(prev)) {
-        clearTimeout(batchTicketSaveTimers.get(prev));
-        batchTicketSaveTimers.delete(prev);
-        try { await saveBatchTicketNow(prev); } catch (e) { /* logged */ }
+    if (prev) {
+        const pending = Array.from(batchTicketSaveTimers.entries()).filter(([, p]) => p.castingId === prev);
+        for (const [ticket, p] of pending) {
+            clearTimeout(p.timer);
+            batchTicketSaveTimers.delete(ticket);
+            try { await saveBatchTicketNow(prev, ticket); } catch (e) { /* logged */ }
+        }
     }
     currentBatchCastingId = castingId;
     // Re-pull color logs first so the recalc reflects any edits made since the
     // tab opened — selecting a casting always recomputes from fresh data.
     await refreshBatchColorLogs();
     renderBatchTickets();
+}
+
+function handleSelectBatchColor(colorKey) {
+    const castingId = currentBatchCastingId;
+    if (!castingId) return;
+    if ((currentBatchColorSel.get(castingId) || '') === colorKey) return;
+    // Pending saves hold their ticket object, so no flush needed — the debounce
+    // fires against the right ticket even after switching pills.
+    currentBatchColorSel.set(castingId, colorKey);
+    renderBatchTicketsContent();
+}
+
+function handleAddBatchColorTicket(colorLogId) {
+    const castingId = currentBatchCastingId;
+    if (!castingId || !colorLogId) return;
+    let arr = batchTickets.get(castingId);
+    if (!arr) { arr = []; batchTickets.set(castingId, arr); }
+    if (!arr.some(t => t.colorLogId === colorLogId)) {
+        const v = emptyBatchTicketForm(castingId);
+        v.colorLogId = colorLogId;
+        arr.push(v);
+    }
+    currentBatchColorSel.set(castingId, colorLogId);
+    renderBatchTicketsContent();
+}
+
+async function handleRemoveBatchColorTicket() {
+    const castingId = currentBatchCastingId;
+    if (!castingId) return;
+    const list = getBatchTicketList(castingId);
+    if (list.length <= 1) return;
+    const ticket = getBatchTicketFor(castingId);
+    if (ticket.id) {
+        if (!confirm(`Delete the "${batchTicketColorLabel(ticket)}" batch ticket? Its saved batch plan will be removed.`)) return;
+        try {
+            await deleteBatchTicket(ticket.id);
+        } catch (err) {
+            logger.error('[batch-tickets] delete failed', err);
+            showToast('Failed to delete batch ticket', 'error');
+            return;
+        }
+    }
+    const pending = batchTicketSaveTimers.get(ticket);
+    if (pending) { clearTimeout(pending.timer); batchTicketSaveTimers.delete(ticket); }
+    const arr = batchTickets.get(castingId) || [];
+    const idx = arr.indexOf(ticket);
+    if (idx !== -1) arr.splice(idx, 1);
+    currentBatchColorSel.delete(castingId);
+    renderBatchTicketsContent();
 }
 
 function handleBatchFieldInput(castingId, field, value) {
@@ -7796,7 +7973,7 @@ function handleBatchFieldInput(castingId, field, value) {
         }
         rerenderBatchPreview(castingId);
     }
-    scheduleBatchTicketSave(castingId);
+    scheduleBatchTicketSave(castingId, ticket);
 }
 
 function handleBatchAssignChange(castingId, idx, type) {
@@ -7818,7 +7995,7 @@ function handleBatchAssignChange(castingId, idx, type) {
     if (idx >= 0 && idx < assignments.length) assignments[idx].type = type;
     ticket.batchAssignments = assignments;
     rerenderBatchPreview(castingId);
-    scheduleBatchTicketSave(castingId);
+    scheduleBatchTicketSave(castingId, ticket);
 }
 
 /**
@@ -7843,10 +8020,22 @@ async function handleImportBatchFromTracking(castingId) {
         }
     }
 
-    const rows = getInventoryFor(castingId);
+    let rows = getInventoryFor(castingId);
     if (!rows.length) {
         showToast('No inventory components for this casting', 'error');
         return;
+    }
+
+    // Multi-color: only total the rows belonging to the active ticket's color
+    // (NULL-color ticket matches rows without a color_log_id). Single-ticket
+    // mode keeps today's behavior and sums everything.
+    const ticket = getBatchTicketFor(castingId);
+    if (getBatchTicketList(castingId).length > 1) {
+        rows = rows.filter(r => ticket.colorLogId ? r.color_log_id === ticket.colorLogId : !r.color_log_id);
+        if (!rows.length) {
+            showToast(`No inventory rows for ${batchTicketColorLabel(ticket)}`, 'error');
+            return;
+        }
     }
 
     const has = (v) => v !== null && v !== undefined && v !== '';
@@ -7862,7 +8051,6 @@ async function handleImportBatchFromTracking(castingId) {
         totalFf   += (Number(r.ff_sq_ft) || 0) * units;
     }
 
-    const ticket = getBatchTicketFor(castingId);
     const applied = [];
     if (cuFtComplete) { ticket.cuFt = String(roundSig(totalCuFt, 2)); applied.push('Total Cu Ft'); }
     if (ffComplete)   { ticket.faceSqFt = String(roundSig(totalFf, 2)); applied.push('Face Sq Ft'); }
@@ -7875,7 +8063,7 @@ async function handleImportBatchFromTracking(castingId) {
     // Plan inputs changed — drop manual batch-type overrides so they can't desync.
     ticket.batchAssignments = [];
     renderBatchTicketsContent();
-    scheduleBatchTicketSave(castingId);
+    scheduleBatchTicketSave(castingId, ticket);
 
     const skipped = [];
     if (!cuFtComplete) skipped.push('Cu Ft');
@@ -7906,8 +8094,9 @@ function rerenderBatchPreview(castingId) {
     const wrap = document.querySelector('#pp-bt-content [data-bt-preview]');
     if (!wrap) return;
     const casting = currentCastings.find(c => c.id === castingId);
-    const ticket = batchTickets.get(castingId);
-    if (!casting || !ticket) return;
+    if (!casting) return;
+    const ticket = getBatchTicketFor(castingId);
+    if (!ticket) return;
     wrap.innerHTML = renderBatchPreview(casting, ticket);
 }
 
@@ -10207,40 +10396,53 @@ body { font-family: 'Segoe UI', Arial, sans-serif; color:#000; font-size:11pt; -
 `;
 
 function handlePrintBatchTickets(castingId) {
-    const ticket = batchTickets.get(castingId);
-    if (!ticket) return;
     const casting = currentCastings.find(c => c.id === castingId);
     if (!casting) return;
-    const activeLog = getActiveBatchColorLog(casting, ticket);
-    const sandLbs = getColorLogSandLbs(activeLog);
-    if (!sandLbs) {
-        showToast('Add a sand entry to the color log first', 'error');
-        return;
+    const list = getBatchTicketList(castingId);
+
+    // Print every color ticket that yields batches; each plan restarts numbering.
+    const printable = [];
+    for (const ticket of list) {
+        const activeLog = getActiveBatchColorLog(casting, ticket);
+        const sandLbs = getColorLogSandLbs(activeLog);
+        if (!sandLbs) continue;
+        const plan = buildBatchPlan({
+            totalCuFt: parseFloat(ticket.cuFt) || 0,
+            faceSqFt: parseFloat(ticket.faceSqFt) || 0,
+            cuFtPer250: parseFloat(ticket.cuFtPer250) || 4.28,
+            castMethod: activeLog?.castMethod || 'sprayUp',
+            colorLogSandLbs: sandLbs,
+            manualOverrides: ticket.batchAssignments
+        });
+        if (!plan.batches.length) continue;
+        printable.push({ ticket, activeLog, plan });
     }
-    const plan = buildBatchPlan({
-        totalCuFt: parseFloat(ticket.cuFt) || 0,
-        faceSqFt: parseFloat(ticket.faceSqFt) || 0,
-        cuFtPer250: parseFloat(ticket.cuFtPer250) || 4.28,
-        castMethod: activeLog?.castMethod || 'sprayUp',
-        colorLogSandLbs: sandLbs,
-        manualOverrides: ticket.batchAssignments
-    });
-    if (!plan.batches.length) {
-        showToast('Enter Total Cu Ft to generate tickets', 'error');
+
+    if (!printable.length) {
+        // Keep the single-ticket error behavior, judged against the active ticket.
+        const ticket = getBatchTicketFor(castingId);
+        const activeLog = getActiveBatchColorLog(casting, ticket);
+        if (!getColorLogSandLbs(activeLog)) {
+            showToast('Add a sand entry to the color log first', 'error');
+        } else {
+            showToast('Enter Total Cu Ft to generate tickets', 'error');
+        }
         return;
     }
 
     const projectName = document.getElementById('pp-f-project_name')?.value || '';
-    const sampleName = activeLog?.name || '';
-    const castMethod = activeLog?.castMethod || '';
-    // Pigment reduction (final backup, and optionally first backup) — without
-    // these, renderBatchTicketCard() falls back to its defaults and the
-    // printed tickets show un-reduced pigment values even though the on-screen
-    // preview applies the reduction.
-    const pigReductionPct = parsePigReduction(ticket.pigReduction);
-    const reduceFirstBackup = !!ticket.pigReduceFirstBackup;
 
-    const pages = plan.batches.map(b => `
+    const pages = printable.map(({ ticket, activeLog, plan }) => {
+        const sampleName = activeLog?.name || '';
+        const castMethod = activeLog?.castMethod || '';
+        // Pigment reduction (final backup, and optionally first backup) — without
+        // these, renderBatchTicketCard() falls back to its defaults and the
+        // printed tickets show un-reduced pigment values even though the on-screen
+        // preview applies the reduction.
+        const pigReductionPct = parsePigReduction(ticket.pigReduction);
+        const reduceFirstBackup = !!ticket.pigReduceFirstBackup;
+
+        return plan.batches.map(b => `
         <div class="bt-page bt-${b.type}">
             ${renderBatchTicketCard({
                 colorLog: activeLog,
@@ -10250,6 +10452,7 @@ function handlePrintBatchTickets(castingId) {
                 castMethod,
                 castNumber: casting.casting_number || '',
                 castDate: casting.casting_date || '',
+                colorName: ticket.colorLogId ? (activeLog?.name || '') : '',
                 batchedBy: ticket.batchedBy,
                 notes: ticket.notes,
                 pigReductionPct,
@@ -10260,6 +10463,7 @@ function handlePrintBatchTickets(castingId) {
             })}
         </div>
     `).join('');
+    }).join('');
 
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>Batch Tickets — ${escapeHtml(projectName)} — Cast ${escapeHtml(casting.casting_number || '')}</title><style>${BATCH_PRINT_CSS}</style></head><body>${pages}<script>window.addEventListener('load',()=>{setTimeout(()=>window.print(),200);});<\/script></body></html>`;
 

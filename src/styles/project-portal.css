@@ -3700,6 +3700,50 @@ body.pp-printing .pp-tab-panel[data-panel="color-log"] { display: none !importan
 }
 .pp-bt-pill-active .pp-bt-pill-date { opacity: 0.85; }
 
+/* Color-ticket pill row (multi-color castings) — smaller pills under the casting pills */
+.pp-bt-color-pills {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+.pp-bt-color-pill {
+    padding: 4px 12px;
+    font-size: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.pp-bt-color-pill-x {
+    font-size: 14px;
+    line-height: 1;
+    opacity: 0.7;
+}
+.pp-bt-color-pill-x:hover { opacity: 1; }
+.pp-bt-color-add {
+    background: #fff;
+    border: 1px dashed #cbd5e1;
+    color: #64748b;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+}
+.pp-bt-color-add:hover {
+    border-color: #94a3b8;
+    color: #0f172a;
+}
+
+/* Multi-color mode: the pill fixes the color — context bar shows it as static text */
+.pp-bt-context-colorlog-static {
+    font-size: 13px;
+    font-weight: 600;
+    color: #0f172a;
+}
+
 #pp-bt-content { display: flex; flex-direction: column; gap: 8px; }
 
 /* Per-casting form */
