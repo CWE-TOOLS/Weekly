@@ -16,3 +16,14 @@ Thumbs.db
 # API keys
 set-api-key.ps1
 api-key.txt
+# Dependencies (restore with npm install)
+node_modules/
+
+# Local Claude Code settings
+.claude/settings.local.json
+
+# Generated screenshot artifacts
+releasability-screenshot.png
+weekly-screenshot.png
+buyin-screenshot.png
+buyin-crate-ship-screenshot.png

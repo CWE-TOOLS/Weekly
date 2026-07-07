@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Phases — Project Portal Manual</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='0.9em' font-size='90'%3E📘%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="assets/manual.css">
+</head>
+<body data-page="phases">
+<div class="m-shell">
+  <main class="m-main">
+    <div class="m-content">
+      <div class="m-breadcrumb"><a href="index.html">Manual</a> &rsaquo; Reference &rsaquo; Phases</div>
+      <h1>Phases</h1>
+      <p class="m-lede">A way to split a large job into smaller pieces — building wings, delivery waves, or any natural grouping — so several tabs get their own per-phase view instead of mixing everything together in one long list.</p>
+
+      <div class="callout danger">
+        <span class="callout-title">One-way switch — there's no going back</span>
+        <p>Once phases are enabled for a project, they <strong>cannot</strong> be turned back off. Only enable phases when the job is genuinely phased. If you're not sure, leave it off — a project runs perfectly well without phases.</p>
+      </div>
+
+      <h2>What this tab is for</h2>
+      <p>Most jobs are simple enough to handle as one big list of castings. But a large job — say a building with three wings, or a project that ships in waves — gets unwieldy when everything is piled together. Phases let you carve the job into named pieces. The tabs that deal with day-to-day production then show one phase at a time, so the screen only shows the castings you're working on right now.</p>
+
+      <h2>How to enable and use phases</h2>
+      <p>You turn phases on from the <span class="ui">Phases</span> section at the bottom of the <a href="project-info.html">Project Info</a> tab.</p>
+      <ol class="steps">
+        <li><strong>Open Project Info.</strong> Scroll to the <span class="ui">Phases</span> section at the bottom of the tab.</li>
+        <li><strong>Turn it on.</strong> Click <span class="ui">Enable Phases</span>. (Read the warning above first — this can't be undone.)</li>
+        <li><strong>Add your phases.</strong> Create a phase for each piece of the job and give it a clear name (for example &ldquo;Wing A&rdquo; or &ldquo;Delivery 1&rdquo;).</li>
+        <li><strong>Reorder and rename as needed.</strong> Drag phases into the order that makes sense, and rename them at any time.</li>
+        <li><strong>Switch between phases.</strong> On any phase-aware tab, use the phase tabs at the top of the section, or the phase switcher dropdown in the project header, to choose which phase you're looking at.</li>
+      </ol>
+
+      <div class="callout warn">
+        <span class="callout-title">Decide on phases early</span>
+        <p>Set up your phases <em>before</em> loading lots of castings — ideally right after kickoff. Each casting belongs to a phase, so deciding early means every casting lands in the right place from the start instead of being sorted out later.</p>
+      </div>
+
+      <h2>Which tabs are affected</h2>
+      <p>When phases are on, the production tabs gain per-phase views. Everything else stays project-wide — shared across all phases — so you only set it once for the whole job.</p>
+      <table class="m-table">
+        <thead><tr><th>Tab</th><th>With phases on</th></tr></thead>
+        <tbody>
+          <tr><td class="k"><a href="casting-inventory.html">Casting Inventory</a></td><td>Per-phase — each casting belongs to a phase.</td></tr>
+          <tr><td class="k"><a href="tracking.html">Tracking</a></td><td>Per-phase — track each phase's castings on their own sheet.</td></tr>
+          <tr><td class="k"><a href="shipping.html">Shipping</a></td><td>Per-phase — crate and ship one phase at a time.</td></tr>
+          <tr><td class="k"><a href="optimizer-hours.html">Optimizer Hours</a></td><td>Per-phase — estimate labor separately per phase.</td></tr>
+          <tr><td class="k"><a href="batch-tickets.html">Batch Tickets</a></td><td>Per-phase — generate tickets for the active phase.</td></tr>
+          <tr><td class="k"><a href="color-log.html">Color Log</a></td><td>Project-wide — one mix recipe for the whole job.</td></tr>
+          <tr><td class="k"><a href="project-info.html">Project Info</a> (cover sheet)</td><td>Project-wide — one cover sheet for the whole job.</td></tr>
+          <tr><td class="k">Project <a href="statuses.html">Status</a></td><td>Project-wide — one status for the whole job.</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Choosing which phases to track</h2>
+      <p>On the <a href="tracking.html">Tracking</a> tab, a <span class="ui">Track phases</span> chip bar lets you pick which phases show up on the tracking sheet. Turn off the phases you're not working on right now to keep the sheet focused on the castings actually moving through the shop.</p>
+
+      <div class="callout note">
+        <span class="callout-title">Where the switch lives</span>
+        <p>Phases are turned on from <a href="project-info.html">Project Info</a>, at the bottom of the tab. Once enabled, the phase switcher appears in the project header so you can change the active phase from anywhere in the job.</p>
+      </div>
+    </div>
+  </main>
+</div>
+<script src="assets/manual-nav.js"></script>
+</body>
+</html>

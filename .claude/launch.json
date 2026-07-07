@@ -4,8 +4,8 @@
     {
       "name": "weekly-schedule",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["live-server", "--port=8090", "--no-browser"],
-      "port": 8090
+      "runtimeArgs": ["live-server", "--no-browser"],
+      "autoPort": true
     }
   ]
 }

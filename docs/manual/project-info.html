@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Project Info — Project Portal Manual</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='0.9em' font-size='90'%3E📘%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="assets/manual.css">
+</head>
+<body data-page="project-info">
+<div class="m-shell">
+  <main class="m-main">
+    <div class="m-content">
+      <div class="m-breadcrumb"><a href="index.html">Manual</a> &rsaquo; Project Tabs &rsaquo; Project Info</div>
+      <h1>Project Info</h1>
+      <p class="m-lede">The cover sheet for the whole project. This is the first tab you land on, and it holds the identifying details every other tab and printout pulls from — project number, name, customer, dates, scope, and the project's status.</p>
+
+      <div class="callout note">
+        <span class="callout-title">Where it lives</span>
+        <p>It's the first tab in a project's left sidebar — the <span class="ui">Project Info</span> tab (the ℹ️ icon). It opens automatically whenever you open or create a project.</p>
+      </div>
+
+      <h2>What this tab is for</h2>
+      <p>Think of Project Info as the title page of the job folder. Most of what you type here is reference information — it doesn't drive a calculation, but it shows up on printouts, labels, and at the top of every other tab so everyone knows which job they're looking at. A few fields are special: the <strong>Project #</strong> identifies the project everywhere, the <strong>Status</strong> drives where the project shows up, and the <strong>dates</strong> feed scheduling.</p>
+
+      <h2>The status bar (top of the sheet)</h2>
+      <p>Across the top of the sheet you'll find three controls plus the company mark:</p>
+      <div class="m-deflist">
+        <div class="row"><div class="term">Status</div><div class="desc">Where the project is in its life cycle: <span class="status-chip">Kicked Off</span> → <span class="status-chip">Releasability</span> → <span class="status-chip">Approved</span> → <span class="status-chip">In Production</span> → <span class="status-chip">Shipped</span> → <span class="status-chip">Closed Out</span>. This is the same status shown in the project list and on the Releasability Board. See <a href="statuses.html">Statuses &amp; Workflow</a>.</div></div>
+        <div class="row"><div class="term">PM</div><div class="desc">The project manager assigned to the job. Pick from the list (e.g. Tim, Islam). Shows in the project list so you can find your own jobs quickly.</div></div>
+        <div class="row"><div class="term">CWE mark</div><div class="desc">The Concreteworks East logo block — just branding on the sheet.</div></div>
+      </div>
+
+      <h2>Filling out the sheet</h2>
+      <ol class="steps">
+        <li><strong>Identify the project.</strong> Enter the <span class="ui">Project Name</span>, <span class="ui">Project #</span> (required — this is the unique number used everywhere), <span class="ui">Kickoff Date</span>, <span class="ui">Project Address</span>, <span class="ui">Estimator / Sales Manager</span>, and <span class="ui">Architect</span>.</li>
+        <li><strong>Add the contacts.</strong> Fill in <span class="ui">Main Contact Information</span> (name, phone, company, email) and <span class="ui">Delivery Information</span> (site contact, phone, delivery address, site restrictions). These print on shipping paperwork.</li>
+        <li><strong>Set the dates.</strong> <span class="ui">Need By Date</span> accepts free text like &ldquo;August 2025&rdquo; — or click the calendar button to pick an exact date. <span class="ui">Production Start Date</span> is also free text (e.g. &ldquo;July&rdquo;).</li>
+        <li><strong>Describe the work.</strong> Use <span class="ui">Scope of Work</span> for what's being built and <span class="ui">Imperative Information</span> for the must-know items the whole shop needs to see.</li>
+      </ol>
+
+      <div class="callout tip">
+        <span class="callout-title">Saving</span>
+        <p>The portal saves your typing automatically as you go — watch the save indicator near the top-right of the project header. There's no separate &ldquo;Save&rdquo; button to remember.</p>
+      </div>
+
+      <h2>Fields, in plain English</h2>
+      <table class="m-table">
+        <thead><tr><th>Field</th><th>What to put there</th></tr></thead>
+        <tbody>
+          <tr><td class="k">Project Name</td><td>The customer-facing name of the job.</td></tr>
+          <tr><td class="k">Project #</td><td><strong>Required.</strong> The unique number for the job — used to find it, label it, and tie all the tabs together.</td></tr>
+          <tr><td class="k">Kickoff Date</td><td>When the project was kicked off.</td></tr>
+          <tr><td class="k">Project Address</td><td>The job-site / project address.</td></tr>
+          <tr><td class="k">Estimator / Sales Manager</td><td>Who sold / estimated the job.</td></tr>
+          <tr><td class="k">Architect</td><td>The project architect, if any.</td></tr>
+          <tr><td class="k">Main Contact</td><td>Primary customer contact — name, phone, company, email.</td></tr>
+          <tr><td class="k">Delivery Information</td><td>Site contact, phone, delivery address, and any site restrictions for the truck.</td></tr>
+          <tr><td class="k">Need By Date</td><td>When the customer needs it. Free text or pick from the calendar.</td></tr>
+          <tr><td class="k">Production Start Date</td><td>When production is expected to start. Free text.</td></tr>
+          <tr><td class="k">Scope of Work</td><td>A description of everything the job includes.</td></tr>
+          <tr><td class="k">Imperative Information</td><td>Critical, can't-miss details for the team.</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Header buttons</h2>
+      <p>At the top of the project (above the tabs) you'll see action buttons that apply to the whole project:</p>
+      <div class="m-deflist">
+        <div class="row"><div class="term">Print</div><div class="desc">Prints the project info sheet.</div></div>
+        <div class="row"><div class="term">Print Label</div><div class="desc">Opens the folder-label printer so you can print a label for the job folder (project name + casting # on top, color log below). See <a href="printing.html">Printing &amp; Labels</a>.</div></div>
+        <div class="row"><div class="term">Delete</div><div class="desc">Permanently deletes the entire project and everything in it. You'll be asked to type the project number to confirm — there's no undo.</div></div>
+      </div>
+
+      <h2>Phases</h2>
+      <p>At the bottom of Project Info is the <strong>Phases</strong> section. Most projects don't need it, but for big jobs you can split the project into phases (building wings, delivery waves, etc.) so that Castings, Tracking, Shipping, Optimizer Hours, and Batch Tickets each get their own per-phase view. Color Log and the cover sheet stay project-wide.</p>
+      <div class="callout warn">
+        <span class="callout-title">One-way switch</span>
+        <p>Turning on phases is permanent for that project — you can't turn it back off. Only enable it when you're sure the job is genuinely phased. Full details on the <a href="phases.html">Phases</a> page.</p>
+      </div>
+    </div>
+  </main>
+</div>
+<script src="assets/manual-nav.js"></script>
+</body>
+</html>

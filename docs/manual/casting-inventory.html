@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Casting Inventory — Project Portal Manual</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='0.9em' font-size='90'%3E📘%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="assets/manual.css">
+</head>
+<body data-page="casting-inventory">
+<div class="m-shell">
+  <main class="m-main">
+    <div class="m-content">
+      <div class="m-breadcrumb"><a href="index.html">Manual</a> &rsaquo; Project Tabs &rsaquo; Casting Inventory</div>
+      <h1>Casting Inventory</h1>
+      <p class="m-lede">The master parts list for the whole job. Here you list every casting on the project and the panels that make up each one. Almost everything else in the portal — Tracking, Casting Layout, Shipping, Optimizer Hours, and Batch Tickets — is built from what you enter here, so it pays to get it right.</p>
+
+      <div class="callout note">
+        <span class="callout-title">Two words to know first</span>
+        <p>A <strong>casting</strong> is one concrete unit, identified by a <strong>casting number</strong> that is unique within the project. A casting is made of one or more <strong>panels</strong> — the individual forms (pieces) that get poured. Casting Inventory is where you enter both.</p>
+      </div>
+
+      <div class="callout warn">
+        <span class="callout-title">Save the project first</span>
+        <p>Make sure the project has been saved (it has a <span class="ui">Project #</span> on <a href="project-info.html">Project Info</a>) before you start adding castings. Castings attach to the saved project, so adding them to an unsaved project can lose your work.</p>
+      </div>
+
+      <h2>What this tab is for</h2>
+      <p>Think of Casting Inventory as the bill of materials for the job. You build up the list of castings, and inside each casting you list its panels with their sizes, color, sealer, and quantity. From there the portal does the heavy lifting: it generates the production <a href="tracking.html">Tracking</a> sheet automatically, hands panel sizes to <a href="casting-layout.html">Casting Layout</a>, feeds <a href="shipping.html">Shipping</a>, <a href="optimizer-hours.html">Optimizer Hours</a>, and <a href="batch-tickets.html">Batch Tickets</a>.</p>
+
+      <h2>The layout of the tab</h2>
+      <div class="m-deflist">
+        <div class="row"><div class="term">Notes</div><div class="desc">A project-level box at the top for any notes about this project's castings — assumptions, customer requests, reminders for whoever picks the job up next.</div></div>
+        <div class="row"><div class="term">Casting cards</div><div class="desc">Each casting is its own card, listed down the page. A card shows the casting number, an optional casting date, an optional description, and an inventory grid of the casting's panels.</div></div>
+        <div class="row"><div class="term">Add buttons</div><div class="desc"><span class="ui">+ Add Casting</span> and <span class="ui">+ Add Remake Casting</span> at the top create new cards (see below).</div></div>
+      </div>
+
+      <h2>The casting card</h2>
+      <p>Every casting card has a few controls:</p>
+      <div class="m-deflist">
+        <div class="row"><div class="term">Casting #</div><div class="desc">The casting's number, unique within this project. This is how the casting is referred to everywhere else in the portal.</div></div>
+        <div class="row"><div class="term">Casting date</div><div class="desc">Optional — the date this casting is poured or planned for.</div></div>
+        <div class="row"><div class="term">Description</div><div class="desc">Optional — a short label so people know what the casting is (e.g. &ldquo;North wall panels&rdquo;).</div></div>
+        <div class="row"><div class="term">Inventory grid</div><div class="desc">The list of panels in this casting. Expand or collapse it with the chevron. Each row is one panel type.</div></div>
+        <div class="row"><div class="term">Edit / Delete</div><div class="desc">Change the casting's details, or remove the casting entirely. Deleting a casting removes its panels from Tracking too.</div></div>
+      </div>
+
+      <div class="callout tip">
+        <span class="callout-title">Drag to reorder</span>
+        <p>Grab a casting card and drag it up or down to change the order castings appear in. The order you set here carries through to the other tabs.</p>
+      </div>
+
+      <h2>How to add a casting</h2>
+      <ol class="steps">
+        <li><strong>Make sure the project is saved.</strong> Confirm it has a <span class="ui">Project #</span> on <a href="project-info.html">Project Info</a> first.</li>
+        <li><strong>Click <span class="ui">+ Add Casting</span>.</strong> A new casting card appears. The portal suggests the next casting number automatically — change it if you need to.</li>
+        <li><strong>Fill in the details.</strong> Set the casting date and a description if you want them.</li>
+        <li><strong>Add the panels.</strong> Open the inventory grid and add one row per panel type, entering the dimensions, color/material, sealer, and quantity (see the field reference below). The cubic footage is worked out for you.</li>
+        <li><strong>Done.</strong> Your changes save automatically, and Tracking updates itself to match.</li>
+      </ol>
+
+      <h2>Panel fields, in plain English</h2>
+      <p>Each row in a casting's inventory grid records one panel type:</p>
+      <table class="m-table">
+        <thead><tr><th>Field</th><th>What it means</th></tr></thead>
+        <tbody>
+          <tr><td class="k">Width × Length × Depth</td><td>The panel's dimensions. These sizes also drive how the panel is drawn in <a href="casting-layout.html">Casting Layout</a>.</td></tr>
+          <tr><td class="k">Color / Material</td><td>The color or material type for the panel — which mix it's poured in.</td></tr>
+          <tr><td class="k">Sealer</td><td>The sealer to be applied to the panel.</td></tr>
+          <tr><td class="k">Quantity</td><td>How many of this panel type are in the casting.</td></tr>
+          <tr><td class="k">Cubic footage</td><td>Calculated automatically from the dimensions and quantity.</td></tr>
+          <tr><td class="k">Rejected</td><td>A count of how many of this panel were marked rejected. This comes <em>from</em> the <a href="tracking.html">Tracking</a> tab — you don't set it here. It's the starting point for remakes (below).</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Remakes — rebuilding rejected panels</h2>
+      <p>When panels fail inspection, they're marked rejected over on <a href="tracking.html">Tracking</a>. Those rejected counts show up here on the panel rows. A <strong>remake</strong> is how you cast replacements for them, and there are two ways to do it.</p>
+
+      <div class="m-card">
+        <h3>+ Add Remake Casting</h3>
+        <p>Click <span class="ui">+ Add Remake Casting</span> to open a dialog that builds a brand-new casting from rejects. You pick which existing castings to pull rejected panels from, and the portal creates a new casting with one inventory line per panel type, summing up the rejected quantities. The new panels get fresh IDs of their own; the original rejected panels stay marked rejected on the castings they came from. Use this when you want the remakes grouped into their own dedicated casting.</p>
+      </div>
+
+      <div class="m-card">
+        <h3>Import Remakes</h3>
+        <p>Inside an existing casting there's also an <span class="ui">Import Remakes</span> action. It lets you bring selected rejected panels from across the project <em>into that casting</em>, rather than creating a separate one. Use this when the remakes belong with a casting you're already building.</p>
+      </div>
+
+      <div class="callout note">
+        <span class="callout-title">Originals stay rejected</span>
+        <p>Either way, the rejected panels you pulled from stay rejected on their source casting — the remake creates new replacement panels, it doesn't erase the rejection history.</p>
+      </div>
+
+      <h2>If the project uses Phases</h2>
+      <p>When a project is split into <a href="phases.html">phases</a>, Casting Inventory only shows the castings that belong to the <strong>active phase</strong>. Switch the active phase to see and edit a different set of castings. Most projects aren't phased, so you'll usually see every casting at once.</p>
+
+      <div class="callout tip">
+        <span class="callout-title">This tab feeds the rest of the portal</span>
+        <p>Tracking is built automatically from what you enter here — add, remove, or change a panel and the <a href="tracking.html">Tracking</a> sheet updates itself. The same panel data also drives <a href="casting-layout.html">Casting Layout</a>, <a href="shipping.html">Shipping</a>, <a href="optimizer-hours.html">Optimizer Hours</a>, and <a href="batch-tickets.html">Batch Tickets</a>. Keeping the inventory accurate keeps everything downstream accurate.</p>
+      </div>
+    </div>
+  </main>
+</div>
+<script src="assets/manual-nav.js"></script>
+</body>
+</html>

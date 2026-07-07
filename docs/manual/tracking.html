@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tracking — Project Portal Manual</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='0.9em' font-size='90'%3E📘%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="assets/manual.css">
+</head>
+<body data-page="tracking">
+<div class="m-shell">
+  <main class="m-main">
+    <div class="m-content">
+      <div class="m-breadcrumb"><a href="index.html">Manual</a> &rsaquo; Project Tabs &rsaquo; Tracking</div>
+      <h1>Tracking</h1>
+      <p class="m-lede">The shop's live status board for the job. Tracking follows every panel as it moves through the production phases — from the mill to the loading dock — and is where you assign panels to shipping crates. If you want to know what's done and what's left, this is the tab to open.</p>
+
+      <div class="callout note">
+        <span class="callout-title">Where it lives</span>
+        <p>It's the <span class="ui">Tracking</span> tab in a project's left sidebar — the fourth tab, right after <a href="casting-inventory.html">Casting Inventory</a>.</p>
+      </div>
+
+      <h2>What this tab is for</h2>
+      <p>Tracking is the day-to-day record of where each panel is. Every panel in the job gets a row, and every production phase gets a column. As a panel finishes a stage, you click that stage's cell to mark it done — a checkmark appears. Anyone looking at the board can see, at a glance, exactly how far along each panel is. Tracking is also where you sort panels into shipping crates and flag any panel that gets <strong>rejected</strong>.</p>
+
+      <div class="callout warn">
+        <span class="callout-title">You need a saved project with at least one casting first</span>
+        <p>Tracking is built from your castings. Save the project and add at least one casting in <a href="casting-inventory.html">Casting Inventory</a> before this tab will have anything to show.</p>
+      </div>
+
+      <h2>Tracking builds itself from Casting Inventory</h2>
+      <p>This is the most important thing to know about this tab: <strong>you do not add or remove panels here.</strong> The Tracking sheet is generated automatically from <a href="casting-inventory.html">Casting Inventory</a>. Every panel you enter there shows up here, ready to track.</p>
+      <div class="callout tip">
+        <span class="callout-title">To change the panels, go to Casting Inventory</span>
+        <p>If a panel is missing, has the wrong dimensions, or the count is off, fix it in <a href="casting-inventory.html">Casting Inventory</a>. Tracking will update itself to match. Don't go looking for an &ldquo;add panel&rdquo; button here — there isn't one, by design.</p>
+      </div>
+
+      <h2>How the board is laid out</h2>
+      <p>The board is organized into one expandable section per <strong>casting</strong>. Click a casting's heading to open or close it. Inside each section is a table that lists all of that casting's panels, one per row, with these columns:</p>
+      <div class="m-deflist">
+        <div class="row"><div class="term">Panel ID</div><div class="desc">Generated automatically for each panel — you don't type it.</div></div>
+        <div class="row"><div class="term">Type / dimensions</div><div class="desc">What the panel is and its size, carried over from Casting Inventory.</div></div>
+        <div class="row"><div class="term">Color / sealer</div><div class="desc">The color and sealer called for on that panel.</div></div>
+        <div class="row"><div class="term">Quantity</div><div class="desc">How many of that panel there are.</div></div>
+        <div class="row"><div class="term">Crate #</div><div class="desc">A selector to assign the panel to a shipping crate. See <a href="#crates">Assigning panels to crates</a> below.</div></div>
+        <div class="row"><div class="term">Phase columns</div><div class="desc">One column for each production phase. Click a cell to mark that phase complete for that panel.</div></div>
+      </div>
+
+      <h2>The production phases</h2>
+      <p>Each panel moves through the same eleven stages, left to right. Click a panel's cell under a stage to mark it complete; click again to clear it. Here's what each column means:</p>
+      <table class="m-table">
+        <thead><tr><th>Column</th><th>Stage</th><th>What it means</th></tr></thead>
+        <tbody>
+          <tr><td class="k">MILL</td><td>Mill</td><td>The mill / shop work to build the form.</td></tr>
+          <tr><td class="k">FO</td><td>Form Out</td><td>The form is laid out and ready.</td></tr>
+          <tr><td class="k">CAST</td><td>Cast</td><td>The panel has been cast (concrete poured).</td></tr>
+          <tr><td class="k">DEMOLD</td><td>Demold</td><td>The panel has been removed from the form.</td></tr>
+          <tr><td class="k">FINISH</td><td>Finish</td><td>Surface finishing work is done.</td></tr>
+          <tr><td class="k">SEAL</td><td>Seal</td><td>The panel has been sealed.</td></tr>
+          <tr><td class="k">STRIPS</td><td>Strip forms</td><td>The forms have been stripped.</td></tr>
+          <tr><td class="k">DRILL</td><td>Drilling</td><td>Any required holes have been drilled.</td></tr>
+          <tr><td class="k">CRATE</td><td>Crating</td><td>The panel has been crated for shipment.</td></tr>
+          <tr><td class="k">FINAL</td><td>Final inspection</td><td>The panel has passed final inspection.</td></tr>
+          <tr><td class="k">LOAD</td><td>Loading</td><td>The panel has been loaded onto the truck.</td></tr>
+        </tbody>
+      </table>
+
+      <h2>How to update tracking</h2>
+      <ol class="steps">
+        <li><strong>Open the casting.</strong> Click the heading of the casting whose panels you're updating to expand its section.</li>
+        <li><strong>Find the panel.</strong> Locate the panel's row by its Panel ID, type, or dimensions.</li>
+        <li><strong>Mark the stage done.</strong> Click the cell where the panel's row meets the finished phase's column. A checkmark appears to show that stage is complete. Click again to undo it.</li>
+        <li><strong>Move along as work happens.</strong> Keep checking off stages left to right as each panel progresses through the shop. The board always reflects the latest status.</li>
+      </ol>
+      <div class="callout tip">
+        <span class="callout-title">Everything saves itself</span>
+        <p>Like the rest of the portal, Tracking saves automatically a moment after you click. There's no Save button — just watch the save indicator near the top-right of the project header.</p>
+      </div>
+
+      <h2 id="crates">Assigning panels to crates</h2>
+      <p>Each panel row has a <strong>Crate #</strong> selector. Use it to say which shipping crate the panel goes in. The crate choices in that selector come from the crates you set up on the <a href="shipping.html">Shipping</a> tab — so build your crates there first, then come back here to assign panels to them.</p>
+
+      <h3>Bulk assign several panels at once</h3>
+      <p>Assigning crates one row at a time is slow on a big job, so you can do it in bulk. Select a range of panels — or several panels at once — and a bulk toolbar appears. Pick a crate in that toolbar and every selected panel is assigned to it in a single step.</p>
+      <ol class="steps">
+        <li><strong>Select the panels.</strong> Choose a range of rows, or pick several panels you want in the same crate.</li>
+        <li><strong>Use the toolbar that appears.</strong> A bulk toolbar shows up once panels are selected.</li>
+        <li><strong>Assign the crate.</strong> Choose the crate in the toolbar; all the selected panels are assigned to it at once.</li>
+      </ol>
+      <div class="callout note">
+        <span class="callout-title">Crates live on the Shipping tab</span>
+        <p>You create and name crates on <a href="shipping.html">Shipping</a>, then assign panels to them here. The Shipping tab is also where packing lists are printed.</p>
+      </div>
+
+      <h2>Focusing the view with the phase picker</h2>
+      <p>At the top of the board is a chip bar that lets you toggle which phase columns are showing. By default every phase is visible. Turn off the stages you don't care about right now to narrow the board down to just the columns you're watching — handy when, say, you only want to see what's left to <span class="ui">SEAL</span> and <span class="ui">CRATE</span>. This only changes what you see on screen; it doesn't affect any panel's status.</p>
+      <div class="callout tip">
+        <span class="callout-title">Narrow the board to what matters today</span>
+        <p>On a wide board, hiding the phases that are already done (or not yet relevant) makes it much easier to scan the few columns the shop is actively working through.</p>
+      </div>
+
+      <h2>Rejecting a panel</h2>
+      <p>If a panel doesn't pass, you can mark it as <strong>Rejected</strong>. Rejected counts flow back to <a href="casting-inventory.html">Casting Inventory</a>, where they feed <strong>remake</strong> castings — the system can spin up replacement panels to recast. This keeps the job's true panel count honest: a rejected panel still needs to be made, and the remake mechanism makes sure it isn't forgotten. Full details on remakes are on the <a href="casting-inventory.html">Casting Inventory</a> page.</p>
+
+      <h2>Track phases (phased projects only)</h2>
+      <p>If the project uses <a href="phases.html">Phases</a>, Tracking gains a <strong>Track phases</strong> chip bar. Use it to choose which of the project's phases appear on the sheet, so you can focus the board on one wing or delivery wave at a time. This chip bar only shows up on projects that have phases turned on — see <a href="phases.html">Phases</a>.</p>
+
+      <h2>Printing tracking sheets</h2>
+      <p>The <span class="ui">Print Tracking</span> button opens a dialog where you pick which castings' tracking sheets you want to print — choose one, several, or all of them. See <a href="printing.html">Printing &amp; Labels</a> for the full rundown on printing from the portal.</p>
+
+    </div>
+  </main>
+</div>
+<script src="assets/manual-nav.js"></script>
+</body>
+</html>

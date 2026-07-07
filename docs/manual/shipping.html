@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shipping — Project Portal Manual</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='0.9em' font-size='90'%3E📘%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="assets/manual.css">
+</head>
+<body data-page="shipping">
+<div class="m-shell">
+  <main class="m-main">
+    <div class="m-content">
+      <div class="m-breadcrumb"><a href="index.html">Manual</a> &rsaquo; Project Tabs &rsaquo; Shipping</div>
+      <h1>Shipping</h1>
+      <p class="m-lede">Group the project's panels into crates and print a packing list for each one so the truck loads cleanly and nothing gets left behind. This tab is where you create and manage the crates themselves; you decide which panel goes in which crate over on the Tracking tab.</p>
+
+      <div class="callout note">
+        <span class="callout-title">Two tabs, two jobs</span>
+        <p>Crates are built and printed here on <strong>Shipping</strong>, but panels are <em>assigned</em> to crates on the <a href="tracking.html">Tracking</a> tab using the <span class="ui">Crate #</span> column (or its bulk-assign tool). Set up your crates here first, then go assign panels there.</p>
+      </div>
+
+      <h2>What this tab is for</h2>
+      <p>A finished job ships as a set of crates. The Shipping tab is your crate list: you create a crate, give it a number and a short description, and the panels that were assigned to it on Tracking show up inside it automatically. When a crate is ready, you print its packing list — the sheet that rides with the crate and tells the receiver exactly what's inside.</p>
+
+      <h2>How to crate and ship a job</h2>
+      <ol class="steps">
+        <li><strong>Set up the crates here.</strong> On this Shipping tab, add a crate for each box, bundle, or load. Give each one a clear <span class="ui">Crate #</span> and a description so the floor knows what it's for.</li>
+        <li><strong>Assign the panels on Tracking.</strong> Go to the <a href="tracking.html">Tracking</a> tab and put each panel into its crate using the <span class="ui">Crate #</span> column (or the bulk-assign tool for many panels at once). The panels then appear inside the matching crate here.</li>
+        <li><strong>Print the packing lists.</strong> Come back to Shipping and click <span class="ui">Print Packing List</span> on each crate. Hand the lists to the loading crew.</li>
+      </ol>
+
+      <div class="callout warn">
+        <span class="callout-title">Save the project first</span>
+        <p>Make sure your latest changes have saved before you print a packing list — watch the save indicator near the top-right of the project header. Printing pulls from the saved project, so a list printed before saving may be missing a panel or a crate change.</p>
+      </div>
+
+      <h2>What a crate card shows</h2>
+      <p>Each crate is an expandable card. Click it to open it and see everything assigned to that crate:</p>
+      <div class="m-deflist">
+        <div class="row"><div class="term">Crate #</div><div class="desc">The crate's number. Editable — type the number you want stenciled on the box.</div></div>
+        <div class="row"><div class="term">Description</div><div class="desc">A short, editable label for the crate, e.g. &ldquo;Wing A &ndash; East Side.&rdquo; Helps the crew and the receiver tell crates apart.</div></div>
+        <div class="row"><div class="term">Panel list</div><div class="desc">Every panel assigned to this crate over on Tracking, showing its type, dimensions, color, and quantity. Each panel has a remove button if it landed in the wrong crate.</div></div>
+        <div class="row"><div class="term">Print Packing List</div><div class="desc">Prints the packing list for just this crate. See <a href="printing.html">Printing &amp; Labels</a>.</div></div>
+      </div>
+
+      <h2>Managing your crates</h2>
+      <div class="m-deflist">
+        <div class="row"><div class="term">Add a crate</div><div class="desc">Creates a new, empty crate ready to be numbered and described. Add one per box or load.</div></div>
+        <div class="row"><div class="term">Delete a crate</div><div class="desc">Removes the crate. The panels that were in it simply become unassigned again on Tracking — they aren't deleted from the job.</div></div>
+        <div class="row"><div class="term">Reorder crates</div><div class="desc">Drag a crate card up or down to put your crates in load order or any order that makes sense.</div></div>
+        <div class="row"><div class="term">Remove a panel</div><div class="desc">Use the remove button next to a panel inside a crate to take just that panel out, without touching the rest of the crate.</div></div>
+      </div>
+
+      <h2>&ldquo;List as quantities&rdquo;</h2>
+      <p>At the top of the tab is a project-wide <span class="ui">List as quantities</span> checkbox. It changes how repeated panels are shown:</p>
+      <div class="m-deflist">
+        <div class="row"><div class="term">Off (default)</div><div class="desc">Every panel is listed on its own line, one row per piece.</div></div>
+        <div class="row"><div class="term">On</div><div class="desc">Identical panels collapse into a single &ldquo;type &times; count&rdquo; row instead of repeating. The setting applies to both the on-screen view and the printed packing list.</div></div>
+      </div>
+
+      <div class="callout tip">
+        <span class="callout-title">When to use the quantities view</span>
+        <p>Turn <span class="ui">List as quantities</span> on for large, repetitive jobs — when a crate holds dozens of the same panel, a single &ldquo;type &times; count&rdquo; line is far easier to read and count against than dozens of identical rows. For mixed, one-off crates, leave it off so every piece is spelled out.</p>
+      </div>
+
+      <h2>Crates reference</h2>
+      <table class="m-table">
+        <thead><tr><th>Item</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td class="k">Crate #</td><td>Editable crate number, stenciled on the box and printed on the packing list.</td></tr>
+          <tr><td class="k">Description</td><td>Editable short label for the crate (e.g. &ldquo;Wing A &ndash; East Side&rdquo;).</td></tr>
+          <tr><td class="k">Panel list</td><td>The panels assigned to this crate on Tracking — type, dimensions, color, quantity.</td></tr>
+          <tr><td class="k">Remove (per panel)</td><td>Takes a single panel out of the crate.</td></tr>
+          <tr><td class="k">Print Packing List</td><td>Prints the packing list for that one crate.</td></tr>
+          <tr><td class="k">List as quantities</td><td>Project-wide toggle — collapse identical panels into &ldquo;type &times; count&rdquo; rows.</td></tr>
+          <tr><td class="k">Add / Delete / drag</td><td>Create a crate, remove a crate, or drag to reorder.</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Phased jobs</h2>
+      <p>If the project uses <a href="phases.html">phases</a>, the Shipping tab only shows the crates for the castings in the currently active phase. Switch phases to see and print the crates for another phase.</p>
+    </div>
+  </main>
+</div>
+<script src="assets/manual-nav.js"></script>
+</body>
+</html>

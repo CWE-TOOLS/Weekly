@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Batching Ticket Generator — Floor Cheat Sheet</title>
+<style>
+  @page { size: Letter portrait; margin: 0.4in; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    font-family: "Segoe UI", Arial, sans-serif;
+    color: #1a1a1a;
+    font-size: 9.3pt;
+    line-height: 1.32;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .sheet { width: 100%; }
+
+  /* Header */
+  .head {
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 3px solid #1f2937; padding-bottom: 6px; margin-bottom: 8px;
+  }
+  .head h1 { font-size: 16pt; letter-spacing: -0.2px; }
+  .head .sub { font-size: 8pt; color: #555; text-align: right; line-height: 1.25; }
+
+  /* Two-column body */
+  .cols { display: flex; gap: 12px; }
+  .col { flex: 1; min-width: 0; }
+
+  .card {
+    border: 1px solid #d1d5db; border-radius: 5px; padding: 6px 8px 7px;
+    margin-bottom: 7px; break-inside: avoid;
+  }
+  .card h2 {
+    font-size: 9.2pt; text-transform: uppercase; letter-spacing: 0.4px;
+    color: #111827; margin-bottom: 4px; display: flex; align-items: center; gap: 5px;
+  }
+  .card h2 .n {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 15px; height: 15px; border-radius: 50%;
+    background: #1f2937; color: #fff; font-size: 8pt; font-weight: 700; flex: 0 0 auto;
+  }
+  ul { list-style: none; }
+  li { position: relative; padding-left: 11px; margin: 1.5px 0; }
+  li::before { content: "•"; position: absolute; left: 0; color: #6b7280; }
+  b { color: #111827; }
+  .muted { color: #555; }
+
+  /* Highlight (most important) card */
+  .hot { border: 2px solid #b45309; background: #fffbeb; }
+  .hot h2 { color: #92400e; }
+  .hot h2 .n { background: #b45309; }
+
+  /* Type chips */
+  .chip { display: inline-block; padding: 0 5px; border-radius: 3px; font-weight: 700;
+    font-size: 8.3pt; color: #fff; }
+  .c-face  { background: #f97316; }
+  .c-first { background: #3b82f6; }
+  .c-final { background: #eab308; color: #3a2d00; }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 2px; }
+  td { padding: 1.5px 3px; vertical-align: top; }
+  td.k { white-space: nowrap; }
+  tr + tr td { border-top: 1px solid #eee; }
+
+  .rule { background:#fff; border:1px solid #f0e0c0; border-radius:4px; padding:4px 6px; margin:4px 0; }
+  .rule .t { font-weight:700; color:#92400e; }
+
+  .foot {
+    margin-top: 6px; border-top: 2px solid #1f2937; padding-top: 5px;
+    font-size: 7.6pt; color: #555; display:flex; justify-content:space-between;
+  }
+  .stop { color:#b91c1c; font-weight:700; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <div class="head">
+    <h1>Batching Ticket Generator</h1>
+    <div class="sub"><b>Floor Cheat Sheet</b><br>You enter the numbers — it builds the batches &amp; tickets.</div>
+  </div>
+
+  <div class="cols">
+
+    <!-- LEFT COLUMN -->
+    <div class="col">
+
+      <div class="card">
+        <h2><span class="n">1</span> What you enter</h2>
+        <ul>
+          <li><b>Total Cu Ft</b> — material the casting needs <span class="muted">(required)</span></li>
+          <li><b>Face Sq Ft</b> — sets how much is the face coat</li>
+          <li><b>Cu Ft / 250 lb batch</b> — defaults to <b>4.28</b></li>
+          <li><b>Pigment reduction %</b> — defaults to <b>50%</b></li>
+          <li><b>Batched by</b> &amp; <b>Notes</b> — print on the ticket</li>
+        </ul>
+        <div class="muted" style="margin-top:3px;">Can auto-import Cu Ft &amp; Face Sq Ft from inventory — only if <b>every</b> row has both filled in.</div>
+      </div>
+
+      <div class="card">
+        <h2><span class="n">2</span> How many batches</h2>
+        <ul>
+          <li>Sand sizes: <b>250 / 150 / 100 lb</b></li>
+          <li>Uses the <b>fewest, largest</b> batches that cover the volume</li>
+          <li>A leftover bit adds one more small batch</li>
+          <li><b>150 + 100 → combined into one 250</b> (one less batch to mix)</li>
+          <li>Listed largest first</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2><span class="n">3</span> How batches are labeled</h2>
+        <table>
+          <tr><td class="k"><b>Direct Cast</b></td>
+              <td><b>50/50</b> split: <span class="chip c-face">FACE</span> + <span class="chip c-final">FINAL BACK UP</span>. <b>No</b> First Back Up.</td></tr>
+          <tr><td class="k"><b>Spray Up</b><br><span class="muted">(Face Sq Ft entered)</span></td>
+              <td><span class="chip c-face">FACE</span> fills the face volume (3/16" thick) → <span class="chip c-first">FIRST BACK UP</span> ≈ same again → rest is <span class="chip c-final">FINAL BACK UP</span>.</td></tr>
+          <tr><td class="k"><b>Spray Up</b><br><span class="muted">(no Face Sq Ft)</span></td>
+              <td>First = <span class="chip c-face">FACE</span>, last = <span class="chip c-final">FINAL BACK UP</span>, middle = <span class="chip c-first">FIRST BACK UP</span>.</td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h2><span class="n">4</span> Recipe scaling</h2>
+        <ul>
+          <li>The <b>color log</b> is the recipe — it must have a <b>Sand</b> entry</li>
+          <li>Every ingredient scales by <b>batch sand ÷ color-log sand</b></li>
+          <li>e.g. 100 lb batch off a 250 lb recipe = <b>40%</b> of everything</li>
+        </ul>
+      </div>
+
+    </div>
+
+    <!-- RIGHT COLUMN -->
+    <div class="col">
+
+      <div class="card hot">
+        <h2><span class="n">5</span> Automatic material rules &nbsp;★</h2>
+        <div class="muted" style="margin-bottom:2px;">The generator applies these for you — you don't adjust them by hand.</div>
+
+        <div class="rule">
+          <div class="t">Bulk Sand swap</div>
+          Spray Up <b>back-up</b> batches show sand as <b>"Bulk Sand (Cowbay)."</b> Face uses the color-log sand.
+        </div>
+
+        <div class="rule">
+          <div class="t">Fibers → Cemfill</div>
+          Spray Up: <b>back-ups</b> use Cemfill. Direct Cast: <b>all</b> batches use Cemfill.
+          Amount = <b>18 lb per 250 lb batch</b> (scales down). Otherwise fiber is straight from the color log.
+        </div>
+
+        <div class="rule">
+          <div class="t">Pigment reduction</div>
+          <span class="chip c-final">FINAL BACK UP</span> <b>always reduced</b> (50% default).
+          <span class="chip c-first">FIRST BACK UP</span> only if you <b>check the box</b>.
+          <span class="chip c-face">FACE</span> always <b>full</b> pigment.
+        </div>
+      </div>
+
+      <div class="card">
+        <h2><span class="n">6</span> Mix Day totals</h2>
+        <ul>
+          <li>Adds up <b>all batches</b> so you know what to pull</li>
+          <li>Uses the same sand / Cemfill / pigment rules above</li>
+          <li>Grouped: <b>Dry Batch · Pigments · Additives</b></li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2><span class="n">7</span> The printed tickets</h2>
+        <ul>
+          <li><b>One page per batch</b>, color-coded:</li>
+        </ul>
+        <div style="margin:3px 0;">
+          <span class="chip c-face">FACE = Orange</span>&nbsp;
+          <span class="chip c-first">FIRST B/U = Blue</span>&nbsp;
+          <span class="chip c-final">FINAL B/U = Yellow</span>
+        </div>
+        <ul>
+          <li>Has Dry Batch, Pigments &amp; Additives tables</li>
+          <li>Blanks for Air/Water Temp &amp; Ice on the floor</li>
+          <li><b>Slump target</b> bullseye — default <b>Face 6"</b>, <b>Back-up 5"</b></li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2><span class="n">8</span> Won't print if…</h2>
+        <ul>
+          <li><span class="stop">No Total Cu Ft</span> entered</li>
+          <li><span class="stop">No Sand</span> entry in the color log</li>
+        </ul>
+        <div class="muted" style="margin-top:2px;">These guards stop a ticket from being built on missing info.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="foot">
+    <span><b>Bottom line:</b> You give volume, face area &amp; batcher — it decides batch count, labels each, scales the recipe, applies the rules, and prints a color-coded ticket per batch.</span>
+    <span>Releasability / Casting Tools</span>
+  </div>
+
+</div>
+</body>
+</html>

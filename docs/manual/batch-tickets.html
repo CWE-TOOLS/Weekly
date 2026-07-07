@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Batch Tickets — Project Portal Manual</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='0.9em' font-size='90'%3E📘%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="assets/manual.css">
+</head>
+<body data-page="batch-tickets">
+<div class="m-shell">
+  <main class="m-main">
+    <div class="m-content">
+      <div class="m-breadcrumb"><a href="index.html">Manual</a> &rsaquo; Project Tabs &rsaquo; Batch Tickets</div>
+      <h1>Batch Tickets</h1>
+      <p class="m-lede">Generate concrete batching tickets for each casting. The tab takes the recipe from the <a href="color-log.html">Color Log</a> and scales it to the volume a casting needs, then prints one ticket per batch for the casting floor. There are three batch types: <span class="chip face">FACE</span> (the face mix), <span class="chip first">FIRST BACK UP</span>, and <span class="chip final">FINAL BACK UP</span>.</p>
+
+      <div class="callout note">
+        <span class="callout-title">Where it lives</span>
+        <p>It's the <span class="ui">Batch Tickets</span> tab in a project's left sidebar, just after the <a href="color-log.html">Color Log</a> tab it depends on.</p>
+      </div>
+
+      <h2>What this tab is for</h2>
+      <p>A batch ticket tells the floor exactly what to weigh out and mix for one batch of concrete. Because every casting needs a different volume, the portal scales the Color Log recipe to fit and splits it into the right number of batches, then prints a clear, color-coded page for each one. You set a few inputs per casting; the generator does the math.</p>
+
+      <div class="callout warn">
+        <span class="callout-title">Before a ticket will generate</span>
+        <p>Four things must be in place: the project must be <strong>saved</strong>; a <a href="color-log.html">Color Log</a> must exist (tickets scale ingredients from it); the casting needs a <strong>Total Cu Ft</strong>; and the color log needs a <strong>Sand</strong> entry. Miss any of these and the ticket won't generate.</p>
+      </div>
+
+      <h2>Target Slump (project-wide)</h2>
+      <p>At the project level you set a <span class="ui">Target Slump</span> — the inches of spread — for each batch type. These values drive the slump bullseye drawn on every printed ticket.</p>
+      <table class="m-table">
+        <thead><tr><th>Batch type</th><th>Default Target Slump</th></tr></thead>
+        <tbody>
+          <tr><td class="k">Face Mix</td><td>6&quot;</td></tr>
+          <tr><td class="k">First Back Up</td><td>5&quot;</td></tr>
+          <tr><td class="k">FINAL Back Up</td><td>5&quot;</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Per-casting settings</h2>
+      <p>Pick a casting from the casting pills, then fill in its inputs:</p>
+      <div class="m-deflist">
+        <div class="row"><div class="term">Total Cu Ft</div><div class="desc"><strong>Required.</strong> The total cubic feet of concrete the casting needs. The whole recipe is scaled from this. Use <span class="ui">Import from Tracking</span> to pull the totals in automatically — see <a href="tracking.html">Tracking</a>.</div></div>
+        <div class="row"><div class="term">Face Sq Ft</div><div class="desc">The face square footage for the casting. Can also be imported from Tracking.</div></div>
+        <div class="row"><div class="term">Pigment reduction %</div><div class="desc">How much to cut pigment in the back-up mixes (default 50%).</div></div>
+        <div class="row"><div class="term">Reduce pigment on First / Final Back Up</div><div class="desc">Choose whether the <span class="chip first">FIRST BACK UP</span> and <span class="chip final">FINAL BACK UP</span> batches get the pigment reduction applied.</div></div>
+        <div class="row"><div class="term">Batched by</div><div class="desc">Who batched the mix. Prints on the ticket.</div></div>
+        <div class="row"><div class="term">Notes</div><div class="desc">A notes box that prints on the ticket.</div></div>
+      </div>
+
+      <h2>How to generate batch tickets</h2>
+      <ol class="steps">
+        <li><strong>Make sure the recipe is ready.</strong> Confirm a <a href="color-log.html">Color Log</a> exists for the project and includes a Sand entry, and that the project is saved.</li>
+        <li><strong>Pick the casting.</strong> Click the casting from the casting pills.</li>
+        <li><strong>Enter the volume.</strong> Type the <span class="ui">Total Cu Ft</span> (required) and the <span class="ui">Face Sq Ft</span>, or use <span class="ui">Import from Tracking</span> to pull them in.</li>
+        <li><strong>Set pigment reduction.</strong> Adjust the pigment reduction % and choose whether First Back Up and Final Back Up are reduced.</li>
+        <li><strong>Review the scaled batches.</strong> Check the batches the generator produced — count, batch type, and scaled ingredients.</li>
+        <li><strong>Print.</strong> Use <span class="ui">Print Batch Tickets</span> to print one page per batch.</li>
+      </ol>
+
+      <h2>What the generator does</h2>
+      <p>You don't need to do the math — the generator handles it. In plain English, for each casting it:</p>
+      <div class="m-deflist">
+        <div class="row"><div class="term">Splits into batches</div><div class="desc">Decides how many batches to make based on standard sand sizes.</div></div>
+        <div class="row"><div class="term">Labels by cast method</div><div class="desc">Labels each batch by the Color Log's cast method (Spray Up vs Direct Cast).</div></div>
+        <div class="row"><div class="term">Scales the recipe</div><div class="desc">Scales the whole recipe by sand weight to match the volume needed.</div></div>
+        <div class="row"><div class="term">Applies material rules</div><div class="desc">Applies automatic adjustments — sand swaps, fiber-to-Cemfill conversion, and pigment reduction.</div></div>
+        <div class="row"><div class="term">Prints color-coded pages</div><div class="desc">Prints one page per batch, color-coded by type: <span class="chip face">FACE</span> orange, <span class="chip first">FIRST BACK UP</span> blue, <span class="chip final">FINAL BACK UP</span> yellow.</div></div>
+      </div>
+
+      <div class="callout tip">
+        <span class="callout-title">The full batching logic</span>
+        <p>Every batching rule and decision the floor needs is on one handout: <a href="../batching-ticket-cheat-sheet.pdf">Batching Ticket — Floor Cheat Sheet (PDF)</a>. It's the single-page reference for casting staff covering all the sand-size, material, and reduction rules the generator follows.</p>
+      </div>
+
+      <h2>Printing batch tickets</h2>
+      <p>The <span class="ui">Print Batch Tickets</span> button opens a dialog where you pick which castings to print, then prints a ticket for each batch. See <a href="printing.html">Printing &amp; Labels</a>.</p>
+      <div class="callout warn">
+        <span class="callout-title">Save before you print</span>
+        <p>Save the project first so the tickets reflect your latest inputs. The portal saves automatically a moment after you type — wait for the save indicator to read <em>Saved</em>.</p>
+      </div>
+
+      <h2>Phases</h2>
+      <p>If the project uses <a href="phases.html">Phases</a>, batch tickets are handled per phase — you pick castings and generate tickets within the phase you're working in.</p>
+    </div>
+  </main>
+</div>
+<script src="assets/manual-nav.js"></script>
+</body>
+</html>

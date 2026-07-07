@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Project List — Project Portal Manual</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='0.9em' font-size='90'%3E📘%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="assets/manual.css">
+</head>
+<body data-page="project-list">
+<div class="m-shell">
+  <main class="m-main">
+    <div class="m-content">
+      <div class="m-breadcrumb"><a href="index.html">Manual</a> &rsaquo; Start Here &rsaquo; The Project List</div>
+      <h1>The Project List</h1>
+      <p class="m-lede">The front door of the Project Portal: a searchable, sortable table of every job in the shop. This is where you find an existing project or start a new one.</p>
+
+      <div class="callout note">
+        <span class="callout-title">Getting here</span>
+        <p>Open the <strong>Weekly Schedule</strong> and click the <span class="ui">Project Portal</span> button in the top navigation. You'll land right on the project list.</p>
+      </div>
+
+      <h2>What this view is for</h2>
+      <p>The project list is the portal's default view — every job in one table. Use it to spot your own jobs, check where each one stands, jump into a project to do work, or create a brand-new project. Each row is one job; click it to open that project.</p>
+
+      <h2>How to find a job</h2>
+      <ol class="steps">
+        <li><strong>Open the portal.</strong> From the Weekly Schedule, click <span class="ui">Project Portal</span>.</li>
+        <li><strong>Search or sort.</strong> Type in the <span class="ui">Search by project # or name…</span> box to filter the list as you type, or click a column header to sort by it.</li>
+        <li><strong>Open it.</strong> Click anywhere on the row. The project opens on its <a href="project-info.html">Project Info</a> tab.</li>
+      </ol>
+
+      <div class="callout tip">
+        <span class="callout-title">Search matches both</span>
+        <p>The search box filters on <em>both</em> the project number and the project name at the same time, so you can type either one — or part of one — to narrow the list instantly.</p>
+      </div>
+
+      <h2>Sorting the table</h2>
+      <p>Click any column header to sort the whole list by that column. Click the same header again to reverse the order (for example, newest dates first, then oldest first). This works on every column — sort by <strong>Status</strong> to group jobs by stage, by <strong>PM</strong> to gather your own jobs, or by a date column to see what's coming up.</p>
+
+      <h2>The columns, in order</h2>
+      <table class="m-table">
+        <thead><tr><th>Column</th><th>What it shows</th></tr></thead>
+        <tbody>
+          <tr><td class="k">Status</td><td>Where the job is in its life cycle — <span class="status-chip">Kicked Off</span>, <span class="status-chip">In Production</span>, and so on. See <a href="statuses.html">Statuses &amp; Workflow</a> for the full list.</td></tr>
+          <tr><td class="k">Project #</td><td>The unique number for the job — the same number used everywhere in the portal.</td></tr>
+          <tr><td class="k">Project Name</td><td>The customer-facing name of the job.</td></tr>
+          <tr><td class="k">PM</td><td>The project manager assigned to the job, so you can spot your own work at a glance.</td></tr>
+          <tr><td class="k">Kickoff Date</td><td>When the job was kicked off.</td></tr>
+          <tr><td class="k">Need By</td><td>When the customer needs the work.</td></tr>
+          <tr><td class="k">Optimizer Start Date</td><td>When the job is planned to start, from the scheduling side of the system. Read-only here.</td></tr>
+          <tr><td class="k">Next Opt. Ship Date</td><td>The next planned ship date, from the scheduling side of the system. Read-only here.</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout note">
+        <span class="callout-title">Planning dates are read-only</span>
+        <p><strong>Optimizer Start Date</strong> and <strong>Next Opt. Ship Date</strong> come from the scheduling / optimizer side of the system. They appear in the list so you can see when each job is planned to start and next ship, but you don't edit them here.</p>
+      </div>
+
+      <h2>Starting a new project</h2>
+      <p>The <span class="ui">+ New Project</span> button at the top-right opens the New Project dialog.</p>
+      <ol class="steps">
+        <li><strong>Click <span class="ui">+ New Project</span>.</strong> It's in the top-right corner of the list.</li>
+        <li><strong>Enter a Project #.</strong> Required, and it must be unique — if you type a number that already exists, the portal blocks it and shows an error.</li>
+        <li><strong>Enter a Project Name (optional).</strong> You can add or change this later on <a href="project-info.html">Project Info</a>.</li>
+        <li><strong>Click <span class="ui">Create</span>.</strong> The new project opens immediately on its Project Info tab, ready to fill in.</li>
+      </ol>
+
+      <div class="callout warn">
+        <span class="callout-title">Project numbers must be unique</span>
+        <p>Two projects can't share a number. If the number is already in use, you'll get an error and the project won't be created — pick a different number.</p>
+      </div>
+
+      <h2>The tabs and links around the list</h2>
+      <p>In the top-left are the portal's top-level &ldquo;folder&rdquo; tabs:</p>
+      <div class="m-deflist">
+        <div class="row"><div class="term">Project Portal</div><div class="desc">The main view you're looking at — the project list and the projects themselves.</div></div>
+        <div class="row"><div class="term">Recent Memos</div><div class="desc">A combined feed of job memos from every project. See <a href="recent-memos.html">Recent Memos Feed</a>.</div></div>
+        <div class="row"><div class="term">Shipping Log</div><div class="desc"><span class="chip ghost">Coming soon</span> — disabled for now.</div></div>
+        <div class="row"><div class="term">Spec. Vendor Log</div><div class="desc"><span class="chip ghost">Coming soon</span> — disabled for now.</div></div>
+      </div>
+      <p>On the top-right, the <span class="ui">Releasability Board</span> link jumps to the readiness board.</p>
+
+      <div class="callout note">
+        <span class="callout-title">Status and PM are set inside the project</span>
+        <p>The list <em>shows</em> each job's status and PM, but you don't set them here. Open the project and use the status bar on <a href="project-info.html">Project Info</a> to change them.</p>
+      </div>
+
+    </div>
+  </main>
+</div>
+<script src="assets/manual-nav.js"></script>
+</body>
+</html>

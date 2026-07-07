@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Actual Labor — Project Portal Manual</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='0.9em' font-size='90'%3E📘%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="assets/manual.css">
+</head>
+<body data-page="actual-labor">
+<div class="m-shell">
+  <main class="m-main">
+    <div class="m-content">
+      <div class="m-breadcrumb"><a href="index.html">Manual</a> &rsaquo; Project Tabs &rsaquo; Actual Labor</div>
+      <h1>Actual Labor</h1>
+      <p class="m-lede">A side-by-side scorecard for the job. It puts the hours actually worked next to the <a href="optimizer-hours.html">Optimizer Hours</a> estimate so you can see, at a glance, where the job ran over the plan and where it came in under.</p>
+
+      <div class="callout note">
+        <span class="callout-title">Read-only — nothing to type here</span>
+        <p>There is nothing to fill in on this tab. The actual hours come from the shop's labor-tracking sheet, which is kept up to date outside the portal. This tab simply reads those hours and lines them up against the estimate. If a number looks wrong, it's corrected on the labor sheet, not here.</p>
+      </div>
+
+      <h2>What this tab is for</h2>
+      <p>The <a href="optimizer-hours.html">Optimizer Hours</a> tab is your plan — what you expected each task to take. This tab is the report card. Once people have actually built the castings and logged their time, you can compare the two and ask: did the work take as long as we thought? The gap between the two numbers is the <strong>variance</strong>, and it's the whole point of this tab.</p>
+
+      <h2>How to read the comparison</h2>
+      <p>The tab shows a comparison grid, one row per casting and task. Each row lines up three numbers — the estimate, the actual, and the difference between them:</p>
+      <ol class="steps">
+        <li><strong>Find the casting and task.</strong> Each row names a casting and the department or production phase the hours belong to.</li>
+        <li><strong>Compare the two hour columns.</strong> <span class="ui">Optimizer hrs</span> is what was budgeted; <span class="ui">Actual hrs</span> is what was logged.</li>
+        <li><strong>Read the variance.</strong> The <span class="ui">Variance</span> column is Actual minus Optimizer. A <strong>positive</strong> number means the task ran <em>over</em> the estimate; a <strong>negative</strong> number means it came in <em>under</em>.</li>
+      </ol>
+
+      <h2>The columns, in plain English</h2>
+      <table class="m-table">
+        <thead><tr><th>Column</th><th>What it shows</th></tr></thead>
+        <tbody>
+          <tr><td class="k">Casting</td><td>The casting the hours were worked on.</td></tr>
+          <tr><td class="k">Department / Phase</td><td>The production department or phase the work belongs to (the task being measured).</td></tr>
+          <tr><td class="k">Optimizer hrs</td><td>The estimated, budgeted hours for that task — pulled straight from <a href="optimizer-hours.html">Optimizer Hours</a>.</td></tr>
+          <tr><td class="k">Actual hrs</td><td>The hours actually logged on that task, from the shop's labor-tracking sheet.</td></tr>
+          <tr><td class="k">Variance</td><td>Actual minus Optimizer. Positive = over the estimate, negative = under.</td></tr>
+        </tbody>
+      </table>
+
+      <h2>When you'd use it</h2>
+      <p>This tab is usually reviewed near the end of a job, around close-out, once the work is done and the time is fully logged. It's part of looking back at how the estimate held up — see <a href="statuses.html">Statuses &amp; Workflow</a> for where close-out fits in the project's life cycle.</p>
+
+      <div class="callout tip">
+        <span class="callout-title">Use the variance to sharpen future estimates</span>
+        <p>If the same task keeps coming in well over (or well under) the estimate across castings, that's a signal — not a one-off. Carry that lesson into the next job's <a href="optimizer-hours.html">Optimizer Hours</a> so the plan starts closer to reality.</p>
+      </div>
+    </div>
+  </main>
+</div>
+<script src="assets/manual-nav.js"></script>
+</body>
+</html>

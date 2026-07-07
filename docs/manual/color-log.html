@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Color Log — Project Portal Manual</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='0.9em' font-size='90'%3E📘%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="assets/manual.css">
+</head>
+<body data-page="color-log">
+<div class="m-shell">
+  <main class="m-main">
+    <div class="m-content">
+      <div class="m-breadcrumb"><a href="index.html">Manual</a> &rsaquo; Project Tabs &rsaquo; Color Log</div>
+      <h1>Color Log</h1>
+      <p class="m-lede">The mix recipe for the project. The Color Log records every ingredient that goes into the concrete — cement, sand, aggregates, pigments, additives, grout, and fill coat — laid out like the printed &ldquo;Color Log&rdquo; form the shop has always used. It is the single source the <a href="batch-tickets.html">Batch Tickets</a> tab scales from, so getting it right matters.</p>
+
+      <div class="callout note">
+        <span class="callout-title">Where it lives</span>
+        <p>It's the <span class="ui">Color Log</span> tab in a project's left sidebar. On screen it looks like the paper form, with the header <strong>Concreteworks East — Rev. 2025</strong> across the top.</p>
+      </div>
+
+      <h2>What this tab is for</h2>
+      <p>The Color Log is the recipe of record for the job's concrete. Everyone who batches, finishes, or seals a panel reads from it, and the <a href="batch-tickets.html">Batch Tickets</a> tab uses it to do its math — it scales every ingredient up or down to match the volume each casting needs. Because of that, the Color Log has to be complete and accurate before batch tickets will work.</p>
+
+      <div class="callout warn">
+        <span class="callout-title">Batch Tickets depend on Sand</span>
+        <p>For <a href="batch-tickets.html">Batch Tickets</a> to generate, the recipe <strong>must include a Sand entry</strong> (and the overall amounts filled in). The batch generator scales the whole recipe based on the sand weight — no sand, no ticket. Keep your sand amounts and units correct.</p>
+      </div>
+
+      <h2>The toolbar</h2>
+      <p>Across the top of the Color Log are a few controls that set up the form:</p>
+      <div class="m-deflist">
+        <div class="row"><div class="term">Load Standard Color</div><div class="desc">A dropdown of saved preset recipes. Pick one to drop a known mix into the log as a starting point, then adjust it for this job.</div></div>
+        <div class="row"><div class="term">Multiple color logs</div><div class="desc">A toggle that lets the project hold more than one named color log (for jobs with several mixes). When it's on, a pill strip appears with one pill per log, plus <span class="ui">+ Add color log</span> and <span class="ui">Delete</span> to manage them.</div></div>
+        <div class="row"><div class="term">⋯ (more) menu</div><div class="desc">Opens a small menu. The main item is <span class="ui">Save as Standard Color</span>, which saves the current log as a reusable preset — a dialog asks you to name it. After that, the recipe shows up in the <span class="ui">Load Standard Color</span> dropdown for any project.</div></div>
+        <div class="row"><div class="term">Notes</div><div class="desc">A project-level notes box for anything about the color log that doesn't fit the form fields.</div></div>
+      </div>
+
+      <div class="callout warn">
+        <span class="callout-title">&ldquo;Multiple color logs&rdquo; is one-way</span>
+        <p>Once you turn the <span class="ui">Multiple color logs</span> toggle on, it can't be turned back off for that project. Only switch it on when the job genuinely needs more than one mix.</p>
+      </div>
+
+      <h2>How to build a color log</h2>
+      <ol class="steps">
+        <li><strong>Start the recipe.</strong> Either pick a preset from <span class="ui">Load Standard Color</span> to start from a known mix, or start blank and enter everything by hand.</li>
+        <li><strong>Fill the header.</strong> Enter the <span class="ui">Sample #</span> (the color name), <span class="ui">Temperature</span>, <span class="ui">Date</span>, and <span class="ui">Made By</span>. The <span class="ui">Project</span> is filled in for you and can't be edited.</li>
+        <li><strong>Set the cement type.</strong> Choose the <strong>STANDARD / CUSTOM</strong> toggle, then pick the <span class="ui">Cement Type</span> — White Portland, Gray Portland, or Other.</li>
+        <li><strong>Enter base ingredients and additives.</strong> Fill the <strong>Base Ingredients</strong> table and the <strong>Additives</strong> table. Each row holds an amount, a unit, and a note; use <span class="ui">+ Add</span> to add more rows. Make sure a <strong>Sand</strong> entry is included.</li>
+        <li><strong>Pick the cast method.</strong> Choose <span class="ui">Cast Method</span> — Spray Up, Direct Cast, or Other. This choice changes how <a href="batch-tickets.html">Batch Tickets</a> handles materials, so set it correctly.</li>
+        <li><strong>Enter the rest of the mix.</strong> Fill the <strong>Aggregates</strong>, <strong>Pigments</strong>, <strong>Grout Type</strong>, and <strong>Fill Coat</strong> tables.</li>
+        <li><strong>Add notes.</strong> Use the <span class="ui">Finishing Notes</span> and <span class="ui">Sealing Notes</span> boxes for instructions the floor needs.</li>
+      </ol>
+
+      <div class="callout tip">
+        <span class="callout-title">Saving</span>
+        <p>The portal saves your typing automatically as you go — watch the save indicator near the top-right of the project header. There's no separate &ldquo;Save&rdquo; button to remember.</p>
+      </div>
+
+      <h2>The form, section by section</h2>
+      <p>The Color Log mirrors the paper form. Here's what each section holds:</p>
+      <table class="m-table">
+        <thead><tr><th>Section</th><th>What it holds</th></tr></thead>
+        <tbody>
+          <tr><td class="k">Header fields</td><td><span class="ui">Sample #</span> (the color name), <span class="ui">Temperature</span>, <span class="ui">Date</span>, <span class="ui">Made By</span>, and <span class="ui">Project</span> (auto-filled and read-only).</td></tr>
+          <tr><td class="k">STANDARD / CUSTOM</td><td>A toggle marking whether this is a standard mix or a custom one for the job.</td></tr>
+          <tr><td class="k">Cement Type</td><td>White Portland, Gray Portland, or Other.</td></tr>
+          <tr><td class="k">Base Ingredients</td><td>The core mix materials. Each row: ingredient/amount, unit, and a note. <span class="ui">+ Add</span> adds rows. Include a <strong>Sand</strong> entry.</td></tr>
+          <tr><td class="k">Additives</td><td>Admixtures and additions. Each row: amount, unit, and a note. <span class="ui">+ Add</span> adds rows.</td></tr>
+          <tr><td class="k">Cast Method</td><td>Spray Up, Direct Cast, or Other. Affects how batch tickets handle materials.</td></tr>
+          <tr><td class="k">Aggregates</td><td>The aggregate materials in the mix, one per row.</td></tr>
+          <tr><td class="k">Pigments</td><td>Each row: pigment, %, weight, and unit.</td></tr>
+          <tr><td class="k">Grout Type</td><td>Each row: name and ratio %.</td></tr>
+          <tr><td class="k">Fill Coat</td><td>Each row: fill pigment, %, weight, and unit.</td></tr>
+          <tr><td class="k">Finishing Notes</td><td>Free-text instructions for finishing the panels.</td></tr>
+          <tr><td class="k">Sealing Notes</td><td>Free-text instructions for sealing the panels.</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Printing the Color Log</h2>
+      <p>The <span class="ui">Print Color Log</span> button prints the full form, exactly as it appears on screen, for the shop floor or the job folder. See <a href="printing.html">Printing &amp; Labels</a>.</p>
+      <div class="callout warn">
+        <span class="callout-title">Save before you print</span>
+        <p>Save the project first so your latest changes are on the printout. The portal saves automatically a moment after you type — wait for the save indicator to read <em>Saved</em> before printing.</p>
+      </div>
+    </div>
+  </main>
+</div>
+<script src="assets/manual-nav.js"></script>
+</body>
+</html>

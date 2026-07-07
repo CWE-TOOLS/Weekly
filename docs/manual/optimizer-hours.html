@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Optimizer Hours — Project Portal Manual</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='0.9em' font-size='90'%3E📘%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="assets/manual.css">
+</head>
+<body data-page="optimizer-hours">
+<div class="m-shell">
+  <main class="m-main">
+    <div class="m-content">
+      <div class="m-breadcrumb"><a href="index.html">Manual</a> &rsaquo; Project Tabs &rsaquo; Optimizer Hours</div>
+      <h1>Optimizer Hours</h1>
+      <p class="m-lede">Estimate the labor manhours for each casting, task by task. You build a shared list of tasks once, then enter the hours for each casting. These estimates feed the schedule — they help set the planned start and ship dates you see in the project list.</p>
+
+      <div class="callout warn">
+        <span class="callout-title">Set up the project first</span>
+        <p>Save the project, then add at least one casting in <a href="casting-inventory.html">Casting Inventory</a>. Optimizer Hours has nothing to fill in until the project has castings.</p>
+      </div>
+
+      <h2>What this tab is for</h2>
+      <p>Optimizer Hours is where you answer the question &ldquo;how many manhours will each casting take?&rdquo; You break the work into <strong>tasks</strong> (also called phases) — milling, casting, finishing, and so on — and put an hours estimate on each one for each casting. The tasks are shared across the project, so they stay consistent from casting to casting, while the hours are entered separately per casting.</p>
+      <p>These numbers don't just sit here. They roll up into the labor estimate that helps plan when the job runs, which is part of what produces the planned start and ship dates shown in the <a href="project-list.html">project list</a>. Once the job is built, you can compare these estimates against what was actually worked on the <a href="actual-labor.html">Actual Labor</a> tab.</p>
+
+      <h2>The Notes box</h2>
+      <p>At the top of the tab is a project-level <span class="ui">Notes</span> box. Use it for anything about the hours or how the job is being optimized — assumptions you made, crews you're planning around, or reminders for whoever reviews the estimate. It applies to the whole project, not to one casting.</p>
+
+      <h2>How the workspace is laid out</h2>
+      <p>The project's castings appear as <strong>pills</strong> across the top. Below them, the workspace shows three castings side by side — a <strong>left</strong>, <strong>center</strong>, and <strong>right</strong> column — so you can compare and copy hours between them. To bring other castings into view, click their pills or use the prev/next arrows to scroll the columns along.</p>
+      <p>Each column is one casting. Inside a column are the <strong>task cards</strong> for that casting, stacked top to bottom, with a <strong>Grand Total</strong> at the bottom.</p>
+
+      <div class="callout note">
+        <span class="callout-title">Phased projects</span>
+        <p>If the project uses <a href="phases.html">Phases</a>, only the castings in the phase you're viewing appear as pills here. Switch phases to estimate the rest.</p>
+      </div>
+
+      <h2>What's on a task card</h2>
+      <div class="m-deflist">
+        <div class="row"><div class="term">Task / phase name</div><div class="desc">What the task is, e.g. &ldquo;Mill,&rdquo; &ldquo;Cast,&rdquo; &ldquo;Finish.&rdquo; Editable — click to rename it.</div></div>
+        <div class="row"><div class="term">Hours</div><div class="desc">The estimated manhours for this task on this casting. Editable — click and type a number.</div></div>
+        <div class="row"><div class="term">Description</div><div class="desc">A collapsible note about the task. Expand it to add detail about what the hours cover; collapse it to keep the column tidy.</div></div>
+      </div>
+      <p>Each card also lets you <strong>copy</strong> its hours so you can <strong>paste</strong> them onto the matching task in another casting, and <strong>delete</strong> the task if it doesn't apply.</p>
+
+      <h2>The Grand Total card</h2>
+      <p>At the bottom of each column, the <span class="ui">Grand Total</span> card adds up the hours from every task on that casting. It updates as you type, so it always reflects the total estimated manhours for that casting.</p>
+
+      <h2>Estimating hours for a casting</h2>
+      <ol class="steps">
+        <li><strong>Pick the casting.</strong> Click its pill so it appears in one of the three columns.</li>
+        <li><strong>Add the tasks.</strong> Use that column's <span class="ui">+ Add Task</span> button to add each task or phase the casting needs.</li>
+        <li><strong>Name each task.</strong> Click the task name and type what it is (Mill, Cast, Finish, and so on).</li>
+        <li><strong>Enter the hours.</strong> Click the hours field on each card and type your manhour estimate.</li>
+        <li><strong>Add detail if it helps.</strong> Expand the description on a card to note what the estimate assumes.</li>
+        <li><strong>Check the total.</strong> Read the <span class="ui">Grand Total</span> at the bottom to confirm the casting's total looks right.</li>
+      </ol>
+
+      <div class="callout tip">
+        <span class="callout-title">Reuse hours across similar castings</span>
+        <p>When two castings are alike, you don't have to retype everything. Bring both into view, <strong>copy</strong> the hours from a task on the first casting and <strong>paste</strong> them onto the matching task on the second. It's the fastest way to estimate a run of near-identical pieces, then tweak the few cards that differ.</p>
+      </div>
+
+      <h2>Printing the estimate</h2>
+      <p>The <span class="ui">Print Optimizer Hours</span> button prints the estimate with one casting per page, so each casting's task list and total comes out on its own sheet. See <a href="printing.html">Printing &amp; Labels</a> for more on printouts.</p>
+
+      <div class="callout tip">
+        <span class="callout-title">Saving</span>
+        <p>The portal saves your typing automatically as you go — watch the save indicator near the top-right of the project header. There's no separate &ldquo;Save&rdquo; button to remember.</p>
+      </div>
+    </div>
+  </main>
+</div>
+<script src="assets/manual-nav.js"></script>
+</body>
+</html>

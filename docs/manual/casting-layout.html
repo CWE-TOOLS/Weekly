@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Casting Layout — Project Portal Manual</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='0.9em' font-size='90'%3E📘%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="assets/manual.css">
+</head>
+<body data-page="casting-layout">
+<div class="m-shell">
+  <main class="m-main">
+    <div class="m-content">
+      <div class="m-breadcrumb"><a href="index.html">Manual</a> &rsaquo; Project Tabs &rsaquo; Casting Layout</div>
+      <h1>Casting Layout</h1>
+      <p class="m-lede">Arrange a casting's panels onto the shop-floor casting tables. The portal packs them automatically, you fine-tune the arrangement by hand, and then you print the diagram for the floor crew to follow.</p>
+
+      <div class="callout warn">
+        <span class="callout-title">You need a casting first</span>
+        <p>Save the project, then add at least one casting with panels on <a href="casting-inventory.html">Casting Inventory</a>. The panel sizes shown here come from the <a href="tracking.html">Tracking</a> sheet, which is built from the inventory — so there's nothing to lay out until that exists.</p>
+      </div>
+
+      <h2>What this tab is for</h2>
+      <p>Every casting's panels have to fit onto a physical casting table on the shop floor. This tab draws each panel as a rectangle on a table and packs them in automatically to save space. You can then nudge and rotate panels to match how the crew actually wants to pour them, and print the result so the floor has a clear plan to work from.</p>
+
+      <div class="callout note">
+        <span class="callout-title">About the mold offset</span>
+        <p>A panel isn't just the concrete — there's a mold around it that takes up room on the table. The <strong>mold offset</strong> you set is added to every edge of each panel to account for that mold footprint, so the layout reflects the real space each form needs.</p>
+      </div>
+
+      <h2>The controls along the top</h2>
+      <table class="m-table">
+        <thead><tr><th>Control</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td class="k">Casting</td><td>Dropdown to choose which casting you're laying out.</td></tr>
+          <tr><td class="k">Casting area</td><td>Choose <span class="ui">Casting Area B</span> or <span class="ui">Casting Area A</span> — which area's tables you're arranging panels on.</td></tr>
+          <tr><td class="k">Mold offset (per side, in)</td><td>Inches added to each edge of every panel for the mold footprint. Default is 4.</td></tr>
+          <tr><td class="k">Space between forms (in)</td><td>The gap to leave between forms on the table. Default is 0.</td></tr>
+          <tr><td class="k">Print Layout</td><td>Prints the arrangement diagram for the floor crew.</td></tr>
+          <tr><td class="k">Reset to auto-pack</td><td>Appears once you've moved or rotated something. Click it to throw away your manual changes and snap back to the automatic packing.</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Moving and rotating panels</h2>
+      <p>The viewer shows each panel as a rectangle sitting on the table. You can rearrange them by hand:</p>
+      <div class="m-deflist">
+        <div class="row"><div class="term">Move a form</div><div class="desc">Drag it to a new spot on the table.</div></div>
+        <div class="row"><div class="term">Rotate 90°</div><div class="desc">Double-click a form — or hover over it and press the <strong>R</strong> key.</div></div>
+      </div>
+
+      <div class="callout tip">
+        <span class="callout-title">Your layout sticks</span>
+        <p>The first time you drag or rotate a form, the portal saves your manual layout so it stays put across sessions. It will keep your arrangement until you click <span class="ui">Reset to auto-pack</span>.</p>
+      </div>
+
+      <h2>How to lay out a casting</h2>
+      <ol class="steps">
+        <li><strong>Pick the casting.</strong> Choose it from the <span class="ui">Casting</span> dropdown.</li>
+        <li><strong>Choose the area.</strong> Set <span class="ui">Casting area</span> to the area whose tables you're working on.</li>
+        <li><strong>Set the spacing.</strong> Enter the <span class="ui">Mold offset (per side, in)</span> and <span class="ui">Space between forms (in)</span> so the layout matches the real molds and gaps. The portal packs the panels automatically based on these.</li>
+        <li><strong>Fine-tune by hand.</strong> Drag forms to reposition them and double-click (or hover + press <strong>R</strong>) to rotate. Your changes save as you go.</li>
+        <li><strong>Print it.</strong> Click <span class="ui">Print Layout</span> to give the floor crew the diagram.</li>
+        <li><strong>Start over if needed.</strong> Click <span class="ui">Reset to auto-pack</span> to discard your manual changes and return to the automatic arrangement.</li>
+      </ol>
+
+      <div class="callout tip">
+        <span class="callout-title">Get the sizes right before printing</span>
+        <p>Adjust the mold offset and the space between forms to match the real mold sizes and the gaps the crew leaves <em>before</em> you print for the floor. A layout that reflects the actual molds is far more useful on the shop floor than one that doesn't.</p>
+      </div>
+    </div>
+  </main>
+</div>
+<script src="assets/manual-nav.js"></script>
+</body>
+</html>

@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Staging — Project Portal Manual</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='0.9em' font-size='90'%3E📘%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="assets/manual.css">
+</head>
+<body data-page="staging">
+<div class="m-shell">
+  <main class="m-main">
+    <div class="m-content">
+      <div class="m-breadcrumb"><a href="index.html">Manual</a> &rsaquo; Project Tabs &rsaquo; Staging</div>
+      <h1>Staging</h1>
+      <p class="m-lede">Write the task descriptions for each casting ahead of time — broken down by department and by day — before those tasks ever land on the weekly board. The descriptions you write here automatically show up on the matching scheduled tasks, so you author the &ldquo;what to do&rdquo; text once, early.</p>
+
+      <div class="callout warn">
+        <span class="callout-title">Set up the project first</span>
+        <p>Save the project, then add at least one casting in <a href="casting-inventory.html">Casting Inventory</a>. Staging needs castings before there's anything to stage.</p>
+      </div>
+
+      <h2>What this tab is for</h2>
+      <p>Staging lets you pre-write the instructions for a casting&mdash;department by department, day by day&mdash;so they're ready before the work is scheduled. Instead of typing descriptions onto tasks one at a time as they appear on the weekly board, you lay them all out here in advance.</p>
+
+      <div class="callout note">
+        <span class="callout-title">These descriptions are shared with the Weekly Schedule board</span>
+        <p>What you write here isn't just a copy. The <strong>Weekly Schedule</strong> board matches each staged description to a scheduled task by three things: the <strong>casting #</strong>, the <strong>department</strong>, and the <strong>order of the days</strong>. When all three line up, the description you wrote appears automatically on that scheduled task. So stage it once here, and it shows up on the board for you.</p>
+      </div>
+
+      <h2>How the workspace is laid out</h2>
+      <p>Like <a href="optimizer-hours.html">Optimizer Hours</a>, the project's castings appear as <strong>pills</strong> across the top, with per-casting columns below. Click a pill to bring that casting into view.</p>
+      <p>Inside a casting you get a <strong>department &times; day grid</strong>. The standard departments are pre-filled down the side:</p>
+      <div class="m-deflist">
+        <div class="row"><div class="term">Mill</div><div class="desc">Milling work.</div></div>
+        <div class="row"><div class="term">Form Out</div><div class="desc">Building and setting the forms.</div></div>
+        <div class="row"><div class="term">Cast</div><div class="desc">Pouring the casting.</div></div>
+        <div class="row"><div class="term">Demold</div><div class="desc">Stripping the casting from the form.</div></div>
+        <div class="row"><div class="term">Finish</div><div class="desc">Finishing work.</div></div>
+        <div class="row"><div class="term">Seal</div><div class="desc">Sealing the casting.</div></div>
+      </div>
+      <p>Each department row has <strong>day columns</strong> — Day 1, Day 2, and so on. Click a day to expand it, then type the description for that department on that day.</p>
+
+      <div class="callout note">
+        <span class="callout-title">Phased projects</span>
+        <p>If the project uses <a href="phases.html">Phases</a>, only the castings in the phase you're viewing appear as pills here. Switch phases to stage the rest.</p>
+      </div>
+
+      <h2>The buttons</h2>
+      <div class="m-deflist">
+        <div class="row"><div class="term">+ Add Day</div><div class="desc">Adds another day column to a department, for work that spans more than the days shown.</div></div>
+        <div class="row"><div class="term">Remove Day</div><div class="desc">Removes a day column from a department.</div></div>
+        <div class="row"><div class="term">Remove Department</div><div class="desc">Removes a whole department row from the casting if it doesn't apply.</div></div>
+        <div class="row"><div class="term">Copy Staging</div><div class="desc">Copies one casting's entire scaffold — its departments, days, and the descriptions you've written.</div></div>
+        <div class="row"><div class="term">Paste Staging</div><div class="desc">Pastes that copied scaffold and its descriptions onto another casting.</div></div>
+      </div>
+
+      <h2>Staging the descriptions</h2>
+      <ol class="steps">
+        <li><strong>Pick the casting.</strong> Click its pill to bring it into view.</li>
+        <li><strong>Adjust the days.</strong> For each department, use <span class="ui">+ Add Day</span> or <span class="ui">Remove Day</span> so the day columns match how long that department's work runs.</li>
+        <li><strong>Drop any departments you don't need.</strong> Use <span class="ui">Remove Department</span> on rows that don't apply to this casting.</li>
+        <li><strong>Write the descriptions.</strong> Click a day to expand it and type what to do for that department on that day.</li>
+        <li><strong>Repeat down the grid.</strong> Work through each department and each day until the casting is fully described.</li>
+      </ol>
+
+      <div class="callout tip">
+        <span class="callout-title">Stage one, paste to the rest</span>
+        <p>When a project has a run of repetitive castings, fully stage just one of them — departments, days, and descriptions — then use <span class="ui">Copy Staging</span> and <span class="ui">Paste Staging</span> to drop the same scaffold onto the others. Adjust only where a casting differs.</p>
+      </div>
+
+      <div class="callout tip">
+        <span class="callout-title">Saving</span>
+        <p>The portal saves your typing automatically as you go — watch the save indicator near the top-right of the project header. There's no separate &ldquo;Save&rdquo; button to remember.</p>
+      </div>
+    </div>
+  </main>
+</div>
+<script src="assets/manual-nav.js"></script>
+</body>
+</html>
