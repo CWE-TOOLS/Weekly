@@ -4538,7 +4538,7 @@ function createEmptyColorLog() {
         isStandard: true,
         cementType: 'white',
         castMethod: 'sprayUp',
-        baseIngredients: [],
+        baseIngredients: [{ name: 'Sand', weight: '', unit: 'lbs', note: '' }],
         additives: [],
         aggregates: [],
         pigments: [],
@@ -4557,6 +4557,15 @@ function clUnitSelect(selected) {
 
 function clRoundSig(num, decimals) {
     return Math.round(num * Math.pow(10, decimals)) / Math.pow(10, decimals);
+}
+
+const clIsSandItem = (item) => ((item?.name || '').trim().toLowerCase() === 'sand');
+
+function clEnsureSandRow(log) {
+    if (!log || !Array.isArray(log.baseIngredients)) return;
+    const sand = log.baseIngredients.find(clIsSandItem);
+    if (sand) { sand.name = 'Sand'; return; }
+    log.baseIngredients.unshift({ name: 'Sand', weight: '', unit: 'lbs', note: '' });
 }
 
 function clGetSandWeightLbs() {
@@ -4579,15 +4588,23 @@ function clRenderIngTable(tableId, items, type) {
     const tbody = document.querySelector(`#${tableId} tbody`);
     if (!tbody) return;
     const valField = type === 'additive' ? 'amount' : 'weight';
-    tbody.innerHTML = items.map((item, i) => `
+    tbody.innerHTML = items.map((item, i) => {
+        const isSand = type === 'base' && clIsSandItem(item);
+        const nameCell = isSand
+            ? `<td><input type="text" value="Sand" data-cl-field="name" readonly title="Sand is required — name is locked" style="opacity:0.65;cursor:default;"></td>`
+            : `<td><input type="text" value="${escapeAttr(item.name || '')}" data-cl-field="name"></td>`;
+        const actionCell = isSand
+            ? `<td class="pp-cl-col-action"></td>`
+            : `<td class="pp-cl-col-action"><button type="button" class="pp-cl-btn-remove" data-cl-remove>&times;</button></td>`;
+        return `
         <tr data-cl-type="${type}" data-cl-idx="${i}">
-            <td><input type="text" value="${escapeAttr(item.name || '')}" data-cl-field="name"></td>
+            ${nameCell}
             <td><input type="number" step="any" value="${item[valField] ?? item.weight ?? item.amount ?? ''}" data-cl-field="${valField}"></td>
             <td>${clUnitSelect(item.unit || 'lbs')}</td>
             <td><input type="text" value="${escapeAttr(item.note || '')}" data-cl-field="note"></td>
-            <td class="pp-cl-col-action"><button type="button" class="pp-cl-btn-remove" data-cl-remove>&times;</button></td>
-        </tr>
-    `).join('');
+            ${actionCell}
+        </tr>`;
+    }).join('');
 }
 
 function clRenderSimpleTable(tableId, items, type) {
@@ -4684,6 +4701,7 @@ function getCurrentProjectDisplay() {
 
 function renderColorLog() {
     if (!currentColorLog) currentColorLog = createEmptyColorLog();
+    clEnsureSandRow(currentColorLog);
     const log = currentColorLog;
     // Project field is always live — never user-edited. Sync in-memory copy too.
     log.project = getCurrentProjectDisplay();
@@ -4722,6 +4740,7 @@ function clHandleRemove(type, idx) {
     const key = CL_TYPE_KEY[type];
     const list = currentColorLog[key];
     if (!list || idx < 0 || idx >= list.length) return;
+    if (type === 'base' && clIsSandItem(list[idx])) return;
     list.splice(idx, 1);
     clRenderType(type);
     // Pigment weights depend on sand presence; nothing else dynamic here.
