@@ -129,31 +129,43 @@ function mergeTrackingStatus(primary, secondary) {
  * (most-advanced wins per item), stamp `keeper` with the stable casting key, then
  * delete `loser`. No progress from either row is lost, and because `keeper` keeps
  * its own (project, week_monday) the primary-key and casting-unique constraints
- * are never violated. The DELETE is filtered on the loser's full PK so it can only
- * ever match that one row.
+ * are never violated. The keeper is matched by its own casting key when it has
+ * one (exact row, regardless of siblings); otherwise by name+week restricted to
+ * un-keyed rows. The loser DELETE is likewise restricted to un-keyed rows so it
+ * can never take out a keyed sibling casting sharing the same name+week.
  *
  * @returns {Promise<boolean>}
  */
 async function mergeAndDeleteLegacy(client, keeper, loser, key) {
   const merged = mergeTrackingStatus(keeper.tracking_status, loser.tracking_status);
 
-  const upd = await client
+  let updQuery = client
     .from(RELEASABILITY_TABLE)
     .update({
       project_number: key.project_number,
       casting_number: key.casting_number,
       tracking_status: merged,
       updated_at: new Date().toISOString()
-    })
-    .eq('project', keeper.project)
-    .eq('week_monday', keeper.week_monday);
+    });
+  if (keeper.project_number && keeper.casting_number) {
+    updQuery = updQuery
+      .eq('project_number', keeper.project_number)
+      .eq('casting_number', keeper.casting_number);
+  } else {
+    updQuery = updQuery
+      .eq('project', keeper.project)
+      .eq('week_monday', keeper.week_monday)
+      .is('casting_number', null);
+  }
+  const upd = await updQuery;
   if (upd.error) throw upd.error;
 
   const del = await client
     .from(RELEASABILITY_TABLE)
     .delete()
     .eq('project', loser.project)
-    .eq('week_monday', loser.week_monday);
+    .eq('week_monday', loser.week_monday)
+    .is('casting_number', null);
   if (del.error) throw del.error;
 
   logger.debug(`  ⤵️ Merged duplicate "${loser.project}" (${loser.week_monday}) into "${keeper.project}" (${keeper.week_monday})`);
@@ -195,12 +207,15 @@ async function backfillCastingNumbers(bf) {
 
   // The legacy row we intend to upgrade, matched by its name+week as it stood when
   // this load began. If it's already gone (healed by a prior load or another tab),
-  // there's nothing to do.
+  // there's nothing to do. Restricted to un-keyed rows: a row that already carries
+  // a casting key belongs to a (possibly different) casting and must never be
+  // re-stamped with this one's numbers.
   const legacyRes = await client
     .from(RELEASABILITY_TABLE)
     .select('*')
     .eq('project', bf.originalProject)
-    .eq('week_monday', bf.oldWeekMonday);
+    .eq('week_monday', bf.oldWeekMonday)
+    .is('casting_number', null);
   if (legacyRes.error) throw legacyRes.error;
   const legacy = legacyRes.data && legacyRes.data[0];
   if (!legacy) return true;
@@ -222,14 +237,19 @@ async function backfillCastingNumbers(bf) {
   }
 
   // 2) We'd refresh the legacy row's week to the current schedule, but a different
-  //    row already sits at (project, newWeek) → moving it there violates the
-  //    primary key. Fold progress into that current-week row instead.
+  //    UN-KEYED row already sits at (project, newWeek) → moving it there violates
+  //    the legacy uniqueness. Fold progress into that current-week row instead.
+  //    Keyed rows at the target week are ignored: they are sibling castings, and
+  //    merging into one would overwrite its key/progress. (Pre-migration, a keyed
+  //    sibling holding the PK slot makes the in-place UPDATE below fail with
+  //    23505 — logged and skipped — which is strictly better than destroying it.)
   if (newWeek && newWeek !== legacy.week_monday) {
     const weekRes = await client
       .from(RELEASABILITY_TABLE)
       .select('*')
       .eq('project', legacy.project)
-      .eq('week_monday', newWeek);
+      .eq('week_monday', newWeek)
+      .is('casting_number', null);
     if (weekRes.error) throw weekRes.error;
     const weekHolder = weekRes.data && weekRes.data[0];
     if (weekHolder && !sameRow(weekHolder)) {
@@ -239,6 +259,8 @@ async function backfillCastingNumbers(bf) {
 
   // 3) No conflict — upgrade the legacy row in place onto the stable key and
   //    refresh its week. Next load exact-matches the casting key and skips this.
+  //    The .is('casting_number', null) guard pins the UPDATE to the un-keyed
+  //    legacy row even if a keyed sibling shares the same name+week.
   const { error } = await client
     .from(RELEASABILITY_TABLE)
     .update({
@@ -248,7 +270,8 @@ async function backfillCastingNumbers(bf) {
       updated_at: new Date().toISOString()
     })
     .eq('project', legacy.project)
-    .eq('week_monday', legacy.week_monday);
+    .eq('week_monday', legacy.week_monday)
+    .is('casting_number', null);
 
   if (error) {
     throw error;
@@ -553,11 +576,17 @@ export async function saveTrackingStatus(project) {
       if (byKey.error) throw byKey.error;
 
       if (!byKey.data || byKey.data.length === 0) {
+        // (b) may only claim a GENUINE legacy row — one that has never been
+        // stamped with a casting key. Without the .is('casting_number', null)
+        // guard, saving a NEW casting (e.g. cast 7) into a week that already
+        // holds a keyed sibling (cast 6, same derived name + week) matched the
+        // sibling's row here and silently overwrote it.
         const byNameWeek = await client
           .from(RELEASABILITY_TABLE)
           .update(row)
           .eq('project', normalizedProjectName)
           .eq('week_monday', project.weekMonday)
+          .is('casting_number', null)
           .select('project');
         if (byNameWeek.error) throw byNameWeek.error;
 
@@ -568,11 +597,24 @@ export async function saveTrackingStatus(project) {
       }
     } else {
       // No structured number yet — fall back to the legacy name+week key so the
-      // row is never stranded.
-      const { error } = await client
+      // row is never stranded. Split into update-then-insert instead of
+      // upsert(onConflict: 'project,week_monday'): once the multi-casting
+      // migration drops that primary key, the upsert has no arbiter constraint
+      // and errors. The .is('casting_number', null) guard also keeps a legacy
+      // save from ever claiming a keyed sibling casting's row.
+      const byNameWeek = await client
         .from(RELEASABILITY_TABLE)
-        .upsert(row, { onConflict: 'project,week_monday' });
-      if (error) throw error;
+        .update(row)
+        .eq('project', normalizedProjectName)
+        .eq('week_monday', project.weekMonday)
+        .is('casting_number', null)
+        .select('project');
+      if (byNameWeek.error) throw byNameWeek.error;
+
+      if (!byNameWeek.data || byNameWeek.data.length === 0) {
+        const inserted = await client.from(RELEASABILITY_TABLE).insert(row);
+        if (inserted.error) throw inserted.error;
+      }
     }
 
     logger.debug(`  → Tracking status saved successfully`);
@@ -643,13 +685,17 @@ export async function deleteTrackingStatus(projectName, weekMonday, projectNumbe
     }
 
     // Legacy fallback: delete by normalized name + week (then original name + week
-    // for old non-normalized rows).
+    // for old non-normalized rows). Restricted to un-keyed rows: a name+week
+    // delete must never take out a keyed sibling casting that happens to share
+    // the same derived name and week. (Un-keyed targets are still matched — their
+    // casting_number is NULL by definition.)
     const normalizedProjectName = normalizeProjectName(projectName);
     let { error, count } = await client
       .from(RELEASABILITY_TABLE)
       .delete({ count: 'exact' })
       .eq('project', normalizedProjectName)
-      .eq('week_monday', weekMonday);
+      .eq('week_monday', weekMonday)
+      .is('casting_number', null);
 
     // If no rows deleted and the name was different after normalization,
     // try with the original name (for old non-normalized records)
@@ -658,7 +704,8 @@ export async function deleteTrackingStatus(projectName, weekMonday, projectNumbe
         .from(RELEASABILITY_TABLE)
         .delete({ count: 'exact' })
         .eq('project', projectName)
-        .eq('week_monday', weekMonday);
+        .eq('week_monday', weekMonday)
+        .is('casting_number', null);
       error = result.error;
       if (result.count === 0) {
         logger.warn(`  ⚠️ No records found to delete for "${projectName}" (${weekMonday})`);
@@ -705,7 +752,15 @@ function findProjectByName(projectName, trackingStatuses) {
   trackingStatuses.forEach((record, key) => {
     // Only match SHEETS projects (not MANUAL ones)
     // Note: record.project is already normalized from loadTrackingStatuses
-    if (record.project === normalizedSearchName && record.source === PROJECT_SOURCE.SHEETS) {
+    // Skip records that already carry a casting key: those are matched exactly
+    // by key in loadAllReleasabilityData step 1, so if we're here they belong
+    // to a DIFFERENT casting of the same project — adopting one would show its
+    // progress on the wrong casting and re-stamp its row via the backfill.
+    if (
+      record.project === normalizedSearchName &&
+      record.source === PROJECT_SOURCE.SHEETS &&
+      !generateCastingKey(record.projectNumber, record.castingNumber)
+    ) {
       matches.push({
         key,
         record
@@ -815,8 +870,14 @@ export async function loadAllReleasabilityData(forceRefresh = false) {
         }
       }
 
-      // Generate unique ID
-      const id = `project_${project.project}_${project.weekMonday}`.replace(/\s+/g, '_');
+      // Generate unique ID. Includes the cast number when present — two castings
+      // of one project can share a name AND a week, and this id is what state
+      // lookups (getProjectById & co.) and DOM data-project-id keys use, so
+      // name+week alone would make sibling castings collide.
+      const castSuffix = project.castingNumber
+        ? `_c${normalizeCastingNumber(project.castingNumber)}`
+        : '';
+      const id = `project_${project.project}_${project.weekMonday}${castSuffix}`.replace(/\s+/g, '_');
 
       // Authoritative name from the portal (looked up by project#), falling back
       // to the Sheet name when there's no project# or no portal match.
@@ -848,7 +909,11 @@ export async function loadAllReleasabilityData(forceRefresh = false) {
 
       // Only add if it's a manual project
       if (record.source === PROJECT_SOURCE.MANUAL) {
-        const id = `project_${record.project}_${record.weekMonday}`.replace(/\s+/g, '_');
+        // Same casting-aware id scheme as the Sheets branch above.
+        const castSuffix = record.castingNumber
+          ? `_c${normalizeCastingNumber(record.castingNumber)}`
+          : '';
+        const id = `project_${record.project}_${record.weekMonday}${castSuffix}`.replace(/\s+/g, '_');
         const portalName = portalNameByNumber.get(normalizeNumberField(record.projectNumber));
 
         projects.push({
