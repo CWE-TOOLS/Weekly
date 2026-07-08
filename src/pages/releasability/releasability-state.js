@@ -12,8 +12,7 @@ import { emit, on, EVENTS } from '../../core/event-bus.js';
 import {
   STATUS,
   DEFAULT_TRACKING_STATUS,
-  PROJECT_SOURCE,
-  TRACKING_ITEMS
+  PROJECT_SOURCE
 } from '../../config/releasability-config.js';
 import { debug } from '../../utils/debug.js';
 
@@ -589,9 +588,12 @@ export function getProjectCompletion(projectId) {
 }
 
 /**
- * Check if a project is fully complete (all tracking items are complete)
+ * Check if a project is complete for release purposes.
+ * Green Sticker is the final release step, so it alone decides completion —
+ * earlier items are routinely N/A, which is why "all items complete" never
+ * matched anything.
  * @param {Object} project - The project object
- * @returns {boolean} True if all tracking items are complete
+ * @returns {boolean} True if the Green Sticker tracking item is complete
  */
 export function isProjectFullyComplete(project) {
   if (!project || !project.trackingStatus) {
@@ -599,25 +601,7 @@ export function isProjectFullyComplete(project) {
     return false;
   }
 
-  // Only check the CURRENT tracking items from config, not all stored keys
-  const incompleteItems = TRACKING_ITEMS.filter(item => {
-    const status = project.trackingStatus[item];
-    return !status || status !== STATUS.COMPLETE;
-  });
-
-  const isComplete = incompleteItems.length === 0;
-
-  // Debug: Log incomplete projects
-  if (!isComplete) {
-    const details = incompleteItems.map(item => {
-      const status = project.trackingStatus[item] || 'missing';
-      return `${item}: ${status}`;
-    });
-    debug.log(`⚠️ Project "${project.project}" not fully complete:`, details);
-  }
-
-  // Project is fully complete only if ALL current tracking items are 'complete'
-  return isComplete;
+  return project.trackingStatus['Green Sticker'] === STATUS.COMPLETE;
 }
 
 /**
