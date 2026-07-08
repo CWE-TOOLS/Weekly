@@ -1009,7 +1009,10 @@ html {
    left-aligned so every "Cast #.." starts at the same x (tidy column). The
    stacked controls sit in the cell's reserved right padding, beside it. */
 .cast-number-wrap {
-  flex: 0 0 88px;
+  /* min-width (not a fixed basis) keeps the tidy column while letting rows
+     with a phase tag widen instead of clipping it */
+  flex: 0 0 auto;
+  min-width: 88px;
   display: inline-flex;
   align-items: center;
   justify-content: flex-start;
@@ -1037,6 +1040,26 @@ html {
   font-weight: 700;
   letter-spacing: 0.02em;
   line-height: 1.4;
+}
+
+/* Phase tag beside the cast # — phased projects reuse cast numbers per phase,
+   so the phase disambiguates which "Cast #2" this row is. */
+.phase-badge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.35rem;
+  border-radius: 999px;
+  background-color: var(--tertiary-container, #ffe0b2);
+  color: var(--on-tertiary-container, #6b4a1b);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.4;
+  max-width: 64px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 /* Drag handle */

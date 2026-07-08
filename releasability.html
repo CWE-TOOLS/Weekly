@@ -123,6 +123,13 @@
                         <input type="text" id="casting-cast-number" name="casting-cast-number" required placeholder="e.g. 13, 1A" autocomplete="off">
                     </div>
 
+                    <!-- Revealed only when the entered project has phases enabled -->
+                    <div class="form-group" id="casting-phase-group" style="display: none;">
+                        <label for="casting-phase">Phase <span class="required">*</span></label>
+                        <select id="casting-phase" name="casting-phase"></select>
+                        <small class="form-help">This project uses phases, so cast numbers can repeat per phase — pick which phase this casting belongs to.</small>
+                    </div>
+
                     <div class="form-group">
                         <label>Project Name (from portal)</label>
                         <div id="casting-resolved-name" class="resolved-name is-empty">Enter a Project # to look up the name…</div>

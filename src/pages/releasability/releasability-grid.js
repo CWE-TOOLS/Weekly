@@ -422,6 +422,16 @@ function createProjectNameCell(project) {
     castLabel.textContent = 'Cast';
     castWrap.appendChild(castLabel);
 
+    // Phase tag to the LEFT of the cast # — phased projects reuse cast numbers
+    // per phase, so "Cast #2" alone is ambiguous without it.
+    if (project.phaseName) {
+      const phaseBadge = document.createElement('span');
+      phaseBadge.className = 'phase-badge';
+      phaseBadge.textContent = project.phaseName;
+      phaseBadge.title = `Phase: ${project.phaseName}`;
+      castWrap.appendChild(phaseBadge);
+    }
+
     const castBadge = document.createElement('span');
     castBadge.className = 'cast-number-badge';
     castBadge.textContent = `#${project.castingNumber}`;

@@ -64,18 +64,25 @@ function normalizeCastingNumber(value) {
  * week), this key is derived only from the Google Sheet's project number (col H)
  * and cast number (col I) — so it survives reschedules AND project renames.
  *
+ * Phased projects reset cast numbering per phase (Phase 1 and Phase 2 can each
+ * have a Cast 2), so project#+cast# alone is ambiguous for them. When the
+ * casting's portal phase is known its phase_id joins the key; un-phased
+ * castings keep the bare two-part key so nothing changes for normal projects.
+ *
  * Returns null when either number is missing; callers fall back to the legacy
  * name+week key in that case, so un-numbered castings are never stranded.
  *
  * @param {string} projectNumber - Project number (e.g. '0383')
  * @param {string} castingNumber - Cast number (e.g. '13', '1A')
- * @returns {string|null} Stable key "projectNumber#castNumber" or null
+ * @param {string|null} [phaseId] - project_phases.id uuid when the casting belongs to a phase
+ * @returns {string|null} Stable key "projectNumber#castNumber[@phaseId]" or null
  */
-function generateCastingKey(projectNumber, castingNumber) {
+function generateCastingKey(projectNumber, castingNumber, phaseId = null) {
   const p = normalizeNumberField(projectNumber);
   const c = normalizeCastingNumber(castingNumber);
   if (!p || !c) return null;
-  return `${p}#${c}`;
+  const ph = normalizeNumberField(phaseId);
+  return ph ? `${p}#${c}@${ph}` : `${p}#${c}`;
 }
 
 /**
@@ -88,7 +95,126 @@ function generateCastingKey(projectNumber, castingNumber) {
  * @returns {string|null} The casting key, or null when both numbers aren't present
  */
 export function getCastingKey(project) {
-  return generateCastingKey(project && project.projectNumber, project && project.castingNumber);
+  return generateCastingKey(
+    project && project.projectNumber,
+    project && project.castingNumber,
+    project && project.phaseId
+  );
+}
+
+/**
+ * Load the portal's casting→phase map so board castings can be resolved to a
+ * phase. The Google Sheet has no phase column, so the portal's project_castings
+ * table is the only source of "which phase is 0383 cast 2".
+ *
+ * Throws on failure (like loadTrackingStatuses): resolving phases from stale or
+ * missing data would change casting identities mid-flight and mis-attach state,
+ * so a failed fetch fails the whole load and keeps the last good render.
+ *
+ * @returns {Promise<{castingsByPC: Map, phaseById: Map}>}
+ *   castingsByPC: "project#cast" → [{project_number, casting_number, phase_id, casting_date}]
+ *   phaseById: phase uuid → {name, sortOrder}
+ */
+async function loadPortalPhaseData() {
+  if (!getSupabaseClient()) {
+    await initializeSupabase();
+  }
+  const client = getSupabaseClient();
+
+  const [castsRes, phasesRes] = await Promise.all([
+    client.from('project_castings').select('project_number, casting_number, phase_id, casting_date'),
+    client.from('project_phases').select('id, project_number, phase_name, sort_order')
+  ]);
+  if (castsRes.error) throw castsRes.error;
+  if (phasesRes.error) throw phasesRes.error;
+
+  const phaseById = new Map();
+  (phasesRes.data || []).forEach(ph => {
+    phaseById.set(ph.id, {
+      name: (ph.phase_name || '').toString().trim(),
+      sortOrder: Number.isFinite(ph.sort_order) ? ph.sort_order : 0
+    });
+  });
+
+  const castingsByPC = new Map();
+  (castsRes.data || []).forEach(c => {
+    const key = generateCastingKey(c.project_number, c.casting_number);
+    if (!key) return;
+    if (!castingsByPC.has(key)) castingsByPC.set(key, []);
+    castingsByPC.get(key).push(c);
+  });
+
+  return { castingsByPC, phaseById };
+}
+
+/**
+ * Resolve which phase a board casting belongs to.
+ *
+ * Matches the casting against the portal's project_castings by project#+cast#.
+ * Phased projects reset cast numbering per phase, so the same pair can match a
+ * casting in more than one phase; the tie-break is the portal casting_date
+ * nearest the board's scheduled start date (undated candidates lose to dated
+ * ones), and with no dates at all the latest phase wins — new scheduling almost
+ * always refers to the newest phase.
+ *
+ * @param {{castingsByPC: Map, phaseById: Map}} phaseData - from loadPortalPhaseData
+ * @param {string} projectNumber
+ * @param {string} castingNumber
+ * @param {string|null} referenceDate - the board casting's start date (YYYY-MM-DD)
+ * @returns {{phaseId: string, phaseName: string}|null} null when the casting has no known phase
+ */
+function resolveCastingPhase(phaseData, projectNumber, castingNumber, referenceDate) {
+  const bareKey = generateCastingKey(projectNumber, castingNumber);
+  if (!bareKey) return null;
+
+  const candidates = phaseData.castingsByPC.get(bareKey) || [];
+  const phased = candidates.filter(c => c.phase_id && phaseData.phaseById.has(c.phase_id));
+  if (phased.length === 0) return null;
+
+  let chosen;
+  if (phased.length === 1) {
+    chosen = phased[0];
+  } else {
+    const sortOf = (c) => phaseData.phaseById.get(c.phase_id).sortOrder;
+    const dated = phased.filter(c => c.casting_date);
+    const refMs = referenceDate ? new Date(`${referenceDate}T00:00:00`).getTime() : NaN;
+    if (dated.length > 0 && !Number.isNaN(refMs)) {
+      dated.sort((a, b) => {
+        const da = Math.abs(new Date(`${a.casting_date}T00:00:00`).getTime() - refMs);
+        const db = Math.abs(new Date(`${b.casting_date}T00:00:00`).getTime() - refMs);
+        return (da - db) || (sortOf(b) - sortOf(a));
+      });
+      chosen = dated[0];
+    } else {
+      chosen = [...phased].sort((a, b) => sortOf(b) - sortOf(a))[0];
+    }
+  }
+
+  return {
+    phaseId: chosen.phase_id,
+    phaseName: phaseData.phaseById.get(chosen.phase_id).name
+  };
+}
+
+/**
+ * One-off phase resolution for a single casting — used by the manual
+ * "Add Casting" flow, which runs outside a full board load. Non-fatal: a
+ * lookup failure just adds the casting without a phase (the next full load
+ * re-resolves and self-heals via the phase stamp).
+ *
+ * @param {string} projectNumber
+ * @param {string} castingNumber
+ * @param {string|null} referenceDate
+ * @returns {Promise<{phaseId: string, phaseName: string}|null>}
+ */
+export async function resolvePhaseForCasting(projectNumber, castingNumber, referenceDate = null) {
+  try {
+    const phaseData = await loadPortalPhaseData();
+    return resolveCastingPhase(phaseData, projectNumber, castingNumber, referenceDate);
+  } catch (error) {
+    logger.warn(`⚠️ Phase lookup failed for ${projectNumber}#${castingNumber}:`, error);
+    return null;
+  }
 }
 
 /**
@@ -144,6 +270,7 @@ async function mergeAndDeleteLegacy(client, keeper, loser, key) {
     .update({
       project_number: key.project_number,
       casting_number: key.casting_number,
+      phase_id: key.phase_id || null,
       tracking_status: merged,
       updated_at: new Date().toISOString()
     });
@@ -151,6 +278,11 @@ async function mergeAndDeleteLegacy(client, keeper, loser, key) {
     updQuery = updQuery
       .eq('project_number', keeper.project_number)
       .eq('casting_number', keeper.casting_number);
+    // Phased projects can hold sibling rows on the same project#+cast# (one per
+    // phase) — pin the UPDATE to the keeper's exact phase row.
+    updQuery = keeper.phase_id
+      ? updQuery.eq('phase_id', keeper.phase_id)
+      : updQuery.is('phase_id', null);
   } else {
     updQuery = updQuery
       .eq('project', keeper.project)
@@ -202,8 +334,9 @@ async function backfillCastingNumbers(bf) {
 
   const projectNumber = normalizeNumberField(bf.projectNumber);
   const castingNumber = normalizeCastingNumber(bf.castingNumber);
+  const phaseId = normalizeNumberField(bf.phaseId) || null;
   const newWeek = bf.newWeekMonday;
-  const key = { project_number: projectNumber, casting_number: castingNumber };
+  const key = { project_number: projectNumber, casting_number: castingNumber, phase_id: phaseId };
 
   // The legacy row we intend to upgrade, matched by its name+week as it stood when
   // this load began. If it's already gone (healed by a prior load or another tab),
@@ -225,13 +358,19 @@ async function backfillCastingNumbers(bf) {
 
   // 1) Casting key already owned by a different row → stamping it here would
   //    violate the casting-unique constraint. Fold progress into the owner instead.
+  //    Phase-aware ownership: the owner is the row on this exact phase, or a
+  //    not-yet-phase-stamped row on the same project#+cast#. Rows keyed to a
+  //    DIFFERENT phase are sibling castings and are never merge targets.
   const keyRes = await client
     .from(RELEASABILITY_TABLE)
     .select('*')
     .eq('project_number', projectNumber)
     .eq('casting_number', castingNumber);
   if (keyRes.error) throw keyRes.error;
-  const keyHolder = keyRes.data && keyRes.data[0];
+  const keyRows = keyRes.data || [];
+  const keyHolder =
+    keyRows.find(r => normalizeNumberField(r.phase_id) === (phaseId || '')) ||
+    (phaseId ? keyRows.find(r => !r.phase_id) : null);
   if (keyHolder && !sameRow(keyHolder)) {
     return mergeAndDeleteLegacy(client, keyHolder, legacy, key);
   }
@@ -266,6 +405,7 @@ async function backfillCastingNumbers(bf) {
     .update({
       project_number: projectNumber,
       casting_number: castingNumber,
+      phase_id: phaseId,
       week_monday: newWeek,
       updated_at: new Date().toISOString()
     })
@@ -473,11 +613,11 @@ export async function loadTrackingStatuses() {
       // Normalize project name for consistent lookups
       const normalizedProject = normalizeProjectName(record.project);
 
-      // Prefer the stable casting key (project#+cast#) when the row has been
-      // stamped with both numbers; fall back to the legacy name+week key for
-      // rows that predate the re-key (they get backfilled on load — see
-      // loadAllReleasabilityData).
-      const castingKey = generateCastingKey(record.project_number, record.casting_number);
+      // Prefer the stable casting key (project#+cast#, plus phase when the row
+      // has been phase-stamped) when the row has been stamped with both
+      // numbers; fall back to the legacy name+week key for rows that predate
+      // the re-key (they get backfilled on load — see loadAllReleasabilityData).
+      const castingKey = generateCastingKey(record.project_number, record.casting_number, record.phase_id);
       const key = castingKey || generateProjectKey(record.project, record.week_monday);
 
       statusMap.set(key, {
@@ -489,6 +629,7 @@ export async function loadTrackingStatuses() {
         manualWeekId: record.manual_week_id || null,
         projectNumber: record.project_number || null,
         castingNumber: record.casting_number || null,
+        phaseId: record.phase_id || null,
         project: normalizedProject,  // Normalized name for display/comparison
         originalProject: record.project  // Keep original DB name for deletion
       });
@@ -537,11 +678,13 @@ export async function saveTrackingStatus(project) {
     // Normalize project name for consistent database storage
     const normalizedProjectName = normalizeProjectName(project.project);
 
-    // Structured identity (project#+cast#). When present, it's the conflict
-    // target so state stays attached to the casting across reschedules/renames.
-    // When absent (sheet left a number blank), fall back to the legacy name+week
-    // target so the row is never stranded.
-    const castingKey = generateCastingKey(project.projectNumber, project.castingNumber);
+    // Structured identity (project#+cast#, plus phase for phased projects).
+    // When present, it's the conflict target so state stays attached to the
+    // casting across reschedules/renames. When absent (sheet left a number
+    // blank), fall back to the legacy name+week target so the row is never
+    // stranded.
+    const phaseId = normalizeNumberField(project.phaseId) || null;
+    const castingKey = generateCastingKey(project.projectNumber, project.castingNumber, phaseId);
 
     // The row we want to persist. We always write BOTH the legacy columns
     // (project, week_monday — still NOT NULL) and the structured numbers, so a
@@ -551,6 +694,7 @@ export async function saveTrackingStatus(project) {
       week_monday: project.weekMonday,
       project_number: normalizeNumberField(project.projectNumber) || null,
       casting_number: normalizeCastingNumber(project.castingNumber) || null,
+      phase_id: phaseId,
       manual_week_id: project.manualWeekId || null,
       tracking_status: project.trackingStatus,
       department: project.department,
@@ -564,16 +708,34 @@ export async function saveTrackingStatus(project) {
       // legacy row already sits at this (project, week_monday): the casting key
       // doesn't match it, so Postgres tries to INSERT and trips the
       // (project, week_monday) primary key (error 23505). So reconcile by hand:
-      //   (a) update the row that already owns this casting key, else
+      //   (a) update the row that already owns this casting key (same phase —
+      //       sibling castings on other phases share project#+cast# and must
+      //       never be claimed), else
+      //   (a2) for a phased casting, adopt the not-yet-phase-stamped row on the
+      //        same project#+cast# (legacy row from before phases), else
       //   (b) attach the key to the legacy name+week row in place, else
       //   (c) insert a brand-new casting.
-      const byKey = await client
+      let byKeyQuery = client
         .from(RELEASABILITY_TABLE)
         .update(row)
         .eq('project_number', row.project_number)
-        .eq('casting_number', row.casting_number)
-        .select('project');
+        .eq('casting_number', row.casting_number);
+      byKeyQuery = phaseId
+        ? byKeyQuery.eq('phase_id', phaseId)
+        : byKeyQuery.is('phase_id', null);
+      let byKey = await byKeyQuery.select('project');
       if (byKey.error) throw byKey.error;
+
+      if (phaseId && (!byKey.data || byKey.data.length === 0)) {
+        byKey = await client
+          .from(RELEASABILITY_TABLE)
+          .update(row)
+          .eq('project_number', row.project_number)
+          .eq('casting_number', row.casting_number)
+          .is('phase_id', null)
+          .select('project');
+        if (byKey.error) throw byKey.error;
+      }
 
       if (!byKey.data || byKey.data.length === 0) {
         // (b) may only claim a GENUINE legacy row — one that has never been
@@ -646,7 +808,7 @@ export async function saveTrackingStatus(project) {
  * @example
  * await deleteTrackingStatus('Project A', '2025-01-13');
  */
-export async function deleteTrackingStatus(projectName, weekMonday, projectNumber = null, castingNumber = null) {
+export async function deleteTrackingStatus(projectName, weekMonday, projectNumber = null, castingNumber = null, phaseId = null) {
   logger.debug(`🗑️ Deleting tracking status for "${projectName}" (${weekMonday})...`);
 
   try {
@@ -658,17 +820,38 @@ export async function deleteTrackingStatus(projectName, weekMonday, projectNumbe
     const client = getSupabaseClient();
 
     // Preferred: delete by the stable casting key when we have both numbers —
-    // that targets the row regardless of its current name/week.
-    const castingKey = generateCastingKey(projectNumber, castingNumber);
+    // that targets the row regardless of its current name/week. Phase-pinned so
+    // deleting a phased casting can never take out a sibling casting that
+    // shares its project#+cast# on another phase; an un-phased delete likewise
+    // only targets un-phased rows.
+    const normalizedPhaseId = normalizeNumberField(phaseId) || null;
+    const castingKey = generateCastingKey(projectNumber, castingNumber, normalizedPhaseId);
     if (castingKey) {
-      const { error, count } = await client
+      let delQuery = client
         .from(RELEASABILITY_TABLE)
         .delete({ count: 'exact' })
         .eq('project_number', normalizeNumberField(projectNumber))
         .eq('casting_number', normalizeCastingNumber(castingNumber));
+      delQuery = normalizedPhaseId
+        ? delQuery.eq('phase_id', normalizedPhaseId)
+        : delQuery.is('phase_id', null);
+      let { error, count } = await delQuery;
 
       if (error) {
         throw error;
+      }
+
+      // A phased casting whose row predates the phase stamp still sits at
+      // (project#, cast#, phase NULL) — fall back to that before giving up.
+      if (count === 0 && normalizedPhaseId) {
+        const nullPhase = await client
+          .from(RELEASABILITY_TABLE)
+          .delete({ count: 'exact' })
+          .eq('project_number', normalizeNumberField(projectNumber))
+          .eq('casting_number', normalizeCastingNumber(castingNumber))
+          .is('phase_id', null);
+        if (nullPhase.error) throw nullPhase.error;
+        count = nullPhase.count;
       }
 
       if (count > 0) {
@@ -795,13 +978,17 @@ export async function loadAllReleasabilityData(forceRefresh = false) {
   logger.debug(`🔄 Loading all releasability data${forceRefresh ? ' (force refresh)' : ''}...`);
 
   try {
-    // Load Sheets projects, Supabase tracking, and the portal's master project
-    // list (project# → authoritative name) in parallel. loadAllProjects() returns
-    // [] on any failure, so a portal outage degrades to the Sheet name, never an error.
-    const [sheetsProjects, trackingStatuses, portalProjects] = await Promise.all([
+    // Load Sheets projects, Supabase tracking, the portal's master project
+    // list (project# → authoritative name), and the portal's casting→phase map
+    // in parallel. loadAllProjects() returns [] on any failure, so a portal
+    // outage degrades to the Sheet name, never an error. loadPortalPhaseData()
+    // throws instead — phases are part of casting identity, so guessing is
+    // worse than failing the load.
+    const [sheetsProjects, trackingStatuses, portalProjects, phaseData] = await Promise.all([
       loadProjectsFromSheets(forceRefresh),
       loadTrackingStatuses(),
-      loadAllProjects()
+      loadAllProjects(),
+      loadPortalPhaseData()
     ]);
 
     // Map project number → authoritative portal name for display lookups. The
@@ -826,17 +1013,51 @@ export async function loadAllReleasabilityData(forceRefresh = false) {
     // in one load.
     const pendingBackfills = new Map();
 
+    // Keyed rows (project#+cast#) from before phases that now resolve to a
+    // phase. Stamped IN PLACE with their phase_id so future loads exact-match
+    // the phase-aware key. Keyed by the phase-aware key so a casting is only
+    // stamped once per load.
+    const pendingPhaseStamps = new Map();
+
     // Merge tracking statuses into Sheets projects
     const projects = sheetsProjects.map(project => {
-      const castingKey = generateCastingKey(project.projectNumber, project.castingNumber);
+      // Resolve the casting's portal phase (null for non-phased projects).
+      // Phased projects reset cast numbering per phase, so the phase is part of
+      // the casting's identity from here on.
+      const phase = resolveCastingPhase(
+        phaseData, project.projectNumber, project.castingNumber, project.actualStartDate
+      );
+      const phaseId = phase ? phase.phaseId : null;
+      const castingKey = generateCastingKey(project.projectNumber, project.castingNumber, phaseId);
+      const bareCastingKey = generateCastingKey(project.projectNumber, project.castingNumber);
       const legacyKey = generateProjectKey(project.project, project.weekMonday);
 
       let saved = null;
 
-      // 1) Preferred: exact match on the stable casting key (project#+cast#).
+      // 1) Preferred: exact match on the stable casting key (project#+cast#,
+      //    phase-aware for phased projects).
       if (castingKey && trackingStatuses.has(castingKey)) {
         saved = trackingStatuses.get(castingKey);
         usedSupabaseKeys.add(castingKey);
+      } else if (
+        // 1b) Phased casting whose saved row predates the phase stamp: adopt the
+        //     bare project#+cast# row and schedule an in-place phase stamp.
+        //     First claimant wins — if two phases' castings share a cast# and
+        //     both miss their phase-aware key, only one may adopt the legacy row.
+        phaseId && bareCastingKey &&
+        trackingStatuses.has(bareCastingKey) &&
+        !usedSupabaseKeys.has(bareCastingKey)
+      ) {
+        saved = trackingStatuses.get(bareCastingKey);
+        usedSupabaseKeys.add(bareCastingKey);
+        if (!pendingPhaseStamps.has(castingKey)) {
+          pendingPhaseStamps.set(castingKey, {
+            projectNumber: project.projectNumber,
+            castingNumber: project.castingNumber,
+            phaseId,
+            projectName: project.project
+          });
+        }
       } else {
         // 2) Legacy exact match on name+week.
         saved = trackingStatuses.get(legacyKey);
@@ -865,6 +1086,7 @@ export async function loadAllReleasabilityData(forceRefresh = false) {
             newWeekMonday: project.weekMonday,
             projectNumber: project.projectNumber,
             castingNumber: project.castingNumber,
+            phaseId,
             projectName: project.project
           });
         }
@@ -873,11 +1095,13 @@ export async function loadAllReleasabilityData(forceRefresh = false) {
       // Generate unique ID. Includes the cast number when present — two castings
       // of one project can share a name AND a week, and this id is what state
       // lookups (getProjectById & co.) and DOM data-project-id keys use, so
-      // name+week alone would make sibling castings collide.
+      // name+week alone would make sibling castings collide. Includes the phase
+      // when present for the same reason: phased projects reuse cast numbers.
       const castSuffix = project.castingNumber
         ? `_c${normalizeCastingNumber(project.castingNumber)}`
         : '';
-      const id = `project_${project.project}_${project.weekMonday}${castSuffix}`.replace(/\s+/g, '_');
+      const phaseSuffix = phaseId ? `_ph${phaseId.slice(0, 8)}` : '';
+      const id = `project_${project.project}_${project.weekMonday}${castSuffix}${phaseSuffix}`.replace(/\s+/g, '_');
 
       // Authoritative name from the portal (looked up by project#), falling back
       // to the Sheet name when there's no project# or no portal match.
@@ -889,6 +1113,8 @@ export async function loadAllReleasabilityData(forceRefresh = false) {
         displayName: portalName || project.project,
         projectNumber: project.projectNumber || null,
         castingNumber: project.castingNumber || null,
+        phaseId,
+        phaseName: phase ? phase.phaseName : null,
         weekMonday: project.weekMonday,
         actualStartDate: project.actualStartDate,
         department: project.department,
@@ -914,11 +1140,15 @@ export async function loadAllReleasabilityData(forceRefresh = false) {
 
       // Only add if it's a manual project
       if (record.source === PROJECT_SOURCE.MANUAL) {
-        // Same casting-aware id scheme as the Sheets branch above.
+        // Same casting-aware id scheme as the Sheets branch above. Manual rows
+        // carry their phase in the DB row itself (stamped at add time).
+        const recordPhaseId = normalizeNumberField(record.phaseId) || null;
+        const recordPhase = recordPhaseId ? phaseData.phaseById.get(recordPhaseId) : null;
         const castSuffix = record.castingNumber
           ? `_c${normalizeCastingNumber(record.castingNumber)}`
           : '';
-        const id = `project_${record.project}_${record.weekMonday}${castSuffix}`.replace(/\s+/g, '_');
+        const phaseSuffix = recordPhaseId ? `_ph${recordPhaseId.slice(0, 8)}` : '';
+        const id = `project_${record.project}_${record.weekMonday}${castSuffix}${phaseSuffix}`.replace(/\s+/g, '_');
         const portalName = portalNameByNumber.get(normalizeNumberField(record.projectNumber));
 
         projects.push({
@@ -927,6 +1157,8 @@ export async function loadAllReleasabilityData(forceRefresh = false) {
           displayName: portalName || record.project,
           projectNumber: record.projectNumber || null,
           castingNumber: record.castingNumber || null,
+          phaseId: recordPhaseId,
+          phaseName: recordPhase ? recordPhase.name : null,
           weekMonday: record.weekMonday,
           actualStartDate: record.weekMonday, // Manual projects use weekMonday as start date
           department: record.department,
@@ -955,6 +1187,32 @@ export async function loadAllReleasabilityData(forceRefresh = false) {
           logger.debug(`  ✓ Stamped "${bf.projectName}" with ${castingKey} (week ${bf.newWeekMonday})`);
         } catch (error) {
           logger.error(`  ✗ Failed to backfill "${bf.projectName}" → ${castingKey}:`, error);
+        }
+      }
+    }
+
+    // Durably stamp phase_id onto keyed rows from before phases — IN PLACE.
+    // Guarded to un-phased rows, so a stamp can never move a row between
+    // phases; future loads then exact-match the phase-aware key and skip this.
+    if (pendingPhaseStamps.size > 0) {
+      logger.debug(`🏷️ Phase-stamping ${pendingPhaseStamps.size} casting row(s)...`);
+
+      if (!getSupabaseClient()) {
+        await initializeSupabase();
+      }
+      const client = getSupabaseClient();
+      for (const [castingKey, stamp] of pendingPhaseStamps) {
+        try {
+          const { error } = await client
+            .from(RELEASABILITY_TABLE)
+            .update({ phase_id: stamp.phaseId, updated_at: new Date().toISOString() })
+            .eq('project_number', normalizeNumberField(stamp.projectNumber))
+            .eq('casting_number', normalizeCastingNumber(stamp.castingNumber))
+            .is('phase_id', null);
+          if (error) throw error;
+          logger.debug(`  ✓ Phase-stamped "${stamp.projectName}" → ${castingKey}`);
+        } catch (error) {
+          logger.error(`  ✗ Failed to phase-stamp "${stamp.projectName}" → ${castingKey}:`, error);
         }
       }
     }

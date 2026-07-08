@@ -43,6 +43,7 @@ import {
   saveTrackingStatus,
   deleteTrackingStatus,
   getCastingKey,
+  resolvePhaseForCasting,
   loadManualWeeks,
   saveManualWeek,
   deleteManualWeek,
@@ -50,6 +51,7 @@ import {
   updateManualWeekName
 } from '../../services/releasability-data-service.js';
 import { loadProject } from '../../services/projects-service.js';
+import { loadPhasesForProject } from '../../services/phases-service.js';
 import {
   setupCacheSubscription,
   removeCacheSubscription
@@ -1488,6 +1490,47 @@ let _pendingAddWeek = null;
 let _castingNameTimer = null;
 let _resolvedCastingName = null;
 
+// Phases of the project currently entered in the Add Casting modal:
+//   []    → project has no phases (or none entered yet) — no phase to assign
+//   [...] → phased project — the Phase select is shown and a choice is required
+//   null  → phase lookup failed/pending — fall back to automatic resolution
+let _castingPhases = [];
+
+/**
+ * Populate (or hide) the Phase select in the Add Casting modal.
+ * Single-phase projects get it preselected; multi-phase projects get a
+ * placeholder so the user must consciously pick one.
+ * @param {Array<Object>|null} phases - project_phases rows, or null on lookup failure
+ */
+function setCastingPhaseOptions(phases) {
+  _castingPhases = phases;
+  const group = document.getElementById('casting-phase-group');
+  const select = document.getElementById('casting-phase');
+  if (!group || !select) return;
+
+  select.innerHTML = '';
+  const list = Array.isArray(phases) ? phases : [];
+  if (list.length === 0) {
+    group.style.display = 'none';
+    return;
+  }
+
+  if (list.length > 1) {
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = 'Select a phase…';
+    select.appendChild(placeholder);
+  }
+  list.forEach(ph => {
+    const opt = document.createElement('option');
+    opt.value = ph.id;
+    opt.textContent = (ph.phase_name || '').trim() || 'Unnamed phase';
+    select.appendChild(opt);
+  });
+  select.value = list.length === 1 ? list[0].id : '';
+  group.style.display = '';
+}
+
 /**
  * Open the Add Casting modal: reset fields, clear the name preview, focus Project #.
  */
@@ -1499,6 +1542,7 @@ function openAddCastingModal() {
   if (form) form.reset();
   _resolvedCastingName = null;
   setResolvedCastingName('', 'empty');
+  setCastingPhaseOptions([]);
 
   modal.style.display = 'flex';
   setTimeout(() => {
@@ -1519,6 +1563,7 @@ function closeAddCastingModal() {
 
   _pendingAddWeek = null;
   _resolvedCastingName = null;
+  setCastingPhaseOptions([]);
   if (_castingNameTimer) {
     clearTimeout(_castingNameTimer);
     _castingNameTimer = null;
@@ -1558,10 +1603,15 @@ function handleCastingProjectNumberInput() {
   const projectNumber = numInput ? numInput.value.trim() : '';
 
   _resolvedCastingName = null;
+  // The phase list belongs to the previously entered project# — invalidate it
+  // now (null = "unknown", so a premature submit falls back to auto-resolve)
+  // and hide the select until the new lookup lands.
+  setCastingPhaseOptions(null);
   if (_castingNameTimer) clearTimeout(_castingNameTimer);
 
   if (!projectNumber) {
     setResolvedCastingName('', 'empty');
+    setCastingPhaseOptions([]);
     return;
   }
 
@@ -1581,10 +1631,23 @@ function handleCastingProjectNumberInput() {
         _resolvedCastingName = null;
         setResolvedCastingName(`No portal match for #${projectNumber} — you can still add it`, 'not-found');
       }
+
+      // Reveal the Phase select for phased projects so the user assigns the
+      // phase explicitly. Gated on phases_enabled: stray project_phases rows
+      // for non-phased projects must not surface here.
+      if (portalProject && portalProject.phases_enabled) {
+        const phases = await loadPhasesForProject(projectNumber);
+        const after = document.getElementById('casting-project-number');
+        if (!after || after.value.trim() !== projectNumber) return;
+        setCastingPhaseOptions(phases);
+      } else {
+        setCastingPhaseOptions([]);
+      }
     } catch (error) {
       console.error('❌ Portal name lookup failed:', error);
       _resolvedCastingName = null;
       setResolvedCastingName('Lookup failed — you can still add it', 'not-found');
+      setCastingPhaseOptions(null);
     }
   }, 350);
 }
@@ -1634,11 +1697,30 @@ async function handleAddCastingSubmit(e) {
     effectiveWeekMonday = getMonday(today).toISOString().split('T')[0];
   }
 
+  // The phase comes from the user's explicit choice in the Phase select (shown
+  // whenever the project has phases enabled). Only when the phase list never
+  // loaded (lookup failed / submit raced the debounce) do we fall back to
+  // automatic resolution, so a phased casting still lands on the right identity.
+  let phase = null;
+  if (Array.isArray(_castingPhases) && _castingPhases.length > 0) {
+    const select = document.getElementById('casting-phase');
+    const chosen = _castingPhases.find(ph => ph.id === (select ? select.value : ''));
+    if (!chosen) {
+      showError('Please select a phase for this casting.');
+      return;
+    }
+    phase = { phaseId: chosen.id, phaseName: (chosen.phase_name || '').trim() };
+  } else if (_castingPhases === null) {
+    phase = await resolvePhaseForCasting(projectNumber, castingNumber, effectiveWeekMonday);
+  }
+
   const newProject = {
     project: name,
     displayName: name,
     projectNumber: projectNumber, // keyed by project#+cast# → seamless merge from Sheets
     castingNumber: castingNumber,
+    phaseId: phase ? phase.phaseId : null,
+    phaseName: phase ? phase.phaseName : null,
     weekMonday: effectiveWeekMonday,
     manualWeekId: ctx.weekId || null,
     actualStartDate: effectiveWeekMonday,
@@ -1650,7 +1732,8 @@ async function handleAddCastingSubmit(e) {
   if (addedProject) {
     try {
       await saveTrackingStatus(addedProject);
-      showNotification(`Added casting ${projectNumber} #${castingNumber} — "${name}"`);
+      const phaseNote = phase ? ` (${phase.phaseName})` : '';
+      showNotification(`Added casting ${projectNumber} #${castingNumber}${phaseNote} — "${name}"`);
     } catch (error) {
       console.error('❌ Failed to save manual casting to Supabase:', error);
       showError('Failed to save casting. Please try again.');
@@ -1708,10 +1791,11 @@ export async function handleDeleteProject(projectId) {
   const project = getAllProjects().find(p => p.id === projectId);
   if (!project) return;
 
-  // Delete from Supabase first. Pass the numbers so a numbered casting is removed
-  // by its stable key (project#+cast#) regardless of its current week.
+  // Delete from Supabase first. Pass the numbers (and phase) so a numbered
+  // casting is removed by its stable key regardless of its current week, and a
+  // phased casting never takes out a sibling sharing its cast # on another phase.
   try {
-    await deleteTrackingStatus(project.project, project.weekMonday, project.projectNumber, project.castingNumber);
+    await deleteTrackingStatus(project.project, project.weekMonday, project.projectNumber, project.castingNumber, project.phaseId);
   } catch (error) {
     console.error('❌ Failed to delete from Supabase:', error);
     // Continue with local deletion anyway
