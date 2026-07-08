@@ -893,7 +893,12 @@ export async function loadAllReleasabilityData(forceRefresh = false) {
         actualStartDate: project.actualStartDate,
         department: project.department,
         source: project.source,
-        manualWeekId: saved && saved.manualWeekId ? saved.manualWeekId : null,
+        // Sheets castings always live in the week derived from their scheduled
+        // start date. A saved manual_week_id here is a leftover from a
+        // placeholder created inside a user-created week before the real
+        // casting arrived — honoring it would pin scheduled work to that
+        // manual week, so drop it.
+        manualWeekId: null,
         trackingStatus: saved ? saved.trackingStatus : { ...DEFAULT_TRACKING_STATUS },
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
