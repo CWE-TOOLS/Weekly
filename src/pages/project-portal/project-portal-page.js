@@ -9775,6 +9775,7 @@ body { font-family: 'Segoe UI', Arial, sans-serif; color: #000; background: #fff
 .fl-head { font-weight: bold; font-size: 12pt; letter-spacing: 0.01em; line-height: 1.1; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fl-color { font-size: 13pt; line-height: 1.1; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 0.03in; }
 .fl-color.fl-empty { color: #666; font-style: italic; font-size: 10pt; }
+.fl-count { font-size: 10pt; font-weight: normal; font-style: normal; color: #333; }
 `;
 
 // Single color-log name to print for a casting: the most-common color log among
@@ -9789,9 +9790,11 @@ function buildFolderLabelHtml(castings, projectName) {
     const labels = castings.map(c => {
         const castLabel = formatStickerCasting(c.casting_number);
         const colorName = folderLabelColorName(c);
+        const compCount = (currentCastingComponents.get(c.id) || []).length;
+        const countHtml = compCount > 0 ? ` <span class="fl-count">(${compCount} Pcs)</span>` : '';
         const colorHtml = colorName
-            ? `<div class="fl-color">${escapeHtml(colorName)}</div>`
-            : `<div class="fl-color fl-empty">No color log</div>`;
+            ? `<div class="fl-color">${escapeHtml(colorName)}${countHtml}</div>`
+            : `<div class="fl-color fl-empty">No color log${countHtml}</div>`;
         return `
             <div class="fl-label">
                 <div class="fl-head">${escapeHtml(cleanProject)} : ${escapeHtml(castLabel)}</div>
