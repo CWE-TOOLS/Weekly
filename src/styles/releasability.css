@@ -530,6 +530,32 @@ html {
   box-shadow: 0 3px 8px 0 rgb(0 0 0 / 0.12);
 }
 
+/* Nav links to the weekly schedule and project portal */
+.nav-link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0.5rem 0.75rem;
+  border-radius: 9999px;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+}
+
+.nav-link-btn svg {
+  width: 1.125rem;
+  height: 1.125rem;
+  flex-shrink: 0;
+}
+
+.nav-link-btn:hover {
+  background-color: var(--surface-container-high);
+  color: var(--text-primary);
+}
+
 /* Icon Buttons (Refresh, Fullscreen) */
 .icon-btn {
   display: flex;
