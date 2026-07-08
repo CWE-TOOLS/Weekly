@@ -10373,9 +10373,11 @@ const BATCH_PRINT_CSS = `
 @page { size: letter portrait; margin: 0.3in 0.4in; }
 * { margin:0; padding:0; box-sizing:border-box; }
 body { font-family: 'Segoe UI', Arial, sans-serif; color:#000; font-size:11pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-/* Fixed pt height (NOT vh) so each ticket fills the printable area exactly without
+/* Fixed pt min-height (NOT vh) so each ticket fills the printable area exactly without
    the cross-page rendering bugs that vh+flex caused. Letter portrait minus 0.3in
-   margins = ~748pt printable; we use 745pt for a touch of safety against rounding. */
+   margins = ~748pt printable; we use 745pt for a touch of safety against rounding.
+   min-height (not height) so an unusually tall ticket grows the colored border with
+   its content instead of letting the footer paint over the bottom border. */
 .bt-page {
     page-break-after: always;
     page-break-inside: avoid;
@@ -10383,7 +10385,7 @@ body { font-family: 'Segoe UI', Arial, sans-serif; color:#000; font-size:11pt; -
     break-inside: avoid;
     padding: 12pt 14pt;
     border: 6pt solid #ccc;
-    height: 745pt;
+    min-height: 745pt;
     display: flex;
     flex-direction: column;
 }
@@ -10406,7 +10408,7 @@ body { font-family: 'Segoe UI', Arial, sans-serif; color:#000; font-size:11pt; -
 .batch-ticket.bt-firstBackUp .bt-type-banner { color: #3b82f6; }
 .batch-ticket.bt-finalBackUp .bt-type-banner { color: #ca8a04; }
 .bt-header-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; margin-bottom: 4pt; }
-.bt-hrow { display: flex; align-items: baseline; padding: 2.5pt 0; border-bottom: 0.75pt solid #000; }
+.bt-hrow { display: flex; align-items: baseline; padding: 2pt 0; border-bottom: 0.75pt solid #000; }
 .bt-hrow:nth-child(odd) { padding-right: 12pt; }
 .bt-hrow:nth-child(even) { padding-left: 12pt; }
 .bt-hlabel { font-size: 9.5pt; font-weight: 700; min-width: 78pt; margin-right: 6pt; }
@@ -10420,9 +10422,9 @@ body { font-family: 'Segoe UI', Arial, sans-serif; color:#000; font-size:11pt; -
 .bt-cb { display: flex; align-items: center; gap: 5pt; font-size: 10pt; }
 .bt-cb-box { width: 14pt; height: 14pt; border: 1.5pt solid #000; display: inline-flex; align-items: center; justify-content: center; font-size: 11pt; font-weight: 900; background: #fff; color: #000; }
 .bt-cb-box.checked::after { content: '\\2713'; }
-.bt-section-label { font-weight: 700; font-size: 9.5pt; text-transform: uppercase; letter-spacing: 0.8pt; padding: 4pt 0 1.5pt; border-bottom: 1pt solid #000; margin-top: 3pt; }
+.bt-section-label { font-weight: 700; font-size: 9.5pt; text-transform: uppercase; letter-spacing: 0.8pt; padding: 3pt 0 1.5pt; border-bottom: 1pt solid #000; margin-top: 2pt; }
 .bt-table { width: 100%; border-collapse: collapse; margin-bottom: 2pt; }
-.bt-table td { font-size: 10pt; padding: 2.5pt 4pt; border-bottom: 0.5pt solid #d4d4d4; vertical-align: baseline; }
+.bt-table td { font-size: 10pt; padding: 2pt 4pt; border-bottom: 0.5pt solid #d4d4d4; vertical-align: baseline; }
 .bt-table .bt-label { font-weight: 700; width: 22%; white-space: nowrap; }
 .bt-table .bt-type { width: 40%; }
 .bt-table .bt-qty-label { font-weight: 700; width: 8%; text-align: right; }
@@ -10432,7 +10434,7 @@ body { font-family: 'Segoe UI', Arial, sans-serif; color:#000; font-size:11pt; -
 .bt-notes { border: 1pt solid #000; padding: 6pt 8pt; flex: 0 0 auto; min-height: 28pt; font-size: 10pt; line-height: 1.4; white-space: pre-wrap; }
 /* Footer: handwrite mix conditions (left) + slump test (right). flex: 1 lets it
    absorb leftover vertical space so each ticket still fills its fixed-height page. */
-.bt-footer { display: grid; grid-template-columns: 1fr auto; gap: 10pt; margin-top: 30pt; padding-right: 10pt; align-items: start; flex: 1 1 auto; }
+.bt-footer { display: grid; grid-template-columns: 1fr auto; gap: 10pt; margin-top: 8pt; padding-right: 10pt; align-items: start; flex: 1 1 auto; }
 .bt-cond-row { display: flex; align-items: baseline; gap: 8pt; padding: 12pt 0 5pt; }
 .bt-cond-label { font-size: 10pt; font-weight: 700; white-space: nowrap; min-width: 66pt; }
 .bt-cond-line { flex: 0 0 100pt; border-bottom: 1pt solid #000; height: 14pt; }
@@ -10441,15 +10443,15 @@ body { font-family: 'Segoe UI', Arial, sans-serif; color:#000; font-size:11pt; -
 .bt-cond-slash { font-size: 11pt; font-weight: 700; }
 .bt-footer-right { text-align: center; }
 .bt-slump-wrap { display: flex; align-items: center; justify-content: center; gap: 10pt; }
-.bt-slump-svg { width: 2.0in; height: 2.0in; display: block; flex: 0 0 auto; }
-.bt-slump-side { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 22pt; }
+.bt-slump-svg { width: 1.7in; height: 1.7in; display: block; flex: 0 0 auto; }
+.bt-slump-side { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 12pt; }
 .bt-slump-readout { display: flex; gap: 18pt; align-items: flex-start; }
 .bt-readout { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.05; }
 .bt-readout-label { font-size: 10pt; font-weight: 700; text-transform: uppercase; letter-spacing: 1pt; }
 .bt-readout-val { font-size: 34pt; font-weight: 800; color: #ea580c; line-height: 1; display: flex; align-items: flex-end; gap: 3pt; }
 .bt-readout-actual { color: #000; font-weight: 700; }
 .bt-readout-blank { width: 44pt; height: 30pt; border-bottom: 1.5pt solid #000; }
-.bt-passfail { display: flex; flex-direction: column; gap: 16pt; }
+.bt-passfail { display: flex; flex-direction: column; gap: 10pt; }
 .bt-pf { display: flex; align-items: center; gap: 12pt; font-size: 13pt; font-weight: 700; }
 .bt-pf-text { min-width: 42pt; }
 .bt-slump-fields { display: flex; flex-direction: column; gap: 12pt; }
