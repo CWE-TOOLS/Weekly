@@ -9767,7 +9767,8 @@ body { font-family: 'Segoe UI', Arial, sans-serif; color: #000; background: #fff
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
-    padding: 0 0.1in;
+    /* Top padding keeps the first line clear of printer clipping at the label edge */
+    padding: 0.08in 0.1in 0;
     text-align: center;
 }
 .fl-label:last-child { page-break-after: auto; }
