@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SOP — Optimizer Planning</title>
+<style>
+  @page { size: Letter portrait; margin: 0.5in; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    font-family: "Segoe UI", Arial, sans-serif;
+    color: #1a1a1a; font-size: 10.5pt; line-height: 1.32;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  .sheet { width: 100%; }
+
+  /* Header */
+  .head {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    border-bottom: 3px solid #1f2937; padding-bottom: 5px; margin-bottom: 7px;
+  }
+  .head h1 { font-size: 22pt; letter-spacing: -0.3px; line-height: 1.05; }
+  .head h1 .eyebrow { display:block; font-size: 10pt; font-weight: 700; color:#6b7280; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 3px; }
+  .head .meta { font-size: 8.5pt; color: #555; text-align: right; line-height: 1.4; }
+  .head .meta b { color:#111827; }
+
+  .lead {
+    font-size: 9.3pt; color:#374151; background:#f3f4f6; border-left:4px solid #1f2937;
+    padding: 3px 11px; border-radius: 3px; margin-bottom: 5px;
+  }
+  b { color:#111827; }
+
+  /* ===== Row grid: explanation left · optimizer card right ===== */
+  .row { display: grid; grid-template-columns: 1fr 300px; column-gap: 16px; break-inside: avoid; }
+
+  .exp { padding: 1px 0; align-self: center; }
+  .exp h3 { font-size: 9.2pt; color:#111827; display:inline; }
+  .exp p { font-size: 8pt; color:#4b5563; line-height: 1.24; }
+  .exp p b { color:#111827; }
+  .exp p.sub { padding-left:16px; border-left:2px solid #e2e8f0; margin-left:2px; }
+  /* group divider inside the card (Strip / Seal 3-day blocks) */
+  .gdiv {
+    font-size:6.8pt; font-weight:800; letter-spacing:.7px; color:#64748b; text-transform:uppercase;
+    background:#eef2f7; border:1px solid #e2e8f0; border-radius:5px; text-align:center; padding:2px 0;
+  }
+
+  /* the card rail (right column) — portal look */
+  .rail { background:#f8fafc; border-left:1.5px solid #dbe2ea; border-right:1.5px solid #dbe2ea; padding: 2px 10px; }
+  .rail.first { border-top:1.5px solid #dbe2ea; border-radius: 10px 10px 0 0; padding-top: 8px; }
+  .rail.last  { border-bottom:1.5px solid #dbe2ea; border-radius: 0 0 10px 10px; padding-bottom: 8px; }
+
+  .cardhead { display:flex; align-items:center; gap:5px; padding: 1px 2px 3px; }
+  .cardhead .cl { font-size:7pt; font-weight:800; letter-spacing:.8px; color:#94a3b8; }
+  .cardhead .cn { font-size:11pt; font-weight:800; color:#2563eb; }
+  .cardhead .ic { margin-left:auto; color:#cbd5e1; font-size:9pt; letter-spacing:2px; }
+
+  /* task row — mimics the portal */
+  .task {
+    display:flex; align-items:center; gap:7px;
+    background:#fff; border:1px solid #e2e8f0; border-radius:8px;
+    padding: 1.5px 8px;
+  }
+  .task .grip { color:#cbd5e1; font-size:8pt; letter-spacing:-1px; line-height:.6; }
+  .task .tname { font-weight:700; font-size:8.8pt; color:#1e293b; }
+  .task .hrs {
+    margin-left:auto; display:flex; align-items:center; gap:4px;
+  }
+  .task .hbox {
+    width:44px; text-align:center; border:1px solid #dbe2ea; border-radius:5px;
+    font-size:8.2pt; font-weight:700; color:#334155; padding:1px 0; background:#fff;
+  }
+  .task .hlab { font-size:6.8pt; font-weight:700; color:#94a3b8; letter-spacing:.5px; }
+  .task .chev { color:#cbd5e1; font-size:8pt; }
+
+  /* branch area */
+  .branch { display:flex; gap:6px; align-items:stretch; padding: 2px 0; }
+  .vjoin { width:2px; height:9px; background:#cbd5e1; margin:2px auto; border-radius:1px; }
+  .route { flex:1 1 0; min-width:0; border-radius:8px; padding:4px 5px 5px; }
+  .route .task .grip { display:none; }
+  .r-acid { background:#eff6ff; border:1.5px dashed #93c5fd; }
+  .r-grind{ background:#f5f3ff; border:1.5px dashed #c4b5fd; }
+  .r-init { background:#f0fdf4; border:1.5px dashed #86efac; }
+  .r-re   { background:#fffbeb; border:1.5px dashed #fcd34d; }
+  .r-init .rh { color:#15803d; }
+  .r-re .rh { color:#b45309; }
+  .route .rh { font-size:7pt; font-weight:800; text-transform:uppercase; letter-spacing:.6px; text-align:center; margin-bottom:4px; }
+  .r-acid .rh { color:#1d4ed8; }
+  .r-grind .rh { color:#6d28d9; }
+  .route .task { padding:1.5px 7px; }
+  .route .task + .task { margin-top:3px; }
+  .route .task .tname { font-size:8.2pt; white-space:nowrap; }
+  .route .task .hlab { display:none; }
+  .route .task .hbox { width:38px; font-size:7.8pt; }
+  .orb {
+    flex:0 0 auto; align-self:center; width:24px; height:24px; border-radius:50%;
+    background:#1f2937; color:#fff; font-size:7.5pt; font-weight:800;
+    display:flex; align-items:center; justify-content:center; text-transform:uppercase;
+  }
+
+  /* total — portal look */
+  .total {
+    display:flex; align-items:center; justify-content:space-between;
+    padding: 4px 4px 0; border-top:1.5px solid #e2e8f0; margin-top:3px;
+  }
+  .total .tl { font-size:8pt; font-weight:800; letter-spacing:.6px; color:#64748b; }
+  .total .tv { font-size:9.5pt; font-weight:800; color:#2563eb; }
+
+  .foot {
+    margin-top: 6px; border-top: 2px solid #1f2937; padding-top: 5px;
+    font-size: 8.4pt; color: #555; display:flex; justify-content:space-between;
+  }
+
+  /* Print button (screen only) */
+  .printbar { position: fixed; top: 14px; right: 14px; z-index: 50; }
+  .printbar button {
+    font-family: "Segoe UI", Arial, sans-serif; font-size: 11pt; font-weight: 700;
+    color: #fff; background: #1f2937; border: none; border-radius: 6px;
+    padding: 9px 16px; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,.25);
+    display: inline-flex; align-items: center; gap: 7px;
+  }
+  .printbar button:hover { background: #374151; }
+  .printbar button svg { width: 15px; height: 15px; }
+
+  @media screen {
+    body { background: #e5e7eb; padding: 24px 0; }
+    .sheet { width: 8.5in; min-height: 11in; margin: 0 auto; background: #fff; padding: 0.5in; box-shadow: 0 4px 18px rgba(0,0,0,.18); }
+  }
+  @media print { .printbar { display:none !important; } }
+</style>
+</head>
+<body>
+
+<div class="printbar">
+  <button onclick="window.print()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+         stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="6 9 6 2 18 2 18 9"></polyline>
+      <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+      <rect x="6" y="14" width="12" height="8"></rect>
+    </svg>
+    Print
+  </button>
+</div>
+
+<div class="sheet">
+
+  <div class="head">
+    <h1><span class="eyebrow">Process Overview</span>
+        Optimizer Planning</h1>
+    <div class="meta">
+      <b>Rev:</b> 0.2 (draft)<br>
+      <b>Type:</b> How the estimate is built<br>
+      <b>Owner:</b> ____________
+    </div>
+  </div>
+
+  <div class="lead">
+    <b>Total hours to distribute:</b> from the Proposal, take <b>Fabrication Revenue + Crate Revenue +
+    Shipping Load</b> values only, and divide by <b>$135 per hour</b> — that is the project's total manhours.
+    Distribute them across the castings — <b>initial build castings get more hours than re-build castings</b>.
+  </div>
+
+  <!-- card header -->
+  <div class="row">
+    <div class="exp"><p>One card per casting — hours are estimated <b>per casting</b>, task by task.</p></div>
+    <div class="rail first">
+      <div class="cardhead"><span class="cl">CAST</span><span class="cn">1</span><span class="ic">▢ ▢</span></div>
+    </div>
+  </div>
+
+  <!-- BUILD BRANCH -->
+  <div class="row">
+    <div class="exp">
+      <p><b>The build — one route.</b> A first-time casting takes the <b>initial build</b> route —
+      <b>Mill</b> the form parts, then <b>Form Out</b> to assemble, caulk, and seal the mold. A casting
+      poured off an existing form takes the <b>Re-Build</b> route instead.</p>
+    </div>
+    <div class="rail">
+      <div class="vjoin"></div>
+      <div class="branch">
+        <div class="route r-init">
+          <div class="rh">Initial Build Route</div>
+          <div class="task"><span class="grip">⣿</span><span class="tname">Mill</span><span class="hrs"><span class="hbox">23–30</span><span class="hlab">HRS</span></span></div>
+          <div class="task"><span class="grip">⣿</span><span class="tname">Form Out</span><span class="hrs"><span class="hbox">20–30</span><span class="hlab">HRS</span></span></div>
+        </div>
+        <span class="orb">or</span>
+        <div class="route r-re">
+          <div class="rh">Re-Build Route</div>
+          <div class="task"><span class="grip">⣿</span><span class="tname">Re-Build</span><span class="hrs"><span class="hbox">10–15</span><span class="hlab">HRS</span></span></div>
+        </div>
+      </div>
+      <div class="vjoin"></div>
+    </div>
+  </div>
+
+  <!-- Cast -->
+  <div class="row">
+    <div class="exp"><p><b>Batch &amp; pour</b> — mix per the batch tickets, pour, vibrate, and screed the piece.</p></div>
+    <div class="rail"><div class="task"><span class="grip">⣿</span><span class="tname">Cast</span><span class="hrs"><span class="hbox">25–35</span><span class="hlab">HRS</span><span class="chev">⌄</span></span></div></div>
+  </div>
+
+  <!-- DM -->
+  <div class="row">
+    <div class="exp"><p><b>Demold</b> — strip the cured piece out of the form.</p></div>
+    <div class="rail"><div class="task"><span class="grip">⣿</span><span class="tname">DM</span><span class="hrs"><span class="hbox">15–20</span><span class="hlab">HRS</span><span class="chev">⌄</span></span></div></div>
+  </div>
+
+  <!-- BRANCH -->
+  <div class="row">
+    <div class="exp">
+      <p><b>The finish — one route, never both.</b> Either an <b>acid wash</b> (cast finish) or a
+      <b>grind</b> (honed finish); each route ends with its own touch-up day — <b>ATU</b> or <b>GTU</b>.</p>
+    </div>
+    <div class="rail">
+      <div class="vjoin"></div>
+      <div class="branch">
+        <div class="route r-acid">
+          <div class="rh">Acid Wash Route</div>
+          <div class="task"><span class="grip">⣿</span><span class="tname">Acid Wash</span><span class="hrs"><span class="hbox">15–20</span><span class="hlab">HRS</span></span></div>
+          <div class="task"><span class="grip">⣿</span><span class="tname">ATU</span><span class="hrs"><span class="hbox">5–10</span><span class="hlab">HRS</span></span></div>
+        </div>
+        <span class="orb">or</span>
+        <div class="route r-grind">
+          <div class="rh">Grind Route</div>
+          <div class="task"><span class="grip">⣿</span><span class="tname">G/F</span><span class="hrs"><span class="hbox">15–20</span><span class="hlab">HRS</span></span></div>
+          <div class="task"><span class="grip">⣿</span><span class="tname">GOF</span><span class="hrs"><span class="hbox">10–15</span><span class="hlab">HRS</span></span></div>
+          <div class="task"><span class="grip">⣿</span><span class="tname">GTU</span><span class="hrs"><span class="hbox">5–10</span><span class="hlab">HRS</span></span></div>
+        </div>
+      </div>
+      <div class="vjoin"></div>
+    </div>
+  </div>
+
+  <!-- Strip block — always 3 days -->
+  <div class="row">
+    <div class="exp"><p><b>Strip</b> — always <b>3 days</b>, one task per day. Totals <b>10–15 hrs</b>, about 3–5 per day:</p></div>
+    <div class="rail"><div class="gdiv">Strip — always 3 days · 10–15 hrs total</div></div>
+  </div>
+  <div class="row">
+    <div class="exp"><p class="sub"><b>Azek</b> — remove the Azek fillers from the concrete.</p></div>
+    <div class="rail"><div class="task"><span class="grip">⣿</span><span class="tname">Azek</span><span class="hrs"><span class="hbox">3–5</span><span class="hlab">HRS</span><span class="chev">⌄</span></span></div></div>
+  </div>
+  <div class="row">
+    <div class="exp"><p class="sub"><b>Strips</b> — install the strips in the concrete.</p></div>
+    <div class="rail"><div class="task"><span class="grip">⣿</span><span class="tname">Strips</span><span class="hrs"><span class="hbox">3–5</span><span class="hlab">HRS</span><span class="chev">⌄</span></span></div></div>
+  </div>
+  <div class="row">
+    <div class="exp"><p class="sub"><b>Touch Up</b> — touch up the strips.</p></div>
+    <div class="rail"><div class="task"><span class="grip">⣿</span><span class="tname">Touch Up</span><span class="hrs"><span class="hbox">3–5</span><span class="hlab">HRS</span><span class="chev">⌄</span></span></div></div>
+  </div>
+
+  <!-- Seal block — always 3 days -->
+  <div class="row">
+    <div class="exp"><p><b>Seal</b> — always <b>3 days</b>, one task per day. Totals <b>10–15 hrs</b>, about 3–5 per day:</p></div>
+    <div class="rail"><div class="gdiv">Seal — always 3 days · 10–15 hrs total</div></div>
+  </div>
+  <div class="row">
+    <div class="exp"><p class="sub"><b>Seal</b> — first day of sealing.</p></div>
+    <div class="rail"><div class="task"><span class="grip">⣿</span><span class="tname">Seal</span><span class="hrs"><span class="hbox">3–5</span><span class="hlab">HRS</span><span class="chev">⌄</span></span></div></div>
+  </div>
+  <div class="row">
+    <div class="exp"><p class="sub"><b>Seal2</b> — second day of sealing.</p></div>
+    <div class="rail"><div class="task"><span class="grip">⣿</span><span class="tname">Seal2</span><span class="hrs"><span class="hbox">3–5</span><span class="hlab">HRS</span><span class="chev">⌄</span></span></div></div>
+  </div>
+  <div class="row">
+    <div class="exp"><p class="sub"><b>TU</b> — touch up the sealer.</p></div>
+    <div class="rail"><div class="task"><span class="grip">⣿</span><span class="tname">TU</span><span class="hrs"><span class="hbox">3–5</span><span class="hlab">HRS</span><span class="chev">⌄</span></span></div></div>
+  </div>
+
+  <!-- Rack -->
+  <div class="row">
+    <div class="exp"><p><b>Rack</b> — move the piece onto the rack.</p></div>
+    <div class="rail"><div class="task"><span class="grip">⣿</span><span class="tname">Rack</span><span class="hrs"><span class="hbox">3–4</span><span class="hlab">HRS</span><span class="chev">⌄</span></span></div></div>
+  </div>
+
+  <!-- Build Crate -->
+  <div class="row">
+    <div class="exp"><p><b>Build the crate</b> — build the shipping crate for the piece.</p></div>
+    <div class="rail"><div class="task"><span class="grip">⣿</span><span class="tname">Build</span><span class="hrs"><span class="hbox">3–4</span><span class="hlab">HRS</span><span class="chev">⌄</span></span></div></div>
+  </div>
+
+  <!-- Load Crate -->
+  <div class="row">
+    <div class="exp"><p><b>Load the crate</b> — load and secure the piece in its crate.</p></div>
+    <div class="rail"><div class="task"><span class="grip">⣿</span><span class="tname">Load</span><span class="hrs"><span class="hbox">3–4</span><span class="hlab">HRS</span><span class="chev">⌄</span></span></div></div>
+  </div>
+
+  <!-- Ship -->
+  <div class="row">
+    <div class="exp"><p><b>Ship</b> — load the truck and deliver to the site.</p></div>
+    <div class="rail"><div class="task"><span class="grip">⣿</span><span class="tname">Ship</span><span class="hrs"><span class="hbox">1</span><span class="hlab">HRS</span><span class="chev">⌄</span></span></div></div>
+  </div>
+
+  <!-- Total -->
+  <div class="row">
+    <div class="exp"><p>The casting's <b>total manhours</b> — a typical casting lands in this range.
+    Reviewed with the Team Leaders at Classroom, then finalized as
+    <b>Final Optimizer HRS</b> on the Releasability Board.</p></div>
+    <div class="rail last">
+      <div class="total"><span class="tl">TOTAL</span><span class="tv">100–175 hrs</span></div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <span><b>Bottom line:</b> One card per casting; an hour figure on every task down its path through the shop. At finish, estimate <b>one route only</b> — acid wash or grind, never both. Review with Team Leaders, then finalize on the Releasability Board.</span>
+    <span>Optimizer Planning <span style="display:inline-block;background:#1f2937;color:#fff;font-weight:800;border-radius:4px;padding:1px 9px;margin-left:7px;letter-spacing:.5px">5</span></span>
+  </div>
+
+</div>
+</body>
+</html>
