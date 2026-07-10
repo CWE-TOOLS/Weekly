@@ -152,36 +152,74 @@ export function registerRefreshHandler(handler) {
     logger.debug('✅ Custom refresh handler registered');
 }
 
+// Refresh-signal coalescing — bulk edits (e.g. pasting many task descriptions)
+// broadcast one signal per save, and a full data reload per signal can exhaust
+// the Supabase connection pool (each reload re-downloads task_descriptions in
+// 1000-row pages). Signals collect for a short window and at most one reload
+// runs at a time; a window that fires mid-reload re-arms itself.
+const REFRESH_COALESCE_MS = 4000;
+let pendingRefreshPayloads = [];
+let refreshWindowTimer = null;
+let refreshReloadInFlight = false;
+
 /**
- * Handle refresh signal by reloading data from all sources
+ * Handle refresh signal — queues it into the current coalescing window
  * @param {Object} payload - Refresh signal payload
  */
 function handleRefreshSignal(payload) {
-    logger.debug('🔄 Processing refresh signal (silent mode)...');
+    pendingRefreshPayloads.push(payload);
+    if (!refreshWindowTimer) {
+        refreshWindowTimer = setTimeout(processPendingRefreshSignals, REFRESH_COALESCE_MS);
+    }
+}
 
+async function processPendingRefreshSignals() {
+    refreshWindowTimer = null;
+    if (refreshReloadInFlight) {
+        // Previous reload still running — check back after another window
+        refreshWindowTimer = setTimeout(processPendingRefreshSignals, REFRESH_COALESCE_MS);
+        return;
+    }
+
+    const payloads = pendingRefreshPayloads;
+    pendingRefreshPayloads = [];
+    if (payloads.length === 0) return;
+
+    logger.debug(`🔄 Processing ${payloads.length} coalesced refresh signal(s) (silent mode)...`);
+    refreshReloadInFlight = true;
+    try {
+        await runRefresh(payloads);
+        logger.debug('✅ Data refreshed from all sources (silent)');
+    } catch (error) {
+        logger.error('❌ Failed to refresh data:', error);
+    } finally {
+        refreshReloadInFlight = false;
+    }
+}
+
+/**
+ * Run one data reload covering a whole batch of refresh signals
+ * @param {Array<Object>} payloads - Coalesced refresh signal payloads
+ */
+async function runRefresh(payloads) {
     // No visual indicator - silent refresh per user preference
     // Smart rendering will handle updates without disruption
 
     // Use custom handler if registered (e.g., releasability board)
     if (customRefreshHandler) {
-        customRefreshHandler(payload)
-            .then(() => {
-                logger.debug('✅ Data refreshed from all sources (silent)');
-            })
-            .catch(error => {
-                logger.error('❌ Failed to refresh data:', error);
-            });
+        await customRefreshHandler(payloads[payloads.length - 1]);
         return;
     }
 
     // Fallback to weekly schedule page handler
-    // Only refresh weekly schedule for non-releasability actions
-    const action = payload && payload.payload && payload.payload.info && payload.payload.info.action;
-    const isReleasabilityAction = action === 'releasability_status_updated' ||
-                                   action === 'releasability_project_deleted';
-
-    if (isReleasabilityAction) {
-        logger.debug('⏭️ Ignoring releasability action in weekly schedule:', action);
+    // Skip only when every signal in the batch is a releasability-only action
+    const isReleasabilityAction = (payload) => {
+        const action = payload && payload.payload && payload.payload.info && payload.payload.info.action;
+        return action === 'releasability_status_updated' ||
+               action === 'releasability_project_deleted';
+    };
+    if (payloads.every(isReleasabilityAction)) {
+        logger.debug('⏭️ Ignoring releasability-only refresh batch in weekly schedule');
         return;
     }
 
@@ -189,13 +227,7 @@ function handleRefreshSignal(payload) {
     // This will fetch from both Google Sheets and Supabase, merge, and update state
     // Use suppressEvents=false to emit events for UI refresh (no loading spinner for remote sync)
     if (window.dataService && window.dataService.fetchAllTasks) {
-        window.dataService.fetchAllTasks(false) // emit events to trigger UI update
-            .then(() => {
-                logger.debug('✅ Data refreshed from all sources (silent)');
-            })
-            .catch(error => {
-                logger.error('❌ Failed to refresh data:', error);
-            });
+        await window.dataService.fetchAllTasks(false); // emit events to trigger UI update
     } else {
         logger.warn('⚠️ No refresh handler available (dataService.fetchAllTasks not on window)');
     }
@@ -260,6 +292,9 @@ function showNotification(message, type = 'info') {
     }, NOTIFICATION_DURATION.ERROR);
 }
 
+const SEND_REFRESH_COALESCE_MS = 1500;
+const pendingBroadcasts = new Map(); // action -> { trailingInfo, timer }
+
 /**
  * Send a refresh signal to all other clients
  *
@@ -287,6 +322,31 @@ export async function sendRefreshSignal(updateInfo = {}) {
         return;
     }
 
+    // Send-side coalescing: bulk edits call this once per save, but receivers
+    // do a full reload per broadcast, so one broadcast per action per window is
+    // plenty. The first call in a burst sends immediately; the rest fold into a
+    // single trailing broadcast carrying the latest info.
+    const action = (updateInfo && updateInfo.action) || 'update';
+    const pending = pendingBroadcasts.get(action);
+    if (pending) {
+        pending.trailingInfo = updateInfo;
+        return;
+    }
+    pendingBroadcasts.set(action, {
+        trailingInfo: null,
+        timer: setTimeout(() => {
+            const entry = pendingBroadcasts.get(action);
+            pendingBroadcasts.delete(action);
+            if (entry && entry.trailingInfo) {
+                broadcastRefresh(entry.trailingInfo);
+            }
+        }, SEND_REFRESH_COALESCE_MS)
+    });
+
+    await broadcastRefresh(updateInfo);
+}
+
+async function broadcastRefresh(updateInfo) {
     try {
         logger.debug('📡 Sending refresh signal to all clients...');
 
