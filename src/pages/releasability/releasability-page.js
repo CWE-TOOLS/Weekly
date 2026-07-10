@@ -2030,8 +2030,8 @@ async function handleMoveWeek(weekId, direction) {
     w.type === 'manual' && w.value.id === weekId
   );
 
-  if (direction < 0 && currentIndex <= 0) {
-    showNotification('Already at the top');
+  if (direction < 0 && (currentIndex <= 0 || fullWeekList[currentIndex - 1].type === 'date')) {
+    showNotification('Manual weeks always stay below the scheduled weeks');
     return;
   }
   if (direction > 0 && (currentIndex === -1 || currentIndex >= fullWeekList.length - 1)) {

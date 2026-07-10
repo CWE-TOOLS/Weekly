@@ -630,9 +630,8 @@ export function groupProjectsByWeek(projects) {
 
 /**
  * Get the range of weeks to display (1 past week + all future weeks + manual weeks)
- * Manual week position semantics: position = insertion index into the merged
- * displayed list. Each manual week (in ascending position order) is spliced in
- * at its position; out-of-range positions are clamped to the end of the list.
+ * User-generated (manual) weeks always come after the actual date-based weeks;
+ * position only determines their order relative to each other.
  * Exported so releasability-page.js can build the exact list the grid renders.
  * @param {Object} projectsByWeek - Map of weekMonday -> projects
  * @param {Array<Object|string>} manualWeeks - Array of manual week objects {id, name, position} or date strings
@@ -666,19 +665,10 @@ export function getWeekRange(projectsByWeek, manualWeeks = []) {
     .sort()
     .filter(weekStr => weekStr >= previousMondayStr);
 
-  // Create a combined list with manual weeks spliced in at their positions
-  const result = [...sortedDateWeeks];
-
-  // Sort manual weeks by position
+  // Manual weeks always follow the date-based weeks, ordered by position
   const sortedManualWeeks = [...manualWeekObjects].sort((a, b) => a.position - b.position);
 
-  // Insert each manual week at its position (clamped to the end if out of range)
-  sortedManualWeeks.forEach(manualWeek => {
-    const insertIndex = Math.min(Math.max(0, manualWeek.position), result.length);
-    result.splice(insertIndex, 0, manualWeek);
-  });
-
-  return result;
+  return [...sortedDateWeeks, ...sortedManualWeeks];
 }
 
 // ============================================================================
