@@ -595,6 +595,36 @@
   pointer-events: none;
 }
 
+/* Board Schedule (11×17): pre-print preview of castings with no Side A/B */
+.board-unresolved-preview {
+  display: none; /* shown by JS only while board-11x17 is selected */
+  margin-top: 0.75rem;
+  font-size: 0.85em;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.board-unresolved-preview .board-unresolved-allclear {
+  color: #16803C; /* muted green all-clear */
+  font-weight: 500;
+}
+
+.board-unresolved-preview .board-unresolved-heading {
+  color: #B45309; /* amber warning */
+  font-weight: 600;
+  margin-bottom: 0.375rem;
+}
+
+.board-unresolved-preview .board-unresolved-list {
+  margin: 0;
+  padding-left: 1.25rem;
+  color: var(--text-primary);
+}
+
+.board-unresolved-preview .board-unresolved-list li {
+  margin-bottom: 0.125rem;
+}
+
 .print-actions {
   display: flex;
   justify-content: flex-end;

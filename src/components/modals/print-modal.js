@@ -8,6 +8,7 @@
 import { getAllTasks } from '../../core/state.js';
 import { emit, EVENTS } from '../../core/event-bus.js';
 import { logger } from '../../utils/logger.js';
+import { escapeHtml } from '../../utils/security-utils.js';
 
 // Import print utilities to ensure they're loaded and exposed globally
 import '../../features/print/print-utils.js';
@@ -112,12 +113,18 @@ export function initializePrintModal() {
         setIncludeBoardSaturday(boardSaturdayCheckbox.checked);
         boardSaturdayCheckbox.addEventListener('change', (e) => {
             setIncludeBoardSaturday(e.target.checked);
+            // Saturday changes which days are in the board week, so the
+            // unresolved-castings preview may gain/lose entries.
+            refreshBoardUnresolvedPreview();
         });
     }
 
     // Week select change
     if (weekSelectElement) {
-        weekSelectElement.addEventListener('change', () => updateWeekDates(weekSelectElement));
+        weekSelectElement.addEventListener('change', () => {
+            updateWeekDates(weekSelectElement);
+            refreshBoardUnresolvedPreview();
+        });
     }
 
     // Department check all/uncheck all
@@ -294,6 +301,68 @@ function updatePrintTypeDisplay() {
             }
         }
     }
+
+    // Refresh (or clear) the board unresolved-castings preview. The function
+    // checks the active print type itself, so calling it unconditionally
+    // keeps the preview in sync when flipping between print types.
+    refreshBoardUnresolvedPreview();
+}
+
+/**
+ * Refresh the "castings without a Side A/B" preview shown with the
+ * Board Schedule (11×17) options. Lists the Cast tasks in the currently
+ * selected week that have no side designated — i.e. exactly what will land
+ * on the printed hand-assign page — so the user can fix them BEFORE printing.
+ * Clears itself for every other print type.
+ * @private
+ */
+function refreshBoardUnresolvedPreview() {
+    const container = document.getElementById('board-unresolved-preview');
+    if (!container) return;
+
+    const clear = () => {
+        container.innerHTML = '';
+        container.style.display = 'none';
+    };
+
+    if (getCurrentPrintType() !== 'board-11x17') {
+        clear();
+        return;
+    }
+
+    const helper = window.PrintUtils && window.PrintUtils.getUnresolvedBoardCastings;
+    if (!helper) {
+        clear();
+        return;
+    }
+
+    // Same week-date path the print flow uses (handlePrintExecute prepares
+    // board weeks as 'week' too) — do not invent a second parsing scheme.
+    const weekDates = preparePrintDates('week', weekSelectElement, null);
+    const allTasks = getAllTasks();
+    if (!weekDates || weekDates.length === 0 || !allTasks || allTasks.length === 0) {
+        clear();
+        return;
+    }
+
+    const unresolved = helper(weekDates, allTasks, getIncludeBoardSaturday());
+    container.style.display = 'block';
+
+    if (unresolved.length === 0) {
+        container.innerHTML = '<div class="board-unresolved-allclear">✓ All castings in this week have a side designated.</div>';
+        return;
+    }
+
+    const items = unresolved.map(u => {
+        const dateLabel = u.date.toLocaleDateString(undefined, {
+            weekday: 'short', month: 'short', day: 'numeric'
+        });
+        return `<li>${escapeHtml(u.label)} — ${dateLabel}</li>`;
+    }).join('');
+
+    container.innerHTML =
+        '<div class="board-unresolved-heading">Castings without a Side A/B — these will print on the hand-assign page:</div>' +
+        `<ul class="board-unresolved-list">${items}</ul>`;
 }
 
 /**

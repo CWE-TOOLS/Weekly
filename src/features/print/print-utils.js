@@ -411,6 +411,7 @@ function applyScaling(printContent, printType, isPreview = false) {
 window.PrintUtils = {
     generatePrintContent,
     executePrint,
+    getUnresolvedBoardCastings: PrintRenderer.getUnresolvedBoardCastings,
     getDepartmentColorMapping,
     normalizeDepartmentClass,
     parseDate,

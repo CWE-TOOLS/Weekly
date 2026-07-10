@@ -326,8 +326,10 @@ export function mergeTaskDescriptions(tasks, descriptionsMap) {
  * of the casting, not of the day, so it's safe to copy across.
  *
  * Match key is (projectNumber || project) + castingNumber — same composite
- * the board-print renderer uses to resolve sides. Tasks that already have a
- * side set are left alone; this only fills in nulls.
+ * the board-print renderer uses to resolve sides. Manual tasks carry no
+ * castingNumber, so Demolds without one fall back to a project-name-only
+ * match, taken only when every sided Cast row with that name agrees. Tasks
+ * that already have a side set are left alone; this only fills in nulls.
  *
  * @param {Array<Object>} tasks
  */
@@ -346,21 +348,33 @@ function propagateCastingSideToDemold(tasks) {
     // row to claim the key wins, which matches the board-print renderer's
     // semantics (sides shouldn't disagree across rows of the same casting).
     const sideByCasting = new Map();
+    // Name-only fallback for manual tasks (no castingNumber → composite key
+    // can never match). A name maps to a side only while every sided Cast row
+    // sharing it agrees; a conflict poisons the entry (null) so we never guess.
+    const sideByName = new Map();
     for (const t of tasks) {
         if (t.department !== 'Cast') continue;
         if (t.castingSide !== 'A' && t.castingSide !== 'B') continue;
         const k = keyFor(t);
         if (k && !sideByCasting.has(k)) sideByCasting.set(k, t.castingSide);
+        const name = String(t.project || '').trim().toLowerCase();
+        if (name) {
+            if (!sideByName.has(name)) sideByName.set(name, t.castingSide);
+            else if (sideByName.get(name) !== t.castingSide) sideByName.set(name, null);
+        }
     }
-    if (sideByCasting.size === 0) return;
+    if (sideByCasting.size === 0 && sideByName.size === 0) return;
 
     let filled = 0;
     for (const t of tasks) {
         if (t.department !== 'Demold') continue;
         if (t.castingSide === 'A' || t.castingSide === 'B') continue;
         const k = keyFor(t);
-        if (!k) continue;
-        const side = sideByCasting.get(k);
+        let side = k ? sideByCasting.get(k) : null;
+        if (!side && !String(t.castingNumber || '').trim()) {
+            const name = String(t.project || '').trim().toLowerCase();
+            if (name) side = sideByName.get(name) || null;
+        }
         if (side) {
             t.castingSide = side;
             filled++;

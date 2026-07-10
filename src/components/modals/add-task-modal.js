@@ -170,6 +170,7 @@ async function handleAddCardSubmit(e) {
         project: formData.get('project'),
         description: formData.get('description'),
         department: formData.get('department'),
+        castingSide: ['A', 'B'].includes(formData.get('castingSide')) ? formData.get('castingSide') : null,
         date: formData.get('date'),
         hours: formData.get('hours'),
         dayNumber: formData.get('dayNumber'),

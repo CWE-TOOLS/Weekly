@@ -114,6 +114,7 @@ export async function loadManualTasksREST() {
                     description: row.description || '',
                     date: row.date,
                     department: normalizeDepartment(row.department),
+                    castingSide: (row.casting_side === 'A' || row.casting_side === 'B') ? row.casting_side : null,
                     value: row.value || '',
                     hours: row.hours || '',
                     dayNumber: row.day_number || '',

@@ -824,20 +824,14 @@ function _workdayBefore(date, includeSaturday) {
     return d;
 }
 
-function generateBoardScheduleContent(weekDates, allTasks, options) {
-    const printContainer = document.createElement('div');
-    printContainer.className = 'print-preview-content board-11x17-preview';
+// Shared week-geometry helper for the board schedule: anchors on the Monday
+// of the supplied week and expands it into Mon-Fri or Mon-Sat day dates.
+// Used by both generateBoardScheduleContent (the print renderer) and
+// getUnresolvedBoardCastings (the print modal's pre-print preview) so the
+// two can never disagree about which days are "in the board week".
+function _boardWeekDayDates(weekDates, includeSaturday) {
+    if (!Array.isArray(weekDates) || weekDates.length === 0) return null;
 
-    if (!Array.isArray(weekDates) || weekDates.length === 0) {
-        logger.warn('Board schedule: no week dates supplied');
-        return printContainer;
-    }
-
-    // "Include Saturday" toggle from the modal. Default true: Mon-Sat work
-    // week, Sat gets its own page, Mon Cast's Layout lands on Sat. Set
-    // false to restore the original Mon-Fri behavior (no Sat page; Mon
-    // Cast's Layout collapses onto Fri).
-    const includeSaturday = !options || options.includeBoardSaturday !== false;
     const boardDays = includeSaturday ? BOARD_DAYS_MON_SAT : BOARD_DAYS_MON_FRI;
 
     // Anchor on the Monday of the supplied week.
@@ -853,6 +847,60 @@ function generateBoardScheduleContent(weekDates, allTasks, options) {
         dt.setDate(monday.getDate() + d.offset);
         return dt;
     });
+
+    return { boardDays, monday, dayDates };
+}
+
+/**
+ * List the Cast tasks in a board week that have no Side A/B designated.
+ * These are the castings that will land on the hand-assign ("unresolved")
+ * page when the 11×17 board schedule is printed. Pure data helper — no DOM.
+ *
+ * Deduped per casting (a multi-day cast lists once, at its earliest date)
+ * and sorted by date ascending.
+ *
+ * @param {Date[]} weekDates - Selected week dates (Monday-anchored internally)
+ * @param {Array} allTasks - Full task list
+ * @param {boolean} [includeSaturday=true] - Mon-Sat board week vs Mon-Fri
+ * @returns {{label: string, date: Date}[]}
+ */
+function getUnresolvedBoardCastings(weekDates, allTasks, includeSaturday = true) {
+    const week = _boardWeekDayDates(weekDates, includeSaturday);
+    if (!week) return [];
+
+    const inWeek = new Set(week.dayDates.map(dt => dt.toDateString()));
+    const byKey = new Map();
+
+    (allTasks || []).forEach(t => {
+        if (t.department !== 'Cast') return;
+        if (t.castingSide === 'A' || t.castingSide === 'B') return;
+        const td = parseDate(t.date);
+        if (!td || !inWeek.has(td.toDateString())) return;
+        const label = _boardLabel(t);
+        const key = _boardSideKey(t) || label;
+        const existing = byKey.get(key);
+        if (!existing || td < existing.date) byKey.set(key, { label, date: td });
+    });
+
+    return [...byKey.values()].sort((a, b) => a.date - b.date);
+}
+
+function generateBoardScheduleContent(weekDates, allTasks, options) {
+    const printContainer = document.createElement('div');
+    printContainer.className = 'print-preview-content board-11x17-preview';
+
+    // "Include Saturday" toggle from the modal. Default true: Mon-Sat work
+    // week, Sat gets its own page, Mon Cast's Layout lands on Sat. Set
+    // false to restore the original Mon-Fri behavior (no Sat page; Mon
+    // Cast's Layout collapses onto Fri).
+    const includeSaturday = !options || options.includeBoardSaturday !== false;
+
+    const week = _boardWeekDayDates(weekDates, includeSaturday);
+    if (!week) {
+        logger.warn('Board schedule: no week dates supplied');
+        return printContainer;
+    }
+    const { boardDays, monday, dayDates } = week;
     const dayKeyByISO = {};
     dayDates.forEach((dt, idx) => {
         const k = dt.toDateString();
@@ -863,12 +911,22 @@ function generateBoardScheduleContent(weekDates, allTasks, options) {
     //    (not just this week) so Layouts that lead a Cast in the following
     //    week and Demolds that trail a Cast from the prior week still resolve.
     const sideByKey = new Map();
+    // Name-only fallback for manual tasks: they carry no castingNumber, so
+    // _boardSideKey can never match them. A name maps to a side only while
+    // every sided Cast row sharing it agrees; a conflict poisons the entry
+    // (null) so ambiguous names stay unresolved rather than guessed.
+    const sideByName = new Map();
     (allTasks || []).forEach(t => {
         if (t.department !== 'Cast') return;
         const side = (t.castingSide === 'A' || t.castingSide === 'B') ? t.castingSide : null;
         if (!side) return;
         const k = _boardSideKey(t);
         if (k && !sideByKey.has(k)) sideByKey.set(k, side);
+        const name = (t.project || '').trim().toLowerCase();
+        if (name) {
+            if (!sideByName.has(name)) sideByName.set(name, side);
+            else if (sideByName.get(name) !== side) sideByName.set(name, null);
+        }
     });
 
     // 2. Bucket activities into cells[day][side].
@@ -924,11 +982,17 @@ function generateBoardScheduleContent(weekDates, allTasks, options) {
             const dayKey = dayKeyByISO[td.toDateString()];
             if (!dayKey) return;
             // Prefer an explicit side on the Demold row, then fall back to
-            // the matching Cast's side via projectNumber + castingNumber.
+            // the matching Cast's side via projectNumber + castingNumber, and
+            // finally — for manual rows with no castingNumber — via an
+            // unambiguous project-name match.
             let side = (t.castingSide === 'A' || t.castingSide === 'B') ? t.castingSide : null;
             if (!side) {
                 const k = _boardSideKey(t);
                 if (k) side = sideByKey.get(k) || null;
+            }
+            if (!side && !(t.castingNumber || '').toString().trim()) {
+                const name = (t.project || '').trim().toLowerCase();
+                if (name) side = sideByName.get(name) || null;
             }
             placeEntry(dayKey, side, 'DEMOLD', t);
             return;
@@ -1597,6 +1661,7 @@ export {
     generatePrintContent,
     generateFrozenDailyContent,
     generateBoardScheduleContent,
+    getUnresolvedBoardCastings,
     generateBuyInContent,
     applyPrintScaling,
     executePrint

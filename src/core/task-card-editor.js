@@ -48,10 +48,12 @@ export function makeTaskCardEditable(taskCard) {
     textarea.placeholder = 'Enter task description...';
     descDiv.replaceWith(textarea);
 
-    // Casting side dropdown — only for Cast-department tasks. Inserted above
-    // the description textarea; stored separately on the task_descriptions row.
+    // Casting side dropdown — for Cast-department tasks and manual Demold
+    // tasks. Inserted above the description textarea; scheduled tasks store
+    // the side on the task_descriptions row, manual tasks on their
+    // weekly_tasks row.
     const task = state.getAllTasks().find(t => t.id === taskId);
-    if (task && task.department === 'Cast') {
+    if (task && (task.department === 'Cast' || (task.isManual && task.department === 'Demold'))) {
         const originalSide = (task.castingSide === 'A' || task.castingSide === 'B') ? task.castingSide : '';
         taskCard.dataset.originalCastingSide = originalSide;
 
