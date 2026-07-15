@@ -378,12 +378,34 @@
                         <div class="pp-castings-wrap">
                             <div class="pp-castings-header">
                                 <h2 class="pp-castings-title">Casting Inventory</h2>
-                                <p class="pp-muted pp-castings-sub">Manage castings for this project. Casting numbers are unique within the project.</p>
+                                <p class="pp-muted pp-castings-sub">Manage castings for this project. Casting numbers are unique within the project.
+                                Use <b>Copy</b> on a casting to grab all its components — or a row's <b>Copy</b> for just that one — then <b>Paste</b> onto another casting.</p>
                             </div>
 
                             <div class="pp-tab-notes" id="pp-castings-notes-wrap">
                                 <label class="pp-tab-notes-label" for="pp-f-castings_notes">Notes</label>
                                 <textarea id="pp-f-castings_notes" class="pp-tab-notes-textarea" placeholder="Notes for this project's castings…"></textarea>
+                            </div>
+
+                            <div id="pp-castings-summary" class="pp-castings-summary" hidden>
+                                <div class="pp-cast-sum-card" title="Panels entered in inventory across all castings (quantity + extras), by component type">
+                                    <button type="button" class="pp-cast-sum-head" data-sum-toggle="total" aria-expanded="false">
+                                        <span class="pp-cast-sum-chev" aria-hidden="true">
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                                        </span>
+                                        <span class="pp-cast-sum-label"><b id="pp-cast-sum-total">0</b> panels in inventory</span>
+                                    </button>
+                                    <div class="pp-cast-sum-grid" id="pp-cast-sum-total-list" hidden></div>
+                                </div>
+                                <div class="pp-cast-sum-card pp-cast-sum-rej" title="Panels marked Rejected on the Tracking tab, by component type">
+                                    <button type="button" class="pp-cast-sum-head" data-sum-toggle="rejected" aria-expanded="false">
+                                        <span class="pp-cast-sum-chev" aria-hidden="true">
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                                        </span>
+                                        <span class="pp-cast-sum-label"><b id="pp-cast-sum-rejected">0</b> rejected</span>
+                                    </button>
+                                    <div class="pp-cast-sum-grid" id="pp-cast-sum-rejected-list" hidden></div>
+                                </div>
                             </div>
 
                             <div id="pp-castings-empty" class="pp-castings-empty" hidden>

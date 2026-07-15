@@ -920,6 +920,8 @@ async function loadAndRenderCastings() {
                 .map(c => c.id)
         );
         castInvExpandedProject = currentProjectNumber;
+        // Summary readouts start collapsed on every project.
+        castSumExpanded = new Set();
     }
     renderCastings();
 }
@@ -959,12 +961,90 @@ function getCastingsForActivePhase() {
     return currentCastings.filter(c => c.phase_id === currentPhaseId);
 }
 
+// Which summary cards are expanded ('total' / 'rejected'). Collapsed by
+// default; survives re-renders within the session.
+let castSumExpanded = new Set();
+
+// Project-wide readout above the casting list: total panels entered in
+// inventory (quantity + extras), and panels flagged Rejected on Tracking.
+function updateCastingsSummary() {
+    const wrap = document.getElementById('pp-castings-summary');
+    if (!wrap) return;
+    if (!currentProjectNumber || currentCastings.length === 0) {
+        wrap.hidden = true;
+        return;
+    }
+    // Panels entered in inventory, grouped by component type.
+    const totalByType = new Map();
+    let totalPanels = 0;
+    for (const c of currentCastings) {
+        for (const it of getInventoryFor(c.id)) {
+            const qty = (parseInt(it.quantity, 10) || 0) + (parseInt(it.extras, 10) || 0);
+            const key = (it.type || '').trim() || '(untyped)';
+            totalByType.set(key, (totalByType.get(key) || 0) + qty);
+            totalPanels += qty;
+        }
+    }
+    // Panels flagged Rejected on Tracking, grouped by component type.
+    const rejectedByType = new Map();
+    let totalRejected = 0;
+    for (const list of currentCastingComponents.values()) {
+        for (const comp of list) {
+            if (!comp.rejected) continue;
+            const key = (comp.type || String(comp.panel_id || '').split('.')[0] || '').trim() || '(untyped)';
+            rejectedByType.set(key, (rejectedByType.get(key) || 0) + 1);
+            totalRejected++;
+        }
+    }
+    const gridByType = (m) => [...m.entries()]
+        .sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }))
+        .map(([type, n]) => `
+            <span class="pp-cast-sum-item">
+                <span class="pp-cast-sum-type">${escapeHtml(type)}</span>
+                <span class="pp-cast-sum-n">${n}</span>
+            </span>`)
+        .join('');
+    const totalEl = document.getElementById('pp-cast-sum-total');
+    const rejEl = document.getElementById('pp-cast-sum-rejected');
+    const totalListEl = document.getElementById('pp-cast-sum-total-list');
+    const rejListEl = document.getElementById('pp-cast-sum-rejected-list');
+    if (totalEl) totalEl.textContent = String(totalPanels);
+    if (rejEl) rejEl.textContent = String(totalRejected);
+    if (totalListEl) totalListEl.innerHTML = totalByType.size ? gridByType(totalByType) : '';
+    if (rejListEl) rejListEl.innerHTML = totalRejected ? gridByType(rejectedByType) : '';
+    wrap.querySelector('.pp-cast-sum-rej')?.classList.toggle('pp-cast-sum-rej-has', totalRejected > 0);
+    // Collapse/expand state. A card with nothing to list keeps its chevron hidden.
+    const applyToggle = (key, listEl, hasEntries) => {
+        const head = wrap.querySelector(`[data-sum-toggle="${key}"]`);
+        if (!head || !listEl) return;
+        const open = hasEntries && castSumExpanded.has(key);
+        listEl.hidden = !open;
+        head.setAttribute('aria-expanded', String(open));
+        head.classList.toggle('pp-cast-sum-open', open);
+        head.classList.toggle('pp-cast-sum-empty', !hasEntries);
+    };
+    applyToggle('total', totalListEl, totalByType.size > 0);
+    applyToggle('rejected', rejListEl, totalRejected > 0);
+    wrap.hidden = false;
+}
+
+function handleCastingsSummaryToggle(e) {
+    const head = e.target.closest('[data-sum-toggle]');
+    if (!head || head.classList.contains('pp-cast-sum-empty')) return;
+    const key = head.getAttribute('data-sum-toggle');
+    if (castSumExpanded.has(key)) castSumExpanded.delete(key);
+    else castSumExpanded.add(key);
+    updateCastingsSummary();
+}
+
 function renderCastings() {
     const list = document.getElementById('pp-castings-list');
     const empty = document.getElementById('pp-castings-empty');
     const needsSave = document.getElementById('pp-castings-needs-save');
     const addRow = document.querySelector('.pp-castings-add');
     if (!list || !empty || !needsSave || !addRow) return;
+
+    updateCastingsSummary();
 
     const hasProject = !!currentProjectNumber;
     needsSave.hidden = hasProject;
@@ -1025,18 +1105,8 @@ function renderCastingCard(c) {
                 </div>
                 <span class="pp-cast-card-count">${countLabel}</span>
                 <div class="pp-cast-card-actions">
-                    <button class="pp-row-btn pp-row-btn-icon" data-action="copy-components" type="button" ${copyDisabled ? 'disabled' : ''} aria-label="Copy components" title="Copy components">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-                        </svg>
-                    </button>
-                    <button class="pp-row-btn pp-row-btn-icon" data-action="paste-components" type="button" ${hasComponentClipboard ? '' : 'disabled'} aria-label="Paste components" title="Paste components">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
-                            <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
-                        </svg>
-                    </button>
+                    <button class="pp-row-btn pp-row-btn-word" data-action="copy-components" type="button" ${copyDisabled ? 'disabled' : ''} title="Copy all components on this casting">Copy</button>
+                    <button class="pp-row-btn pp-row-btn-word" data-action="paste-components" type="button" ${hasComponentClipboard ? '' : 'disabled'} title="Paste copied components into this casting">Paste</button>
                     <button class="pp-row-btn pp-row-btn-delete" data-action="delete" type="button" aria-label="Delete casting" title="Delete casting">&times;</button>
                 </div>
             </div>
@@ -1064,6 +1134,7 @@ function renderInventoryBody(casting, items) {
                 <span class="pp-inv-header-num">FF Sq Ft</span>
                 <span>Remake Of</span>
             </div>
+            <div class="pp-inv-header-copy-spacer"></div>
             <div class="pp-inv-header-delete-spacer"></div>
         </div>
     `;
@@ -1150,6 +1221,7 @@ function renderInventoryRow(item, castingId) {
                 <input type="number" class="pp-inv-input pp-inv-input-num" data-field="ff_sq_ft" step="any" min="0" placeholder="0" value="${item.ff_sq_ft == null ? '' : escapeAttr(item.ff_sq_ft)}" />
                 ${remakeCellHtml}
             </div>
+            <button class="pp-inv-row-copy" type="button" data-action="copy-inventory-row" aria-label="Copy component" title="Copy this component — paste it with another casting's Paste button">Copy</button>
             <button class="pp-inv-row-delete" type="button" data-action="delete-inventory" aria-label="Delete component" title="Delete component">&times;</button>
         </div>
     `;
@@ -1972,6 +2044,7 @@ function updateCastingInventoryCount(castingId) {
     countEl.textContent = items.length === 0
         ? '0 components'
         : `${items.length} ${items.length === 1 ? 'type' : 'types'} · ${totalQty} pcs`;
+    updateCastingsSummary();
 }
 
 async function handleDeleteInventoryItem(castingId, itemId) {
@@ -3494,6 +3567,25 @@ function handleCopyComponents(castingId) {
     renderCastings();
 }
 
+function handleCopyInventoryRow(castingId, itemId) {
+    const item = getInventoryFor(castingId).find(it => it.id === itemId);
+    if (!item) return;
+    copiedComponents = [{
+        type: item.type,
+        width: item.width,
+        length: item.length,
+        color: item.color,
+        sealer: item.sealer,
+        quantity: item.quantity,
+        extras: item.extras,
+        cu_ft: item.cu_ft,
+        ff_sq_ft: item.ff_sq_ft
+    }];
+    const casting = currentCastings.find(c => c.id === castingId);
+    showToast(`Copied "${item.type || '(untitled)'}" from Cast ${casting?.casting_number || ''}. Use Paste on another casting.`);
+    renderCastings();
+}
+
 async function handlePasteComponents(targetCastingId) {
     if (!Array.isArray(copiedComponents) || copiedComponents.length === 0) return;
     if (!targetCastingId) return;
@@ -3761,12 +3853,14 @@ async function handleRejectedToggle(componentId, checkboxEl) {
     }
     target.rejected = next;
     renderTracking();
+    updateCastingsSummary();
     try {
         await setComponentRejected(componentId, next);
     } catch (err) {
         logger.error('[project-portal] setComponentRejected failed:', err);
         target.rejected = prev;
         renderTracking();
+        updateCastingsSummary();
         showToast('Could not save rejected flag — check connection.', 'error');
     }
 }
@@ -6878,6 +6972,9 @@ function wireEvents() {
     });
     document.getElementById('pp-print-label-list')?.addEventListener('change', updatePrintLabelSubmitState);
 
+    // Castings: summary readout expand/collapse
+    document.getElementById('pp-castings-summary')?.addEventListener('click', handleCastingsSummaryToggle);
+
     // Castings: row actions (delegation)
     const castingsList = document.getElementById('pp-castings-list');
     castingsList.addEventListener('click', (e) => {
@@ -6903,6 +7000,10 @@ function wireEvents() {
             const row = btn.closest('.pp-inv-row[data-inventory-id]');
             const itemId = row?.getAttribute('data-inventory-id');
             if (itemId) handleDeleteInventoryItem(castingId, itemId);
+        } else if (action === 'copy-inventory-row') {
+            const row = btn.closest('.pp-inv-row[data-inventory-id]');
+            const itemId = row?.getAttribute('data-inventory-id');
+            if (itemId) handleCopyInventoryRow(castingId, itemId);
         }
     });
     castingsList.addEventListener('input', (e) => {

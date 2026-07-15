@@ -702,6 +702,108 @@ body { overflow: visible; }
     box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
 }
 .pp-castings-header { margin-bottom: 18px; }
+
+/* Project-wide panel readouts above the casting list */
+.pp-castings-summary {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 0 0 16px 0;
+}
+.pp-cast-sum-card {
+    flex: 1 1 320px;
+    min-width: 0;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 10px 12px;
+}
+.pp-cast-sum-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    background: none;
+    border: none;
+    padding: 0;
+    text-align: left;
+    font-size: 12.5px;
+    color: #334155;
+    font-weight: 500;
+    cursor: pointer;
+    user-select: none;
+}
+.pp-cast-sum-head.pp-cast-sum-empty { cursor: default; }
+.pp-cast-sum-head:focus,
+.pp-cast-sum-head:hover {
+    background: none;
+    box-shadow: none;
+    outline: none;
+    color: #334155;
+}
+.pp-cast-sum-head:focus-visible {
+    outline: 2px solid #93c5fd;
+    outline-offset: 2px;
+}
+.pp-cast-sum-head b {
+    font-size: 14px;
+    font-weight: 700;
+    color: #0f172a;
+}
+.pp-cast-sum-chev {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    color: #94a3b8;
+    transition: transform 0.15s;
+}
+.pp-cast-sum-chev svg { width: 12px; height: 12px; display: block; }
+.pp-cast-sum-open .pp-cast-sum-chev { transform: rotate(90deg); }
+.pp-cast-sum-head.pp-cast-sum-empty .pp-cast-sum-chev { visibility: hidden; }
+.pp-cast-sum-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+    gap: 3px 8px;
+    margin-top: 8px;
+}
+.pp-cast-sum-grid[hidden] { display: none; }
+.pp-cast-sum-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 6px;
+    font-size: 11.5px;
+    background: #fff;
+    border: 1px solid #eef2f7;
+    border-radius: 4px;
+    padding: 2px 8px;
+    min-width: 0;
+}
+.pp-cast-sum-type {
+    font-weight: 600;
+    color: #334155;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.pp-cast-sum-n {
+    font-weight: 700;
+    color: #0f172a;
+    font-variant-numeric: tabular-nums;
+}
+.pp-cast-sum-rej-has {
+    background: #fef2f2;
+    border-color: #fecaca;
+}
+.pp-cast-sum-rej-has .pp-cast-sum-head { color: #7f1d1d; }
+.pp-cast-sum-rej-has .pp-cast-sum-head b { color: #b91c1c; }
+.pp-cast-sum-rej-has .pp-cast-sum-item { border-color: #fee2e2; }
+.pp-cast-sum-rej-has .pp-cast-sum-type { color: #7f1d1d; }
+.pp-cast-sum-rej-has .pp-cast-sum-n { color: #b91c1c; }
 .pp-castings-title {
     margin: 0 0 4px 0;
     font-size: 18px;
@@ -870,6 +972,29 @@ body { overflow: visible; }
     background: #fee2e2;
     color: #b91c1c;
 }
+.pp-cast-card .pp-row-btn-word {
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    color: #475569;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.2;
+    padding: 4px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, opacity 0.15s;
+    opacity: 0.6;
+}
+.pp-cast-card:hover .pp-row-btn-word { opacity: 1; }
+.pp-cast-card .pp-row-btn-word:hover:not(:disabled) {
+    background: #dbeafe;
+    color: #1d4ed8;
+    border-color: #bfdbfe;
+}
+.pp-cast-card .pp-row-btn-word:disabled {
+    opacity: 0.25;
+    cursor: not-allowed;
+}
 .pp-cast-card .pp-row-btn-icon {
     background: transparent;
     border: none;
@@ -937,6 +1062,7 @@ body { overflow: visible; }
     margin-bottom: 6px;
 }
 .pp-inv-header-grip-spacer { flex: 0 0 18px; }
+.pp-inv-header-copy-spacer { flex: 0 0 44px; }
 .pp-inv-header-delete-spacer { flex: 0 0 26px; }
 .pp-inv-header-fields {
     flex: 1 1 auto;
@@ -1144,6 +1270,29 @@ body { overflow: visible; }
 .pp-inv-input[type="number"] {
     -moz-appearance: textfield;
     appearance: textfield;
+}
+
+.pp-inv-row-copy {
+    flex: 0 0 44px;
+    width: 44px;
+    height: 26px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    color: #64748b;
+    border-radius: 4px;
+    font-size: 10.5px;
+    font-weight: 600;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+    opacity: 0.75;
+    transition: background 0.15s, color 0.15s, opacity 0.15s;
+}
+.pp-inv-row:hover .pp-inv-row-copy { opacity: 1; }
+.pp-inv-row-copy:hover {
+    background: #dbeafe;
+    color: #1d4ed8;
+    border-color: #bfdbfe;
 }
 
 .pp-inv-row-delete {
