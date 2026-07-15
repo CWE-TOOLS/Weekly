@@ -50,7 +50,13 @@
     padding: 12px 15px; margin-bottom: 9px;
     box-shadow: 0 1px 3px rgba(0,0,0,.06);
     transition: box-shadow .12s, border-color .12s, transform .12s;
+    position: relative;
   }
+  /* Stretched link: makes a div.card fully clickable while allowing
+     sibling links (e.g. the PDF chip) to sit above it. */
+  .cardlink { color: inherit; text-decoration: none; }
+  .cardlink::after { content: ""; position: absolute; inset: 0; }
+  .card .pdf { position: relative; z-index: 1; }
   .card:hover { border-color:#1f2937; box-shadow: 0 3px 10px rgba(0,0,0,.12); transform: translateY(-1px); }
   .num {
     flex: 0 0 auto; min-width: 46px; height: 38px; padding: 0 7px; border-radius: 7px;
@@ -126,13 +132,13 @@
         </a>
       </li>
       <li>
-        <a class="card" href="updating-project-file-racks.html">
+        <div class="card">
           <span class="num">1.3</span>
-          <span class="txt"><h3>Updating Project File Racks</h3>
+          <span class="txt"><h3><a class="cardlink" href="updating-project-file-racks.html">Updating Project File Racks</a></h3>
             <p>Keep the wall board and file racks below the TV in sync. Weekly, after Friday Buy-In.</p></span>
           <a class="pdf" href="updating-project-file-racks.pdf">PDF</a>
           <span class="arrow">&rsaquo;</span>
-        </a>
+        </div>
       </li>
       <li>
         <a class="card" href="create-jig-list.html">
