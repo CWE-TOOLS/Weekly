@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SOP — Create Jig List</title>
+<style>
+  @page { size: Letter portrait; margin: 0.5in; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    font-family: "Segoe UI", Arial, sans-serif;
+    color: #1a1a1a;
+    font-size: 10.5pt;
+    line-height: 1.35;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .sheet { width: 100%; }
+
+  /* Header */
+  .head {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    border-bottom: 3px solid #1f2937; padding-bottom: 8px; margin-bottom: 12px;
+  }
+  .head h1 { font-size: 25pt; letter-spacing: -0.3px; line-height: 1.05; }
+  .head h1 .eyebrow { display:block; font-size: 10pt; font-weight: 700; color:#6b7280; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 3px; }
+  .head .meta { font-size: 8.5pt; color: #555; text-align: right; line-height: 1.4; }
+  .head .meta b { color:#111827; }
+
+  .lead {
+    font-size: 9.5pt; color:#374151; background:#f3f4f6; border-left:4px solid #1f2937;
+    padding: 6px 11px; border-radius: 3px; margin-bottom: 12px;
+  }
+
+  /* Steps */
+  .step {
+    display: flex; gap: 10px; align-items: flex-start;
+    padding: 6px 0; break-inside: avoid;
+  }
+  .step + .step { border-top: 1px solid #e5e7eb; }
+  .n {
+    flex: 0 0 auto;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 23px; height: 23px; border-radius: 50%;
+    background: #1f2937; color: #fff; font-size: 11pt; font-weight: 700;
+    margin-top: 1px;
+  }
+  .body p { font-size: 9.8pt; color:#1f2937; }
+  .body .note { font-size: 8.6pt; color:#6b7280; margin-top: 2px; }
+  .body ul { margin: 3px 0 0 16px; font-size: 9.8pt; color:#1f2937; }
+  .body ul li { margin-top: 2px; }
+  b { color:#111827; }
+
+  /* UI element / file path chips */
+  .ui {
+    display:inline-block; font-weight:700; padding:0 6px; border-radius:3px;
+    font-size:9pt; border:1px solid #93c5fd; background:#dbeafe; color:#1e40af;
+  }
+  .path {
+    font-family: Consolas, "Courier New", monospace; font-size: 8.8pt;
+    background:#f3f4f6; border:1px solid #d1d5db; border-radius:3px; padding:0 5px;
+    white-space: nowrap;
+  }
+
+  /* RED circle for critical / write-on-sheet steps */
+  .hot .n { background: #b91c1c; }
+
+  .foot {
+    margin-top: 12px; border-top: 2px solid #1f2937; padding-top: 7px;
+    font-size: 8.5pt; color: #555; display:flex; justify-content:space-between;
+  }
+
+  /* Print button (screen only) */
+  .printbar { position: fixed; top: 14px; right: 14px; z-index: 50; }
+  .printbar button {
+    font-family: "Segoe UI", Arial, sans-serif; font-size: 11pt; font-weight: 700;
+    color: #fff; background: #1f2937; border: none; border-radius: 6px;
+    padding: 9px 16px; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,.25);
+    display: inline-flex; align-items: center; gap: 7px;
+  }
+  .printbar button:hover { background: #374151; }
+  .printbar button svg { width: 15px; height: 15px; }
+
+  /* Screen framing so it reads like a sheet of paper */
+  @media screen {
+    body { background: #e5e7eb; padding: 24px 0; }
+    .sheet {
+      width: 8.5in; min-height: 11in; margin: 0 auto;
+      background: #fff; padding: 0.5in;
+      box-shadow: 0 4px 18px rgba(0,0,0,.18);
+    }
+  }
+
+  @media print {
+    .printbar { display: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="printbar">
+  <button onclick="window.print()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+         stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="6 9 6 2 18 2 18 9"></polyline>
+      <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+      <rect x="6" y="14" width="12" height="8"></rect>
+    </svg>
+    Print
+  </button>
+</div>
+
+<div class="sheet">
+
+  <div class="head">
+    <h1><span class="eyebrow">Standard Operating Procedure</span>
+        Create Jig List</h1>
+    <div class="meta">
+      <b>Rev:</b> 1.0<br>
+      <b>Cadence:</b> Per casting — before release<br>
+      <b>Owner:</b> ____________
+    </div>
+  </div>
+
+  <div class="lead">
+    Create a set of drawings describing and listing all <b>screed jigs</b> required to complete a
+    casting. This is one of the items on the <b>Releasability Board</b> for each project folder.
+  </div>
+
+  <div class="step">
+    <span class="n">1</span>
+    <div class="body">
+      <p>Review the concrete components in the <b>project folder</b> and identify:</p>
+      <ul>
+        <li>The <b>direction each form will be screeded</b> <span class="note">(typically from the shortest side)</span></li>
+        <li>The <b>depths and quantity of scrim layers</b> in the concrete
+          <span class="note">(ex: 1 at 1/4&quot; from face of concrete and 1 at 1/2&quot; from face of concrete)</span></li>
+        <li>All <b>unique jig widths</b> for that casting</li>
+      </ul>
+      <p class="note">A jig can be used across multiple forms if the forms have the same width
+      or are within 1&quot; of each other.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <span class="n">2</span>
+    <div class="body">
+      <p>Make a list of <b>all jig widths needed</b> for the casting, including one for
+      <b>each scrim level</b> of each width.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <span class="n">3</span>
+    <div class="body">
+      <p>You will generally want <b>at least two</b> of each unique jig type.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <span class="n">4</span>
+    <div class="body">
+      <p>Open the <b>Jig List Tool</b> at
+      <span class="path">S:\!CWE - Tools\Custom Tools\Jig Making</span>.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <span class="n">5</span>
+    <div class="body">
+      <p>Fill out the <b>Project / Casting Information</b> at the top of the page.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <span class="n">6</span>
+    <div class="body">
+      <p>Fill out and <b>confirm the jig depths</b> required, based on the scrim levels
+      in the concrete.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <span class="n">7</span>
+    <div class="body">
+      <p>Fill out the <b>Panels</b> section with each unique width from the list in step 2.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <span class="n">8</span>
+    <div class="body">
+      <p><b>Name each jig</b>. <span class="note">(ex: by form type or width)</span></p>
+    </div>
+  </div>
+
+  <div class="step">
+    <span class="n">9</span>
+    <div class="body">
+      <p>Fill out the <b>quantity per jig type</b>. <span class="note">(typically 2)</span></p>
+    </div>
+  </div>
+
+  <div class="step">
+    <span class="n">10</span>
+    <div class="body">
+      <p>Click <span class="ui">Print / Save PDF</span> when all information is complete.</p>
+    </div>
+  </div>
+
+  <div class="step hot">
+    <span class="n">11</span>
+    <div class="body">
+      <p>Save to the <b>3D Drawing folder</b> of the project, labeled
+      <b>Jig List&nbsp;&ndash;&nbsp;Cast&nbsp;#X</b>.</p>
+    </div>
+  </div>
+
+  <div class="step hot">
+    <span class="n">12</span>
+    <div class="body">
+      <p><b>Print, hole punch, and place in the casting folder</b> on top of the 3D drawings
+      for that casting.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <span class="n">13</span>
+    <div class="body">
+      <p>Also click <span class="ui">Export JSON</span> and save under a folder with the
+      <b>project title</b> at
+      <span class="path">S:\!CWE - Tools\Custom Tools\Jig Making\Projects</span>.</p>
+      <p class="note">You can load this file in the future to edit or make new casting lists.</p>
+    </div>
+  </div>
+
+  <div class="foot">
+    <span><b>Bottom line:</b> every casting gets a printed Jig List in its folder and a saved JSON
+    in the Jig Making projects folder before release.</span>
+    <span>Create Jig List</span>
+  </div>
+
+</div>
+</body>
+</html>
