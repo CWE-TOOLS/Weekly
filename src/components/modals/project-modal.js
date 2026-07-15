@@ -45,6 +45,12 @@ let saveBtn = null;
 let cancelBtn = null;
 let currentProjectName = '';
 let originalDescriptions = new Map();
+let castingNavEl = null;
+let castingPrevBtn = null;
+let castingNextBtn = null;
+let castingNavLabel = null;
+let castingNavList = [];
+let castingNavIndex = -1;
 
 /**
  * Initialize project modal
@@ -84,6 +90,29 @@ export function initializeProjectModal() {
 
     // Initialize edit mode controls
     initializeEditMode();
+
+    // Casting prev/next navigation
+    castingNavEl = document.getElementById('casting-nav');
+    castingPrevBtn = document.getElementById('casting-prev-btn');
+    castingNextBtn = document.getElementById('casting-next-btn');
+    castingNavLabel = document.getElementById('casting-nav-label');
+    if (castingPrevBtn && castingNextBtn) {
+        castingPrevBtn.addEventListener('click', () => navigateCasting(-1));
+        castingNextBtn.addEventListener('click', () => navigateCasting(1));
+    }
+
+    // Arrow keys jump castings while the modal is open (unless typing)
+    document.addEventListener('keydown', (e) => {
+        if (!modalElement.classList.contains('show')) return;
+        if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+        const target = e.target;
+        if (target instanceof Element &&
+            (target.closest('input, textarea, select') || target.isContentEditable)) {
+            return;
+        }
+        e.preventDefault();
+        navigateCasting(e.key === 'ArrowLeft' ? -1 : 1);
+    });
 
     // Listen for project selection event from search
     on(EVENTS.PROJECT_SELECTED, ({ projectName }) => {
@@ -158,8 +187,102 @@ export function showProjectModal(projectName) {
     // Update edit mode UI
     updateEditModeUI();
 
+    // Update casting prev/next navigation
+    updateCastingNav(projectName, allTasks);
+
     // Emit event
     emit(EVENTS.MODAL_OPENED, { modalName: 'project-modal', projectName });
+}
+
+/**
+ * Sort key for casting numbers like "1", "2", "10", "1A" —
+ * numeric part first, then any suffix.
+ * @private
+ */
+function castingSortKey(castingNumber) {
+    const str = String(castingNumber || '').trim();
+    const match = str.match(/^(\d+)(.*)$/);
+    return match
+        ? { num: parseInt(match[1], 10), suffix: match[2] }
+        : { num: Number.MAX_SAFE_INTEGER, suffix: str };
+}
+
+/**
+ * Build the ordered list of sibling castings for the current project.
+ * Castings are the distinct sheet project names sharing the current task's
+ * projectNumber (sheet column H), ordered by castingNumber (column I).
+ * @private
+ * @returns {Array<{project: string, castingNumber: string}>}
+ */
+function buildCastingNavList(projectName, allTasks) {
+    const current = allTasks.find(t => t.project === projectName);
+    const projNum = current ? String(current.projectNumber || '').trim() : '';
+    if (!projNum) return [];
+
+    const byProject = new Map(); // project name -> {project, castingNumber, sortKey}
+    for (const task of allTasks) {
+        if (String(task.projectNumber || '').trim() !== projNum) continue;
+        const castNum = String(task.castingNumber || '').trim();
+        if (!castNum) continue;
+        const existing = byProject.get(task.project);
+        const sortKey = castingSortKey(castNum);
+        if (!existing ||
+            sortKey.num < existing.sortKey.num ||
+            (sortKey.num === existing.sortKey.num && sortKey.suffix < existing.sortKey.suffix)) {
+            byProject.set(task.project, { project: task.project, castingNumber: castNum, sortKey });
+        }
+    }
+
+    return Array.from(byProject.values()).sort((a, b) =>
+        a.sortKey.num - b.sortKey.num ||
+        (a.sortKey.suffix < b.sortKey.suffix ? -1 : a.sortKey.suffix > b.sortKey.suffix ? 1 : 0)
+    );
+}
+
+/**
+ * Refresh the casting nav buttons/label for the project on display.
+ * Hidden when the project has no sibling castings to jump to.
+ * @private
+ */
+function updateCastingNav(projectName, allTasks) {
+    if (!castingNavEl || !castingPrevBtn || !castingNextBtn || !castingNavLabel) return;
+
+    castingNavList = buildCastingNavList(projectName, allTasks);
+    castingNavIndex = castingNavList.findIndex(c => c.project === projectName);
+
+    if (castingNavIndex === -1 || castingNavList.length < 2) {
+        castingNavEl.style.display = 'none';
+        return;
+    }
+
+    const current = castingNavList[castingNavIndex];
+    const prev = castingNavList[castingNavIndex - 1];
+    const next = castingNavList[castingNavIndex + 1];
+
+    castingNavEl.style.display = 'flex';
+    castingNavLabel.textContent = `Cast ${current.castingNumber} · ${castingNavIndex + 1} of ${castingNavList.length}`;
+    castingPrevBtn.disabled = !prev;
+    castingNextBtn.disabled = !next;
+    castingPrevBtn.title = prev ? `Previous casting: Cast ${prev.castingNumber}` : 'No previous casting';
+    castingNextBtn.title = next ? `Next casting: Cast ${next.castingNumber}` : 'No next casting';
+}
+
+/**
+ * Jump to the previous/next casting of the current project.
+ * @private
+ * @param {number} delta - -1 for previous, +1 for next
+ */
+function navigateCasting(delta) {
+    if (castingNavIndex === -1) return;
+    const target = castingNavList[castingNavIndex + delta];
+    if (!target) return;
+
+    // Leave edit mode before swapping content so unsaved textareas aren't lost silently
+    if (saveBtn && saveBtn.style.display !== 'none') {
+        cancelEditMode();
+    }
+
+    showProjectModal(target.project);
 }
 
 /**

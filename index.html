@@ -195,7 +195,14 @@
         <div class="project-modal" id="project-modal">
             <div class="project-content">
                 <div class="project-header">
-                    <h2 class="project-title" id="project-title">Build Plan</h2>
+                    <div class="project-title-group">
+                        <h2 class="project-title" id="project-title">Build Plan</h2>
+                        <div class="casting-nav" id="casting-nav" style="display: none;">
+                            <button class="casting-nav-btn" id="casting-prev-btn" title="Previous casting">&lsaquo;</button>
+                            <span class="casting-nav-label" id="casting-nav-label"></span>
+                            <button class="casting-nav-btn" id="casting-next-btn" title="Next casting">&rsaquo;</button>
+                        </div>
+                    </div>
                     <div class="header-actions">
                         <button id="unlock-editing-btn">🔒 Unlock Editing</button>
                         <button id="edit-plan-btn" style="display: none;">✏️ Edit Plan</button>
