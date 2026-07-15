@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="color-scheme" content="only light">
 <title>SOP — Print End-of-Week Top Line</title>
 <style>
   @page { size: Letter portrait; margin: 0.5in; }
@@ -96,6 +97,7 @@
   }
 
   @media print {
+    html, body { background: #fff !important; }
     .printbar { display: none !important; }
   }
 </style>

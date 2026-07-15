@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="color-scheme" content="only light">
 <title>SOP — Color Logs</title>
 <style>
   @page { size: Letter portrait; margin: 0.5in; }
@@ -97,7 +98,7 @@
     body { background: #e5e7eb; padding: 24px 0; }
     .sheet { width: 8.5in; margin: 0 auto; background: #fff; padding: 0.5in; box-shadow: 0 4px 18px rgba(0,0,0,.18); }
   }
-  @media print { .printbar { display:none !important; } }
+  @media print { html, body { background: #fff !important; } .printbar { display: none !important; } }
 </style>
 </head>
 <body>
