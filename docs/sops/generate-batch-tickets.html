@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="color-scheme" content="only light">
-<title>SOP — Inputting Staging</title>
+<title>SOP — Generate Batch Tickets</title>
 <style>
   @page { size: Letter portrait; margin: 0.5in; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -63,6 +63,15 @@
   }
   a.sopref:hover { background:#ddd6fe; }
 
+  /* Batch-type chips (match the printed ticket colors) */
+  .chip {
+    display:inline-block; font-weight:700; padding:0 6px; border-radius:3px;
+    font-size:8.6pt; border:1px solid;
+  }
+  .c-face  { background:#ffedd5; color:#9a3412; border-color:#fdba74; }
+  .c-first { background:#dbeafe; color:#1e40af; border-color:#93c5fd; }
+  .c-final { background:#fef9c3; color:#854d0e; border-color:#fde047; }
+
   /* RED circle for critical steps */
   .hot .n { background: #b91c1c; }
 
@@ -116,97 +125,128 @@
 
   <div class="head">
     <h1><span class="eyebrow">Standard Operating Procedure</span>
-        Inputting Staging</h1>
+        Generate Batch Tickets</h1>
     <div class="meta">
       <b>Rev:</b> 1.0<br>
-      <b>Cadence:</b> Per casting — before the work is scheduled<br>
+      <b>Cadence:</b> Per casting — before cast day<br>
       <b>Owner:</b> ____________
     </div>
   </div>
 
   <div class="lead">
-    The mechanics of entering <b>staging descriptions</b> in the Project Portal — the
-    department-by-day grid where task descriptions are written ahead of time. What you write
-    here automatically appears on the matching tasks on the <b>weekly schedule board</b>.
-    <b>What to write</b> for each department is covered by its own SOP —
-    ex: <a class="sopref" href="mill-and-form-out-staging.html">Mill and Form Out Staging</a>
+    Generate and print the <b>concrete batching tickets</b> for a casting from the Project
+    Portal. The generator scales the <b>Color Log</b> recipe to the casting's volume and prints
+    one color-coded page per batch — <span class="chip c-face">FACE</span>,
+    <span class="chip c-first">FIRST BACK UP</span>, and
+    <span class="chip c-final">FINAL BACK UP</span> — for the casting floor.
   </div>
 
   <div class="step">
     <span class="n">1</span>
     <div class="body">
-      <p>Open the project in the <b>Project Portal</b> and go to the <b>Staging</b> tab.
-      <span class="note">Staging needs castings first — the project must be saved with at least
-      one casting in Casting Inventory.</span></p>
+      <p><b>Confirm the Color Log is ready.</b> The project must be <b>saved</b>, a
+      <b>Color Log</b> must exist for the project, and it must include a <b>Sand</b> entry.
+      <span class="note">Tickets scale their ingredients from the Color Log — no log with sand,
+      no ticket. See SOP: <a class="sopref" href="color-logs.html">Color Logs</a></span></p>
     </div>
   </div>
 
   <div class="step">
     <span class="n">2</span>
     <div class="body">
-      <p>Click the <b>casting's pill</b> at the top to bring that casting into view.
-      <span class="note">On phased projects, only castings in the phase you're viewing appear.</span></p>
+      <p><b>Verify every component in the casting</b> has its <b>Cu Ft</b> and
+      <b>finish face square footage</b> filled out in Casting Inventory.
+      <span class="note">If any row is missing either value, Import from Tracking won't
+      import the casting's info at all.</span></p>
     </div>
   </div>
 
   <div class="step">
     <span class="n">3</span>
     <div class="body">
-      <p>For each department row, use <span class="ui">+ Add Day</span> /
-      <span class="ui">Remove Day</span> until the day columns match <b>how long that
-      department's work runs</b>.</p>
+      <p>Open the project in the <b>Project Portal</b> and go to the <b>Batch Tickets</b> tab
+      <span class="note">(left sidebar, just after Color Log)</span>.</p>
     </div>
   </div>
 
   <div class="step">
     <span class="n">4</span>
     <div class="body">
-      <p>Drop any departments that don't apply to this casting with
-      <span class="ui">Remove Department</span>; add missing ones with the
-      <span class="ui">+ Department…</span> drop-down.</p>
+      <p>Confirm the project-wide <span class="ui">Target Slump</span> for each batch type.
+      <span class="note">Defaults: Face Mix 6&quot;, First Back Up 5&quot;, FINAL Back Up 5&quot;.
+      These draw the slump bullseye on every printed ticket.</span></p>
     </div>
   </div>
 
   <div class="step">
     <span class="n">5</span>
     <div class="body">
-      <p><b>Click a day to expand it</b>, then type the description of what that department
-      does on that day. <span class="note">Each line you type prints as its own line on the
-      weekly board card.</span></p>
+      <p>Pick the casting from the <b>casting pills</b>.
+      <span class="note">On phased projects, batch tickets are handled per phase — work within
+      the phase you're in.</span></p>
     </div>
   </div>
 
   <div class="step">
     <span class="n">6</span>
     <div class="body">
-      <p>Repeat down the grid — <b>every department, every day</b> — until the casting is
-      fully described.</p>
+      <p>Enter the volume: <b>Total Cu Ft</b> (required — the whole recipe scales from this)
+      and <b>Face Sq Ft</b>, or click <span class="ui">Import from Tracking</span> to pull
+      both in automatically.</p>
     </div>
   </div>
 
   <div class="step">
     <span class="n">7</span>
     <div class="body">
-      <p>Repeat for <b>each casting</b>. For castings that repeat, fully stage one, then use
-      <span class="ui">Copy Staging</span> / <span class="ui">Paste Staging</span> to drop the
-      same scaffold onto the others. <span class="note">Pasting overwrites the target casting —
-      the portal asks you to confirm.</span></p>
+      <p>Set the <b>pigment reduction %</b> <span class="note">(default 50%)</span> and choose
+      whether the <span class="chip c-first">FIRST BACK UP</span> and
+      <span class="chip c-final">FINAL BACK UP</span> batches get the reduction.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <span class="n">8</span>
+    <div class="body">
+      <p>Fill out <b>Batched by</b> and any <b>Notes</b> — both print on the ticket.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <span class="n">9</span>
+    <div class="body">
+      <p><b>Review the scaled batches</b> the generator produced — batch count, batch type, and
+      scaled ingredients. <span class="note">The generator splits batches by standard sand
+      sizes, labels them by the Color Log's cast method (Spray Up / Direct Cast), scales the
+      recipe by sand weight, and applies the material rules (sand swaps, fiber&rarr;Cemfill,
+      pigment reduction). Full rules — see SOP:
+      <a class="sopref" href="principles-of-batching.html">Principles of Batching</a></span></p>
     </div>
   </div>
 
   <div class="step hot">
-    <span class="n">8</span>
+    <span class="n">10</span>
     <div class="body">
-      <p><b>Confirm it saved.</b> The portal autosaves as you type — watch the save indicator
-      near the top-right of the project header. Descriptions appear automatically on the
-      matching weekly-board tasks, matched by <b>casting&nbsp;#, department, and day order</b>.</p>
+      <p><b>Wait for the save indicator to read &ldquo;Saved&rdquo;</b> before printing, so the
+      tickets reflect your latest inputs.</p>
+    </div>
+  </div>
+
+  <div class="step hot">
+    <span class="n">11</span>
+    <div class="body">
+      <p>Click <span class="ui">Print Batch Tickets</span>, pick the castings to print in the
+      dialog, and print. <b>One page per batch</b>, color-coded:
+      <span class="chip c-face">FACE</span> orange,
+      <span class="chip c-first">FIRST BACK UP</span> blue,
+      <span class="chip c-final">FINAL BACK UP</span> yellow.</p>
     </div>
   </div>
 
   <div class="foot">
-    <span><b>Bottom line:</b> every casting is fully described in the Staging grid before its
-    tasks land on the weekly board.</span>
-    <span>Inputting Staging</span>
+    <span><b>Bottom line:</b> every casting goes to the floor with a printed, color-coded ticket
+    for each batch, scaled from the Color Log recipe.</span>
+    <span>Generate Batch Tickets</span>
   </div>
 
 </div>
