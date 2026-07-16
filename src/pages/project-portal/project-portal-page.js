@@ -7136,13 +7136,15 @@ function getBatchTicketList(castingId) {
     return arr.slice().sort((a, b) => rank(a) - rank(b));
 }
 
-// Active ticket for a casting: the one matching the color-pill selection,
-// falling back to the first in the effective list.
+// Active ticket for a casting: the one matching the color-pill selection.
+// With no explicit selection yet, prefer a real color over the legacy
+// NULL-color slot — "No Color" sorts first but shouldn't mask a valid color.
 function getBatchTicketFor(castingId) {
     const list = getBatchTicketList(castingId);
     if (list.length === 1) return list[0];
     const selKey = currentBatchColorSel.get(castingId);
-    return list.find(t => (t.colorLogId || '') === selKey) || list[0];
+    const selected = list.find(t => (t.colorLogId || '') === selKey);
+    return selected || list.find(t => t.colorLogId) || list[0];
 }
 
 /**
@@ -8066,7 +8068,10 @@ async function handleSelectBatchCasting(castingId) {
 function handleSelectBatchColor(colorKey) {
     const castingId = currentBatchCastingId;
     if (!castingId) return;
-    if ((currentBatchColorSel.get(castingId) || '') === colorKey) return;
+    // Compare against the stored key only — with no selection stored yet the
+    // default pill is a real color, so a first click on "No Color" ('') must
+    // not be mistaken for a no-op.
+    if (currentBatchColorSel.get(castingId) === colorKey) return;
     // Pending saves hold their ticket object, so no flush needed — the debounce
     // fires against the right ticket even after switching pills.
     currentBatchColorSel.set(castingId, colorKey);
