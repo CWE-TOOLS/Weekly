@@ -16,10 +16,18 @@
 
   /* Header */
   .head {
-    display: flex; align-items: flex-end; justify-content: space-between;
+    display: flex; align-items: flex-end; justify-content: space-between; gap: 12px;
     border-bottom: 3px solid #1f2937; padding-bottom: 8px; margin-bottom: 11px;
   }
-  .head h1 { font-size: 25pt; letter-spacing: -0.3px; line-height: 1.05; }
+  .head h1 { font-size: 25pt; letter-spacing: -0.3px; line-height: 1.05; flex: 1 1 auto; }
+  /* SOP number badge — mirrors the section-number squares on the SOP index */
+  .sopnum {
+    flex: 0 0 auto; min-width: 48px; height: 44px; padding: 0 9px; border-radius: 9px;
+    background: #1f2937; color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 17pt; font-weight: 800; letter-spacing: -.5px;
+    margin-bottom: 3px;
+  }
   .head h1 .eyebrow { display:block; font-size: 10pt; font-weight: 700; color:#6b7280; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 3px; }
   .head .meta { font-size: 8.5pt; color: #555; text-align: right; line-height: 1.4; }
   .head .meta b { color:#111827; }
@@ -50,8 +58,9 @@
 
   .foot {
     margin-top: 11px; border-top: 2px solid #1f2937; padding-top: 6px;
-    font-size: 8.5pt; color: #555; display:flex; justify-content:space-between;
+    font-size: 8.5pt; color: #555; display:flex; justify-content:space-between; gap: 14px;
   }
+  .foot span:last-child { flex: 0 0 auto; white-space: nowrap; }
 
   /* Print button (screen only) */
   .printbar { position: fixed; top: 14px; right: 14px; z-index: 50; }
@@ -88,6 +97,7 @@
 <div class="sheet">
 
   <div class="head">
+    <span class="sopnum">4.4</span>
     <h1><span class="eyebrow">Standard Operating Procedure</span>
         Generate Pic Lists</h1>
     <div class="meta">
@@ -184,7 +194,7 @@
 
   <div class="foot">
     <span><b>Bottom line:</b> With Sales Orders verified, run the Product Sales report (Unfulfilled/Started/Fulfilled, dated next Monday): print the Facilities master, a list per department, and the Non-Stocked / Tool lists — then rack the Team Leader lists for staging.</span>
-    <span>Generate Pic Lists <span style="display:inline-block;background:#1f2937;color:#fff;font-weight:800;border-radius:4px;padding:1px 9px;margin-left:7px;letter-spacing:.5px">4.4</span></span>
+    <span><b>SOP 4.4</b> — Generate Pic Lists</span>
   </div>
 
 </div>

@@ -16,10 +16,18 @@
 
   /* Header */
   .head {
-    display: flex; align-items: flex-end; justify-content: space-between;
+    display: flex; align-items: flex-end; justify-content: space-between; gap: 12px;
     border-bottom: 3px solid #1f2937; padding-bottom: 8px; margin-bottom: 14px;
   }
-  .head h1 { font-size: 24pt; letter-spacing: -0.3px; line-height: 1.05; }
+  .head h1 { font-size: 24pt; letter-spacing: -0.3px; line-height: 1.05; flex: 1 1 auto; }
+  /* SOP number badge — mirrors the section-number squares on the SOP index */
+  .sopnum {
+    flex: 0 0 auto; min-width: 48px; height: 44px; padding: 0 9px; border-radius: 9px;
+    background: #1f2937; color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 17pt; font-weight: 800; letter-spacing: -.5px;
+    margin-bottom: 3px;
+  }
   .head h1 .eyebrow { display:block; font-size: 10pt; font-weight: 700; color:#6b7280; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 3px; }
   .head .meta { font-size: 8.5pt; color: #555; text-align: right; line-height: 1.4; }
   .head .meta b { color:#111827; }
@@ -83,8 +91,9 @@
 
   .foot {
     margin-top: 16px; border-top: 2px solid #1f2937; padding-top: 7px;
-    font-size: 8.5pt; color: #555; display:flex; justify-content:space-between;
+    font-size: 8.5pt; color: #555; display:flex; justify-content:space-between; gap: 14px;
   }
+  .foot span:last-child { flex: 0 0 auto; white-space: nowrap; }
 
   /* Print button (screen only) */
   .printbar { position: fixed; top: 14px; right: 14px; z-index: 50; }
@@ -121,6 +130,7 @@
 <div class="sheet">
 
   <div class="head">
+    <span class="sopnum">4</span>
     <h1><span class="eyebrow">Process Overview</span>
         Material Inflow Management</h1>
     <div class="meta">
@@ -148,7 +158,7 @@
       <span class="arr">›</span>
       <div class="fcard"><span class="step">2</span><div class="ftitle">2nd-Half Plan Meeting</div><div class="fsub">prepare Sales Quotes</div></div>
       <span class="arr">›</span>
-      <div class="fcard"><span class="step">3</span><div class="ftitle">Final Reconcile</div><div class="fsub">match Releasability exactly</div></div>
+      <div class="fcard"><span class="step">3</span><div class="ftitle">Final Reconcile</div><div class="fsub">all projects in the month to be ordered</div></div>
       <span class="arr">›</span>
       <div class="fcard"><span class="step">4</span><div class="ftitle">Generate Order</div><div class="fsub">Quotes report</div></div>
       <span class="arr">›</span>
@@ -204,7 +214,7 @@
 
   <div class="foot">
     <span><b>Bottom line:</b> Quote every casting once (dated the 1st) → buy the month in bulk → each week cut Sales Orders (next Monday) into pic lists to stage the floor → email actual usage. Quotes procure monthly; orders pull weekly.</span>
-    <span>Material Inflow Management <span style="display:inline-block;background:#1f2937;color:#fff;font-weight:800;border-radius:4px;padding:1px 9px;margin-left:7px;letter-spacing:.5px">4</span></span>
+    <span><b>Section 4</b> — Material Inflow Management</span>
   </div>
 
 </div>
