@@ -30,6 +30,7 @@ import {
 } from './releasability-state.js';
 import {
   TRACKING_ITEMS,
+  TRACKING_ITEM_LABELS,
   PROJECT_SOURCE,
   VALIDATION,
   STATUS,
@@ -1428,7 +1429,8 @@ function updateCellVisual(cell, newStatus) {
   // Update tooltip
   const project = getAllProjects().find(p => p.id === cell.dataset.projectId);
   if (project) {
-    cell.title = `${project.project} - ${cell.dataset.trackingItem}: ${statusConfig.label}`;
+    const itemLabel = TRACKING_ITEM_LABELS[cell.dataset.trackingItem] || cell.dataset.trackingItem;
+    cell.title = `${project.project} - ${itemLabel}: ${statusConfig.label}`;
   }
 
   // Add visual feedback (flash animation)

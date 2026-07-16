@@ -91,6 +91,16 @@ export const TRACKING_ITEMS = [
 ];
 
 /**
+ * Display-only header overrides for tracking items.
+ * Keys are the canonical TRACKING_ITEMS names — those are also the
+ * tracking_status keys persisted in Supabase, so never rename them;
+ * change what the column shows here instead.
+ */
+export const TRACKING_ITEM_LABELS = {
+  'Jig List': 'Jig List / Cross-Section'
+};
+
+/**
  * Shortened display names for tracking items (for narrow columns)
  * Maps full name to abbreviated version
  */

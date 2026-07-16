@@ -8,7 +8,7 @@
  */
 
 import { getMonday, getWeekMonth, getWeekOfMonth } from '../../utils/date-utils.js';
-import { TRACKING_ITEMS, STATUS, STATUS_DISPLAY } from '../../config/releasability-config.js';
+import { TRACKING_ITEMS, TRACKING_ITEM_LABELS, STATUS, STATUS_DISPLAY } from '../../config/releasability-config.js';
 import { isWeekCollapsed } from './releasability-state.js';
 
 // Callbacks for project actions (set by releasability-page.js to avoid circular dependency)
@@ -139,8 +139,9 @@ function createHeaderRow() {
   TRACKING_ITEMS.forEach((item, index) => {
     const headerCell = document.createElement('div');
     headerCell.className = 'header-cell tracking-item-header';
-    headerCell.textContent = item;
-    headerCell.title = item; // Tooltip with full name
+    const label = TRACKING_ITEM_LABELS[item] || item;
+    headerCell.textContent = label;
+    headerCell.title = label; // Tooltip with full name
     headerCell.dataset.trackingIndex = index; // Add index for individual targeting
     cells.push(headerCell);
   });
@@ -558,7 +559,7 @@ function createStatusCell(project, trackingItem) {
   cell.appendChild(icon);
 
   // Tooltip
-  cell.title = `${project.project} - ${trackingItem}: ${statusConfig.label}`;
+  cell.title = `${project.project} - ${TRACKING_ITEM_LABELS[trackingItem] || trackingItem}: ${statusConfig.label}`;
 
   return cell;
 }
