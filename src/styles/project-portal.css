@@ -5964,3 +5964,142 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
     line-height: 1.4;
     white-space: nowrap;
 }
+
+/* ============================================================
+   Jig List tab — ported GFRC Scrim Jig Generator
+   (src/pages/project-portal/jig-list.js)
+   All screen rules are scoped to the jig-list panel so nothing
+   leaks in or out. Print-page CSS lives in jig-list.js — the
+   hidden print iframe gets its own document.
+   ============================================================ */
+.pp-tab-panel[data-panel="jig-list"] {
+    --ink: #1a1a1a; --sub: #555; --line: #111; --blue: #1f3a93;
+    --tan: #efe2c2; --wall: #d9d9d9; --hdr: #eaeaea; --rowb: #f6f1e6;
+}
+.pp-tab-panel[data-panel="jig-list"] #jig-list-root {
+    font-family: 'Segoe UI', Arial, Helvetica, sans-serif;
+    color: var(--ink);
+}
+
+/* ---------- top toolbar (in-panel, non-fixed) ---------- */
+.pp-tab-panel[data-panel="jig-list"] .bar{display:flex;flex-wrap:wrap;align-items:center;gap:12px;
+     padding:9px 16px;background:#ffffff;color:#0f172a;font-size:14px;border-radius:8px 8px 0 0;
+     border:1px solid #e2e8f0;border-bottom:none}
+.pp-tab-panel[data-panel="jig-list"] .bar b{font-weight:600;color:#0f172a}
+.pp-tab-panel[data-panel="jig-list"] .bar .savestat{font-size:12px;color:#64748b;min-width:60px}
+.pp-tab-panel[data-panel="jig-list"] .bar .sp{margin-left:auto}
+.pp-tab-panel[data-panel="jig-list"] .bar .actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-left:auto}
+.pp-tab-panel[data-panel="jig-list"] .bar button{background:#1d4ed8;color:#fff;border:none;border-radius:6px;
+     padding:8px 14px;font-size:13px;font-weight:500;cursor:pointer;transition:background 0.15s}
+.pp-tab-panel[data-panel="jig-list"] .bar button:hover{background:#1e40af}
+.pp-tab-panel[data-panel="jig-list"] .bar button.ghost{background:#e2e8f0;color:#1e293b}
+.pp-tab-panel[data-panel="jig-list"] .bar button.ghost:hover{background:#cbd5e1}
+
+/* ---------- print-set bar (in-panel, non-fixed) ---------- */
+.pp-tab-panel[data-panel="jig-list"] .vbar{background:#f8fafc;color:#334155;
+      display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:7px 16px;
+      border:1px solid #e2e8f0;border-bottom:none;min-height:38px}
+.pp-tab-panel[data-panel="jig-list"] .vbar .vlab{font-size:12px;font-weight:600;color:#64748b;margin-right:4px}
+.pp-tab-panel[data-panel="jig-list"] .vbar button{background:#fff;color:#334155;border:1px solid #cbd5e1;border-radius:5px;
+      padding:5px 11px;font-size:12.5px;font-weight:600;cursor:pointer;line-height:1;transition:background 0.15s,color 0.15s}
+.pp-tab-panel[data-panel="jig-list"] .vbar button:hover{background:#f1f5f9;color:#0f172a}
+.pp-tab-panel[data-panel="jig-list"] .vbar button.active{background:#1d4ed8;border-color:#1d4ed8;color:#fff}
+.pp-tab-panel[data-panel="jig-list"] .vbar button.active:hover{background:#1e40af;border-color:#1e40af}
+
+/* work surface the editor + preview pages sit on */
+.pp-tab-panel[data-panel="jig-list"] .doc{background:#e9edf2;padding:20px 12px 40px;
+      border-radius:0 0 8px 8px;border:1px solid #e2e8f0;border-top:none;overflow-x:auto}
+
+/* ---------- editor card ---------- */
+.pp-tab-panel[data-panel="jig-list"] .editor{width:8.5in;max-width:100%;margin:0 auto 22px;background:#fff;border-radius:8px;
+        border:1px solid #e2e8f0;box-shadow:0 1px 4px rgba(15,23,42,.08);padding:18px 22px 22px}
+.pp-tab-panel[data-panel="jig-list"] .editor h2{font-size:14px;margin:18px 0 8px;letter-spacing:.4px;text-transform:uppercase;color:#444;
+           border-bottom:1px solid #e3e3e3;padding-bottom:5px}
+.pp-tab-panel[data-panel="jig-list"] .editor h2:first-child{margin-top:0}
+.pp-tab-panel[data-panel="jig-list"] .editor .hint{font-size:12px;color:#777;margin:0 0 10px}
+.pp-tab-panel[data-panel="jig-list"] .fields{display:flex;flex-wrap:wrap;gap:14px}
+.pp-tab-panel[data-panel="jig-list"] .fld{display:flex;flex-direction:column;gap:3px}
+.pp-tab-panel[data-panel="jig-list"] .fld label{font-size:11px;color:#666;font-weight:600}
+.pp-tab-panel[data-panel="jig-list"] .fld input{border:1px solid #c8c8c8;border-radius:5px;padding:6px 8px;font-size:13px}
+.pp-tab-panel[data-panel="jig-list"] .fld .u{font-size:11px;color:#999}
+
+.pp-tab-panel[data-panel="jig-list"] table.edit{border-collapse:collapse;width:100%;font-size:13px}
+.pp-tab-panel[data-panel="jig-list"] table.edit th{background:#f1f1f1;border:1px solid #ddd;padding:6px 8px;text-align:left;font-size:11.5px;color:#555}
+.pp-tab-panel[data-panel="jig-list"] table.edit td{border:1px solid #e2e2e2;padding:3px 4px}
+.pp-tab-panel[data-panel="jig-list"] table.edit input{width:100%;border:1px solid transparent;border-radius:4px;padding:5px 6px;font-size:13px;background:#fcfcfc}
+.pp-tab-panel[data-panel="jig-list"] table.edit input:focus{border-color:#1d4ed8;background:#fff;outline:none}
+.pp-tab-panel[data-panel="jig-list"] table.edit .row-n{width:34px;text-align:center;color:#999;font-size:12px}
+.pp-tab-panel[data-panel="jig-list"] table.edit .del{width:34px;text-align:center}
+.pp-tab-panel[data-panel="jig-list"] table.edit .del button{background:#eee;border:1px solid #d8d8d8;color:#a33;border-radius:4px;
+      cursor:pointer;width:26px;height:26px;font-size:14px;line-height:1}
+.pp-tab-panel[data-panel="jig-list"] table.edit .del button:hover{background:#fdecec}
+.pp-tab-panel[data-panel="jig-list"] .addbtn{margin-top:8px;background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;border-radius:6px;
+        padding:7px 12px;font-size:13px;font-weight:600;cursor:pointer;transition:background 0.15s}
+.pp-tab-panel[data-panel="jig-list"] .addbtn:hover{background:#dbeafe}
+.pp-tab-panel[data-panel="jig-list"] .warn{color:#b23;font-size:12px;margin-top:6px}
+.pp-tab-panel[data-panel="jig-list"] .toolrow{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.pp-tab-panel[data-panel="jig-list"] .toolrow button{background:#f4f4f4;border:1px solid #d6d6d6;color:#333;border-radius:6px;
+        padding:7px 12px;font-size:13px;font-weight:600;cursor:pointer}
+.pp-tab-panel[data-panel="jig-list"] .toolrow button:hover{background:#ececec}
+.pp-tab-panel[data-panel="jig-list"] .toolrow button.danger{color:#a33}
+.pp-tab-panel[data-panel="jig-list"] .collapse-h{cursor:pointer;user-select:none}
+.pp-tab-panel[data-panel="jig-list"] .collapse-h::before{content:'\25BE  ';font-size:11px;color:#999}
+.pp-tab-panel[data-panel="jig-list"] .collapsed .collapse-h::before{content:'\25B8  '}
+.pp-tab-panel[data-panel="jig-list"] .collapsed .collapse-body{display:none}
+
+/* ---------- generated page (screen preview) ---------- */
+.pp-tab-panel[data-panel="jig-list"] .page{width:8.5in;min-height:11in;background:#fff;margin:0 auto 18px;padding:0.5in;
+      border:1px solid #e2e8f0;box-shadow:0 1px 4px rgba(15,23,42,.10);position:relative}
+.pp-tab-panel[data-panel="jig-list"] h1{font-size:22px;font-weight:700;margin:0}
+.pp-tab-panel[data-panel="jig-list"] .titlerow{display:flex;justify-content:space-between;align-items:flex-end;
+          border-bottom:1.5px solid var(--line);padding-bottom:8px;margin-bottom:16px}
+.pp-tab-panel[data-panel="jig-list"] .titlerow .meta{text-align:right;font-size:12px;color:var(--sub);line-height:1.5}
+.pp-tab-panel[data-panel="jig-list"] .pfoot{position:absolute;left:0.5in;right:0.5in;bottom:0.3in;
+       border-top:.5px solid #bbb;padding-top:4px;font-size:10px;color:#888;
+       display:flex;justify-content:space-between}
+.pp-tab-panel[data-panel="jig-list"] .rules{font-size:12.5px;line-height:1.7;margin:14px 0 0}
+.pp-tab-panel[data-panel="jig-list"] .rules li{margin-bottom:5px}
+.pp-tab-panel[data-panel="jig-list"] .rules b{color:#000}
+.pp-tab-panel[data-panel="jig-list"] .instr-svg{display:block;width:100%;max-width:6.6in;margin:6px auto 0}
+
+.pp-tab-panel[data-panel="jig-list"] table.list{border-collapse:collapse;width:100%;font-size:13px;margin-top:6px}
+.pp-tab-panel[data-panel="jig-list"] table.list thead th{background:var(--hdr);border:1px solid var(--line);padding:7px 8px;
+         text-align:left;font-size:12px;letter-spacing:.3px}
+.pp-tab-panel[data-panel="jig-list"] table.list tbody td{border:1px solid #cfcfcf;padding:6px 8px}
+.pp-tab-panel[data-panel="jig-list"] table.list td.c{text-align:center}
+.pp-tab-panel[data-panel="jig-list"] table.list td.b{font-weight:700;white-space:nowrap}
+.pp-tab-panel[data-panel="jig-list"] table.list tr.w1{background:var(--rowb)}
+.pp-tab-panel[data-panel="jig-list"] .listnote{font-size:12px;color:#333;margin-top:12px;line-height:1.6}
+
+.pp-tab-panel[data-panel="jig-list"] .grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;
+      gap:0.28in;margin-top:10px;height:8.7in}
+.pp-tab-panel[data-panel="jig-list"] .card{border:1px solid #222;border-radius:6px;padding:8px 10px 6px;
+      display:flex;flex-direction:column;break-inside:avoid;position:relative}
+.pp-tab-panel[data-panel="jig-list"] .card-h{display:flex;align-items:baseline;gap:10px;border-bottom:.5px solid #ccc;
+        padding-bottom:5px;margin-bottom:2px}
+.pp-tab-panel[data-panel="jig-list"] .qtybig{position:absolute;top:38px;right:14px;text-align:center;line-height:.85;
+        color:var(--blue);pointer-events:none;background:rgba(255,255,255,.86);
+        border-radius:9px;padding:3px 10px 5px}
+.pp-tab-panel[data-panel="jig-list"] .qtybig .num{font-size:46px;font-weight:800;display:block}
+.pp-tab-panel[data-panel="jig-list"] .qtybig .lab{font-size:10px;font-weight:700;letter-spacing:2px;color:#888}
+.pp-tab-panel[data-panel="jig-list"] .card-h .jno{font-size:15px;font-weight:800;letter-spacing:.5px}
+.pp-tab-panel[data-panel="jig-list"] .card-h .jid{font-size:13px;font-weight:600;color:#333}
+.pp-tab-panel[data-panel="jig-list"] .cardsvg{flex:1;width:100%;min-height:0}
+.pp-tab-panel[data-panel="jig-list"] .card-f{font-size:11px;color:#333;border-top:.5px solid #ccc;padding-top:5px;margin-top:2px}
+.pp-tab-panel[data-panel="jig-list"] .card-f b{color:#000}
+
+.pp-tab-panel[data-panel="jig-list"] .pl{fill:var(--tan);stroke:var(--line);stroke-width:1.6;stroke-linejoin:round}
+.pp-tab-panel[data-panel="jig-list"] .wl{fill:var(--wall);stroke:var(--line);stroke-width:.8}
+.pp-tab-panel[data-panel="jig-list"] .scr{stroke:var(--line);stroke-width:.8;stroke-dasharray:5 3}
+.pp-tab-panel[data-panel="jig-list"] .rlbl{font-size:11px;font-weight:700;letter-spacing:.5px;fill:var(--ink)}
+.pp-tab-panel[data-panel="jig-list"] .dnum{font-size:13px;font-weight:700;fill:var(--blue)}
+.pp-tab-panel[data-panel="jig-list"] .dl{stroke:var(--blue);stroke-width:1;fill:none}
+.pp-tab-panel[data-panel="jig-list"] .de{stroke:var(--blue);stroke-width:.7;stroke-dasharray:3 2;fill:none}
+.pp-tab-panel[data-panel="jig-list"] .il{font-style:italic;font-size:11px;fill:#777}
+
+.pp-tab-panel[data-panel="jig-list"] .emptyhint{width:8.5in;max-width:100%;margin:0 auto;color:#64748b;text-align:center;font-size:14px;padding:30px}
+
+/* ---------- cross-section designer ---------- */
+.pp-tab-panel[data-panel="jig-list"] .conc{fill:#c9c9c9;stroke:var(--line);stroke-width:1.5}
+.pp-tab-panel[data-panel="jig-list"] .xsec-wrap{margin:12px auto 2px;text-align:center}
+.pp-tab-panel[data-panel="jig-list"] .xsec-wrap svg{max-width:100%;height:auto}

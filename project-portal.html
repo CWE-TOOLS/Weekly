@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="src/styles/variables.css">
     <link rel="stylesheet" href="src/styles/base.css">
     <link rel="stylesheet" href="src/styles/buttons.css">
-    <link rel="stylesheet" href="src/styles/project-portal.css?v=20260521-01">
+    <link rel="stylesheet" href="src/styles/project-portal.css?v=20260716-02">
 
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 </head>
@@ -156,6 +156,14 @@
                             <rect x="11" y="11" width="7" height="4"/>
                         </svg>
                         <span>Casting Layout</span>
+                    </button>
+                    <button class="pp-tab-btn" data-tab="jig-list" type="button">
+                        <svg class="pp-tab-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M3 6h18v4H3z"/>
+                            <path d="M8 10h8v5H8z"/>
+                            <line x1="3" y1="19" x2="21" y2="19"/>
+                        </svg>
+                        <span>Jig List</span>
                     </button>
                     <button class="pp-tab-btn" data-tab="shipping" type="button">
                         <svg class="pp-tab-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -504,6 +512,11 @@
                                 <div id="pp-clay-card" class="pp-clay-card"></div>
                             </div>
                         </div>
+                    </div>
+
+                    <!-- Tab: Jig List -->
+                    <div class="pp-tab-panel" data-panel="jig-list" hidden>
+                        <div id="jig-list-root"></div>
                     </div>
 
                     <!-- Tab: Shipping -->

@@ -125,6 +125,7 @@ import {
 } from '../../services/classroom-tasks-service.js';
 import { renderCastingLayout } from './casting-layout.js?v=20260701-01';
 import { attachLayoutDrag } from './casting-layout-drag.js?v=20260701-01';
+import { activateJigListTab } from './jig-list.js?v=20260716-01';
 import {
     loadLayoutPositions,
     snapshotLayout,
@@ -284,7 +285,7 @@ function getViewFromUrl() {
 
 const VALID_TABS = new Set([
     'info', 'job-memos', 'castings', 'optimizer', 'tracking',
-    'casting-layout', 'shipping', 'color-log', 'batch-tickets', 'cr-notes',
+    'casting-layout', 'jig-list', 'shipping', 'color-log', 'batch-tickets', 'cr-notes',
     'actual-labor'
 ]);
 
@@ -439,8 +440,17 @@ async function showFormView(projectNumber, draftOverrides = null) {
     if (currentTab === 'staging')      activateStagingTab();
     if (currentTab === 'tracking')     activateTrackingTab();
     if (currentTab === 'casting-layout') activateCastingLayoutTab();
+    if (currentTab === 'jig-list')     activateJigListTabWithCtx();
     if (currentTab === 'shipping')     activateShippingTab();
     if (currentTab === 'actual-labor') activateActualLaborTab();
+}
+
+// Bridge to the extracted Jig List module: hand it the current project context.
+function activateJigListTabWithCtx() {
+    activateJigListTab({
+        projectNumber: currentProjectNumber,
+        projectName: document.getElementById('pp-f-project_name')?.value || ''
+    });
 }
 
 function openNewProjectModal() {
@@ -539,8 +549,8 @@ function setActiveTab(tab) {
     const printBtn = document.getElementById('pp-print-btn');
     if (printBtn) {
         // Tracking + Shipping have per-row print buttons — hide the global one.
-        // Job Memos has no print pipeline yet; Casting Layout has its own button.
-        if (tab === 'tracking' || tab === 'shipping' || tab === 'job-memos' || tab === 'casting-layout' || tab === 'actual-labor' || tab === 'staging') {
+        // Job Memos has no print pipeline yet; Casting Layout and Jig List have their own buttons.
+        if (tab === 'tracking' || tab === 'shipping' || tab === 'job-memos' || tab === 'casting-layout' || tab === 'jig-list' || tab === 'actual-labor' || tab === 'staging') {
             printBtn.hidden = true;
         } else {
             printBtn.hidden = false;
@@ -6218,6 +6228,8 @@ function wireEvents() {
                 activateTrackingTab();
             } else if (tab === 'casting-layout') {
                 activateCastingLayoutTab();
+            } else if (tab === 'jig-list') {
+                activateJigListTabWithCtx();
             } else if (tab === 'color-log') {
                 activateColorLogTab();
             } else if (tab === 'batch-tickets') {
