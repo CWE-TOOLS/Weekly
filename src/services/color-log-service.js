@@ -138,6 +138,42 @@ export async function loadColorLogsForProject(projectNumber) {
 }
 
 /**
+ * Bulk-load all non-preset color logs for many projects in a single query.
+ * Mirrors loadColorLogsForProject() but filters by a set of project numbers —
+ * used when enriching the weekly schedule with casting-linked data (color log
+ * titles, batch counts) without one query per project.
+ * @param {string[]} projectNumbers
+ * @returns {Promise<Map<string, Array<Object>>>} keyed by project_number,
+ *   values are form-shaped records ordered by sort_order then created_at
+ */
+export async function loadColorLogsForProjects(projectNumbers) {
+    const map = new Map();
+    if (!Array.isArray(projectNumbers) || projectNumbers.length === 0) return map;
+    const client = await getClient();
+    if (!client) return map;
+
+    const { data, error } = await client
+        .from(TABLE)
+        .select('*')
+        .in('project_number', projectNumbers)
+        .eq('is_preset', false)
+        .order('sort_order', { ascending: true })
+        .order('created_at', { ascending: true });
+
+    if (error) {
+        logger.error('[color-log] loadColorLogsForProjects error:', error);
+        throw error;
+    }
+    for (const row of data || []) {
+        const key = String(row.project_number || '').trim();
+        if (!key) continue;
+        if (!map.has(key)) map.set(key, []);
+        map.get(key).push(rowToForm(row));
+    }
+    return map;
+}
+
+/**
  * Fetch a single color log by id. Returns null when missing.
  * @param {string} id
  * @returns {Promise<Object|null>} form-shaped record

@@ -99,14 +99,52 @@ export function createTaskCard(task, rowClass, isEditingUnlocked) {
     dayCounterDiv.textContent = task.dayCounter || '';
     card.appendChild(dayCounterDiv);
 
+    // Cast-department cards linked to a portal casting show explicit "Missing …"
+    // placeholders when a readout has no data (instead of hiding the line).
+    const isCastCastingLinked = task.department === 'Cast'
+        && String(task.projectNumber || '').trim() !== ''
+        && String(task.castingNumber || '').trim() !== '';
+    const appendBand = (className, text, missing) => {
+        const div = document.createElement('div');
+        div.className = missing ? `${className} task-missing-data` : className;
+        div.textContent = text;
+        card.appendChild(div);
+    };
+
     // Pieces count — for tasks linked to a casting in the project portal, show
     // the casting's total inventory pieces (quantity + extras) as a slim band
     // directly below the day counter. Set during load by enrichTasksWithPieces.
     if (typeof task.piecesCount === 'number' && task.piecesCount > 0) {
-        const piecesDiv = document.createElement('div');
-        piecesDiv.className = 'task-pieces-count';
-        piecesDiv.textContent = `${task.piecesCount} pcs`;
-        card.appendChild(piecesDiv);
+        appendBand('task-pieces-count', `${task.piecesCount} pcs`);
+    } else if (isCastCastingLinked) {
+        appendBand('task-pieces-count', 'Missing pcs count', true);
+    }
+
+    // Color log title — name(s) of the color log(s) used by this casting's
+    // batch tickets. Set during load by enrichTasksWithPieces.
+    const colorLogTitle = typeof task.colorLogTitle === 'string' ? task.colorLogTitle.trim() : '';
+    if (colorLogTitle) {
+        appendBand('task-color-log', colorLogTitle);
+    } else if (isCastCastingLinked) {
+        appendBand('task-color-log', 'Missing color log', true);
+    }
+
+    // Cast method — "Spray Up" / "Direct Cast" from the resolved color log(s).
+    // Only rendered when a color log exists (the "Missing color log" line
+    // covers the no-log case). Set during load by enrichTasksWithPieces.
+    const castMethod = typeof task.castMethod === 'string' ? task.castMethod.trim() : '';
+    if (castMethod) {
+        appendBand('task-cast-method', castMethod);
+    } else if (isCastCastingLinked && colorLogTitle) {
+        appendBand('task-cast-method', 'Missing cast method', true);
+    }
+
+    // Batch count — total batches across the casting's batch tickets
+    // (buildBatchPlan summary totals). Set during load by enrichTasksWithPieces.
+    if (typeof task.batchCount === 'number' && task.batchCount > 0) {
+        appendBand('task-batch-count', `${task.batchCount} ${task.batchCount === 1 ? 'batch' : 'batches'}`);
+    } else if (isCastCastingLinked) {
+        appendBand('task-batch-count', 'Missing batching', true);
     }
 
     // Task description

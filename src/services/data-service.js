@@ -31,6 +31,9 @@ import { loadManualTasks, fetchTaskDescriptions } from './supabase-service.js';
 import { loadAllProjects } from './projects-service.js';
 import { loadCastingsForProjects } from './castings-service.js';
 import { loadAllInventoryForProject } from './inventory-service.js';
+import { loadBatchTicketsForCastings } from './batch-ticket-service.js';
+import { loadColorLogsForProjects } from './color-log-service.js';
+import { buildBatchPlan, getColorLogSandLbs } from '../utils/batch-calc.js';
 import { parseDate } from '../utils/date-utils.js';
 import { setAllTasks, getAllTasks } from '../core/state.js';
 
@@ -421,6 +424,18 @@ export function enrichTasksWithProject(tasks, projects) {
     logger.info(`🔗 Project linking: ${matched} tasks matched to projects table (of ${tasks.length} total)`);
 }
 
+const CAST_METHOD_LABELS = {
+    sprayUp: 'Spray Up',
+    directCast: 'Direct Cast',
+    other: 'Other'
+};
+
+/** Display label for a color log's cast method — matches the portal's radio labels. */
+function formatCastMethod(castMethod) {
+    if (!castMethod) return '';
+    return CAST_METHOD_LABELS[castMethod] || String(castMethod);
+}
+
 /**
  * Attach a pieces count to tasks that are linked to a casting in the project
  * portal. A task is "casting-linked" when it carries both a projectNumber and a
@@ -430,6 +445,18 @@ export function enrichTasksWithProject(tasks, projects) {
  * mirroring the "X pcs" total shown on the project-portal casting cards.
  *
  * Sets `task.piecesCount` (number) only when the linked casting has inventory.
+ *
+ * The same pass (reusing the one bulk castings query) also stamps, on
+ * Cast-department tasks only:
+ *   - `task.colorLogTitle` (string) — unique resolved color log names for the
+ *     casting's batch tickets, joined with " / "; falls back to the project's
+ *     first color log when the casting has no tickets yet.
+ *   - `task.castMethod` (string) — display label(s) for the resolved log(s)'
+ *     cast method ("Spray Up" / "Direct Cast", matching the portal's labels),
+ *     unique values joined with " / ".
+ *   - `task.batchCount` (number) — sum of buildBatchPlan(...).summary.total
+ *     across the casting's batch tickets (portal batch-ticket math).
+ *
  * Resilient by design: any failure is logged and swallowed so a Supabase hiccup
  * never blocks the weekly schedule from rendering.
  *
@@ -462,8 +489,14 @@ export async function enrichTasksWithPieces(tasks) {
         }
         if (referencedIds.size === 0) return;
 
-        // Sum quantity + extras per casting (same formula as the portal "pcs" total).
-        const inventoryByCasting = await loadAllInventoryForProject([...referencedIds]);
+        // Sum quantity + extras per casting (same formula as the portal "pcs"
+        // total). Batch tickets + color logs load in parallel — they feed the
+        // color-log-title / batch-count enrichment below.
+        const [inventoryByCasting, ticketsByCasting, colorLogsByProject] = await Promise.all([
+            loadAllInventoryForProject([...referencedIds]),
+            loadBatchTicketsForCastings([...referencedIds]),
+            loadColorLogsForProjects(projectNumbers)
+        ]);
         const piecesById = new Map();
         for (const [castingId, rows] of inventoryByCasting) {
             const total = (rows || []).reduce(
@@ -473,13 +506,86 @@ export async function enrichTasksWithPieces(tasks) {
             if (total > 0) piecesById.set(castingId, total);
         }
 
+        // Per-casting color log title + batch count, mirroring the portal's
+        // batch-ticket math (buildBatchPlan over each ticket's cu ft, scaled
+        // by the resolved color log's sand weight). Log resolution here is the
+        // simplified board priority: ticket.colorLogId -> project's first log.
+        const projectByCastingId = new Map();
+        for (const c of castings) {
+            if (c.id) projectByCastingId.set(c.id, String(c.project_number || '').trim());
+        }
+        const batchInfoById = new Map();
+        for (const castingId of referencedIds) {
+            try {
+                const projectLogs = colorLogsByProject.get(projectByCastingId.get(castingId)) || [];
+                const logById = new Map(projectLogs.map(l => [l.id, l]));
+                const tickets = ticketsByCasting.get(castingId) || [];
+
+                const names = [];
+                const methods = [];
+                const addMethod = (log) => {
+                    const label = formatCastMethod(log?.castMethod);
+                    if (label && !methods.includes(label)) methods.push(label);
+                };
+                let batchTotal = 0;
+                if (tickets.length > 0) {
+                    for (const ticket of tickets) {
+                        // Resolve the ticket's log: explicit colorLogId, else first project log.
+                        const log = (ticket.colorLogId && logById.get(ticket.colorLogId)) || projectLogs[0] || null;
+                        if (log?.name && !names.includes(log.name)) names.push(log.name);
+                        addMethod(log);
+
+                        // Same guards as the portal preview: no cu ft or no sand weight -> no plan.
+                        const totalCuFt = parseFloat(ticket.cuFt);
+                        if (!totalCuFt || totalCuFt <= 0) continue;
+                        const sandLbs = getColorLogSandLbs(log);
+                        if (!sandLbs) continue;
+                        const plan = buildBatchPlan({
+                            totalCuFt,
+                            faceSqFt: parseFloat(ticket.faceSqFt) || 0,
+                            cuFtPer250: parseFloat(ticket.cuFtPer250) || 4.28,
+                            castMethod: log?.castMethod || 'sprayUp',
+                            colorLogSandLbs: sandLbs,
+                            manualOverrides: ticket.batchAssignments
+                        });
+                        batchTotal += plan?.summary?.total || 0;
+                    }
+                } else if (projectLogs[0]) {
+                    // No tickets yet — still show which color log the casting would use.
+                    if (projectLogs[0].name) names.push(projectLogs[0].name);
+                    addMethod(projectLogs[0]);
+                }
+                batchInfoById.set(castingId, {
+                    colorLogTitle: names.join(' / '),
+                    castMethod: methods.join(' / '),
+                    batchCount: batchTotal
+                });
+            } catch (err) {
+                logger.error('[data-service] batch enrichment failed for casting (non-fatal):', castingId, err);
+            }
+        }
+
         let matched = 0;
+        let batchMatched = 0;
         for (const t of linked) {
             const id = idByKey.get(`${String(t.projectNumber).trim()}|${String(t.castingNumber).trim()}`);
             const total = id ? piecesById.get(id) : undefined;
             if (total) { t.piecesCount = total; matched++; }
+
+            // Color log / cast method / batch count are Cast-department-only
+            // readouts (matches t.department === 'Cast' comparisons used
+            // throughout, e.g. schedule-utils, print-renderer). The pcs count
+            // above keeps its existing visibility on all casting-linked tasks.
+            const info = (id && t.department === 'Cast') ? batchInfoById.get(id) : undefined;
+            if (info) {
+                if (info.colorLogTitle) t.colorLogTitle = info.colorLogTitle;
+                if (info.castMethod) t.castMethod = info.castMethod;
+                if (info.batchCount > 0) t.batchCount = info.batchCount;
+                if (info.colorLogTitle || info.castMethod || info.batchCount > 0) batchMatched++;
+            }
         }
         logger.info(`🧱 Pieces linking: ${matched} tasks given a pieces count (of ${linked.length} casting-linked)`);
+        logger.info(`🎨 Batch linking: ${batchMatched} tasks given a color log / batch count (of ${linked.length} casting-linked)`);
     } catch (err) {
         logger.error('[data-service] enrichTasksWithPieces failed (non-fatal):', err);
     }

@@ -135,12 +135,34 @@ function createPrintTaskCard(task, departmentClass) {
         ? `<div class="print-task-casting-side">Side ${task.castingSide}</div>`
         : '';
 
+    // Cast-department cards linked to a portal casting show explicit "Missing …"
+    // placeholders when a readout has no data — mirrors the on-screen card.
+    const isCastCastingLinked = task.department === 'Cast'
+        && String(task.projectNumber || '').trim() !== ''
+        && String(task.castingNumber || '').trim() !== '';
+    const band = (className, text, missing) =>
+        `<div class="${className}${missing ? ' print-task-missing-data' : ''}">${text}</div>`;
+
     // Pieces count (casting inventory qty + extras) for casting-linked tasks —
     // mirrors the on-screen card, sitting just below the day counter. Set during
     // data load by enrichTasksWithPieces; omitted when the casting has no inventory.
     const piecesHtml = (typeof task.piecesCount === 'number' && task.piecesCount > 0)
-        ? `<div class="print-task-pieces-count">${task.piecesCount} pcs</div>`
-        : '';
+        ? band('print-task-pieces-count', `${task.piecesCount} pcs`)
+        : (isCastCastingLinked ? band('print-task-pieces-count', 'Missing pcs count', true) : '');
+
+    // Color log title + cast method + batch count — mirror the on-screen card's
+    // bands below the pieces count. Set during data load by enrichTasksWithPieces.
+    const colorLogTitle = typeof task.colorLogTitle === 'string' ? task.colorLogTitle.trim() : '';
+    const colorLogHtml = colorLogTitle
+        ? band('print-task-color-log', colorLogTitle)
+        : (isCastCastingLinked ? band('print-task-color-log', 'Missing color log', true) : '');
+    const castMethod = typeof task.castMethod === 'string' ? task.castMethod.trim() : '';
+    const castMethodHtml = castMethod
+        ? band('print-task-cast-method', castMethod)
+        : (isCastCastingLinked && colorLogTitle ? band('print-task-cast-method', 'Missing cast method', true) : '');
+    const batchCountHtml = (typeof task.batchCount === 'number' && task.batchCount > 0)
+        ? band('print-task-batch-count', `${task.batchCount} ${task.batchCount === 1 ? 'batch' : 'batches'}`)
+        : (isCastCastingLinked ? band('print-task-batch-count', 'Missing batching', true) : '');
 
     card.innerHTML = `
         <div class="print-task-title" style="background-color: ${colors.bg} !important; color: ${colors.text} !important;">
@@ -151,6 +173,9 @@ function createPrintTaskCard(task, departmentClass) {
             ${task.dayCounter || ''}
         </div>
         ${piecesHtml}
+        ${colorLogHtml}
+        ${castMethodHtml}
+        ${batchCountHtml}
         <div class="print-task-description">
             ${task.description && task.description.trim() ? task.description : '<span class="print-missing-description">Staging Missing</span>'}
         </div>

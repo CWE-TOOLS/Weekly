@@ -47,6 +47,28 @@ export function renderTaskCard(task, index) {
         year: 'numeric'
     }) : 'No date');
 
+    // Cast-department cards linked to a portal casting show explicit "Missing …"
+    // placeholders when a readout has no data — mirrors the main board card.
+    const isCastCastingLinked = task.department === 'Cast'
+        && String(task.projectNumber || '').trim() !== ''
+        && String(task.castingNumber || '').trim() !== '';
+    const band = (className, text, missing) =>
+        `<div class="${className}${missing ? ' task-missing-data' : ''}">${escapeHtml(text)}</div>`;
+    const piecesHtml = (typeof task.piecesCount === 'number' && task.piecesCount > 0)
+        ? band('task-pieces-count', `${task.piecesCount} pcs`)
+        : (isCastCastingLinked ? band('task-pieces-count', 'Missing pcs count', true) : '');
+    const colorLogTitle = typeof task.colorLogTitle === 'string' ? task.colorLogTitle.trim() : '';
+    const colorLogHtml = colorLogTitle
+        ? band('task-color-log', colorLogTitle)
+        : (isCastCastingLinked ? band('task-color-log', 'Missing color log', true) : '');
+    const castMethod = typeof task.castMethod === 'string' ? task.castMethod.trim() : '';
+    const castMethodHtml = castMethod
+        ? band('task-cast-method', castMethod)
+        : (isCastCastingLinked && colorLogTitle ? band('task-cast-method', 'Missing cast method', true) : '');
+    const batchCountHtml = (typeof task.batchCount === 'number' && task.batchCount > 0)
+        ? band('task-batch-count', `${task.batchCount} ${task.batchCount === 1 ? 'batch' : 'batches'}`)
+        : (isCastCastingLinked ? band('task-batch-count', 'Missing batching', true) : '');
+
     return `
         <div class="project-task-card task-card department-${normalizeDepartmentClass(task.department)}"
              style="animation-delay: ${index * ANIMATION_CONFIG.CARD_DELAY_STEP_S}s"
@@ -55,7 +77,10 @@ export function renderTaskCard(task, index) {
             <div class="task-title">${escapeHtml(task.project)}</div>
             <div class="project-description">${escapeHtml(task.projectDescription || '')}</div>
             <div class="task-day-counter">${escapeHtml(task.dayCounter || '')}</div>
-            ${typeof task.piecesCount === 'number' && task.piecesCount > 0 ? `<div class="task-pieces-count">${task.piecesCount} pcs</div>` : ''}
+            ${piecesHtml}
+            ${colorLogHtml}
+            ${castMethodHtml}
+            ${batchCountHtml}
             <div class="task-description">${task.description && task.description.trim() ? sanitizeDescription(task.description) : '<span class="missing-description">Staging Missing</span>'}</div>
             <div class="task-details">
                 <strong>Date:</strong> ${escapeHtml(formattedDate)}<br>

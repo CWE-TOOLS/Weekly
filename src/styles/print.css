@@ -245,7 +245,7 @@ li:last-child {
     /* Pieces count — casting inventory total (qty + extras), a slimmer band
        beneath the day counter. Mirrors the on-screen .task-pieces-count. */
     .print-task-pieces-count {
-        font-size: 0.7em !important;
+        font-size: 1.08em !important; /* match .print-task-description */
         font-weight: 600 !important;
         color: #475569 !important;
         text-align: center;
@@ -258,6 +258,35 @@ li:last-child {
         box-sizing: border-box;
         print-color-adjust: exact !important;
         -webkit-print-color-adjust: exact !important;
+    }
+
+    /* Color log title + cast method + batch count — bands beneath the pieces
+       count. Mirror the on-screen .task-color-log / .task-cast-method /
+       .task-batch-count. */
+    .print-task-color-log,
+    .print-task-cast-method,
+    .print-task-batch-count {
+        font-size: 1.08em !important; /* match .print-task-description */
+        font-weight: 600 !important;
+        color: #475569 !important;
+        text-align: center;
+        margin-bottom: 0.2em;
+        background: #f8fafc;
+        padding: 0.1em 0.3em;
+        border-radius: 0.1em;
+        display: inline-block;
+        width: 100%;
+        box-sizing: border-box;
+        print-color-adjust: exact !important;
+        -webkit-print-color-adjust: exact !important;
+    }
+
+    /* Missing-data placeholder state — Cast cards with a casting link but no
+       portal data for a readout. Mirrors the on-screen .task-missing-data. */
+    .print-task-missing-data {
+        font-style: italic !important;
+        color: #b91c1c !important;
+        background: #fee2e2 !important;
     }
 
     /* Casting side row — Cast department only, sits just under the title. */
