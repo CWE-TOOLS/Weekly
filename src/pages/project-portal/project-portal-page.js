@@ -125,7 +125,7 @@ import {
 } from '../../services/classroom-tasks-service.js';
 import { renderCastingLayout } from './casting-layout.js?v=20260701-01';
 import { attachLayoutDrag } from './casting-layout-drag.js?v=20260701-01';
-import { activateJigListTab } from './jig-list.js?v=20260716-01';
+import { activateJigListTab } from './jig-list.js?v=20260716-02';
 import {
     loadLayoutPositions,
     snapshotLayout,
@@ -445,11 +445,13 @@ async function showFormView(projectNumber, draftOverrides = null) {
     if (currentTab === 'actual-labor') activateActualLaborTab();
 }
 
-// Bridge to the extracted Jig List module: hand it the current project context.
+// Bridge to the extracted Jig List module: hand it the current project context
+// plus the phase-scoped castings (same source the Batch Tickets tab uses).
 function activateJigListTabWithCtx() {
     activateJigListTab({
         projectNumber: currentProjectNumber,
-        projectName: document.getElementById('pp-f-project_name')?.value || ''
+        projectName: document.getElementById('pp-f-project_name')?.value || '',
+        castings: getCastingsForActivePhase()
     });
 }
 
@@ -8386,6 +8388,10 @@ function handlePhaseSwitch(phaseId) {
             currentBatchCastingId = phaseScoped[0]?.id || null;
         }
         renderBatchTickets();
+    } else if (currentTab === 'jig-list') {
+        // Re-activate with the newly scoped castings; the module keeps the
+        // selected casting when it's still in scope.
+        activateJigListTabWithCtx();
     }
 }
 

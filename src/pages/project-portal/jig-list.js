@@ -6,9 +6,14 @@
  * per-jig profile drawings and the panel cross-section diagram for a project.
  *
  * Portal adaptations (behavior otherwise preserved verbatim):
- *   - localStorage autosave replaced with a debounced per-project Supabase
+ *   - localStorage autosave replaced with a debounced per-casting Supabase
  *     save via jig-list-service (same JSON state shape as the standalone
  *     tool used, so old exports could be seeded into the table if needed).
+ *   - One jig list per casting: a casting pill row (same look as the Batch
+ *     Tickets tab) selects which casting's list is being edited. A casting
+ *     with no saved list yet is seeded by deep-copying the most recent
+ *     casting that has one (date reset to today) — falling back to the
+ *     project's legacy pre-migration blob, then to the defaults.
  *   - The JSON export/import buttons and the editable project-name field are
  *     removed: Supabase is the source of truth and the printed title always
  *     mirrors the portal project record (Info tab).
@@ -27,20 +32,26 @@
  * @module pages/project-portal/jig-list
  */
 
-import { loadJigList, saveJigList } from '../../services/jig-list-service.js';
+import { loadJigListsForProject, saveJigListForCasting } from '../../services/jig-list-service.js';
 import { logger } from '../../utils/logger.js';
 
 /* ============================ module state ============================ */
 
-let S = null;                    // the whole tool state (see defaultState())
+let S = null;                    // the ACTIVE casting's state (see defaultState())
 let currentGroup = null;         // null = All
 let measDiv = null;              // hidden measuring div for list pagination
 let currentProjectNumber = null;
 let currentProjectName = '';
+let currentCastings = [];        // phase-scoped, sort-ordered castings from the portal
+let currentCastingId = null;     // active casting (owner of S)
+let stateByCasting = new Map();  // castingId -> state object (loaded + seeded)
+let savedCastingIds = new Set(); // castings known to have a persisted jig_lists row
+let legacyState = null;          // pre-migration project-level blob (seed fallback)
 let uiBuilt = false;
 let activationToken = 0;         // guards against overlapping activations
 
 let saveTimer = null;            // debounced Supabase save
+let pendingSave = null;          // {pn, castingId, state} captured by scheduleSave
 let renderTimer = null;          // debounced output re-render
 let statusTimer = null;          // transient save-status clear
 
@@ -49,9 +60,13 @@ const SAVE_DEBOUNCE_MS = 800;
 /* ============================ public API ============================ */
 
 /**
- * Activate the Jig List tab. Renders the UI on first call; on later calls
- * reloads state when the project changed. Safe to call repeatedly.
- * @param {{projectNumber:string, projectName:string}} project
+ * Activate the Jig List tab. Renders the UI on first call; every activation
+ * reloads the project's per-casting jig lists in one query so newly added
+ * castings (and their seeded copies) always appear fresh. Safe to call
+ * repeatedly.
+ * @param {{projectNumber:string, projectName:string, castings:Array}} project
+ *   `castings` is the phase-scoped, sort-ordered casting array from the
+ *   portal (same source the Batch Tickets tab uses).
  */
 export async function activateJigListTab(project) {
   const root = document.getElementById('jig-list-root');
@@ -59,42 +74,150 @@ export async function activateJigListTab(project) {
 
   const projectNumber = project && project.projectNumber ? String(project.projectNumber) : null;
   const projectName = project && project.projectName ? String(project.projectName) : '';
+  const castings = (project && Array.isArray(project.castings)) ? project.castings : [];
 
   if (!uiBuilt) { buildShell(root); uiBuilt = true; }
 
-  // Same project and state already loaded — nothing to do.
-  if (projectNumber === currentProjectNumber && S) return;
-
-  // Flush any pending save for the previous project before switching.
-  if (saveTimer) {
-    clearTimeout(saveTimer);
-    saveTimer = null;
-    if (currentProjectNumber && S) doSave(currentProjectNumber, S);
-  }
+  // Flush any pending save for the casting being left before reloading.
+  flushPendingSave();
 
   const token = ++activationToken;
+  const prevCastingId = (projectNumber === currentProjectNumber) ? currentCastingId : null;
   currentProjectNumber = projectNumber;
   currentProjectName = projectName;
+  currentCastings = castings;
+  currentCastingId = null;
   S = null;
+  stateByCasting = new Map();
+  savedCastingIds = new Set();
+  legacyState = null;
 
-  let loaded = null;
+  let loaded = { byCasting: new Map(), legacy: null };
   try {
-    loaded = projectNumber ? await loadJigList(projectNumber) : null;
+    if (projectNumber) loaded = await loadJigListsForProject(projectNumber);
   } catch (err) {
     logger.error('[jig-list] load failed:', err);
   }
   if (token !== activationToken) return;   // superseded by a newer activation
 
-  S = (loaded && Array.isArray(loaded.depths))
-    ? Object.assign(defaultState(), loaded)
-    : freshState();
+  for (const [castingId, data] of loaded.byCasting) {
+    // Merge over defaults; a row with an unreadable blob counts as absent so
+    // seeding can rebuild it.
+    savedCastingIds.add(castingId);
+    if (data && Array.isArray(data.depths)) {
+      stateByCasting.set(castingId, Object.assign(defaultState(), data));
+    }
+  }
+  legacyState = (loaded.legacy && Array.isArray(loaded.legacy.depths)) ? loaded.legacy : null;
+
+  // No castings in scope → hint instead of the editor (Batch Tickets pattern).
+  if (!currentCastings.length) {
+    setNoCastingsHint(true);
+    renderCastingPills();
+    return;
+  }
+  setNoCastingsHint(false);
+
+  // Keep the previously selected casting if still in scope, else first.
+  const keep = prevCastingId && currentCastings.some(c => c.id === prevCastingId);
+  selectCasting(keep ? prevCastingId : currentCastings[0].id);
+}
+
+/* ================== casting selection + seeding ================== */
+
+function setNoCastingsHint(show) {
+  const hint = document.getElementById('jig-no-castings');
+  const doc = document.getElementById('jig-doc');
+  const bar = document.getElementById('jig-topbar');
+  const vbar = document.getElementById('jig-vbar');
+  if (hint) hint.hidden = !show;
+  if (doc) doc.hidden = show;
+  // .bar is display:flex in CSS, which beats the hidden attribute.
+  if (bar) bar.style.display = show ? 'none' : '';
+  if (show && vbar) { vbar.style.display = 'none'; vbar.innerHTML = ''; }
+}
+
+/** The casting row for the active casting (label for printed titles). */
+function activeCasting() {
+  return currentCastings.find(c => c.id === currentCastingId) || null;
+}
+
+/**
+ * Make a casting active: use its loaded state, or seed one by copying the
+ * most recent casting that has a jig list (date reset to today), falling
+ * back to the legacy project-level blob, then to the defaults. Seeded
+ * copies are persisted immediately.
+ */
+function selectCasting(castingId) {
+  currentCastingId = castingId;
+  let st = stateByCasting.get(castingId);
+  let persistSeed = false;
+  if (!st) {
+    const seed = buildSeedState(castingId);
+    st = seed.state;
+    persistSeed = seed.fromCopy;
+    stateByCasting.set(castingId, st);
+  }
+  S = st;
   fixXsec();
   // The printed title always mirrors the portal project record (Info tab),
   // even for states saved under an older project name.
   if (currentProjectName) S.project = currentProjectName;
   currentGroup = null;
+  renderCastingPills();
   buildEditor();
   renderOutput();
+  // Persist a seeded-from-copy state right away so the copy survives.
+  if (persistSeed) scheduleSave();
+}
+
+/**
+ * Build the initial state for a casting with no saved jig list.
+ * @returns {{state:Object, fromCopy:boolean}} fromCopy=true when the state
+ *   was copied from another casting / the legacy blob (should be persisted).
+ */
+function buildSeedState(castingId) {
+  // Most recent casting WITH a jig list = highest sort_order = last in the
+  // sorted array (excluding the casting being seeded).
+  for (let i = currentCastings.length - 1; i >= 0; i--) {
+    const c = currentCastings[i];
+    if (c.id === castingId) continue;
+    const src = stateByCasting.get(c.id);
+    if (src) {
+      const st = structuredClone(src);
+      st.date = todayISO();
+      return { state: st, fromCopy: true };
+    }
+  }
+  if (legacyState) {
+    const st = structuredClone(Object.assign(defaultState(), legacyState));
+    st.date = todayISO();
+    return { state: st, fromCopy: true };
+  }
+  return { state: freshState(), fromCopy: false };
+}
+
+/* ===================== casting pill row ===================== */
+
+function renderCastingPills() {
+  const pills = document.getElementById('jig-casting-pills');
+  if (!pills) return;
+  // .pp-bt-pills is display:flex in CSS, which beats the hidden attribute.
+  if (!currentCastings.length) { pills.innerHTML = ''; pills.style.display = 'none'; return; }
+  pills.style.display = '';
+  pills.innerHTML = currentCastings.map(c => {
+    const active = c.id === currentCastingId ? ' pp-bt-pill-active' : '';
+    const date = c.casting_date ? `<span class="pp-bt-pill-date">${esc(c.casting_date)}</span>` : '';
+    return `<button type="button" class="pp-bt-pill${active}" data-jig-pill data-casting-id="${esc(c.id)}">${esc(c.casting_number || '')}${date}</button>`;
+  }).join('');
+}
+
+function handleSelectCasting(castingId) {
+  if (!castingId || castingId === currentCastingId) return;
+  // Flush the pending save for the casting we're leaving so its DB state
+  // matches the editor before switching.
+  flushPendingSave();
+  selectCasting(castingId);
 }
 
 /* ============================ state ============================ */
@@ -133,19 +256,37 @@ function fixXsec(){
 /* =================== persistence (Supabase) =================== */
 
 function scheduleSave(){
-  if (!currentProjectNumber || !S) return;
+  if (!currentProjectNumber || !currentCastingId || !S) return;
   clearTimeout(saveTimer);
-  const pn = currentProjectNumber;
-  const state = S;
-  saveTimer = setTimeout(() => { saveTimer = null; doSave(pn, state); }, SAVE_DEBOUNCE_MS);
+  pendingSave = { pn: currentProjectNumber, castingId: currentCastingId, state: S };
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    const p = pendingSave; pendingSave = null;
+    if (p) doSave(p.pn, p.castingId, p.state);
+  }, SAVE_DEBOUNCE_MS);
 }
-async function doSave(projectNumber, state){
-  if (!projectNumber || !state) return;
+/** Fire a pending debounced save immediately (casting/project switch). */
+function flushPendingSave(){
+  if (!saveTimer) return;
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  const p = pendingSave; pendingSave = null;
+  if (p) doSave(p.pn, p.castingId, p.state);
+}
+async function doSave(projectNumber, castingId, state){
+  if (!projectNumber || !castingId || !state) return;
   setSaveStatus('Saving…', false);
   try {
-    await saveJigList(projectNumber, state);
+    await saveJigListForCasting(projectNumber, castingId, state);
+    savedCastingIds.add(castingId);
     setSaveStatus('Saved', true);
   } catch (err) {
+    if (err && err.pendingMigration) {
+      // DB not migrated yet — the service already warned once; keep the
+      // status visible without spamming errors.
+      setSaveStatus('Not saved — DB migration pending', false, true);
+      return;
+    }
     logger.error('[jig-list] save failed:', err);
     setSaveStatus('Save failed', true, true);
   }
@@ -216,6 +357,20 @@ function buildJigs(){
 }
 
 /* ===================== output page builders ==================== */
+
+/**
+ * Title line for generated/printed pages: the project name plus the active
+ * casting (e.g. "Project Name — Casting 2") so per-casting printouts are
+ * distinguishable. The casting suffix is display-only — S.project itself
+ * stays the bare portal project name in the saved state.
+ */
+function projTitle(){
+  const c = activeCasting();
+  const num = c ? String(c.casting_number || '').trim() : '';
+  if (!num) return S.project;
+  const label = /^cast/i.test(num) ? num : ('Casting ' + num);
+  return S.project + ' — ' + label;
+}
 /* Retained from the source tool for parity — the source defines it but
    renderOutput() never calls it (output starts straight at the jig list). */
 function instrPage(over, clr){
@@ -224,7 +379,7 @@ function instrPage(over, clr){
   const depthList = S.depths.map(d => `<b>${fmt16(parseInches(d.d)||0)}″</b> ${d.label||''}`).join(' &nbsp;·&nbsp; ');
   return `<section class="page">
     <div class="titlerow"><h1>Scrim Jigs — How They Work</h1>
-      <div class="meta">${esc(S.project)}<br>${esc(S.date)}</div></div>
+      <div class="meta">${esc(projTitle())}<br>${esc(S.date)}</div></div>
     <p class="rules" style="margin-top:0">Each jig is <b>one piece of plywood</b> cut to a T-outline. It spans the panel width and
       <b>rides on top of the two form side walls</b>; the foot drops into the cavity and sets the depth the scrim is pressed to.</p>
     <svg class="instr-svg" viewBox="0 0 700 350" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Scrim jig profile">
@@ -262,7 +417,7 @@ function instrPage(over, clr){
       <li><b>Depths this project:</b> ${depthList}. One jig is cut per panel width for <b>each</b> depth.</li>
       <li>Profile drawings are schematic — height exaggerated. Widths are the real cut dimensions.</li>
     </ul>
-    <div class="pfoot"><span>Scrim Jigs · ${esc(S.project)}</span><span>Page 1 — Instructions</span></div>
+    <div class="pfoot"><span>Scrim Jigs · ${esc(projTitle())}</span><span>Page 1 — Instructions</span></div>
   </section>`;
 }
 
@@ -339,10 +494,10 @@ function buildListPages(jigs, opt){
     const meta = grp.length ? `Jigs ${range} of ${jigs.length}` : 'Notes';
     html += `<section class="page">
       <div class="titlerow"><h1>${opt.title}</h1>
-        <div class="meta"><b style="font-size:13px;color:#333">${esc(S.project)}</b><br>${opt.summary?opt.summary+'<br>':''}${meta}<br>${esc(S.date)}</div></div>
+        <div class="meta"><b style="font-size:13px;color:#333">${esc(projTitle())}</b><br>${opt.summary?opt.summary+'<br>':''}${meta}<br>${esc(S.date)}</div></div>
       ${grp.length ? `<table class="list">${opt.listHead}<tbody>${body}</tbody></table>` : ''}
       ${pi === legendPage ? opt.legend : ''}
-      <div class="pfoot"><span>Scrim Jigs · ${esc(S.project)}</span><span>Page ${pageNo} — Jig List (${range})</span></div>
+      <div class="pfoot"><span>Scrim Jigs · ${esc(projTitle())}</span><span>Page ${pageNo} — Jig List (${range})</span></div>
     </section>`;
   });
   return { html, n: pages.length };
@@ -411,9 +566,9 @@ function drawingPages(jigs, opt){
     const pageNo = opt.page0 + i/PER;
     html += `<section class="page">
       <div class="titlerow"><h1>${opt.title}</h1>
-        <div class="meta"><b style="font-size:13px;color:#333">${esc(S.project)}</b><br>${opt.summary?opt.summary+'<br>':''}Jigs ${a}–${b} of ${T}<br>${esc(S.date)}</div></div>
+        <div class="meta"><b style="font-size:13px;color:#333">${esc(projTitle())}</b><br>${opt.summary?opt.summary+'<br>':''}Jigs ${a}–${b} of ${T}<br>${esc(S.date)}</div></div>
       <div class="grid">${group.map(card).join('')}</div>
-      <div class="pfoot"><span>Scrim Jigs · ${esc(S.project)}</span><span>Page ${pageNo} — Drawings ${a}–${b}</span></div>
+      <div class="pfoot"><span>Scrim Jigs · ${esc(projTitle())}</span><span>Page ${pageNo} — Drawings ${a}–${b}</span></div>
     </section>`;
   }
   return html;
@@ -552,7 +707,7 @@ function xsecPrintHTML(){
     `<tr><td class="c b">Scrim ${o.n}</td><td>${fmt16(o.v)}″ from bottom</td><td>${fmt16(T - o.v)}″ from top</td></tr>`).join('');
   return `
     <div class="titlerow"><h1>Panel Cross-Section — Scrim Placement</h1>
-      <div class="meta"><b style="font-size:13px;color:#333">${esc(S.project)}</b><br>${esc(S.date)}</div></div>
+      <div class="meta"><b style="font-size:13px;color:#333">${esc(projTitle())}</b><br>${esc(S.date)}</div></div>
     <div class="xsec-wrap" style="margin-top:0.35in">${svg || '<p>No section — enter a total concrete thickness.</p>'}</div>
     ${rows ? `<table class="list" style="margin-top:0.35in"><thead><tr>
       <th style="width:20%" class="c">Scrim</th><th style="width:40%">Height from bottom</th><th style="width:40%">Depth from top</th>
@@ -560,11 +715,11 @@ function xsecPrintHTML(){
     <p class="listnote">Total concrete thickness <b>${T != null ? fmt16(T) : '?'}″</b>.
       Grey = concrete; dashed lines = scrim layers. Heights are measured from the bottom (face) of the panel;
       “depth from top” matches the jig foot depth pressed from the top of the pour.</p>
-    <div class="pfoot"><span>Scrim Jigs · ${esc(S.project)}</span><span>Panel Cross-Section</span></div>`;
+    <div class="pfoot"><span>Scrim Jigs · ${esc(projTitle())}</span><span>Panel Cross-Section</span></div>`;
 }
 function printXsec(){
   if (!S) return;
-  printViaIframe('Panel Cross-Section — ' + S.project,
+  printViaIframe('Panel Cross-Section — ' + projTitle(),
     `<section class="page">${xsecPrintHTML()}</section>`);
 }
 function printJigs(){
@@ -572,7 +727,7 @@ function printJigs(){
   const out = document.getElementById('jig-output');
   const pages = out ? out.querySelectorAll('.page') : [];
   if (!pages.length){ alert('Add at least one panel with a valid width to generate jigs.'); return; }
-  printViaIframe('Jig List — ' + S.project, [...pages].map(p => p.outerHTML).join(''));
+  printViaIframe('Jig List — ' + projTitle(), [...pages].map(p => p.outerHTML).join(''));
 }
 
 /* ===================== hidden print iframe ==================== */
@@ -800,8 +955,10 @@ function afterLoad(){
   fixXsec(); currentGroup = null;
   // The printed title always mirrors the portal project record (Info tab).
   if (currentProjectName) S.project = currentProjectName;
+  // example/clear replaced the state object — keep the per-casting map in sync.
+  if (currentCastingId) stateByCasting.set(currentCastingId, S);
   // Immediate save (not debounced) — example/clear should persist now.
-  if (currentProjectNumber) doSave(currentProjectNumber, S);
+  if (currentProjectNumber && currentCastingId) doSave(currentProjectNumber, currentCastingId, S);
   buildEditor(); renderOutput();
 }
 
@@ -830,7 +987,11 @@ function exampleState(){
 function buildShell(root){
   root.innerHTML = `
 ${MARKER_DEFS}
-<div class="bar">
+<div class="pp-bt-pills" id="jig-casting-pills" style="display:none"></div>
+<div class="pp-castings-hint" id="jig-no-castings" hidden>
+  No castings yet. Add a casting first — each casting gets its own jig list.
+</div>
+<div class="bar" id="jig-topbar">
   <b>Scrim Jig Generator</b>
   <span class="savestat" id="jig-save-status" aria-live="polite"></span>
   <span class="sp"></span>
@@ -841,7 +1002,7 @@ ${MARKER_DEFS}
 </div>
 <div class="vbar" id="jig-vbar" style="display:none"></div>
 
-<div class="doc">
+<div class="doc" id="jig-doc">
 
   <!-- ====================== EDITOR (screen only) ====================== -->
   <section class="editor" id="jig-editor">
@@ -876,7 +1037,7 @@ ${MARKER_DEFS}
       <button type="button" data-act="example">Load example</button>
       <button type="button" class="danger" data-act="clear">Clear all</button>
     </div>
-    <p class="hint" style="margin-top:8px">Work auto-saves to this project.</p>
+    <p class="hint" style="margin-top:8px">Work auto-saves to the selected casting.</p>
   </section>
 
   <!-- ====================== GENERATED OUTPUT ====================== -->
@@ -887,6 +1048,13 @@ ${MARKER_DEFS}
   const editor = document.getElementById('jig-editor');
   editor.addEventListener('input', onEditorInput);
   editor.addEventListener('click', onEditorClick);
+
+  // Casting pill row (delegated — pills re-render on every casting switch).
+  document.getElementById('jig-casting-pills').addEventListener('click', (e) => {
+    const pill = e.target.closest('[data-jig-pill]');
+    if (!pill) return;
+    handleSelectCasting(pill.dataset.castingId);
+  });
 
   document.getElementById('jig-btn-print-jigs').onclick = printJigs;
   document.getElementById('jig-btn-print-xsec').onclick = printXsec;
