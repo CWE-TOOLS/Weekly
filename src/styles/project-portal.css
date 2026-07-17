@@ -5994,6 +5994,7 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
 .pp-tab-panel[data-panel="jig-list"] .bar button:hover{background:#1e40af}
 .pp-tab-panel[data-panel="jig-list"] .bar button.ghost{background:#e2e8f0;color:#1e293b}
 .pp-tab-panel[data-panel="jig-list"] .bar button.ghost:hover{background:#cbd5e1}
+.pp-tab-panel[data-panel="jig-list"] .bar button:disabled{opacity:.45;cursor:default;pointer-events:none}
 
 /* ---------- print-set bar (in-panel, non-fixed) ---------- */
 .pp-tab-panel[data-panel="jig-list"] .vbar{background:#f8fafc;color:#334155;

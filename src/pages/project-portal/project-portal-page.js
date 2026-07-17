@@ -125,7 +125,7 @@ import {
 } from '../../services/classroom-tasks-service.js';
 import { renderCastingLayout } from './casting-layout.js?v=20260701-01';
 import { attachLayoutDrag } from './casting-layout-drag.js?v=20260701-01';
-import { activateJigListTab } from './jig-list.js?v=20260716-02';
+import { activateJigListTab } from './jig-list.js?v=20260717-1';
 import {
     loadLayoutPositions,
     snapshotLayout,

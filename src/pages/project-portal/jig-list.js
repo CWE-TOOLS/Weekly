@@ -13,7 +13,10 @@
  *     Tickets tab) selects which casting's list is being edited. A casting
  *     with no saved list yet is seeded by deep-copying the most recent
  *     casting that has one (date reset to today) — falling back to the
- *     project's legacy pre-migration blob, then to the defaults.
+ *     project's legacy pre-migration blob, then to the defaults. A toolbar
+ *     "Copy to Casting…" button does the same copy explicitly: it pushes the
+ *     active casting's list/cross-section onto chosen castings, replacing
+ *     whatever they had.
  *   - The JSON export/import buttons and the editable project-name field are
  *     removed: Supabase is the source of truth and the printed title always
  *     mirrors the portal project record (Info tab).
@@ -200,6 +203,8 @@ function buildSeedState(castingId) {
 /* ===================== casting pill row ===================== */
 
 function renderCastingPills() {
+  const copyBtn = document.getElementById('jig-btn-copy');
+  if (copyBtn) copyBtn.disabled = currentCastings.length < 2;
   const pills = document.getElementById('jig-casting-pills');
   if (!pills) return;
   // .pp-bt-pills is display:flex in CSS, which beats the hidden attribute.
@@ -218,6 +223,68 @@ function handleSelectCasting(castingId) {
   // matches the editor before switching.
   flushPendingSave();
   selectCasting(castingId);
+}
+
+/* ================== copy to another casting ================== */
+
+/** Open the copy modal listing every OTHER casting in scope as a target. */
+function openCopyModal() {
+  if (!S || !currentCastingId) return;
+  const targets = currentCastings.filter(c => c.id !== currentCastingId);
+  if (!targets.length) return;
+  const src = activeCasting();
+  document.getElementById('jig-copy-hint').innerHTML =
+    `Copy casting <b>${esc((src && src.casting_number) || '')}</b>’s jig list and cross-section onto the selected castings. Targets that already have a jig list are <b>replaced</b>.`;
+  document.getElementById('jig-copy-list').innerHTML = targets.map(c => {
+    const date = c.casting_date ? ` <span class="pp-pl-desc">${esc(c.casting_date)}</span>` : '';
+    const status = savedCastingIds.has(c.id)
+      ? '<span class="pp-pl-color">has a jig list — will be replaced</span>'
+      : '<span class="pp-pl-color pp-pl-color-empty">no jig list yet</span>';
+    return `<label class="pp-print-label-row"><input type="checkbox" value="${esc(c.id)}"><span class="pp-pl-cast">${esc(c.casting_number || '')}</span>${date}${status}</label>`;
+  }).join('');
+  document.getElementById('jig-copy-all').checked = false;
+  updateCopyConfirmState();
+  document.getElementById('jig-copy-modal').hidden = false;
+}
+
+function closeCopyModal() {
+  document.getElementById('jig-copy-modal').hidden = true;
+}
+
+function updateCopyConfirmState() {
+  const any = !!document.querySelector('#jig-copy-list input:checked');
+  document.getElementById('jig-copy-confirm').disabled = !any;
+}
+
+/**
+ * Copy the active casting's state onto every checked target (deep clone,
+ * date reset to today — same rules as seeding) and persist each copy
+ * immediately so it survives without the target ever being opened.
+ */
+async function confirmCopy() {
+  const ids = [...document.querySelectorAll('#jig-copy-list input:checked')].map(cb => cb.value);
+  if (!ids.length || !S || !currentProjectNumber) return;
+  closeCopyModal();
+  setSaveStatus('Copying…', false);
+  let failed = 0;
+  for (const targetId of ids) {
+    const clone = structuredClone(S);
+    clone.date = todayISO();
+    stateByCasting.set(targetId, clone);
+    try {
+      await saveJigListForCasting(currentProjectNumber, targetId, clone);
+      savedCastingIds.add(targetId);
+    } catch (err) {
+      if (err && err.pendingMigration) {
+        setSaveStatus('Not saved — DB migration pending', false, true);
+        return;
+      }
+      failed++;
+      logger.error('[jig-list] copy failed:', err);
+    }
+  }
+  if (failed) setSaveStatus(`Copy failed for ${failed} casting${failed === 1 ? '' : 's'}`, true, true);
+  else setSaveStatus(`Copied to ${ids.length} casting${ids.length === 1 ? '' : 's'}`, true);
 }
 
 /* ============================ state ============================ */
@@ -996,6 +1063,7 @@ ${MARKER_DEFS}
   <span class="savestat" id="jig-save-status" aria-live="polite"></span>
   <span class="sp"></span>
   <span class="actions">
+    <button type="button" id="jig-btn-copy" class="ghost">Copy to Casting…</button>
     <button type="button" id="jig-btn-print-jigs">Print Jigs</button>
     <button type="button" id="jig-btn-print-xsec">Print Cross-Section</button>
   </span>
@@ -1043,6 +1111,25 @@ ${MARKER_DEFS}
   <!-- ====================== GENERATED OUTPUT ====================== -->
   <div id="jig-output"></div>
 
+</div>
+
+<!-- Copy-to-casting modal (portal pp-modal classes, jig-copy-* ids) -->
+<div class="pp-modal-backdrop" id="jig-copy-modal" role="dialog" aria-modal="true" aria-labelledby="jig-copy-title" hidden>
+  <div class="pp-modal">
+    <div class="pp-modal-header">
+      <h2 id="jig-copy-title">Copy Jig List / Cross-Section</h2>
+      <button type="button" class="pp-modal-close" id="jig-copy-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="pp-modal-body">
+      <p class="pp-modal-hint" id="jig-copy-hint"></p>
+      <label class="pp-print-label-all"><input type="checkbox" id="jig-copy-all"> Select all</label>
+      <div class="pp-print-label-list" id="jig-copy-list"></div>
+    </div>
+    <div class="pp-modal-actions">
+      <button type="button" class="pp-secondary-btn" id="jig-copy-cancel">Cancel</button>
+      <button type="button" class="pp-primary-btn" id="jig-copy-confirm" disabled>Copy</button>
+    </div>
+  </div>
 </div>`;
 
   const editor = document.getElementById('jig-editor');
@@ -1058,4 +1145,18 @@ ${MARKER_DEFS}
 
   document.getElementById('jig-btn-print-jigs').onclick = printJigs;
   document.getElementById('jig-btn-print-xsec').onclick = printXsec;
+
+  // Copy-to-casting modal.
+  document.getElementById('jig-btn-copy').onclick = openCopyModal;
+  document.getElementById('jig-copy-close').onclick = closeCopyModal;
+  document.getElementById('jig-copy-cancel').onclick = closeCopyModal;
+  document.getElementById('jig-copy-confirm').onclick = confirmCopy;
+  const copyModal = document.getElementById('jig-copy-modal');
+  copyModal.addEventListener('click', (e) => { if (e.target === copyModal) closeCopyModal(); });
+  document.getElementById('jig-copy-list').addEventListener('change', updateCopyConfirmState);
+  document.getElementById('jig-copy-all').addEventListener('change', (e) => {
+    document.querySelectorAll('#jig-copy-list input[type="checkbox"]')
+      .forEach(cb => { cb.checked = e.target.checked; });
+    updateCopyConfirmState();
+  });
 }
