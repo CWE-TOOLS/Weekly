@@ -98,7 +98,7 @@ export const TRACKING_ITEMS = [
  */
 export const TRACKING_ITEM_LABELS = {
   'Jig List': 'Jig List / Cross-Section',
-  'Inflow Sales Ticket': 'Inflow Sales Order',
+  'Inflow Sales Ticket': 'Inflow Sales Quote',
   'Casting Layout': 'Casting Layout/Instructions'
 };
 
