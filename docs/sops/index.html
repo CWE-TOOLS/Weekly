@@ -88,6 +88,31 @@
   .tmpl p { font-size: 9.5pt; color:#6b7280; margin-top: 4px; }
 
   .foot { margin-top: 28px; font-size: 8.5pt; color:#6b7280; text-align:center; }
+
+  /* ===== Print: compact two-column contents sheet, one Letter page ===== */
+  @page { size: Letter portrait; margin: 0.4in; }
+  @media print {
+    html, body { background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .wrap { max-width: none; padding: 0; column-count: 2; column-gap: 22px; }
+    .head { column-span: all; margin-bottom: 10px; padding-bottom: 6px; }
+    .head h1 { font-size: 19pt; }
+    .head p, .printall, .tmpl, .ovpill,
+    .sechead .arrow, .card .arrow, .card .pdf { display: none; }
+    .section { margin-bottom: 9px; break-inside: avoid; }
+    .sechead { gap: 8px; padding-bottom: 4px; margin-bottom: 5px; border-bottom-width: 1.5px; }
+    .secnum { width: 23px; height: 23px; border-radius: 6px; font-size: 10.5pt; }
+    .sectitle h2 { font-size: 11pt; }
+    .sectitle p { display: none; }
+    .sublist { padding-left: 31px; }
+    .card {
+      padding: 3px 8px; margin-bottom: 4px; gap: 8px;
+      box-shadow: none; border-radius: 5px;
+    }
+    .num { min-width: 30px; height: 20px; padding: 0 5px; border-radius: 5px; font-size: 9pt; }
+    .card .txt h3 { font-size: 9.5pt; }
+    .card .txt p { font-size: 7.3pt; margin-top: 0; }
+    .foot { column-span: all; margin-top: 8px; }
+  }
 </style>
 </head>
 <body>
@@ -372,6 +397,27 @@
           <span class="num">8.1</span>
           <span class="txt"><h3>Form Construction</h3>
             <p>General guidelines — melamine vs HDO/Blackboard by cast count, bracing rails over 2", and Azek tread strips. Shop reference.</p></span>
+          <span class="arrow">&rsaquo;</span>
+        </a>
+      </li>
+    </ul>
+  </div>
+
+  <!-- ===== 9 · Shop Folder ===== -->
+  <div class="section">
+    <div class="sechead" style="cursor:default">
+      <span class="secnum">9</span>
+      <span class="sectitle">
+        <h2>Shop Folder</h2>
+        <p>The physical folder that travels with each casting — standard contents, tab by tab.</p>
+      </span>
+    </div>
+    <ul class="sublist">
+      <li>
+        <a class="card" href="shop-folder-contents.html">
+          <span class="num">9.1</span>
+          <span class="txt"><h3>Shop Folder Contents</h3>
+            <p>Cover sheet &amp; sticker, then what files at each of the four tabs, left- and right-hand side. Per casting.</p></span>
           <span class="arrow">&rsaquo;</span>
         </a>
       </li>

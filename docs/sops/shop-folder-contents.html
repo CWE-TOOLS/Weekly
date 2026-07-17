@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="color-scheme" content="only light">
+<title>SOP — Shop Folder Contents</title>
+<style>
+  @page { size: Letter portrait; margin: 0.5in; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    font-family: "Segoe UI", Arial, sans-serif;
+    color: #1a1a1a; font-size: 10.5pt; line-height: 1.35;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  .sheet { width: 100%; }
+
+  /* Header */
+  .head {
+    display: flex; align-items: flex-end; justify-content: space-between; gap: 12px;
+    border-bottom: 3px solid #1f2937; padding-bottom: 8px; margin-bottom: 10px;
+  }
+  .head h1 { font-size: 25pt; letter-spacing: -0.3px; line-height: 1.05; flex: 1 1 auto; }
+  .sopnum {
+    flex: 0 0 auto; min-width: 48px; height: 44px; padding: 0 9px; border-radius: 9px;
+    background: #1f2937; color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 17pt; font-weight: 800; letter-spacing: -.5px;
+    margin-bottom: 3px;
+  }
+  .head h1 .eyebrow { display:block; font-size: 10pt; font-weight: 700; color:#6b7280; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 3px; }
+  .head .meta { font-size: 8.5pt; color: #555; text-align: right; line-height: 1.4; }
+  .head .meta b { color:#111827; }
+
+  .lead {
+    font-size: 9.8pt; color:#374151; background:#f3f4f6; border-left:4px solid #1f2937;
+    padding: 7px 12px; border-radius: 3px; margin-bottom: 10px;
+  }
+  b { color:#111827; }
+
+  /* Section */
+  .section { margin-bottom: 8px; break-inside: avoid; }
+  .section > h2 {
+    font-size: 12pt; color:#fff; background:#1f2937; padding: 5px 11px;
+    border-radius: 4px; letter-spacing: .4px; display:flex; align-items:center; gap:8px;
+  }
+  .section > h2 .num {
+    display:inline-flex; align-items:center; justify-content:center;
+    width:19px; height:19px; border-radius:50%; background:#b45309; color:#fff;
+    font-size:10pt; font-weight:800; flex:0 0 auto;
+  }
+  .section .inner { padding: 7px 2px 2px; }
+  p.body { font-size: 9.8pt; margin-bottom: 6px; }
+
+  /* Cover checklist */
+  .cover { list-style:none; }
+  .cover li {
+    display:flex; gap:9px; align-items:flex-start; font-size:9.8pt; color:#374151;
+    padding:4px 0;
+  }
+  .cover li + li { border-top:1px solid #e5e7eb; }
+  .cover .n {
+    flex:0 0 auto; display:inline-flex; align-items:center; justify-content:center;
+    width:20px; height:20px; border-radius:50%; background:#1f2937; color:#fff;
+    font-size:10pt; font-weight:700; margin-top:1px;
+  }
+
+  /* Tab spreads */
+  .tab { border:1px solid #d1d5db; border-radius:6px; overflow:hidden; margin-bottom:7px; break-inside:avoid; }
+  .tab .thead {
+    background:#1f2937; color:#fff; font-weight:800; font-size:9.8pt;
+    padding:4px 11px; letter-spacing:.4px; text-transform:uppercase;
+    display:flex; align-items:center; gap:8px;
+  }
+  .tab .thead .tnum {
+    display:inline-flex; align-items:center; justify-content:center;
+    width:18px; height:18px; border-radius:50%; background:#b45309; color:#fff;
+    font-size:9.5pt; font-weight:800; flex:0 0 auto;
+  }
+  .spread { display:grid; grid-template-columns:1fr 1fr; }
+  .pane { padding:6px 11px 7px; }
+  .pane + .pane { border-left:1px dashed #cbd5e1; }
+  .pane .side {
+    font-size:7.8pt; font-weight:800; text-transform:uppercase; letter-spacing:.7px;
+    color:#6b7280; margin-bottom:3px;
+  }
+  .pane ul { list-style:none; }
+  .pane li { font-size:9.4pt; color:#374151; padding:2px 0 2px 13px; position:relative; }
+  .pane li::before { content:"▸"; position:absolute; left:0; color:#b45309; font-size:8.5pt; }
+  .pane li b { color:#111827; }
+  .pane .sub { display:block; font-size:8.4pt; color:#6b7280; }
+
+  .foot {
+    margin-top: 10px; border-top: 2px solid #1f2937; padding-top: 7px;
+    font-size: 8.5pt; color: #555; display:flex; justify-content:space-between; gap: 14px;
+  }
+  .foot span:last-child { flex: 0 0 auto; white-space: nowrap; }
+
+  /* Print button (screen only) */
+  .printbar { position: fixed; top: 14px; right: 14px; z-index: 50; }
+  .printbar button {
+    font-family: "Segoe UI", Arial, sans-serif; font-size: 11pt; font-weight: 700;
+    color: #fff; background: #1f2937; border: none; border-radius: 6px;
+    padding: 9px 16px; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,.25);
+    display: inline-flex; align-items: center; gap: 7px;
+  }
+  .printbar button:hover { background: #374151; }
+  .printbar button svg { width: 15px; height: 15px; }
+
+  @media screen {
+    body { background: #e5e7eb; padding: 24px 0; }
+    .sheet { width: 8.5in; margin: 0 auto; background: #fff; padding: 0.5in; box-shadow: 0 4px 18px rgba(0,0,0,.18); }
+  }
+  @media print { html, body { background: #fff !important; } .printbar { display: none !important; } }
+</style>
+</head>
+<body>
+
+<div class="printbar">
+  <button onclick="window.print()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+         stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="6 9 6 2 18 2 18 9"></polyline>
+      <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+      <rect x="6" y="14" width="12" height="8"></rect>
+    </svg>
+    Print
+  </button>
+</div>
+
+<div class="sheet">
+
+  <div class="head">
+    <span class="sopnum">9.1</span>
+    <h1><span class="eyebrow">Standard Operating Procedure</span>
+        Shop Folder Contents</h1>
+    <div class="meta">
+      <b>Rev:</b> 1.0<br>
+      <b>Cadence:</b> Per casting<br>
+      <b>Owner:</b> ____________
+    </div>
+  </div>
+
+  <div class="lead">
+    Standard contents of the <b>physical shop folder</b> — what goes on the cover and what is filed at each
+    of the four tabs, left- and right-hand side. Every folder is built the same way so anyone on the floor
+    can find a document without hunting.
+  </div>
+
+  <!-- 1 -->
+  <div class="section">
+    <h2><span class="num">1</span> Cover</h2>
+    <div class="inner">
+      <ul class="cover">
+        <li><span class="n">1</span><span><b>Cover Sheet</b> — printed and applied to the front of the folder.</span></li>
+        <li><span class="n">2</span><span><b>Sticker</b> — printed and applied.</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 2 -->
+  <div class="section">
+    <h2><span class="num">2</span> Tab-by-tab contents</h2>
+    <div class="inner">
+
+      <div class="tab">
+        <div class="thead"><span class="tnum">1</span> 1st Tab</div>
+        <div class="spread">
+          <div class="pane">
+            <div class="side">Left hand / inside cover</div>
+            <ul>
+              <li><b>Shop Drawings / Tickets</b>
+                <span class="sub">All dimensional information about the concrete components.</span></li>
+            </ul>
+          </div>
+          <div class="pane">
+            <div class="side">Right hand</div>
+            <ul>
+              <li><b>Tracking Sheet</b></li>
+              <li><b>Stickers</b> — stapled behind the Tracking Sheet.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab">
+        <div class="thead"><span class="tnum">2</span> 2nd Tab</div>
+        <div class="spread">
+          <div class="pane">
+            <div class="side">Left hand</div>
+            <ul>
+              <li><b>Formwork 3D Drawings</b></li>
+              <li><b>Jig List</b></li>
+              <li><b>Form Out Instructions</b> <span class="sub">If needed.</span></li>
+            </ul>
+          </div>
+          <div class="pane">
+            <div class="side">Right hand</div>
+            <ul>
+              <li><b>Sales Order</b></li>
+              <li><b>Form Out Instructions</b> <span class="sub">If needed.</span></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab">
+        <div class="thead"><span class="tnum">3</span> 3rd Tab</div>
+        <div class="spread">
+          <div class="pane">
+            <div class="side">Left hand</div>
+            <ul>
+              <li><b>Casting Layout</b></li>
+              <li><b>Casting Instructions</b></li>
+            </ul>
+          </div>
+          <div class="pane">
+            <div class="side">Right hand</div>
+            <ul>
+              <li><b>Batching Ticket</b></li>
+              <li><b>Color Log</b></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab">
+        <div class="thead"><span class="tnum">4</span> 4th Tab</div>
+        <div class="spread">
+          <div class="pane">
+            <div class="side">Left hand</div>
+            <ul>
+              <li><b>Build Crate Ticket</b></li>
+            </ul>
+          </div>
+          <div class="pane">
+            <div class="side">Right hand</div>
+            <ul>
+              <li><b>Optimizer Hours</b></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="foot">
+    <span><b>Bottom line:</b> cover sheet + sticker on the front, then four tabs — drawings &amp; tracking,
+      formwork &amp; sales order, casting &amp; batching, crate &amp; optimizer — always filed left/right the same way.</span>
+    <span><b>SOP 9.1</b> — Shop Folder Contents</span>
+  </div>
+
+</div>
+</body>
+</html>
