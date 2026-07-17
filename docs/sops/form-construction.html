@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="color-scheme" content="only light">
+<title>SOP — Form Construction</title>
+<style>
+  @page { size: Letter portrait; margin: 0.5in; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    font-family: "Segoe UI", Arial, sans-serif;
+    color: #1a1a1a; font-size: 10.5pt; line-height: 1.35;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  .sheet { width: 100%; }
+
+  /* Header */
+  .head {
+    display: flex; align-items: flex-end; justify-content: space-between; gap: 12px;
+    border-bottom: 3px solid #1f2937; padding-bottom: 8px; margin-bottom: 10px;
+  }
+  .head h1 { font-size: 25pt; letter-spacing: -0.3px; line-height: 1.05; flex: 1 1 auto; }
+  .sopnum {
+    flex: 0 0 auto; min-width: 48px; height: 44px; padding: 0 9px; border-radius: 9px;
+    background: #1f2937; color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 17pt; font-weight: 800; letter-spacing: -.5px;
+    margin-bottom: 3px;
+  }
+  .head h1 .eyebrow { display:block; font-size: 10pt; font-weight: 700; color:#6b7280; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 3px; }
+  .head .meta { font-size: 8.5pt; color: #555; text-align: right; line-height: 1.4; }
+  .head .meta b { color:#111827; }
+
+  .lead {
+    font-size: 9.8pt; color:#374151; background:#f3f4f6; border-left:4px solid #1f2937;
+    padding: 7px 12px; border-radius: 3px; margin-bottom: 11px;
+  }
+  b { color:#111827; }
+
+  /* Warning callout */
+  .warnbox {
+    background:#fef2f2; border:1px solid #fca5a5; border-left:4px solid #b91c1c;
+    border-radius:3px; padding:7px 12px; margin-bottom:11px; font-size:9.6pt; color:#7f1d1d;
+  }
+  .warnbox b { color:#b91c1c; }
+
+  /* Section */
+  .section { margin-bottom: 8px; break-inside: avoid; }
+  .section > h2 {
+    font-size: 12pt; color:#fff; background:#1f2937; padding: 5px 11px;
+    border-radius: 4px; letter-spacing: .4px; display:flex; align-items:center; gap:8px;
+  }
+  .section > h2 .num {
+    display:inline-flex; align-items:center; justify-content:center;
+    width:19px; height:19px; border-radius:50%; background:#b45309; color:#fff;
+    font-size:10pt; font-weight:800; flex:0 0 auto;
+  }
+  .section .inner { padding: 7px 2px 2px; }
+  p.body { font-size: 9.8pt; margin-bottom: 6px; }
+
+  /* Materials table */
+  .mat { width:100%; border-collapse:collapse; font-size:9.4pt; }
+  .mat th {
+    text-align:left; font-size:8pt; text-transform:uppercase; letter-spacing:.5px;
+    color:#6b7280; font-weight:800; padding:0 10px 4px 0; border-bottom:2px solid #1f2937;
+  }
+  .mat td { padding:4px 10px 4px 0; border-bottom:1px solid #e5e7eb; color:#374151; vertical-align:top; }
+  .mat td b { color:#111827; }
+  .mat .swatch {
+    display:inline-block; width:12px; height:12px; border-radius:3px; border:1px solid #cbd5e1;
+    vertical-align:-1px; margin-right:6px;
+  }
+  .sw-white { background:#ffffff; }
+  .sw-tan   { background:#c9a56a; border-color:#a9843f; }
+  .sw-black { background:#1a1a1a; border-color:#000; }
+  .mat .size { white-space:nowrap; font-variant-numeric: tabular-nums; }
+
+  /* Choice group blocks */
+  .grp { border:1px solid #e5e7eb; border-radius:6px; overflow:hidden; margin-bottom:8px; break-inside:avoid; }
+  .grp .ghead { color:#fff; font-weight:800; font-size:9.6pt; padding:4px 11px; letter-spacing:.4px; text-transform:uppercase; }
+  .grp.one .ghead   { background:#0d9488; }
+  .grp.multi .ghead { background:#b45309; }
+  .grp .gbody { padding:5px 11px; font-size:9.4pt; color:#374151; }
+  .grp .gbody b { color:#111827; }
+
+  /* Definition rows */
+  .defs { display:grid; grid-template-columns: 150px 1fr; gap: 0; }
+  .defs .k { font-weight:700; color:#111827; font-size:9.5pt; padding:5px 10px 5px 0; border-top:1px solid #e5e7eb; }
+  .defs .v { font-size:9.5pt; color:#374151; padding:5px 0; border-top:1px solid #e5e7eb; }
+  .defs .k:first-of-type, .defs .v:nth-of-type(2) { border-top:none; }
+
+  .foot {
+    margin-top: 11px; border-top: 2px solid #1f2937; padding-top: 7px;
+    font-size: 8.5pt; color: #555; display:flex; justify-content:space-between; gap: 14px;
+  }
+  .foot span:last-child { flex: 0 0 auto; white-space: nowrap; }
+
+  /* Print button (screen only) */
+  .printbar { position: fixed; top: 14px; right: 14px; z-index: 50; }
+  .printbar button {
+    font-family: "Segoe UI", Arial, sans-serif; font-size: 11pt; font-weight: 700;
+    color: #fff; background: #1f2937; border: none; border-radius: 6px;
+    padding: 9px 16px; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,.25);
+    display: inline-flex; align-items: center; gap: 7px;
+  }
+  .printbar button:hover { background: #374151; }
+  .printbar button svg { width: 15px; height: 15px; }
+
+  @media screen {
+    body { background: #e5e7eb; padding: 24px 0; }
+    .sheet { width: 8.5in; margin: 0 auto; background: #fff; padding: 0.5in; box-shadow: 0 4px 18px rgba(0,0,0,.18); }
+  }
+  @media print { html, body { background: #fff !important; } .printbar { display: none !important; } }
+</style>
+</head>
+<body>
+
+<div class="printbar">
+  <button onclick="window.print()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+         stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="6 9 6 2 18 2 18 9"></polyline>
+      <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+      <rect x="6" y="14" width="12" height="8"></rect>
+    </svg>
+    Print
+  </button>
+</div>
+
+<div class="sheet">
+
+  <div class="head">
+    <span class="sopnum">8.1</span>
+    <h1><span class="eyebrow">Standard Operating Procedure</span>
+        Form Construction</h1>
+    <div class="meta">
+      <b>Rev:</b> 1.0<br>
+      <b>Type:</b> Shop reference<br>
+      <b>Owner:</b> ____________
+    </div>
+  </div>
+
+  <div class="lead">
+    General guidelines for building the forms a casting is cast in — which sheet stock to use, when to
+    spend on the durable materials, and how rails, brackets, and tread strips go together. These are
+    defaults, not hard rules: the right choice mostly comes down to <b>how many times the form will be cast</b>.
+  </div>
+
+  <div class="warnbox">
+    <b>Melamine is moisture-sensitive.</b> Even a small scratch through the laminate face lets the flakeboard
+    core soak up water and swell — a scratched or gouged melamine form should not be reused. Keep faces clean
+    and dry, and move to HDO or Blackboard for anything that will be cast more than once.
+  </div>
+
+  <!-- 1 -->
+  <div class="section">
+    <h2><span class="num">1</span> Sheet goods stocked in-house</h2>
+    <div class="inner">
+      <p class="body">Forms are generally built from one of four sheet goods kept in stock:</p>
+      <table class="mat">
+        <thead>
+          <tr><th>Stock</th><th>Size</th><th>Core</th><th>Facing</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><b>Melamine</b></td>
+            <td class="size">4' × 8' × ¾"</td>
+            <td>Flakeboard</td>
+            <td><span class="swatch sw-white"></span>White laminate</td>
+          </tr>
+          <tr>
+            <td><b>Melamine</b></td>
+            <td class="size">5' × 9' × ¾"</td>
+            <td>Flakeboard</td>
+            <td><span class="swatch sw-white"></span>White laminate</td>
+          </tr>
+          <tr>
+            <td><b>HDO</b></td>
+            <td class="size">4' × 8' × ¾"</td>
+            <td>Birch</td>
+            <td><span class="swatch sw-tan"></span>Tan laminate</td>
+          </tr>
+          <tr>
+            <td><b>Blackboard</b> <span style="color:#6b7280">/ EuroForm</span></td>
+            <td class="size">5' × 12' × ¾"</td>
+            <td>Birch</td>
+            <td><span class="swatch sw-black"></span>Black laminate</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="body" style="margin-top:5px; margin-bottom:0; font-size:9.2pt; color:#6b7280">
+        Blackboard / EuroForm is <b>typically custom-ordered per project</b> rather than pulled from general stock.</p>
+    </div>
+  </div>
+
+  <!-- 2 -->
+  <div class="section">
+    <h2><span class="num">2</span> Choosing the stock — how many casts?</h2>
+    <div class="inner">
+      <div class="grp one">
+        <div class="ghead">One-time casting → Melamine</div>
+        <div class="gbody">Forms used for a <b>single casting</b> are generally built from <b>melamine</b>. HDO is
+          cost-prohibitive on one-time work, and melamine gives a clean face for one pour. Because it's
+          moisture-sensitive (see the warning above), treat a one-time melamine form as disposable.</div>
+      </div>
+      <div class="grp multi">
+        <div class="ghead">Rebuilt 3+ times → HDO or Blackboard</div>
+        <div class="gbody">Forms that will be <b>rebuilt or reused three or more times</b> are generally built from
+          <b>HDO</b> or <b>Blackboard</b>. The birch core and tougher facing hold up to repeated castings where
+          melamine would fail.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3 -->
+  <div class="section">
+    <h2><span class="num">3</span> Rails &amp; brackets</h2>
+    <div class="inner">
+      <div class="defs">
+        <div class="k">Rails</div>
+        <div class="v">Forms are built up from side walls called <b>rails</b>. They set the perimeter and height of
+          the cavity.</div>
+        <div class="k">Rails over 2"</div>
+        <div class="v">Any rail <b>taller than 2"</b> needs a <b>bracket</b> behind it to keep it from bowing under
+          the pour — generally spaced <b>every 8"</b> along the rail.</div>
+        <div class="k">Bracket material</div>
+        <div class="v">Brackets are <b>always made from HDO</b> — preferably <b>used stock</b> pulled from the rack
+          in the forms tent before cutting into new sheets.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4 -->
+  <div class="section">
+    <h2><span class="num">4</span> Stair-tread strips</h2>
+    <div class="inner">
+      <p class="body">Strips on stair treads are cut from <b>Azek</b> sheet material and applied to the base of the
+        tread with <b>two-sided tape</b>.</p>
+    </div>
+  </div>
+
+  <div class="foot">
+    <span><b>Bottom line:</b> melamine for one-time forms, HDO or Blackboard for anything cast three or more
+      times; brace rails over 2" with HDO brackets every 8", and cut tread strips from Azek.</span>
+    <span><b>SOP 8.1</b> — Form Construction</span>
+  </div>
+
+</div>
+</body>
+</html>

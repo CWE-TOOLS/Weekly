@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="color-scheme" content="only light">
+<title>SOP Book — Print All</title>
+<style>
+  /* The book assembles: a generated cover, a generated table of contents,
+     then every SOP page from index.html in section order. Each SOP is a
+     fully standalone HTML file whose class names collide with the others
+     (.head, .cols, .card…), so each one renders inside its own shadow root
+     with its own stylesheet — nothing here leaks in, nothing leaks out.
+     The SOP list and order are scraped from index.html at load time, so a
+     new SOP added to the index automatically appears in the book. */
+  @page { size: Letter portrait; margin: 0.5in; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    font-family: "Segoe UI", Arial, sans-serif;
+    color: #1a1a1a; font-size: 10.5pt; line-height: 1.35;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+
+  /* ===== generated pages (cover + TOC) ===== */
+  .bk-eyebrow { font-size: 10pt; font-weight: 700; color:#6b7280; text-transform: uppercase; letter-spacing: 1.5px; }
+
+  .bk-cover-inner { display:flex; flex-direction:column; justify-content:center; min-height: 9.6in; }
+  .bk-cover .bk-rule { height: 6px; background:#1f2937; width: 2.4in; margin-bottom: 22px; }
+  .bk-cover h1 { font-size: 40pt; letter-spacing: -0.8px; line-height: 1.02; color:#111827; margin-top: 6px; }
+  .bk-cover .bk-secs { margin-top: 34px; }
+  .bk-cover .bk-secrow { display:flex; align-items:center; gap: 12px; margin-bottom: 8px; }
+  .bk-cover .bk-secnum {
+    flex: 0 0 auto; width: 30px; height: 30px; border-radius: 7px;
+    background:#1f2937; color:#fff; display:flex; align-items:center; justify-content:center;
+    font-size: 12.5pt; font-weight: 800;
+  }
+  .bk-cover .bk-secrow b { font-size: 11.5pt; color:#111827; }
+  .bk-cover .bk-date { margin-top: 34px; font-size: 10pt; color:#6b7280; border-top: 2px solid #1f2937; padding-top: 8px; width: 2.4in; }
+
+  .bk-toc .bk-tochead { border-bottom: 3px solid #1f2937; padding-bottom: 8px; margin-bottom: 16px; }
+  .bk-toc h1 { font-size: 24pt; letter-spacing: -0.4px; line-height: 1.05; margin-top: 2px; }
+  .bk-toc .bk-sec { margin-bottom: 13px; break-inside: avoid; }
+  .bk-toc .bk-sechead { display:flex; align-items:center; gap: 11px; border-bottom: 2px solid #1f2937; padding-bottom: 5px; margin-bottom: 6px; }
+  .bk-toc .bk-secnum {
+    flex: 0 0 auto; width: 27px; height: 27px; border-radius: 6px;
+    background:#1f2937; color:#fff; display:flex; align-items:center; justify-content:center;
+    font-size: 12pt; font-weight: 800;
+  }
+  .bk-toc .bk-sechead h2 { font-size: 12.5pt; color:#111827; line-height: 1.1; flex: 1 1 auto; }
+  .bk-toc .bk-sechead .bk-ov { flex: 0 0 auto; font-size: 7.5pt; font-weight: 800; letter-spacing:.5px; text-transform: uppercase; color:#1f2937; border:1px solid #9ca3af; border-radius: 20px; padding: 1px 9px; }
+  .bk-toc .bk-row { display:flex; align-items:baseline; gap: 9px; padding: 2.5px 0 2.5px 38px; }
+  .bk-toc .bk-num { flex: 0 0 auto; min-width: 34px; font-size: 10pt; font-weight: 800; color:#1f2937; letter-spacing: -.3px; }
+  .bk-toc .bk-row .bk-t { flex: 0 0 auto; font-size: 10.5pt; font-weight: 600; color:#111827; }
+  .bk-toc .bk-lead { flex: 1 1 auto; border-bottom: 1.5px dotted #9ca3af; transform: translateY(-3px); min-width: 20px; }
+  .bk-toc .bk-desc { flex: 0 1 auto; font-size: 8pt; color:#6b7280; text-align: right; max-width: 2.9in; }
+  .bk-toc .bk-foot { margin-top: 16px; font-size: 8.5pt; color:#6b7280; text-align:center; }
+
+  /* ===== assembled SOP hosts ===== */
+  .bk-sop { display: block; }
+  .bk-err {
+    background:#fef2f2; border:1.5px solid #fecaca; color:#7f1d1d;
+    border-radius: 8px; padding: 14px 18px; font-size: 10.5pt;
+  }
+  .bk-err b { color:#991b1b; }
+
+  /* ===== print button (screen only) ===== */
+  .printbar { position: fixed; top: 14px; right: 14px; z-index: 50; display:flex; gap: 9px; align-items:center; }
+  .printbar .bk-status { font-size: 10pt; font-weight: 600; color:#4b5563; background:#fff; border:1px solid #d1d5db; border-radius: 6px; padding: 8px 12px; }
+  .printbar button, .printbar a.bk-back {
+    font-family: "Segoe UI", Arial, sans-serif; font-size: 11pt; font-weight: 700;
+    color: #fff; background: #1f2937; border: none; border-radius: 6px;
+    padding: 9px 16px; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,.25);
+    display: inline-flex; align-items: center; gap: 7px; text-decoration: none;
+  }
+  .printbar a.bk-back { background:#fff; color:#1f2937; border:1px solid #9ca3af; box-shadow:none; }
+  .printbar button:hover { background: #374151; }
+  .printbar button:disabled { background:#9ca3af; cursor: default; }
+  .printbar button svg { width: 15px; height: 15px; }
+
+  @media screen {
+    body { background: #e5e7eb; padding: 24px 0; }
+    .bk-page { width: 8.5in; min-height: 11in; margin: 0 auto 24px; background: #fff; padding: 0.5in; box-shadow: 0 4px 18px rgba(0,0,0,.18); }
+    .bk-sop { margin-bottom: 0; }
+  }
+  @media print {
+    html, body { background: #fff !important; }
+    .printbar { display: none !important; }
+    /* Every part of the book starts on a fresh sheet. */
+    #bk-book > * + * { break-before: page; }
+  }
+</style>
+</head>
+<body>
+
+<div class="printbar">
+  <a class="bk-back" href="index.html">&lsaquo; SOP Library</a>
+  <span class="bk-status" id="bk-status">Loading SOPs…</span>
+  <button id="bk-print" onclick="window.print()" disabled>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+         stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="6 9 6 2 18 2 18 9"></polyline>
+      <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+      <rect x="6" y="14" width="12" height="8"></rect>
+    </svg>
+    Print Book
+  </button>
+</div>
+
+<div id="bk-book">
+
+  <!-- ====== Cover ====== -->
+  <div class="bk-page bk-cover">
+    <div class="bk-cover-inner">
+      <div class="bk-rule"></div>
+      <div class="bk-eyebrow">Standard Operating Procedures</div>
+      <h1>CWE SOP Book</h1>
+      <div class="bk-secs" id="bk-cover-secs"></div>
+      <div class="bk-date">Printed <span id="bk-date"></span></div>
+    </div>
+  </div>
+
+  <!-- ====== Table of Contents ====== -->
+  <div class="bk-page bk-toc">
+    <div class="bk-tochead">
+      <div class="bk-eyebrow">Standard Operating Procedures</div>
+      <h1>Table of Contents</h1>
+    </div>
+    <div id="bk-toc-body"></div>
+    <div class="bk-foot">Weekly Schedule Viewer · Docs · SOP Library</div>
+  </div>
+
+  <!-- SOP pages are appended here in order -->
+
+</div>
+
+<script>
+(function () {
+  var book = document.getElementById('bk-book');
+  var statusEl = document.getElementById('bk-status');
+  var printBtn = document.getElementById('bk-print');
+  document.getElementById('bk-date').textContent =
+    new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function (ch) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch];
+    });
+  }
+
+  function fail(msg) {
+    statusEl.textContent = msg;
+    statusEl.style.color = '#b91c1c';
+  }
+
+  function fetchDoc(href) {
+    return fetch(href, { cache: 'no-cache' }).then(function (res) {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.text();
+    }).then(function (html) {
+      return new DOMParser().parseFromString(html, 'text/html');
+    });
+  }
+
+  /* Scrape section order + entries from index.html — it is the single
+     source of truth for numbering and sequence. */
+  function parseIndex(doc) {
+    var sections = [];
+    doc.querySelectorAll('.section').forEach(function (sec) {
+      var head = sec.querySelector('.sechead');
+      if (!head) return;
+      var s = {
+        num: (head.querySelector('.secnum') || {}).textContent || '',
+        title: (head.querySelector('.sectitle h2') || {}).textContent || '',
+        desc: (head.querySelector('.sectitle p') || {}).textContent || '',
+        href: head.matches('a[href]') ? head.getAttribute('href') : null,
+        subs: []
+      };
+      sec.querySelectorAll('.sublist .card').forEach(function (card) {
+        var href = card.matches('a[href]') ? card.getAttribute('href')
+          : (card.querySelector('a.cardlink[href]') || { getAttribute: function () { return null; } }).getAttribute('href');
+        if (!href || !/\.html$/i.test(href)) return;   // skip PDF chips etc.
+        s.subs.push({
+          num: (card.querySelector('.num') || {}).textContent || '',
+          title: (card.querySelector('.txt h3') || {}).textContent || '',
+          desc: (card.querySelector('.txt p') || {}).textContent || '',
+          href: href
+        });
+      });
+      sections.push(s);
+    });
+    return sections;
+  }
+
+  function renderCoverAndToc(sections) {
+    document.getElementById('bk-cover-secs').innerHTML = sections.map(function (s) {
+      return '<div class="bk-secrow"><span class="bk-secnum">' + esc(s.num.trim()) + '</span><b>' + esc(s.title.trim()) + '</b></div>';
+    }).join('');
+
+    document.getElementById('bk-toc-body').innerHTML = sections.map(function (s) {
+      var rows = '';
+      if (s.href) {
+        rows += '<div class="bk-row"><span class="bk-num">' + esc(s.num.trim()) + '</span><span class="bk-t">' + esc(s.title.trim()) + ' — Overview</span><span class="bk-lead"></span><span class="bk-desc">' + esc(s.desc.trim()) + '</span></div>';
+      }
+      rows += s.subs.map(function (e) {
+        return '<div class="bk-row"><span class="bk-num">' + esc(e.num.trim()) + '</span><span class="bk-t">' + esc(e.title.trim()) + '</span><span class="bk-lead"></span><span class="bk-desc">' + esc(e.desc.trim()) + '</span></div>';
+      }).join('');
+      return '<div class="bk-sec"><div class="bk-sechead"><span class="bk-secnum">' + esc(s.num.trim()) + '</span><h2>' + esc(s.title.trim()) + '</h2>' + (s.href ? '<span class="bk-ov">Overview</span>' : '') + '</div>' + rows + '</div>';
+    }).join('');
+  }
+
+  /* Mount one fetched SOP document into an isolated shadow root. Its whole
+     stylesheet comes along; `html, body` / `body` selectors are retargeted
+     to :host so base font-size, color and print-color-adjust still apply.
+     (Each file's @page rule is inert inside a shadow root — the book's own
+     @page governs.) The .printbar is a body-level sibling of .sheet, so
+     taking only .sheet drops it automatically. */
+  function mountSop(host, doc, label) {
+    var style = doc.querySelector('head style');
+    var sheet = doc.querySelector('.sheet');
+    if (!style || !sheet) throw new Error('no .sheet found');
+    var css = style.textContent.replace(/\b(?:html\s*,\s*)?body\b/g, ':host');
+    // Sibling-sheet rules for SOPs that get repaginated into several sheets,
+    // plus a uniform letter-page proportion for the screen preview.
+    css += '\n@media screen { .sheet { min-height: 11in; } .sheet + .sheet { margin-top: 24px; } }' +
+           '\n@media print { .sheet + .sheet { break-before: page; } }';
+    var shadow = host.attachShadow({ mode: 'open' });
+    shadow.innerHTML = '<style>' + css + '</style>';
+    shadow.appendChild(sheet.cloneNode(true));
+    host.setAttribute('data-sop', label);
+  }
+
+  /* An SOP taller than one letter page renders as one long sheet — split it
+     into real letter-sized sheets so the screen preview matches the printed
+     book and print breaks fall between blocks, never through one. Blocks are
+     the sheet's top-level children (head, lead, sections, foot); a block
+     carrying its own forced break-before starts a fresh sheet. Sheet content
+     is 7.5in wide on screen and in print alike, so screen-measured heights
+     carry over to the printed page. */
+  var PAGE_H = 1056;      // 11in at 96dpi
+  var CONTENT_H = 940;    // 10in printable height minus a little slack
+  function repaginate(host) {
+    var shadow = host.shadowRoot;
+    var sheet = shadow && shadow.querySelector('.sheet');
+    if (!sheet || sheet.offsetHeight <= PAGE_H + 24) return;
+    var contentTop = sheet.getBoundingClientRect().top +
+                     parseFloat(getComputedStyle(sheet).paddingTop || 0);
+    var pages = [[]];
+    var pageStart = 0;
+    Array.prototype.slice.call(sheet.children).forEach(function (kid) {
+      var rect = kid.getBoundingClientRect();
+      var top = rect.top - contentTop;
+      var bottom = rect.bottom - contentTop;
+      var brk = getComputedStyle(kid).breakBefore;
+      var forced = brk === 'page' || brk === 'always' || brk === 'left' || brk === 'right';
+      var current = pages[pages.length - 1];
+      if (current.length && (forced || bottom - pageStart > CONTENT_H)) {
+        pages.push([kid]);
+        pageStart = top;
+      } else {
+        current.push(kid);
+      }
+    });
+    if (pages.length < 2) return;
+    pages.slice(1).forEach(function (kids) {
+      var next = sheet.cloneNode(false);
+      kids.forEach(function (kid) { next.appendChild(kid); });
+      // The sibling-sheet rule owns the page break now; a leftover forced
+      // break on the first block would print a blank page.
+      kids[0].style.breakBefore = 'auto';
+      sheet.parentNode.insertBefore(next, sheet.nextSibling);
+      sheet = next;
+    });
+  }
+
+  fetchDoc('index.html').then(function (indexDoc) {
+    var sections = parseIndex(indexDoc);
+    var entries = [];
+    sections.forEach(function (s) {
+      if (s.href) entries.push({ num: s.num.trim(), title: s.title.trim(), href: s.href });
+      s.subs.forEach(function (e) { entries.push({ num: e.num.trim(), title: e.title.trim(), href: e.href }); });
+    });
+    if (!entries.length) { fail('No SOPs found in index.html'); return; }
+    renderCoverAndToc(sections);
+
+    // Placeholder hosts up front so pages land in book order no matter
+    // which fetch finishes first.
+    var hosts = entries.map(function (e) {
+      var host = document.createElement('div');
+      host.className = 'bk-sop';
+      book.appendChild(host);
+      return host;
+    });
+
+    var done = 0;
+    statusEl.textContent = 'Loading 0 / ' + entries.length + '…';
+    Promise.all(entries.map(function (e, i) {
+      return fetchDoc(e.href).then(function (doc) {
+        mountSop(hosts[i], doc, e.num + ' ' + e.title);
+      }).catch(function (err) {
+        hosts[i].innerHTML = '<div class="bk-err"><b>' + esc(e.num + ' — ' + e.title) + '</b> failed to load (' + esc(err.message) + '). Print it separately from ' + esc(e.href) + '.</div>';
+      }).then(function () {
+        done++;
+        statusEl.textContent = 'Loading ' + done + ' / ' + entries.length + '…';
+      });
+    })).then(function () {
+      // Layout is settled once everything is mounted — now split any SOP
+      // taller than one letter page into proper sheets.
+      requestAnimationFrame(function () {
+        hosts.forEach(repaginate);
+        statusEl.textContent = entries.length + ' SOPs · ready';
+        printBtn.disabled = false;
+      });
+    });
+  }).catch(function (err) {
+    fail('Could not load index.html (' + err.message + ') — open this page through the dev server, not from a file path.');
+  });
+})();
+</script>
+
+</body>
+</html>

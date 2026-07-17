@@ -73,6 +73,15 @@
   }
   .card .arrow { flex: 0 0 auto; color:#9ca3af; font-size: 15pt; }
 
+  .printall {
+    display: inline-flex; align-items: center; gap: 8px; margin-top: 12px;
+    font-size: 10pt; font-weight: 700; color: #fff; background: #1f2937;
+    border-radius: 6px; padding: 8px 15px; text-decoration: none;
+    box-shadow: 0 1px 4px rgba(0,0,0,.18);
+  }
+  .printall:hover { background: #374151; }
+  .printall svg { width: 14px; height: 14px; }
+
   .tmpl { margin-top: 26px; padding-top: 16px; border-top: 1px dashed #9ca3af; }
   .tmpl a { color:#1f2937; font-weight: 700; text-decoration: none; }
   .tmpl a:hover { text-decoration: underline; }
@@ -88,6 +97,15 @@
     <div class="eyebrow">Standard Operating Procedures</div>
     <h1>SOP Library</h1>
     <p>Grouped by area. Numbered section headers open the overview; each procedure is single-page and print-ready — open one and hit <b>Print</b>.</p>
+    <a class="printall" href="print-book.html">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="6 9 6 2 18 2 18 9"></polyline>
+        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+        <rect x="6" y="14" width="12" height="8"></rect>
+      </svg>
+      Print All — SOP Book (cover, contents &amp; every SOP in order)
+    </a>
   </div>
 
   <!-- ===== 0 · Company Operations Overview ===== -->
@@ -333,6 +351,27 @@
           <span class="num">7.1</span>
           <span class="txt"><h3>Casting Layout</h3>
             <p>Auto-pack a casting's forms onto the Area A/B tables, fine-tune by drag and rotate, and print the diagram. Per casting, before cast day.</p></span>
+          <span class="arrow">&rsaquo;</span>
+        </a>
+      </li>
+    </ul>
+  </div>
+
+  <!-- ===== 8 · Form Construction ===== -->
+  <div class="section">
+    <div class="sechead" style="cursor:default">
+      <span class="secnum">8</span>
+      <span class="sectitle">
+        <h2>Form Construction</h2>
+        <p>What to build casting forms from and how to reinforce them — sheet stock, rails, brackets, tread strips.</p>
+      </span>
+    </div>
+    <ul class="sublist">
+      <li>
+        <a class="card" href="form-construction.html">
+          <span class="num">8.1</span>
+          <span class="txt"><h3>Form Construction</h3>
+            <p>General guidelines — melamine vs HDO/Blackboard by cast count, bracing rails over 2", and Azek tread strips. Shop reference.</p></span>
           <span class="arrow">&rsaquo;</span>
         </a>
       </li>
