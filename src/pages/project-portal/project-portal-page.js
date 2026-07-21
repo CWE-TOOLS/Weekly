@@ -7141,13 +7141,24 @@ function getBatchTicketList(castingId) {
         const idx = arr.findIndex(t => !t.colorLogId && isPristineBatchTicket(t));
         if (idx !== -1) arr.splice(idx, 1);
     }
+    // A null-color ticket is not a valid state: it can't be pill-selected,
+    // can't render a batch plan, and would double-count in Mix Day Totals.
+    // If nothing color-tagged exists yet, seed an empty ticket on the project's
+    // default color log so the form has something real to bind to.
+    if (!arr.some(t => t.colorLogId) && currentColorLogs[0]?.id) {
+        const v = emptyBatchTicketForm(castingId);
+        v.colorLogId = currentColorLogs[0].id;
+        arr.push(v);
+    }
     if (!arr.length) arr.push(emptyBatchTicketForm(castingId));
     const rank = (t) => {
         if (!t.colorLogId) return -1;
         const i = detected.indexOf(t.colorLogId);
         return i === -1 ? detected.length : i;
     };
-    return arr.slice().sort((a, b) => rank(a) - rank(b));
+    // Legacy null-color rows stay in `arr` (and in the DB) but never surface —
+    // no pill, no plan, no contribution to totals.
+    return arr.slice().sort((a, b) => rank(a) - rank(b)).filter(t => t.colorLogId);
 }
 
 // Active ticket for a casting: the one matching the color-pill selection.
@@ -7350,7 +7361,12 @@ function renderBatchTicketBody(casting, ticket, multi = false) {
                     ).join('')}
                 </select>
             </div>`
-            : '');
+            : (activeLog
+                ? `<div class="pp-bt-context-colorlog-group">
+                        <span class="pp-bt-context-date-label">Color Log</span>
+                        <span class="pp-bt-context-colorlog-static">${escapeHtml(activeLog.name || '(unnamed)')}</span>
+                    </div>`
+                : ''));
     return `
         <div class="pp-bt-form">
             <div class="pp-bt-context">
