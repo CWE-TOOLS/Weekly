@@ -36,7 +36,7 @@ import {
   STATUS,
   STATUS_DISPLAY
 } from '../../config/releasability-config.js';
-import { renderReleasabilityGrid, getUniqueDepartments, setProjectActions, groupProjectsByWeek, getWeekRange } from './releasability-grid.js';
+import { renderReleasabilityGrid, getUniqueDepartments, setProjectActions, groupProjectsByWeek, getWeekRange } from './releasability-grid.js?v=20260804-1';
 import { getMonday, getWeekMonth, getWeekOfMonth } from '../../utils/date-utils.js';
 import { normalizeProjectName } from '../../utils/ui-utils.js';
 import {

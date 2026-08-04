@@ -38,7 +38,8 @@
   /* Tracking Item Header Colors - Saturated, grouped by category */
   /* Tracking column header colors — POSITIONAL by data-tracking-index, which is
      the item's position in TRACKING_ITEMS. Keep in sync with that array and with
-     COLUMN_GROUPS (Classroom 0-2, Project Manager 3-8, Engineering 9-17). */
+     COLUMN_GROUPS (Classroom 0-2, Project Manager 3-8, Fab Coordinator 9-12,
+     Engineering 13-17, Release 18). */
   --tracking-0-color: #B39DDB;   /* Classroom #1 - Purple */
   --tracking-1-color: #B39DDB;   /* Classroom #2 - Purple */
   --tracking-2-color: #B39DDB;   /* Classroom #3 - Purple */
@@ -48,10 +49,10 @@
   --tracking-6-color: #80CBC4;   /* Color Log - Teal (PM) */
   --tracking-7-color: #80CBC4;   /* Final Optimizer HRS - Teal (PM) */
   --tracking-8-color: #80CBC4;   /* Rebar/Drilling Layout - Teal (PM) */
-  --tracking-9-color: #A5D6A7;   /* Labels - Green (Engineering) */
-  --tracking-10-color: #A5D6A7;  /* Final Tracking - Green (Engineering) */
-  --tracking-11-color: #A5D6A7;  /* Batching Sheets - Green (Engineering) */
-  --tracking-12-color: #A5D6A7;  /* Casting Layout - Green (Engineering) */
+  --tracking-9-color: #FFF59D;   /* Labels - Pastel Yellow (Fab Coordinator) */
+  --tracking-10-color: #FFF59D;  /* Final Tracking - Pastel Yellow (Fab Coordinator) */
+  --tracking-11-color: #FFF59D;  /* Batching Sheets - Pastel Yellow (Fab Coordinator) */
+  --tracking-12-color: #FFF59D;  /* Casting Layout - Pastel Yellow (Fab Coordinator) */
   --tracking-13-color: #A5D6A7;  /* Inflow Sales Ticket - Green (Engineering) */
   --tracking-14-color: #A5D6A7;  /* 3D Drawings/Parts List - Green (Engineering) */
   --tracking-15-color: #A5D6A7;  /* Toolpath Program - Green (Engineering) */
@@ -693,6 +694,12 @@ html {
 
 .group-header-cell.group-pm {
   background-color: #80CBC4;
+  color: #000;
+  border-radius: 4px 4px 0 0;
+}
+
+.group-header-cell.group-fab-coordinator {
+  background-color: #FFF59D;
   color: #000;
   border-radius: 4px 4px 0 0;
 }

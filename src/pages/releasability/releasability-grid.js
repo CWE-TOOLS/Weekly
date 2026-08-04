@@ -90,7 +90,8 @@ export function renderReleasabilityGrid(projects, manualWeeks = []) {
 const COLUMN_GROUPS = [
   { label: 'Classroom', startIndex: 0, endIndex: 2, className: 'group-classroom' },
   { label: 'Project Manager', startIndex: 3, endIndex: 8, className: 'group-pm' },
-  { label: 'Engineering', startIndex: 9, endIndex: 17, className: 'group-engineering' },
+  { label: 'Fab Coordinator', startIndex: 9, endIndex: 12, className: 'group-fab-coordinator' },
+  { label: 'Engineering', startIndex: 13, endIndex: 17, className: 'group-engineering' },
   { label: 'Release', startIndex: 18, endIndex: 18, className: 'group-release' }
 ];
 
