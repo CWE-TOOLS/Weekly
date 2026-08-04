@@ -7577,7 +7577,7 @@ function additiveAmount(item) {
 /**
  * Mix Day Totals — sums every ingredient across all batches in the plan,
  * applying the same per-batch overrides used on the tickets:
- *   - Sand split into "Sand - Bulk (Cowbay)" for Spray Up backup batches
+ *   - Sand split into "Sand - Bulk (Cowbay)" for Spray Up FINAL Back Up only
  *   - Fibers replaced by Cemfill for Spray Up backup batches and ALL Direct Cast batches
  *   - Pigments multiplied by (1 - reduction%) on FINAL Back Up batches
  * Matches the totals table from Batchin Calc/index.html.
@@ -7605,7 +7605,9 @@ function renderBatchTotals(entries) {
         const isDirectCast = log?.castMethod === 'directCast';
 
         // Pre-seed base ingredient ordering, inserting bulk sand right after sand.
-        const hasBulkSand = !isDirectCast && plan.batches.some(b => b.type === 'firstBackUp' || b.type === 'finalBackUp');
+        // Only FINAL Back Up uses Bulk Sand (Cowbay); First Back Up uses the regular
+        // color-log sand (e.g. Qrok), same as the Face Mix.
+        const hasBulkSand = !isDirectCast && plan.batches.some(b => b.type === 'finalBackUp');
         for (const ing of (log?.baseIngredients || [])) {
             if (!ing?.name) continue;
             const unit = ing.unit || 'lbs';
@@ -7629,11 +7631,12 @@ function renderBatchTotals(entries) {
             const pigMultiplier = applyPigReduction ? (1 - pigReductionPct / 100) : 1;
             const isBackup = batchType === 'firstBackUp' || batchType === 'finalBackUp';
 
-            // Base ingredients — split sand into Bulk Sand for sprayUp backup batches.
+            // Base ingredients — split sand into Bulk Sand for sprayUp FINAL Back Up
+            // only. First Back Up keeps the regular color-log sand (e.g. Qrok).
             for (const ing of (log?.baseIngredients || [])) {
                 if (!ing?.weight || !ing?.name) continue;
                 const w = Number(ing.weight) * scaleFactor;
-                if ((ing.name || '').trim().toLowerCase() === 'sand' && !isDirectCast && isBackup) {
+                if ((ing.name || '').trim().toLowerCase() === 'sand' && !isDirectCast && batchType === 'finalBackUp') {
                     addTotal('Sand_bulk', 'Sand - Bulk (Cowbay)', roundSig(w, 4), ing.unit || 'lbs', 'dry');
                 } else {
                     addTotal(ing.name, ing.name + (ing.note ? ' (' + ing.note + ')' : ''), roundSig(w, 4), ing.unit || 'lbs', 'dry');
@@ -7943,7 +7946,10 @@ function renderBatchTicketCard({
         : '';
 
     const isDirectCast = castMethod === 'directCast';
-    const sandTypeDisplay = (!isDirectCast && (batchType === 'firstBackUp' || batchType === 'finalBackUp'))
+    // Spray Up sand types by batch:
+    //   - Face Mix & First Back Up → the color-log sand (e.g. Qrok)
+    //   - FINAL Back Up            → Bulk Sand (Cowbay)
+    const sandTypeDisplay = (!isDirectCast && batchType === 'finalBackUp')
         ? 'Bulk Sand (Cowbay)'
         : escapeHtml(sand.type || '');
 
