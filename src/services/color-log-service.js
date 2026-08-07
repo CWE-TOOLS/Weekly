@@ -15,6 +15,10 @@ import { logger } from '../utils/logger.js';
 const TABLE = 'color_logs';
 
 const FORM_TO_DB = {
+    // For preset rows this is the preset's display name (set explicitly by
+    // saveAsPreset/updatePreset). For a project row it doubles as the "locked to
+    // preset" marker: non-empty = this log is a frozen snapshot of that preset.
+    presetName: 'preset_name',
     name: 'name',
     date: 'log_date',
     madeBy: 'made_by',

@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="src/styles/variables.css">
     <link rel="stylesheet" href="src/styles/base.css">
     <link rel="stylesheet" href="src/styles/buttons.css">
-    <link rel="stylesheet" href="src/styles/project-portal.css?v=20260717-1">
+    <link rel="stylesheet" href="src/styles/project-portal.css?v=20260807-1">
 
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 </head>
@@ -30,6 +30,7 @@
                 <div class="pp-folder-tabs" role="tablist" aria-label="Portal sections">
                     <div class="pp-folder-tab pp-folder-tab-active" role="tab" aria-selected="true" data-folder-tab="projects">Project Portal</div>
                     <div class="pp-folder-tab" role="tab" aria-selected="false" data-folder-tab="recent-memos">Recent Memos</div>
+                    <div class="pp-folder-tab" role="tab" aria-selected="false" data-folder-tab="standard-colors">Standard Colors</div>
                     <div class="pp-folder-tab pp-folder-tab-disabled" role="tab" aria-disabled="true" title="Coming soon">Shipping Log</div>
                     <div class="pp-folder-tab pp-folder-tab-disabled" role="tab" aria-disabled="true" title="Coming soon">Spec. Vendor Log</div>
                 </div>
@@ -92,6 +93,23 @@
                     No memos yet across any project.
                 </div>
                 <div id="pp-rm-list" class="pp-jm-list"></div>
+            </div>
+        </section>
+
+        <!-- STANDARD COLORS VIEW -->
+        <section id="pp-standards-view" class="pp-view" hidden>
+            <div class="pp-sc-layout">
+                <aside class="pp-sc-sidebar">
+                    <div class="pp-sc-sidebar-head">
+                        <input type="text" id="pp-sc-search" class="pp-sc-search" placeholder="Filter standard colors..." autocomplete="off" />
+                        <button type="button" id="pp-sc-new" class="pp-sc-new-btn">+ New</button>
+                    </div>
+                    <div id="pp-sc-list" class="pp-sc-list"></div>
+                </aside>
+                <div class="pp-sc-main">
+                    <div id="pp-sc-empty" class="pp-sc-empty">Select a standard color on the left to edit it, or click <strong>+ New</strong> to create one.</div>
+                    <div id="pp-sc-editor" class="pp-sc-editor" hidden></div>
+                </div>
             </div>
         </section>
 
@@ -567,6 +585,11 @@
                                         </div>
                                     </div>
                                 </div>
+                            </div>
+
+                            <div class="pp-cl-lock-banner" id="pp-cl-lock-banner" hidden>
+                                <span class="pp-cl-lock-text">&#128274; Locked to standard color: <strong id="pp-cl-lock-name"></strong>. These values match the standard and can't be edited.</span>
+                                <button type="button" id="pp-cl-clear-selection" class="pp-cl-clear-btn">Clear color log selection</button>
                             </div>
 
                             <div class="pp-cl-logs-bar" id="pp-cl-logs-bar" hidden>
@@ -1188,6 +1211,6 @@
         <div id="pp-toast" class="pp-toast" hidden></div>
     </div>
 
-    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20260721-1"></script>
+    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20260807-1"></script>
 </body>
 </html>

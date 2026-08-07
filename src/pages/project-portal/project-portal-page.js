@@ -92,7 +92,8 @@ import {
     saveColorLogForProject,
     loadPresets as loadColorLogPresets,
     saveAsPreset as saveColorLogAsPreset,
-    updatePreset as updateColorLogPreset
+    updatePreset as updateColorLogPreset,
+    deletePreset as deleteColorLogPreset
 } from '../../services/color-log-service.js';
 import { enableMultiColorForProject } from '../../services/multi-color-service.js';
 import {
@@ -305,6 +306,8 @@ async function showListView() {
     document.getElementById('pp-form-view').hidden = true;
     const memosView = document.getElementById('pp-memos-view');
     if (memosView) memosView.hidden = true;
+    const scViewLV = document.getElementById('pp-standards-view');
+    if (scViewLV) scViewLV.hidden = true;
     setFolderTabActive('projects');
     setProjectInUrl(null);
     setTabInUrl(null);
@@ -4674,8 +4677,8 @@ function clEnsureSandRow(log) {
     log.baseIngredients.unshift({ name: 'Sand', weight: '', unit: 'lbs', note: '' });
 }
 
-function clGetSandWeightLbs() {
-    const rows = document.querySelectorAll('#pp-cl-base-table tbody tr');
+function clGetSandWeightLbs(baseTableId = 'pp-cl-base-table') {
+    const rows = document.querySelectorAll(`#${baseTableId} tbody tr`);
     for (const tr of rows) {
         const nameInput = tr.querySelector('input[data-cl-field="name"]');
         const weightInput = tr.querySelector('input[data-cl-field="weight"]');
@@ -4726,10 +4729,10 @@ function clRenderSimpleTable(tableId, items, type) {
     `).join('');
 }
 
-function clRenderPigmentTable(tableId, items, type) {
+function clRenderPigmentTable(tableId, items, type, baseTableId = 'pp-cl-base-table') {
     const tbody = document.querySelector(`#${tableId} tbody`);
     if (!tbody) return;
-    const sandLbs = clGetSandWeightLbs();
+    const sandLbs = clGetSandWeightLbs(baseTableId);
     tbody.innerHTML = items.map((item, i) => {
         const pct = item.pct ?? '';
         const unit = item.unit || 'lbs';
@@ -4826,6 +4829,9 @@ function renderColorLog() {
     clSetRadio('pp-cl-cast', log.castMethod || 'sprayUp');
 
     Object.keys(CL_TYPE_KEY).forEach(clRenderType);
+
+    // Lock the form when this project log is a snapshot of a standard color.
+    clApplyLockState();
 }
 
 function clHandleAdd(type) {
@@ -4887,10 +4893,10 @@ function clHandleRowInputChange(tr, input) {
     }
 }
 
-function clRecomputeRowQty(tr, item) {
+function clRecomputeRowQty(tr, item, baseTableId = 'pp-cl-base-table') {
     const qtyInput = tr.querySelector('input[data-cl-field="qty"]');
     if (!qtyInput) return;
-    const sandLbs = clGetSandWeightLbs();
+    const sandLbs = clGetSandWeightLbs(baseTableId);
     const pct = item.pct;
     const unit = item.unit || 'lbs';
     if (pct === '' || pct == null || isNaN(pct) || sandLbs <= 0) {
@@ -5009,7 +5015,9 @@ async function refreshPresetPicker() {
 function loadPresetIntoForm(presetId) {
     const preset = colorLogPresets.find(p => p.id === presetId);
     if (!preset || !currentColorLog) return;
-    // Copy preset fields into the project's log, preserving id/projectNumber.
+    // Snapshot the preset's fields into the project's log, preserving id/projectNumber.
+    // presetName is retained (not cleared): a non-empty presetName on a project log
+    // marks it as locked to that standard color — see isColorLogLocked().
     const keepId = currentColorLog.id;
     const keepProject = currentColorLog.projectNumber;
     currentColorLog = {
@@ -5017,10 +5025,502 @@ function loadPresetIntoForm(presetId) {
         id: keepId,
         projectNumber: keepProject,
         isPreset: false,
-        presetName: ''
+        presetName: preset.presetName || preset.name || ''
     };
     renderColorLog();
     scheduleColorLogSave();
+}
+
+/**
+ * A project color log is "locked" when it's a frozen snapshot of a standard
+ * color — i.e. a non-preset log carrying a presetName. Locked logs render
+ * read-only; the user must Clear the selection to build a custom log.
+ */
+function isColorLogLocked() {
+    return !!(currentColorLog && !currentColorLog.isPreset && (currentColorLog.presetName || '').trim());
+}
+
+/**
+ * Apply the locked/unlocked state to the color-log form: toggle the banner,
+ * disable every recipe input inside the form wrap, and gate "Save as Standard
+ * Color" (only meaningful for a custom, unlocked log). Toolbar controls (preset
+ * picker, multi-color, pills, Clear) stay live.
+ */
+function clApplyLockState() {
+    const locked = isColorLogLocked();
+    const wrap = document.getElementById('pp-cl-wrap');
+    if (wrap) {
+        wrap.classList.toggle('pp-cl-locked', locked);
+        wrap.querySelectorAll('input, select, textarea, button').forEach(el => { el.disabled = locked; });
+    }
+    const banner = document.getElementById('pp-cl-lock-banner');
+    if (banner) banner.hidden = !locked;
+    const nameEl = document.getElementById('pp-cl-lock-name');
+    if (nameEl) nameEl.textContent = locked ? (currentColorLog.presetName || '') : '';
+    const saveBtn = document.getElementById('pp-cl-save-preset-btn');
+    if (saveBtn) saveBtn.disabled = locked;
+}
+
+/**
+ * Clear the standard-color selection: wipe every field (including the name)
+ * back to a blank log and unlock it so the user can build one from scratch.
+ */
+function handleClearColorLogSelection() {
+    if (!currentColorLog) return;
+    if (!window.confirm('Clear this color log and start from scratch?\n\nThis removes the standard color values and the name so you can build a custom color log.')) return;
+    const keepId = currentColorLog.id;
+    const keepProject = currentColorLog.projectNumber;
+    currentColorLog = {
+        ...createEmptyColorLog(),
+        id: keepId,
+        projectNumber: keepProject,
+        isPreset: false,
+        presetName: ''
+    };
+    clEnsureSandRow(currentColorLog);
+    renderColorLog();
+    scheduleColorLogSave();
+}
+
+// ============================================================================
+// STANDARD COLORS (preset) MANAGEMENT TAB
+// A top-level view to browse/create/edit/delete standard colors (color_logs
+// where is_preset = true). Reuses the low-level color-log row renderers against
+// a parallel set of pp-pcl-* table ids, editing a working copy (editingPreset)
+// so the project color-log code path stays untouched.
+// ============================================================================
+
+let editingPreset = null;        // deep-cloned working copy of the preset under edit
+let editingPresetIsNew = false;  // true when editingPreset is an unsaved new preset
+let standardColorsFilter = '';
+
+const PCL_TYPE_TABLE = {
+    base: 'pp-pcl-base-table',
+    additive: 'pp-pcl-additives-table',
+    aggregate: 'pp-pcl-aggregates-table',
+    pigment: 'pp-pcl-pigments-table',
+    grout: 'pp-pcl-grout-table',
+    fillCoat: 'pp-pcl-fillcoat-table',
+};
+
+async function showStandardColorsView() {
+    // Flush any pending saves from other views first.
+    if (colorLogSaveTimer) {
+        clearTimeout(colorLogSaveTimer);
+        colorLogSaveTimer = null;
+        try { await saveColorLogNow(); } catch (e) { /* logged */ }
+    }
+    await flushAllBatchTicketSaves();
+    await flushAllJobMemoSaves();
+
+    currentProjectNumber = null;
+    setProjectInUrl(null);
+    setTabInUrl(null);
+
+    document.getElementById('pp-list-view').hidden = true;
+    document.getElementById('pp-form-view').hidden = true;
+    const memosView = document.getElementById('pp-memos-view');
+    if (memosView) memosView.hidden = true;
+    const scView = document.getElementById('pp-standards-view');
+    if (scView) scView.hidden = false;
+    setFolderTabActive('standard-colors');
+
+    editingPreset = null;
+    editingPresetIsNew = false;
+    showPresetEditor(false);
+    await loadAndRenderStandardColors();
+}
+
+async function loadAndRenderStandardColors() {
+    const listEl = document.getElementById('pp-sc-list');
+    if (listEl) listEl.innerHTML = '<div class="pp-sc-loading">Loading…</div>';
+    try {
+        colorLogPresets = await loadColorLogPresets();
+    } catch (err) {
+        logger.error('[standard-colors] load failed', err);
+        colorLogPresets = [];
+        showToast('Failed to load standard colors', 'error');
+    }
+    renderStandardColorsList();
+}
+
+function renderStandardColorsList() {
+    const listEl = document.getElementById('pp-sc-list');
+    if (!listEl) return;
+    const filter = (standardColorsFilter || '').trim().toLowerCase();
+    const items = !filter
+        ? colorLogPresets
+        : colorLogPresets.filter(p => (p.presetName || p.name || '').toLowerCase().includes(filter));
+    if (!items.length) {
+        listEl.innerHTML = `<div class="pp-sc-list-empty">No standard colors${filter ? ' match your filter.' : ' yet.'}</div>`;
+        return;
+    }
+    const activeId = (editingPreset && !editingPresetIsNew) ? editingPreset.id : null;
+    listEl.innerHTML = items.map(p => {
+        const label = escapeHtml((p.presetName || p.name || '(unnamed)').trim());
+        const active = p.id === activeId ? ' is-active' : '';
+        return `<button type="button" class="pp-sc-list-item${active}" data-preset-id="${escapeAttr(p.id)}">${label}</button>`;
+    }).join('');
+}
+
+function showPresetEditor(show) {
+    const container = document.getElementById('pp-sc-editor');
+    const emptyEl = document.getElementById('pp-sc-empty');
+    if (container) container.hidden = !show;
+    if (emptyEl) emptyEl.hidden = show;
+}
+
+function selectPresetForEdit(id) {
+    const src = colorLogPresets.find(p => p.id === id);
+    if (!src) return;
+    editingPreset = JSON.parse(JSON.stringify(src));
+    editingPresetIsNew = false;
+    clEnsureSandRow(editingPreset);
+    renderPresetEditor();
+    renderStandardColorsList();
+}
+
+function startNewPreset() {
+    editingPreset = { ...createEmptyColorLog(), isPreset: true, presetName: '' };
+    editingPresetIsNew = true;
+    clEnsureSandRow(editingPreset);
+    renderPresetEditor();
+    renderStandardColorsList();
+}
+
+function pclRenderType(type) {
+    if (!editingPreset) return;
+    const tableId = PCL_TYPE_TABLE[type];
+    const items = editingPreset[CL_TYPE_KEY[type]] || [];
+    if (type === 'base' || type === 'additive') clRenderIngTable(tableId, items, type);
+    else if (type === 'aggregate') clRenderSimpleTable(tableId, items, type);
+    else if (type === 'pigment' || type === 'fillCoat') clRenderPigmentTable(tableId, items, type, 'pp-pcl-base-table');
+    else if (type === 'grout') clRenderGroutTable(tableId, items, type);
+}
+
+function renderPresetEditor() {
+    const container = document.getElementById('pp-sc-editor');
+    if (!container) return;
+    if (!editingPreset) { showPresetEditor(false); return; }
+    if (!container.dataset.built) {
+        container.innerHTML = presetEditorFormHtml();
+        container.dataset.built = '1';
+    }
+    showPresetEditor(true);
+
+    const p = editingPreset;
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v ?? ''; };
+    set('pp-pcl-presetname', p.presetName || '');
+    set('pp-pcl-temp', p.temperature);
+    set('pp-pcl-date', p.date);
+    set('pp-pcl-madeby', p.madeBy);
+    set('pp-pcl-finishing-notes', p.finishingNotes);
+    set('pp-pcl-sealing-notes', p.sealingNotes);
+
+    document.getElementById('pp-pcl-std-box')?.classList.toggle('checked', p.isStandard !== false);
+    document.getElementById('pp-pcl-cust-box')?.classList.toggle('checked', p.isStandard === false);
+    document.querySelectorAll('input[name="pp-pcl-cement"]').forEach(r => { r.checked = (r.value === (p.cementType || 'white')); });
+    document.querySelectorAll('input[name="pp-pcl-cast"]').forEach(r => { r.checked = (r.value === (p.castMethod || 'sprayUp')); });
+
+    Object.keys(CL_TYPE_KEY).forEach(pclRenderType);
+
+    const delBtn = document.getElementById('pp-sc-delete');
+    if (delBtn) delBtn.hidden = editingPresetIsNew;
+    const titleEl = document.getElementById('pp-sc-editor-title');
+    if (titleEl) titleEl.textContent = editingPresetIsNew ? 'New Standard Color' : 'Edit Standard Color';
+}
+
+function presetEditorFormHtml() {
+    return `
+    <div class="pp-sc-editor-bar">
+        <span class="pp-sc-editor-title" id="pp-sc-editor-title">Edit Standard Color</span>
+        <div class="pp-sc-editor-actions">
+            <button type="button" id="pp-sc-save" class="pp-sc-save-btn">Save</button>
+            <button type="button" id="pp-sc-delete" class="pp-sc-delete-btn">Delete</button>
+            <button type="button" id="pp-sc-cancel" class="pp-sc-cancel-btn">Close</button>
+        </div>
+    </div>
+    <div class="pp-cl-wrap">
+      <div class="pp-cl-paper">
+        <div class="pp-cl-header">
+            <div>
+                <div class="pp-cl-title">STANDARD COLOR</div>
+                <div class="pp-cl-sub">Concreteworks East &mdash; master formula</div>
+            </div>
+            <div class="pp-cl-sample">
+                <span class="pp-cl-sample-label">Name:</span>
+                <input type="text" id="pp-pcl-presetname" class="pp-cl-input pp-cl-input-lg" placeholder="Standard Color Name">
+            </div>
+        </div>
+
+        <div class="pp-cl-grid-2">
+            <div class="pp-cl-field"><span class="pp-cl-label">Temperature:</span><input type="text" id="pp-pcl-temp" class="pp-cl-input"></div>
+            <div class="pp-cl-field"><span class="pp-cl-label">Made By:</span><input type="text" id="pp-pcl-madeby" class="pp-cl-input"></div>
+        </div>
+        <div class="pp-cl-grid-2">
+            <div class="pp-cl-field"><span class="pp-cl-label">Date:</span><input type="date" id="pp-pcl-date" class="pp-cl-input"></div>
+            <div class="pp-cl-field"></div>
+        </div>
+
+        <div class="pp-cl-std-row">
+            <div class="pp-cl-cb-tag">
+                <span class="pp-cl-tag" data-cl-std="true">STANDARD</span>
+                <span class="pp-cl-tag-box checked" id="pp-pcl-std-box" data-cl-std="true"></span>
+                <span class="pp-cl-tag" data-cl-std="false" style="margin-left:30px;">CUSTOM</span>
+                <span class="pp-cl-tag-box" id="pp-pcl-cust-box" data-cl-std="false"></span>
+            </div>
+        </div>
+
+        <div class="pp-cl-cb-row">
+            <span class="pp-cl-label" style="font-weight:700;">Cement Type:</span>
+            <label class="pp-cl-cb"><input type="radio" name="pp-pcl-cement" value="white" checked><span class="pp-cl-checkbox"></span> White Portland</label>
+            <label class="pp-cl-cb"><input type="radio" name="pp-pcl-cement" value="gray"><span class="pp-cl-checkbox"></span> Gray Portland</label>
+            <label class="pp-cl-cb"><input type="radio" name="pp-pcl-cement" value="other"><span class="pp-cl-checkbox"></span> Other</label>
+        </div>
+
+        <div class="pp-cl-divider"></div>
+
+        <div class="pp-cl-2col">
+            <div class="pp-cl-col-left">
+                <table class="pp-cl-ing-table" id="pp-pcl-base-table">
+                    <thead><tr><th>Ingredient</th><th style="width:20%;">Weight</th><th style="width:22%;">Unit</th><th style="width:20%;">Note</th><th class="pp-cl-col-action"></th></tr></thead>
+                    <tbody></tbody>
+                </table>
+                <button class="pp-cl-btn-add" type="button" data-cl-add="base">+ Add Ingredient</button>
+            </div>
+            <div class="pp-cl-col-right">
+                <table class="pp-cl-ing-table" id="pp-pcl-additives-table">
+                    <thead><tr><th>Additive</th><th style="width:20%;">Amount</th><th style="width:22%;">Unit</th><th style="width:20%;">Note</th><th class="pp-cl-col-action"></th></tr></thead>
+                    <tbody></tbody>
+                </table>
+                <button class="pp-cl-btn-add" type="button" data-cl-add="additive">+ Add Additive</button>
+            </div>
+        </div>
+
+        <div class="pp-cl-cb-row pp-cl-cb-row-bordered">
+            <span class="pp-cl-label" style="font-weight:700;">Cast Method:</span>
+            <label class="pp-cl-cb"><input type="radio" name="pp-pcl-cast" value="sprayUp" checked><span class="pp-cl-checkbox"></span> Spray Up</label>
+            <label class="pp-cl-cb"><input type="radio" name="pp-pcl-cast" value="directCast"><span class="pp-cl-checkbox"></span> Direct Cast</label>
+            <label class="pp-cl-cb"><input type="radio" name="pp-pcl-cast" value="other"><span class="pp-cl-checkbox"></span> Other</label>
+        </div>
+
+        <div class="pp-cl-2col">
+            <div class="pp-cl-col-left">
+                <div class="pp-cl-sect-label">Aggregates:</div>
+                <table class="pp-cl-ing-table" id="pp-pcl-aggregates-table">
+                    <thead><tr><th>Name</th><th style="width:30%;">Amount</th><th style="width:28%;">Unit</th><th class="pp-cl-col-action"></th></tr></thead>
+                    <tbody></tbody>
+                </table>
+                <button class="pp-cl-btn-add" type="button" data-cl-add="aggregate">+ Add Aggregate</button>
+            </div>
+            <div class="pp-cl-col-right">
+                <div class="pp-cl-sect-label">Pigments:</div>
+                <table class="pp-cl-ing-table" id="pp-pcl-pigments-table">
+                    <thead><tr><th style="width:22%;">Pigment</th><th style="width:20%;">%</th><th style="width:20%;">Weight</th><th style="width:24%;">Unit</th><th class="pp-cl-col-action"></th></tr></thead>
+                    <tbody></tbody>
+                </table>
+                <button class="pp-cl-btn-add" type="button" data-cl-add="pigment">+ Add Pigment</button>
+            </div>
+        </div>
+
+        <div class="pp-cl-2col">
+            <div class="pp-cl-col-left">
+                <div class="pp-cl-sect-label">Grout Type:</div>
+                <table class="pp-cl-ing-table" id="pp-pcl-grout-table">
+                    <thead><tr><th>Grout Name</th><th style="width:30%;">Ratio %</th><th class="pp-cl-col-action"></th></tr></thead>
+                    <tbody></tbody>
+                </table>
+                <button class="pp-cl-btn-add" type="button" data-cl-add="grout">+ Add Grout</button>
+            </div>
+            <div class="pp-cl-col-right">
+                <div class="pp-cl-sect-label">Fill Coat:</div>
+                <table class="pp-cl-ing-table" id="pp-pcl-fillcoat-table">
+                    <thead><tr><th style="width:22%;">Fill Pigment</th><th style="width:20%;">%</th><th style="width:20%;">Weight</th><th style="width:24%;">Unit</th><th class="pp-cl-col-action"></th></tr></thead>
+                    <tbody></tbody>
+                </table>
+                <button class="pp-cl-btn-add" type="button" data-cl-add="fillCoat">+ Add Fill Pigment</button>
+            </div>
+        </div>
+
+        <div class="pp-cl-divider"></div>
+
+        <div class="pp-cl-2col">
+            <div class="pp-cl-col-left">
+                <div class="pp-cl-sect-label">Finishing Notes:</div>
+                <textarea id="pp-pcl-finishing-notes" class="pp-cl-textarea" rows="4"></textarea>
+            </div>
+            <div class="pp-cl-col-right">
+                <div class="pp-cl-sect-label">Sealing Notes:</div>
+                <textarea id="pp-pcl-sealing-notes" class="pp-cl-textarea" rows="4"></textarea>
+            </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ----- Standard Colors editor row handlers (operate on editingPreset) -----
+
+function pclHandleRowInputChange(tr, input) {
+    if (!editingPreset) return;
+    const type = tr.dataset.clType;
+    const idx = parseInt(tr.dataset.clIdx, 10);
+    const field = input.dataset.clField;
+    const key = CL_TYPE_KEY[type];
+    if (!key || isNaN(idx)) return;
+    const item = editingPreset[key]?.[idx];
+    if (!item) return;
+    if (field === 'name' || field === 'note') item[field] = input.value;
+    else if (field === 'weight') item.weight = input.value === '' ? '' : parseFloat(input.value);
+    else if (field === 'amount') item.amount = input.value === '' ? '' : parseFloat(input.value);
+    else if (field === 'pct') item.pct = input.value === '' ? '' : parseFloat(input.value);
+    else if (field === 'ratio') item.ratio = input.value === '' ? '' : parseFloat(input.value);
+    if (type === 'base' && (field === 'name' || field === 'weight')) { pclRenderType('pigment'); pclRenderType('fillCoat'); }
+    if (field === 'pct' && (type === 'pigment' || type === 'fillCoat')) clRecomputeRowQty(tr, item, 'pp-pcl-base-table');
+}
+
+function pclHandleRowUnitChange(tr, select) {
+    if (!editingPreset) return;
+    const type = tr.dataset.clType;
+    const idx = parseInt(tr.dataset.clIdx, 10);
+    const key = CL_TYPE_KEY[type];
+    if (!key || isNaN(idx)) return;
+    const item = editingPreset[key]?.[idx];
+    if (!item) return;
+    item.unit = select.value;
+    if (type === 'base') { pclRenderType('pigment'); pclRenderType('fillCoat'); }
+    else if (type === 'pigment' || type === 'fillCoat') pclRenderType(type);
+}
+
+function pclHandleAdd(type) {
+    if (!editingPreset) return;
+    const key = CL_TYPE_KEY[type];
+    if (!key) return;
+    const list = editingPreset[key];
+    if (type === 'base') list.push({ name: '', weight: '', unit: 'lbs', note: '' });
+    else if (type === 'additive') list.push({ name: '', amount: '', unit: 'oz', note: '' });
+    else if (type === 'aggregate') list.push({ name: '', amount: '', unit: 'lbs' });
+    else if (type === 'pigment' || type === 'fillCoat') list.push({ name: '', pct: '', qty: '', unit: 'lbs' });
+    else if (type === 'grout') list.push({ name: '', ratio: '' });
+    pclRenderType(type);
+}
+
+function pclHandleRemove(type, idx) {
+    if (!editingPreset) return;
+    const key = CL_TYPE_KEY[type];
+    const list = editingPreset[key];
+    if (!list || idx < 0 || idx >= list.length) return;
+    if (type === 'base' && clIsSandItem(list[idx])) return;
+    list.splice(idx, 1);
+    pclRenderType(type);
+}
+
+async function handleSaveStandardColor() {
+    if (!editingPreset) return;
+    const name = (editingPreset.presetName || '').trim();
+    if (!name) { showToast('Enter a standard color name first', 'error'); return; }
+    try {
+        let saved;
+        if (editingPresetIsNew) {
+            saved = await saveColorLogAsPreset(name, editingPreset);
+        } else {
+            saved = await updateColorLogPreset(editingPreset.id, editingPreset, name);
+        }
+        colorLogPresets = await loadColorLogPresets();
+        const fresh = colorLogPresets.find(p => p.id === (saved?.id || editingPreset.id));
+        editingPreset = fresh ? JSON.parse(JSON.stringify(fresh)) : null;
+        if (editingPreset) clEnsureSandRow(editingPreset);
+        editingPresetIsNew = false;
+        renderStandardColorsList();
+        renderPresetEditor();
+        showToast('Standard color saved', 'success');
+    } catch (err) {
+        logger.error('[standard-colors] save failed', err);
+        showToast('Failed to save standard color', 'error');
+    }
+}
+
+async function handleDeleteStandardColor() {
+    if (!editingPreset || editingPresetIsNew) return;
+    const label = (editingPreset.presetName || editingPreset.name || 'this standard color').trim();
+    if (!window.confirm(`Delete standard color "${label}"?\n\nThis cannot be undone. Projects already locked to it keep their snapshot.`)) return;
+    try {
+        await deleteColorLogPreset(editingPreset.id);
+        editingPreset = null;
+        editingPresetIsNew = false;
+        showPresetEditor(false);
+        colorLogPresets = await loadColorLogPresets();
+        renderStandardColorsList();
+        showToast('Standard color deleted', 'success');
+    } catch (err) {
+        logger.error('[standard-colors] delete failed', err);
+        showToast('Failed to delete standard color', 'error');
+    }
+}
+
+function initStandardColorsEvents() {
+    const searchEl = document.getElementById('pp-sc-search');
+    if (searchEl) searchEl.addEventListener('input', (e) => {
+        standardColorsFilter = e.target.value;
+        renderStandardColorsList();
+    });
+
+    const newBtn = document.getElementById('pp-sc-new');
+    if (newBtn) newBtn.addEventListener('click', () => startNewPreset());
+
+    const listEl = document.getElementById('pp-sc-list');
+    if (listEl) listEl.addEventListener('click', (e) => {
+        const item = e.target.closest('[data-preset-id]');
+        if (item) selectPresetForEdit(item.dataset.presetId);
+    });
+
+    const editor = document.getElementById('pp-sc-editor');
+    if (!editor) return;
+
+    editor.addEventListener('click', (e) => {
+        if (e.target.id === 'pp-sc-save')   { handleSaveStandardColor(); return; }
+        if (e.target.id === 'pp-sc-delete') { handleDeleteStandardColor(); return; }
+        if (e.target.id === 'pp-sc-cancel') {
+            editingPreset = null; editingPresetIsNew = false;
+            showPresetEditor(false); renderStandardColorsList();
+            return;
+        }
+        const addBtn = e.target.closest('[data-cl-add]');
+        if (addBtn) { pclHandleAdd(addBtn.dataset.clAdd); return; }
+        const removeBtn = e.target.closest('[data-cl-remove]');
+        if (removeBtn) {
+            const tr = removeBtn.closest('tr');
+            if (tr) pclHandleRemove(tr.dataset.clType, parseInt(tr.dataset.clIdx, 10));
+            return;
+        }
+        const stdEl = e.target.closest('[data-cl-std]');
+        if (stdEl && editingPreset) {
+            editingPreset.isStandard = stdEl.dataset.clStd === 'true';
+            document.getElementById('pp-pcl-std-box')?.classList.toggle('checked', editingPreset.isStandard);
+            document.getElementById('pp-pcl-cust-box')?.classList.toggle('checked', !editingPreset.isStandard);
+        }
+    });
+
+    editor.addEventListener('input', (e) => {
+        if (!editingPreset) return;
+        const t = e.target;
+        if (t.id === 'pp-pcl-presetname')      { editingPreset.presetName = t.value; return; }
+        if (t.id === 'pp-pcl-temp')            { editingPreset.temperature = t.value; return; }
+        if (t.id === 'pp-pcl-date')            { editingPreset.date = t.value; return; }
+        if (t.id === 'pp-pcl-madeby')          { editingPreset.madeBy = t.value; return; }
+        if (t.id === 'pp-pcl-finishing-notes') { editingPreset.finishingNotes = t.value; return; }
+        if (t.id === 'pp-pcl-sealing-notes')   { editingPreset.sealingNotes = t.value; return; }
+        const tr = t.closest('tr[data-cl-type]');
+        if (tr && t.matches('input[data-cl-field]')) pclHandleRowInputChange(tr, t);
+    });
+
+    editor.addEventListener('change', (e) => {
+        if (!editingPreset) return;
+        const t = e.target;
+        if (t.name === 'pp-pcl-cement') { editingPreset.cementType = t.value; return; }
+        if (t.name === 'pp-pcl-cast')   { editingPreset.castMethod = t.value; return; }
+        const tr = t.closest('tr[data-cl-type]');
+        if (tr && t.tagName === 'SELECT') pclHandleRowUnitChange(tr, t);
+    });
 }
 
 // ---------- Multi-color: toggle, pills, add/delete ----------
@@ -5777,6 +6277,8 @@ async function showRecentMemosView() {
     document.getElementById('pp-form-view').hidden = true;
     const memosView = document.getElementById('pp-memos-view');
     if (memosView) memosView.hidden = false;
+    const scViewRM = document.getElementById('pp-standards-view');
+    if (scViewRM) scViewRM.hidden = true;
     setFolderTabActive('recent-memos');
 
     await loadAndRenderRecentMemos();
@@ -6006,9 +6508,14 @@ function wireEvents() {
                 showListView();
             } else if (which === 'recent-memos') {
                 showRecentMemosView();
+            } else if (which === 'standard-colors') {
+                showStandardColorsView();
             }
         });
     });
+
+    // Standard Colors tab wiring (sidebar list, search, new, editor).
+    initStandardColorsEvents();
 
     // Recent Memos: search filter
     const rmSearch = document.getElementById('pp-rm-search');
@@ -6271,8 +6778,15 @@ function wireEvents() {
     const clPanel = document.querySelector('.pp-tab-panel[data-panel="color-log"]');
     if (clPanel) {
         clPanel.addEventListener('click', (e) => {
+            // Clear selection stays live even when locked — it's the unlock action.
+            if (e.target.id === 'pp-cl-clear-selection') {
+                handleClearColorLogSelection();
+                return;
+            }
+
             const addBtn = e.target.closest('[data-cl-add]');
             if (addBtn) {
+                if (isColorLogLocked()) return;
                 clHandleAdd(addBtn.dataset.clAdd);
                 scheduleColorLogSave();
                 return;
@@ -6280,6 +6794,7 @@ function wireEvents() {
 
             const removeBtn = e.target.closest('[data-cl-remove]');
             if (removeBtn) {
+                if (isColorLogLocked()) return;
                 const tr = removeBtn.closest('tr');
                 if (!tr) return;
                 clHandleRemove(tr.dataset.clType, parseInt(tr.dataset.clIdx, 10));
@@ -6289,6 +6804,7 @@ function wireEvents() {
 
             const stdEl = e.target.closest('[data-cl-std]');
             if (stdEl) {
+                if (isColorLogLocked()) return;
                 clSetStandard(stdEl.dataset.clStd === 'true');
                 scheduleColorLogSave();
                 return;
@@ -6332,6 +6848,7 @@ function wireEvents() {
         clPanel.addEventListener('input', (e) => {
             const target = e.target;
             if (!currentColorLog) return;
+            if (isColorLogLocked()) return; // recipe is read-only while locked to a standard color
             let touched = false;
 
             // Top-level fields
@@ -6366,6 +6883,9 @@ function wireEvents() {
                 target.value = '';
                 return;
             }
+
+            // Recipe selects (cement/cast/units) are read-only while locked.
+            if (isColorLogLocked()) return;
 
             if (target.name === 'pp-cl-cement') {
                 currentColorLog.cementType = target.value;

@@ -3099,6 +3099,198 @@ body.pp-printing .pp-tab-panel[data-panel="castings"] { display: none !important
     gap: 12px;
 }
 
+/* Locked-to-standard-color banner + clear button */
+.pp-cl-lock-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 8px 12px;
+    background: #FEF3C7;
+    border: 1px solid #F59E0B;
+    border-radius: var(--border-radius-md);
+    color: #92400E;
+    font-size: 13px;
+}
+
+.pp-cl-clear-btn {
+    flex: none;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #92400E;
+    background: #FFFFFF;
+    border: 1px solid #F59E0B;
+    border-radius: var(--border-radius-sm);
+    cursor: pointer;
+}
+
+.pp-cl-clear-btn:hover {
+    background: #FDE68A;
+}
+
+/* Read-only appearance while a project log is locked to a standard color */
+.pp-cl-wrap.pp-cl-locked .pp-cl-paper {
+    opacity: 0.9;
+}
+
+.pp-cl-wrap.pp-cl-locked input:disabled,
+.pp-cl-wrap.pp-cl-locked select:disabled,
+.pp-cl-wrap.pp-cl-locked textarea:disabled {
+    background: #f1f5f9;
+    color: var(--text-secondary);
+    cursor: not-allowed;
+}
+
+/* ===== Standard Colors management tab ===== */
+.pp-sc-layout {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    padding: 16px;
+}
+
+.pp-sc-sidebar {
+    flex: 0 0 260px;
+    max-width: 260px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    position: sticky;
+    top: 16px;
+}
+
+.pp-sc-sidebar-head {
+    display: flex;
+    gap: 8px;
+}
+
+.pp-sc-search {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 8px 10px;
+    border: 1px solid var(--border-primary);
+    border-radius: var(--border-radius-sm);
+    font-size: 13px;
+}
+
+.pp-sc-new-btn {
+    flex: none;
+    padding: 8px 12px;
+    font-weight: 700;
+    font-size: 13px;
+    color: #fff;
+    background: var(--accent-primary, #4f46e5);
+    border: none;
+    border-radius: var(--border-radius-sm);
+    cursor: pointer;
+}
+
+.pp-sc-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: calc(100vh - 160px);
+    overflow-y: auto;
+    border: 1px solid var(--border-primary);
+    border-radius: var(--border-radius-md);
+    padding: 6px;
+    background: var(--surface-container);
+}
+
+.pp-sc-list-item {
+    text-align: left;
+    padding: 8px 10px;
+    border: none;
+    background: transparent;
+    border-radius: var(--border-radius-sm);
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-primary);
+}
+
+.pp-sc-list-item:hover {
+    background: var(--surface-hover, #eef2ff);
+}
+
+.pp-sc-list-item.is-active {
+    background: var(--accent-primary, #4f46e5);
+    color: #fff;
+    font-weight: 700;
+}
+
+.pp-sc-list-empty,
+.pp-sc-loading {
+    padding: 12px;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.pp-sc-main {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.pp-sc-empty {
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+.pp-sc-editor-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+    padding: 10px 14px;
+    background: var(--surface-container);
+    border: 1px solid var(--border-primary);
+    border-radius: var(--border-radius-md);
+}
+
+.pp-sc-editor-title {
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--text-primary);
+}
+
+.pp-sc-editor-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.pp-sc-save-btn,
+.pp-sc-delete-btn,
+.pp-sc-cancel-btn {
+    padding: 7px 14px;
+    font-weight: 700;
+    font-size: 13px;
+    border-radius: var(--border-radius-sm);
+    cursor: pointer;
+    border: 1px solid var(--border-primary);
+}
+
+.pp-sc-save-btn {
+    color: #fff;
+    background: var(--accent-primary, #4f46e5);
+    border-color: transparent;
+}
+
+.pp-sc-delete-btn {
+    color: #b91c1c;
+    background: #fff;
+    border-color: #fca5a5;
+}
+
+.pp-sc-cancel-btn {
+    color: var(--text-secondary);
+    background: #fff;
+}
+
 .pp-cl-toolbar .pp-tab-notes {
     margin-top: 0;
     padding-top: 12px;
