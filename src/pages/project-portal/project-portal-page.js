@@ -184,7 +184,7 @@ let phaseRenameSaveTimers = new Map();     // phaseId -> debounce handle for ren
 let currentPhaseId = null;                 // active phase for filtering across tabs (null = no phase / phases off)
 // Production phases that can appear as columns on the tracking sheet.
 // Order here is the order they'll print in. Editable per project via the chip bar.
-const TRACKING_PHASES = ['MILL', 'FO', 'CAST', 'DEMOLD', 'FINISH', 'SEAL', 'STRIPS', 'DRILL', 'CRATE', 'FINAL', 'LOAD'];
+const TRACKING_PHASES = ['MILL', 'FO', 'CAST', 'DEMOLD', 'FINISH', 'EPOXY', 'SEAL', 'STRIPS', 'DRILL', 'DRY FIT', 'CRATE', 'FINAL', 'LOAD'];
 let currentTrackingPhases = new Set(TRACKING_PHASES); // default: all phases tracked
 // Tracks which project the phases above belong to, so switching projects resets defaults.
 let trackingPhasesProject = null;
