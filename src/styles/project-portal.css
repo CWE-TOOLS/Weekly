@@ -3100,6 +3100,10 @@ body.pp-printing .pp-tab-panel[data-panel="castings"] { display: none !important
 }
 
 /* Locked-to-standard-color banner + clear button */
+.pp-cl-lock-banner[hidden] {
+    display: none;
+}
+
 .pp-cl-lock-banner {
     display: flex;
     align-items: center;
