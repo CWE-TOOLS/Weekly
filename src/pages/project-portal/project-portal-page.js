@@ -7633,7 +7633,7 @@ function getCastingComponentColorIds(castingId) {
 function isPristineBatchTicket(t) {
     return !t.id && t.cuFt === '' && t.faceSqFt === '' && t.batchedBy === '' && t.notes === ''
         && t.cuFtPer250 === '4.28' && t.pigReduction === '50' && !t.pigReduceFirstBackup
-        && !t.omitAggFinalBackup
+        && !t.omitAggFinalBackup && !t.omitFibersFace && !t.cowbayFinalBackup
         && (!Array.isArray(t.batchAssignments) || t.batchAssignments.length === 0);
 }
 
@@ -7940,6 +7940,20 @@ function renderBatchTicketBody(casting, ticket, multi = false) {
                     </label>
                     <span class="pp-bt-field-hint">For Direct Cast mixes — leaves aggregate out of the FINAL Back Up batch (ticket and Mix Day Totals), while keeping it in the Face Mix.</span>
                 </div>
+                <div class="pp-bt-field pp-bt-omitfibers">
+                    <label class="pp-bt-checkbox">
+                        <input type="checkbox" data-bt-field="omitFibersFace"${ticket.omitFibersFace ? ' checked' : ''}>
+                        Omit Fibers from Face Mix
+                    </label>
+                    <span class="pp-bt-field-hint">For Direct Cast mixes — leaves fibers out of the Face Mix batch (ticket and Mix Day Totals). Back Up mixes keep their fibers.</span>
+                </div>
+                <div class="pp-bt-field pp-bt-cowbayfinal">
+                    <label class="pp-bt-checkbox">
+                        <input type="checkbox" data-bt-field="cowbayFinalBackup"${ticket.cowbayFinalBackup ? ' checked' : ''}>
+                        Switch to Cowbay for Final Back Up
+                    </label>
+                    <span class="pp-bt-field-hint">For Direct Cast mixes — overrides the FINAL Back Up sand to Bulk Sand (Cowbay) on the ticket and Mix Day Totals. The Face Mix keeps the color-log sand.</span>
+                </div>
                 <details class="pp-bt-advanced"${parseFloat(ticket.cuFtPer250) !== 4.28 ? ' open' : ''}>
                     <summary>Advanced</summary>
                     <div class="pp-bt-advanced-body">
@@ -8035,7 +8049,9 @@ function buildBatchTotalsEntries(casting) {
             log,
             pigReductionPct: parsePigReduction(t.pigReduction),
             reduceFirstBackup: !!t.pigReduceFirstBackup,
-            omitAggFinalBackup: !!t.omitAggFinalBackup
+            omitAggFinalBackup: !!t.omitAggFinalBackup,
+            omitFibersFace: !!t.omitFibersFace,
+            cowbayFinalBackup: !!t.cowbayFinalBackup
         });
     }
     return entries;
@@ -8130,13 +8146,14 @@ function renderBatchTotals(entries) {
     // Accumulate every color ticket's plan into one shared totals map — same-name
     // materials (Portland, Sand, Water…) merge across colors, color-specific
     // pigments/additives get their own rows.
-    for (const { plan, log, pigReductionPct = FINAL_BACKUP_PIG_REDUCTION_PCT, reduceFirstBackup = false, omitAggFinalBackup = false } of entries) {
+    for (const { plan, log, pigReductionPct = FINAL_BACKUP_PIG_REDUCTION_PCT, reduceFirstBackup = false, omitAggFinalBackup = false, omitFibersFace = false, cowbayFinalBackup = false } of entries) {
         const isDirectCast = log?.castMethod === 'directCast';
+        // FINAL Back Up sand goes to Bulk Sand (Cowbay) for Spray Up, or when a
+        // Direct Cast ticket opts in via "Switch to Cowbay for Final Back Up".
+        const finalUsesCowbay = !isDirectCast || cowbayFinalBackup;
 
         // Pre-seed base ingredient ordering, inserting bulk sand right after sand.
-        // Only FINAL Back Up uses Bulk Sand (Cowbay); First Back Up uses the regular
-        // color-log sand (e.g. Qrok), same as the Face Mix.
-        const hasBulkSand = !isDirectCast && plan.batches.some(b => b.type === 'finalBackUp');
+        const hasBulkSand = finalUsesCowbay && plan.batches.some(b => b.type === 'finalBackUp');
         for (const ing of (log?.baseIngredients || [])) {
             if (!ing?.name) continue;
             const unit = ing.unit || 'lbs';
@@ -8160,12 +8177,12 @@ function renderBatchTotals(entries) {
             const pigMultiplier = applyPigReduction ? (1 - pigReductionPct / 100) : 1;
             const isBackup = batchType === 'firstBackUp' || batchType === 'finalBackUp';
 
-            // Base ingredients — split sand into Bulk Sand for sprayUp FINAL Back Up
-            // only. First Back Up keeps the regular color-log sand (e.g. Qrok).
+            // Base ingredients — split sand into Bulk Sand for the FINAL Back Up
+            // (Spray Up, or Direct Cast opting in). Other batches keep color-log sand.
             for (const ing of (log?.baseIngredients || [])) {
                 if (!ing?.weight || !ing?.name) continue;
                 const w = Number(ing.weight) * scaleFactor;
-                if ((ing.name || '').trim().toLowerCase() === 'sand' && !isDirectCast && batchType === 'finalBackUp') {
+                if ((ing.name || '').trim().toLowerCase() === 'sand' && finalUsesCowbay && batchType === 'finalBackUp') {
                     addTotal('Sand_bulk', 'Sand - Bulk (Cowbay)', roundSig(w, 4), ing.unit || 'lbs', 'dry');
                 } else {
                     addTotal(ing.name, ing.name + (ing.note ? ' (' + ing.note + ')' : ''), roundSig(w, 4), ing.unit || 'lbs', 'dry');
@@ -8185,8 +8202,12 @@ function renderBatchTotals(entries) {
             // Fibers override:
             //   - Spray Up backup batches → Cemfill 18 lbs/250 lbs sand
             //   - Direct Cast (all batches) → Cemfill 18 lbs/250 lbs sand
+            // Skipped entirely for the Face Mix when the ticket opts out of fibers.
+            const omitFibersHere = omitFibersFace && batchType === 'face';
             const cemfillOverride = isBackup || (isDirectCast && batchType === 'face');
-            if (cemfillOverride) {
+            if (omitFibersHere) {
+                // no fibers on this batch
+            } else if (cemfillOverride) {
                 const fibersLbs = 18 * (batchSandLbs / 250);
                 addTotal('Fibers_override', 'Fibers - Cemfill', roundSig(fibersLbs, 4), 'lbs', 'dry');
             } else {
@@ -8261,6 +8282,8 @@ function renderBatchTicketCards(casting, ticket, plan) {
     const pigReductionPct = parsePigReduction(ticket.pigReduction);
     const reduceFirstBackup = !!ticket.pigReduceFirstBackup;
     const omitAggFinalBackup = !!ticket.omitAggFinalBackup;
+    const omitFibersFace = !!ticket.omitFibersFace;
+    const cowbayFinalBackup = !!ticket.cowbayFinalBackup;
 
     return plan.batches.map(b =>
         renderBatchTicketCard({
@@ -8277,6 +8300,8 @@ function renderBatchTicketCards(casting, ticket, plan) {
             pigReductionPct,
             reduceFirstBackup,
             omitAggFinalBackup,
+            omitFibersFace,
+            cowbayFinalBackup,
             // Project-wide slump target for this batch's type (in inches).
             targetSlump: clampSlumpTarget(currentSlumpTargets[b.type])
         })
@@ -8350,7 +8375,7 @@ function renderSlumpGraphic(targetIn = 5) {
 function renderBatchTicketCard({
     colorLog, batch, project, sampleName, castMethod, castNumber, castDate,
     colorName = '', batchedBy, notes, pigReductionPct = FINAL_BACKUP_PIG_REDUCTION_PCT, reduceFirstBackup = false,
-    omitAggFinalBackup = false,
+    omitAggFinalBackup = false, omitFibersFace = false, cowbayFinalBackup = false,
     targetSlump = 5
 }) {
     const slumpTarget = clampSlumpTarget(targetSlump);
@@ -8421,6 +8446,11 @@ function renderBatchTicketCard({
     if (overrideToCemfill) {
         fibers = { qty: roundSig(18 * (batchSandLbs / 250), 2), unit: 'lbs', type: 'Cemfill' };
     }
+    // Omit fibers from the Face Mix entirely when the ticket opts out
+    // (e.g. Direct Cast jobs that don't want fibers in the face coat).
+    if (omitFibersFace && batchType === 'face') {
+        fibers = { qty: '-', unit: 'lbs', type: '' };
+    }
 
     // ADDITIVES — fully dynamic. The color log stores Water + Forton as base
     // ingredients and ADVA / Eclipse / Fibers (+ any custom) as additives, but the
@@ -8485,10 +8515,12 @@ function renderBatchTicketCard({
         : '';
 
     const isDirectCast = castMethod === 'directCast';
-    // Spray Up sand types by batch:
+    // Sand type by batch:
     //   - Face Mix & First Back Up → the color-log sand (e.g. Qrok)
-    //   - FINAL Back Up            → Bulk Sand (Cowbay)
-    const sandTypeDisplay = (!isDirectCast && batchType === 'finalBackUp')
+    //   - FINAL Back Up → Bulk Sand (Cowbay) for Spray Up, or when a Direct
+    //     Cast ticket opts in via "Switch to Cowbay for Final Back Up".
+    const useCowbayFinal = (!isDirectCast || cowbayFinalBackup) && batchType === 'finalBackUp';
+    const sandTypeDisplay = useCowbayFinal
         ? 'Bulk Sand (Cowbay)'
         : escapeHtml(sand.type || '');
 
@@ -8697,7 +8729,7 @@ function handleBatchFieldInput(castingId, field, value) {
     if (!(field in ticket)) return;
     ticket[field] = value;
     // Inputs that affect the visible preview: re-render it so summary/tickets stay in sync.
-    const previewAffectingFields = ['cuFt', 'faceSqFt', 'cuFtPer250', 'pigReduction', 'pigReduceFirstBackup', 'omitAggFinalBackup', 'batchedBy', 'notes', 'colorLogId'];
+    const previewAffectingFields = ['cuFt', 'faceSqFt', 'cuFtPer250', 'pigReduction', 'pigReduceFirstBackup', 'omitAggFinalBackup', 'omitFibersFace', 'cowbayFinalBackup', 'batchedBy', 'notes', 'colorLogId'];
     if (previewAffectingFields.includes(field)) {
         // If the batch count would change, drop manual overrides so they don't desync.
         const casting = currentCastings.find(c => c.id === castingId);
@@ -11197,6 +11229,8 @@ function handlePrintBatchTickets(castingId) {
         const pigReductionPct = parsePigReduction(ticket.pigReduction);
         const reduceFirstBackup = !!ticket.pigReduceFirstBackup;
         const omitAggFinalBackup = !!ticket.omitAggFinalBackup;
+        const omitFibersFace = !!ticket.omitFibersFace;
+        const cowbayFinalBackup = !!ticket.cowbayFinalBackup;
 
         return plan.batches.map(b => `
         <div class="bt-page bt-${b.type}">
@@ -11214,6 +11248,8 @@ function handlePrintBatchTickets(castingId) {
                 pigReductionPct,
                 reduceFirstBackup,
                 omitAggFinalBackup,
+                omitFibersFace,
+                cowbayFinalBackup,
                 // Project-wide slump target for this batch's type — mirror the on-screen
                 // preview (renderBatchTicketCards) so print isn't stuck on the 5" default.
                 targetSlump: clampSlumpTarget(currentSlumpTargets[b.type])
