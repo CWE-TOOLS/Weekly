@@ -5020,12 +5020,17 @@ function loadPresetIntoForm(presetId) {
     // marks it as locked to that standard color — see isColorLogLocked().
     const keepId = currentColorLog.id;
     const keepProject = currentColorLog.projectNumber;
+    const standardName = preset.presetName || preset.name || '';
     currentColorLog = {
         ...preset,
         id: keepId,
         projectNumber: keepProject,
         isPreset: false,
-        presetName: preset.presetName || preset.name || ''
+        // Name the project's color after the standard color. Presets keep their
+        // identity in presetName; the inner `name` is often blank (e.g. presets
+        // made in the Standard Colors tab), which otherwise rendered "unnamed".
+        name: standardName,
+        presetName: standardName
     };
     renderColorLog();
     scheduleColorLogSave();
