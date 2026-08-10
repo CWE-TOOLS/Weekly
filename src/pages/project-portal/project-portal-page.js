@@ -7633,6 +7633,7 @@ function getCastingComponentColorIds(castingId) {
 function isPristineBatchTicket(t) {
     return !t.id && t.cuFt === '' && t.faceSqFt === '' && t.batchedBy === '' && t.notes === ''
         && t.cuFtPer250 === '4.28' && t.pigReduction === '50' && !t.pigReduceFirstBackup
+        && !t.omitAggFinalBackup
         && (!Array.isArray(t.batchAssignments) || t.batchAssignments.length === 0);
 }
 
@@ -7932,6 +7933,13 @@ function renderBatchTicketBody(casting, ticket, multi = false) {
                     </div>
                     <span class="pp-bt-field-hint">Always applied to FINAL Back Up. Check the box to also reduce First Back Up.</span>
                 </div>
+                <div class="pp-bt-field pp-bt-omitagg">
+                    <label class="pp-bt-checkbox">
+                        <input type="checkbox" data-bt-field="omitAggFinalBackup"${ticket.omitAggFinalBackup ? ' checked' : ''}>
+                        Omit Aggregate from Final Back Up
+                    </label>
+                    <span class="pp-bt-field-hint">For Direct Cast mixes — leaves aggregate out of the FINAL Back Up batch (ticket and Mix Day Totals), while keeping it in the Face Mix.</span>
+                </div>
                 <details class="pp-bt-advanced"${parseFloat(ticket.cuFtPer250) !== 4.28 ? ' open' : ''}>
                     <summary>Advanced</summary>
                     <div class="pp-bt-advanced-body">
@@ -8026,7 +8034,8 @@ function buildBatchTotalsEntries(casting) {
             plan,
             log,
             pigReductionPct: parsePigReduction(t.pigReduction),
-            reduceFirstBackup: !!t.pigReduceFirstBackup
+            reduceFirstBackup: !!t.pigReduceFirstBackup,
+            omitAggFinalBackup: !!t.omitAggFinalBackup
         });
     }
     return entries;
@@ -8121,7 +8130,7 @@ function renderBatchTotals(entries) {
     // Accumulate every color ticket's plan into one shared totals map — same-name
     // materials (Portland, Sand, Water…) merge across colors, color-specific
     // pigments/additives get their own rows.
-    for (const { plan, log, pigReductionPct = FINAL_BACKUP_PIG_REDUCTION_PCT, reduceFirstBackup = false } of entries) {
+    for (const { plan, log, pigReductionPct = FINAL_BACKUP_PIG_REDUCTION_PCT, reduceFirstBackup = false, omitAggFinalBackup = false } of entries) {
         const isDirectCast = log?.castMethod === 'directCast';
 
         // Pre-seed base ingredient ordering, inserting bulk sand right after sand.
@@ -8163,10 +8172,14 @@ function renderBatchTotals(entries) {
                 }
             }
 
-            // Aggregates — printed under DRY BATCH on every ticket card, so total them the same way.
-            for (const agg of (log?.aggregates || [])) {
-                if (!agg?.name || !agg.amount) continue;
-                addTotal('agg_' + agg.name, agg.name, roundSig(Number(agg.amount) * scaleFactor, 4), agg.unit || 'lbs', 'dry');
+            // Aggregates — printed under DRY BATCH on every ticket card, so total them
+            // the same way. Skipped for the FINAL Back Up when the ticket opts out.
+            const omitAggHere = omitAggFinalBackup && batchType === 'finalBackUp';
+            if (!omitAggHere) {
+                for (const agg of (log?.aggregates || [])) {
+                    if (!agg?.name || !agg.amount) continue;
+                    addTotal('agg_' + agg.name, agg.name, roundSig(Number(agg.amount) * scaleFactor, 4), agg.unit || 'lbs', 'dry');
+                }
             }
 
             // Fibers override:
@@ -8247,6 +8260,7 @@ function renderBatchTicketCards(casting, ticket, plan) {
 
     const pigReductionPct = parsePigReduction(ticket.pigReduction);
     const reduceFirstBackup = !!ticket.pigReduceFirstBackup;
+    const omitAggFinalBackup = !!ticket.omitAggFinalBackup;
 
     return plan.batches.map(b =>
         renderBatchTicketCard({
@@ -8262,6 +8276,7 @@ function renderBatchTicketCards(casting, ticket, plan) {
             notes: ticket.notes,
             pigReductionPct,
             reduceFirstBackup,
+            omitAggFinalBackup,
             // Project-wide slump target for this batch's type (in inches).
             targetSlump: clampSlumpTarget(currentSlumpTargets[b.type])
         })
@@ -8335,6 +8350,7 @@ function renderSlumpGraphic(targetIn = 5) {
 function renderBatchTicketCard({
     colorLog, batch, project, sampleName, castMethod, castNumber, castDate,
     colorName = '', batchedBy, notes, pigReductionPct = FINAL_BACKUP_PIG_REDUCTION_PCT, reduceFirstBackup = false,
+    omitAggFinalBackup = false,
     targetSlump = 5
 }) {
     const slumpTarget = clampSlumpTarget(targetSlump);
@@ -8373,8 +8389,11 @@ function renderBatchTicketCard({
     const sand     = scaleBase('Sand');
     const pozzo    = scaleBase('Pozzotive');
 
+    // Aggregate is omitted from the FINAL Back Up when the ticket opts out
+    // (e.g. Direct Cast jobs that only want aggregate in the Face Mix).
+    const omitAggHere = omitAggFinalBackup && batchType === 'finalBackUp';
     let aggRows = '';
-    const aggs = (colorLog?.aggregates || []).filter(a => a && a.name);
+    const aggs = omitAggHere ? [] : (colorLog?.aggregates || []).filter(a => a && a.name);
     if (aggs.length) {
         aggRows = aggs.map(agg => {
             const qty = agg.amount ? roundSig(Number(agg.amount) * scaleFactor, 2) : '-';
@@ -8678,7 +8697,7 @@ function handleBatchFieldInput(castingId, field, value) {
     if (!(field in ticket)) return;
     ticket[field] = value;
     // Inputs that affect the visible preview: re-render it so summary/tickets stay in sync.
-    const previewAffectingFields = ['cuFt', 'faceSqFt', 'cuFtPer250', 'pigReduction', 'pigReduceFirstBackup', 'batchedBy', 'notes', 'colorLogId'];
+    const previewAffectingFields = ['cuFt', 'faceSqFt', 'cuFtPer250', 'pigReduction', 'pigReduceFirstBackup', 'omitAggFinalBackup', 'batchedBy', 'notes', 'colorLogId'];
     if (previewAffectingFields.includes(field)) {
         // If the batch count would change, drop manual overrides so they don't desync.
         const casting = currentCastings.find(c => c.id === castingId);
@@ -11177,6 +11196,7 @@ function handlePrintBatchTickets(castingId) {
         // preview applies the reduction.
         const pigReductionPct = parsePigReduction(ticket.pigReduction);
         const reduceFirstBackup = !!ticket.pigReduceFirstBackup;
+        const omitAggFinalBackup = !!ticket.omitAggFinalBackup;
 
         return plan.batches.map(b => `
         <div class="bt-page bt-${b.type}">
@@ -11193,6 +11213,7 @@ function handlePrintBatchTickets(castingId) {
                 notes: ticket.notes,
                 pigReductionPct,
                 reduceFirstBackup,
+                omitAggFinalBackup,
                 // Project-wide slump target for this batch's type — mirror the on-screen
                 // preview (renderBatchTicketCards) so print isn't stuck on the 5" default.
                 targetSlump: clampSlumpTarget(currentSlumpTargets[b.type])
