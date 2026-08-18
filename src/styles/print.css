@@ -305,12 +305,12 @@ li:last-child {
         color: #222 !important;
         text-align: center;
         line-height: 1.3;
-        /* Clamp long descriptions so a single task can't overrun the sheet */
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 4;
-        line-clamp: 4;
-        overflow: hidden;
+        /* Show the full description on day/week prints — the card and row grow
+           with the text, using the empty space instead of clipping. The dense
+           "optimized" page keeps a clamp (below) where space is genuinely tight. */
+        overflow: visible;
+        overflow-wrap: break-word;
+        word-break: break-word;
     }
 
     .print-task-details {
@@ -481,6 +481,13 @@ li:last-child {
         color: #222 !important;
         text-align: center !important;
         line-height: 1.1 !important;
+        /* Dense many-task pages are genuinely tight — keep a clamp so one long
+           description can't overrun the sheet. Raised from 4 to 6 lines. */
+        display: -webkit-box !important;
+        -webkit-box-orient: vertical !important;
+        -webkit-line-clamp: 6 !important;
+        line-clamp: 6 !important;
+        overflow: hidden !important;
     }
 
     .print-page-optimized .print-task-details {
