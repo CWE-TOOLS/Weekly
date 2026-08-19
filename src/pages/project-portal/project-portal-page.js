@@ -569,6 +569,9 @@ function setActiveTab(tab) {
     // Print Label (folder labels) lives beside Print Cover — Info tab only.
     const printLabelBtn = document.getElementById('pp-print-label-btn');
     if (printLabelBtn) printLabelBtn.hidden = (tab !== 'info');
+    // Print Shop Folder Cover (QC sticker cover) — Info tab only.
+    const printShopFolderBtn = document.getElementById('pp-print-shop-folder-btn');
+    if (printShopFolderBtn) printShopFolderBtn.hidden = (tab !== 'info');
 
     if (tab === 'shipping' && currentProjectNumber) {
         activateShippingTab();
@@ -6670,6 +6673,12 @@ function wireEvents() {
         openPrintLabelModal();
     });
 
+    // Print Shop Folder Cover (QC sticker cover) — Info tab.
+    document.getElementById('pp-print-shop-folder-btn')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        handlePrintShopFolderCover();
+    });
+
     // Print Tracking modal: close handlers
     document.getElementById('pp-track-print-modal-close').addEventListener('click', closeTrackPrintModal);
     document.getElementById('pp-track-print-modal-cancel').addEventListener('click', closeTrackPrintModal);
@@ -10331,6 +10340,134 @@ function handlePrintCoverPage() {
     doc.open();
     doc.write(html);
     doc.close();
+}
+
+// ---------- Print Shop Folder Cover (QC sticker cover) ----------
+// Letter portrait. Same header as the project cover, then a grid of 1"
+// circles — one per active tracking-sheet column — for placing 1" round QC
+// stickers. Each circle is labelled "Post <column>" (e.g. Post Mill), in the
+// same order and active set as the project's Tracking tab.
+
+const SHOP_FOLDER_PHASE_LABELS = {
+    MILL: 'Mill', FO: 'FO', CAST: 'Cast', DEMOLD: 'Demold', FINISH: 'Finish',
+    EPOXY: 'Epoxy', SEAL: 'Seal', STRIPS: 'Strips', DRILL: 'Drill',
+    'DRY FIT': 'Dry Fit', CRATE: 'Crate', FINAL: 'Final', LOAD: 'Load'
+};
+
+function shopFolderPhaseLabel(phase) {
+    return SHOP_FOLDER_PHASE_LABELS[phase]
+        || String(phase || '').toLowerCase().replace(/\b\w/g, ch => ch.toUpperCase());
+}
+
+const SHOP_FOLDER_COVER_CSS = `
+@page { size: letter portrait; margin: 0.5in; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', Arial, sans-serif; color: #000; font-size: 10pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; line-height: 1.35; }
+.cv-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14pt; }
+.cv-status { display: inline-block; padding: 4pt 14pt; border-radius: 999px; font-size: 10pt; font-weight: 700; letter-spacing: 0.3pt; background: #b91c1c; color: #fff; }
+.cv-status.cv-status-kicked-off  { background: #1e40af; }
+.cv-status.cv-status-releasability { background: #b45309; }
+.cv-status.cv-status-approved      { background: #166534; }
+.cv-status.cv-status-in-production { background: #5b21b6; }
+.cv-status.cv-status-shipped       { background: #0f766e; }
+.cv-status.cv-status-closed-out    { background: #475569; }
+.cv-brand { font-size: 22pt; font-weight: 800; letter-spacing: 1pt; }
+.cv-meta { display: flex; gap: 24pt; margin-bottom: 10pt; }
+.cv-meta-col { flex: 1; display: grid; grid-template-columns: 10em 1fr; row-gap: 3pt; column-gap: 6pt; }
+.cv-meta-col .cv-value { font-weight: 700; }
+.cv-meta-col .cv-value.cv-multiline { white-space: pre-wrap; }
+.sf-title { background: #111827; color: #fff; text-align: center; padding: 6pt 8pt; font-size: 13pt; font-weight: 700; letter-spacing: 0.4pt; text-transform: uppercase; margin: 8pt 0 4pt 0; }
+.sf-sub { text-align: center; font-size: 9pt; color: #374151; margin-bottom: 18pt; }
+.sf-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.45in 0.2in; justify-items: center; margin-top: 8pt; }
+.sf-cell { display: flex; flex-direction: column; align-items: center; gap: 8pt; break-inside: avoid; }
+.sf-label { font-size: 11pt; font-weight: 700; text-align: center; max-width: 1.4in; line-height: 1.2; }
+.sf-circle { width: 1in; height: 1in; border: 1.5pt solid #000; border-radius: 50%; }
+.sf-empty { text-align: center; color: #6b7280; font-style: italic; margin-top: 24pt; }
+`;
+
+function buildShopFolderCoverHtml(f, phases) {
+    const statusCls = f.status ? `cv-status-${statusSlug(f.status)}` : '';
+    const statusText = f.status || 'No Status';
+    const projectAddrLines = f.project_address ? escapeHtml(f.project_address).replace(/\n/g, '<br>') : '';
+
+    const circles = phases.length
+        ? `<div class="sf-grid">${phases.map(p => `
+            <div class="sf-cell">
+                <div class="sf-label">Post ${escapeHtml(shopFolderPhaseLabel(p))}</div>
+                <div class="sf-circle"></div>
+            </div>`).join('')}</div>`
+        : `<div class="sf-empty">No tracking columns are active for this project — enable columns on the Tracking tab.</div>`;
+
+    return `<!doctype html><html><head><meta charset="utf-8"><title>Shop Folder Cover — ${escapeHtml(f.project_number || '')} ${escapeHtml(f.project_name || '')}</title><style>${SHOP_FOLDER_COVER_CSS}</style></head><body>
+        <div class="cv-header">
+            <span class="cv-status ${statusCls}">${escapeHtml(statusText)}</span>
+            <span class="cv-brand">CWE</span>
+        </div>
+        <div class="cv-meta">
+            <div class="cv-meta-col">
+                <span class="cv-label">Project Name:</span><span class="cv-value">${escapeHtml(f.project_name)}</span>
+                <span class="cv-label">Project #:</span><span class="cv-value">${escapeHtml(f.project_number)}</span>
+                <span class="cv-label">PM:</span><span class="cv-value">${escapeHtml(f.pm)}</span>
+            </div>
+            <div class="cv-meta-col">
+                <span class="cv-label">Date:</span><span class="cv-value">${escapeHtml(f.project_date)}</span>
+                <span class="cv-label">Project Address:</span><span class="cv-value cv-multiline">${projectAddrLines}</span>
+            </div>
+        </div>
+        <div class="sf-title">Quality Control &mdash; Sticker Cover</div>
+        <div class="sf-sub">Place a 1&quot; round QC sticker in each circle as its step is completed.</div>
+        ${circles}
+    </body></html>`;
+}
+
+/** Print a full HTML document via a hidden iframe (leaves the page untouched). */
+function printHtmlInIframe(html, frameId, errLabel = 'print') {
+    const prior = document.getElementById(frameId);
+    if (prior) prior.remove();
+
+    const iframe = document.createElement('iframe');
+    iframe.id = frameId;
+    iframe.setAttribute('aria-hidden', 'true');
+    iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;';
+    document.body.appendChild(iframe);
+
+    let cleaned = false;
+    const cleanup = () => { if (cleaned) return; cleaned = true; setTimeout(() => iframe.remove(), 500); };
+
+    iframe.addEventListener('load', () => {
+        try {
+            const win = iframe.contentWindow;
+            win.addEventListener('afterprint', cleanup);
+            win.focus();
+            win.print();
+        } catch (err) {
+            logger.error(`[project-portal] ${errLabel} failed:`, err);
+            showToast('Print failed', 'error');
+            cleanup();
+        }
+        setTimeout(cleanup, 60000);
+    }, { once: true });
+
+    const doc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (!doc) {
+        showToast('Print failed — could not open frame', 'error');
+        iframe.remove();
+        return;
+    }
+    doc.open();
+    doc.write(html);
+    doc.close();
+}
+
+function handlePrintShopFolderCover() {
+    if (!currentProjectNumber) {
+        showToast('Save the project first', 'error');
+        return;
+    }
+    const fields = readCoverFields();
+    const phases = TRACKING_PHASES.filter(p => currentTrackingPhases.has(p));
+    const html = buildShopFolderCoverHtml(fields, phases);
+    printHtmlInIframe(html, 'pp-shop-folder-print-frame', 'print shop folder cover');
 }
 
 // ---------- Print PM List (project list view) ----------
