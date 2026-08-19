@@ -10359,6 +10359,9 @@ function shopFolderPhaseLabel(phase) {
         || String(phase || '').toLowerCase().replace(/\b\w/g, ch => ch.toUpperCase());
 }
 
+// Fixed QC circles shown on every project's cover, regardless of tracking columns.
+const SHOP_FOLDER_FIXED_CIRCLES = ['Batch Check'];
+
 const SHOP_FOLDER_CEMENT_LABELS = { white: 'White Portland', gray: 'Gray Portland', other: 'Other' };
 const SHOP_FOLDER_CAST_LABELS = { sprayUp: 'Spray Up', directCast: 'Direct Cast', other: 'Other' };
 
@@ -10428,13 +10431,16 @@ function buildShopFolderCoverHtml(f, phases, colorLogs) {
     const statusText = f.status || 'No Status';
     const projectAddrLines = f.project_address ? escapeHtml(f.project_address).replace(/\n/g, '<br>') : '';
 
-    const circles = phases.length
-        ? `<div class="sf-grid">${phases.map(p => `
+    // Tracking-column circles ("Post <column>") followed by the fixed circles.
+    const circleLabels = [
+        ...phases.map(p => `Post ${shopFolderPhaseLabel(p)}`),
+        ...SHOP_FOLDER_FIXED_CIRCLES
+    ];
+    const circles = `<div class="sf-grid">${circleLabels.map(label => `
             <div class="sf-cell">
-                <div class="sf-label">Post ${escapeHtml(shopFolderPhaseLabel(p))}</div>
+                <div class="sf-label">${escapeHtml(label)}</div>
                 <div class="sf-circle"></div>
-            </div>`).join('')}</div>`
-        : `<div class="sf-empty">No tracking columns are active for this project — enable columns on the Tracking tab.</div>`;
+            </div>`).join('')}</div>`;
 
     return `<!doctype html><html><head><meta charset="utf-8"><title>Shop Folder Cover — ${escapeHtml(f.project_number || '')} ${escapeHtml(f.project_name || '')}</title><style>${SHOP_FOLDER_COVER_CSS}</style></head><body>
         <div class="cv-header">
