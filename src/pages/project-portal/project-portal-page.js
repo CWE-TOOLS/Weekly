@@ -10359,8 +10359,11 @@ function shopFolderPhaseLabel(phase) {
         || String(phase || '').toLowerCase().replace(/\b\w/g, ch => ch.toUpperCase());
 }
 
-// Fixed QC circles shown on every project's cover, regardless of tracking columns.
-const SHOP_FOLDER_FIXED_CIRCLES = ['Batch Check'];
+// Fixed QC circles shown on every project's cover, regardless of tracking
+// columns. Keyed by the tracking phase they should appear immediately BEFORE,
+// so they slot into the workflow sequence (e.g. Batch Check right before Cast).
+// Any whose anchor phase isn't active fall back to the end of the grid.
+const SHOP_FOLDER_FIXED_BEFORE = { CAST: ['Batch Check'] };
 
 const SHOP_FOLDER_CEMENT_LABELS = { white: 'White Portland', gray: 'Gray Portland', other: 'Other' };
 const SHOP_FOLDER_CAST_LABELS = { sprayUp: 'Spray Up', directCast: 'Direct Cast', other: 'Other' };
@@ -10431,11 +10434,20 @@ function buildShopFolderCoverHtml(f, phases, colorLogs) {
     const statusText = f.status || 'No Status';
     const projectAddrLines = f.project_address ? escapeHtml(f.project_address).replace(/\n/g, '<br>') : '';
 
-    // Tracking-column circles ("Post <column>") followed by the fixed circles.
-    const circleLabels = [
-        ...phases.map(p => `Post ${shopFolderPhaseLabel(p)}`),
-        ...SHOP_FOLDER_FIXED_CIRCLES
-    ];
+    // Tracking-column circles ("Post <column>") with fixed circles slotted in
+    // before their anchor phase; unanchored/leftover fixed circles go at the end.
+    const circleLabels = [];
+    const placedFixed = new Set();
+    for (const p of phases) {
+        (SHOP_FOLDER_FIXED_BEFORE[p] || []).forEach(label => {
+            circleLabels.push(label);
+            placedFixed.add(label);
+        });
+        circleLabels.push(`Post ${shopFolderPhaseLabel(p)}`);
+    }
+    Object.values(SHOP_FOLDER_FIXED_BEFORE).flat().forEach(label => {
+        if (!placedFixed.has(label)) circleLabels.push(label);
+    });
     const circles = `<div class="sf-grid">${circleLabels.map(label => `
             <div class="sf-cell">
                 <div class="sf-label">${escapeHtml(label)}</div>
