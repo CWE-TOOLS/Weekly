@@ -10359,6 +10359,36 @@ function shopFolderPhaseLabel(phase) {
         || String(phase || '').toLowerCase().replace(/\b\w/g, ch => ch.toUpperCase());
 }
 
+const SHOP_FOLDER_CEMENT_LABELS = { white: 'White Portland', gray: 'Gray Portland', other: 'Other' };
+const SHOP_FOLDER_CAST_LABELS = { sprayUp: 'Spray Up', directCast: 'Direct Cast', other: 'Other' };
+
+/** Approved Color Information block(s) built from the project's color log(s). */
+function shopFolderColorInfoHtml(colorLogs) {
+    const logs = (colorLogs || []).filter(Boolean);
+    if (!logs.length) {
+        return `<div class="sf-color-empty">No color log is linked to this project yet.</div>`;
+    }
+    return logs.map(cl => {
+        const cement = SHOP_FOLDER_CEMENT_LABELS[cl.cementType] || (cl.cementType || '—');
+        const cast = SHOP_FOLDER_CAST_LABELS[cl.castMethod] || (cl.castMethod || '—');
+        const stdCustom = cl.isStandard !== false ? 'Standard' : 'Custom';
+        const finishing = (cl.finishingNotes || '').trim();
+        const sealing = (cl.sealingNotes || '').trim();
+        return `<div class="sf-color">
+            <div class="sf-color-head">${escapeHtml((cl.name || '').trim() || '(unnamed color)')}</div>
+            <div class="sf-color-row">
+                <span><b>Cement Type:</b> ${escapeHtml(cement)}</span>
+                <span><b>Cast Method:</b> ${escapeHtml(cast)}</span>
+                <span><b>Designation:</b> ${escapeHtml(stdCustom)}</span>
+            </div>
+            <div class="sf-notes">
+                <div><b>Finishing Notes:</b> ${finishing ? escapeHtml(finishing) : '—'}</div>
+                <div><b>Sealing Notes:</b> ${sealing ? escapeHtml(sealing) : '—'}</div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
 const SHOP_FOLDER_COVER_CSS = `
 @page { size: letter portrait; margin: 0.5in; }
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -10376,6 +10406,14 @@ body { font-family: 'Segoe UI', Arial, sans-serif; color: #000; font-size: 10pt;
 .cv-meta-col { flex: 1; display: grid; grid-template-columns: 10em 1fr; row-gap: 3pt; column-gap: 6pt; }
 .cv-meta-col .cv-value { font-weight: 700; }
 .cv-meta-col .cv-value.cv-multiline { white-space: pre-wrap; }
+.sf-section-bar { background: #e5e7eb; color: #000; padding: 4pt 8pt; font-size: 11pt; font-weight: 700; letter-spacing: 0.3pt; text-transform: uppercase; margin: 6pt 0 6pt 0; }
+.sf-colors { display: flex; flex-direction: column; gap: 8pt; margin-bottom: 8pt; }
+.sf-color { border: 0.75pt solid #cbd5e1; border-radius: 3pt; padding: 6pt 9pt; break-inside: avoid; }
+.sf-color-head { font-size: 12pt; font-weight: 700; margin-bottom: 3pt; }
+.sf-color-row { display: flex; flex-wrap: wrap; gap: 4pt 20pt; font-size: 10pt; margin-bottom: 4pt; }
+.sf-notes { font-size: 9.5pt; }
+.sf-notes > div { margin-top: 2pt; white-space: pre-wrap; }
+.sf-color-empty { font-size: 10pt; color: #6b7280; font-style: italic; margin-bottom: 6pt; }
 .sf-title { background: #111827; color: #fff; text-align: center; padding: 6pt 8pt; font-size: 13pt; font-weight: 700; letter-spacing: 0.4pt; text-transform: uppercase; margin: 8pt 0 4pt 0; }
 .sf-sub { text-align: center; font-size: 9pt; color: #374151; margin-bottom: 18pt; }
 .sf-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.45in 0.2in; justify-items: center; margin-top: 8pt; }
@@ -10385,7 +10423,7 @@ body { font-family: 'Segoe UI', Arial, sans-serif; color: #000; font-size: 10pt;
 .sf-empty { text-align: center; color: #6b7280; font-style: italic; margin-top: 24pt; }
 `;
 
-function buildShopFolderCoverHtml(f, phases) {
+function buildShopFolderCoverHtml(f, phases, colorLogs) {
     const statusCls = f.status ? `cv-status-${statusSlug(f.status)}` : '';
     const statusText = f.status || 'No Status';
     const projectAddrLines = f.project_address ? escapeHtml(f.project_address).replace(/\n/g, '<br>') : '';
@@ -10414,6 +10452,9 @@ function buildShopFolderCoverHtml(f, phases) {
                 <span class="cv-label">Project Address:</span><span class="cv-value cv-multiline">${projectAddrLines}</span>
             </div>
         </div>
+        <div class="sf-section-bar">Approved Color Information</div>
+        <div class="sf-colors">${shopFolderColorInfoHtml(colorLogs)}</div>
+
         <div class="sf-title">Quality Control &mdash; Sticker Cover</div>
         <div class="sf-sub">Place a 1&quot; round QC sticker in each circle as its step is completed.</div>
         ${circles}
@@ -10459,14 +10500,17 @@ function printHtmlInIframe(html, frameId, errLabel = 'print') {
     doc.close();
 }
 
-function handlePrintShopFolderCover() {
+async function handlePrintShopFolderCover() {
     if (!currentProjectNumber) {
         showToast('Save the project first', 'error');
         return;
     }
+    // Ensure the project's color log(s) are loaded for the Approved Color section.
+    try { await ensureColorLogsLoaded(); } catch (err) { logger.error('[project-portal] shop folder cover: color log load failed', err); }
     const fields = readCoverFields();
     const phases = TRACKING_PHASES.filter(p => currentTrackingPhases.has(p));
-    const html = buildShopFolderCoverHtml(fields, phases);
+    const colorLogs = Array.isArray(currentColorLogs) ? currentColorLogs : [];
+    const html = buildShopFolderCoverHtml(fields, phases, colorLogs);
     printHtmlInIframe(html, 'pp-shop-folder-print-frame', 'print shop folder cover');
 }
 
