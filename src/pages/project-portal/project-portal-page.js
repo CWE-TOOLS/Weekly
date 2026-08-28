@@ -4104,11 +4104,22 @@ async function resetCastingLayout() {
 function printCastingLayout() {
     const svgEl = document.querySelector('#pp-clay-card svg');
     if (!svgEl) { alert('No layout to print yet.'); return; }
+    // Print on 11x17 (tabloid) portrait so the layout scales up and stays
+    // readable. Crop the printed SVG to the actual drawn content — the on-screen
+    // SVG has a fixed 750x1000 page with empty margins around narrow layouts, so
+    // cropping lets the drawing fill the sheet instead of floating small in the
+    // middle with wasted space around it.
+    const printSvg = svgEl.cloneNode(true);
+    try {
+        const bb = svgEl.getBBox();
+        if (bb && bb.width > 0 && bb.height > 0) {
+            const pad = 16;
+            printSvg.setAttribute('viewBox', `${bb.x - pad} ${bb.y - pad} ${bb.width + pad * 2} ${bb.height + pad * 2}`);
+            printSvg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+        }
+    } catch (e) { /* keep the original viewBox if getBBox is unavailable */ }
     const w = window.open('', '_blank');
     if (!w) return;
-    // Print on 11x17 (tabloid) portrait so the layout scales up and stays
-    // readable. The SVG has a portrait viewBox + preserveAspectRatio="meet", so
-    // sizing it to the printable area scales it up to fit without distortion.
     w.document.write(`<!DOCTYPE html>
 <html><head><title>Casting Layout</title>
 <style>
@@ -4116,7 +4127,7 @@ function printCastingLayout() {
   html, body { margin: 0; padding: 0; }
   svg { width: 10in; height: 16in; display: block; margin: 0 auto; }
 </style></head>
-<body>${svgEl.outerHTML}</body></html>`);
+<body>${printSvg.outerHTML}</body></html>`);
     w.document.close();
     w.focus();
     w.print();
