@@ -7961,27 +7961,32 @@ function renderBatchTicketBody(casting, ticket, multi = false) {
                     </div>
                     <span class="pp-bt-field-hint">Always applied to FINAL Back Up. Check the box to also reduce First Back Up.</span>
                 </div>
-                <div class="pp-bt-field pp-bt-omitagg">
-                    <label class="pp-bt-checkbox">
-                        <input type="checkbox" data-bt-field="omitAggFinalBackup"${ticket.omitAggFinalBackup ? ' checked' : ''}>
-                        Omit Aggregate from Final Back Up
-                    </label>
-                    <span class="pp-bt-field-hint">For Direct Cast mixes — leaves aggregate out of the FINAL Back Up batch (ticket and Mix Day Totals), while keeping it in the Face Mix.</span>
-                </div>
-                <div class="pp-bt-field pp-bt-omitfibers">
-                    <label class="pp-bt-checkbox">
-                        <input type="checkbox" data-bt-field="omitFibersFace"${ticket.omitFibersFace ? ' checked' : ''}>
-                        Omit Fibers from Face Mix
-                    </label>
-                    <span class="pp-bt-field-hint">For Direct Cast mixes — leaves fibers out of the Face Mix batch (ticket and Mix Day Totals). Back Up mixes keep their fibers.</span>
-                </div>
-                <div class="pp-bt-field pp-bt-cowbayfinal">
-                    <label class="pp-bt-checkbox">
-                        <input type="checkbox" data-bt-field="cowbayFinalBackup"${ticket.cowbayFinalBackup ? ' checked' : ''}>
-                        Switch to Cowbay for Final Back Up
-                    </label>
-                    <span class="pp-bt-field-hint">For Direct Cast mixes — overrides the FINAL Back Up sand to Bulk Sand (Cowbay) on the ticket and Mix Day Totals. The Face Mix keeps the color-log sand.</span>
-                </div>
+                <details class="pp-bt-advanced"${(ticket.omitAggFinalBackup || ticket.omitFibersFace || ticket.cowbayFinalBackup) ? ' open' : ''}>
+                    <summary>Direct Cast Options</summary>
+                    <div class="pp-bt-advanced-body">
+                        <div class="pp-bt-field pp-bt-omitagg">
+                            <label class="pp-bt-checkbox">
+                                <input type="checkbox" data-bt-field="omitAggFinalBackup"${ticket.omitAggFinalBackup ? ' checked' : ''}>
+                                Omit Aggregate from Final Back Up
+                            </label>
+                            <span class="pp-bt-field-hint">For Direct Cast mixes — leaves aggregate out of the FINAL Back Up batch (ticket and Mix Day Totals), while keeping it in the Face Mix.</span>
+                        </div>
+                        <div class="pp-bt-field pp-bt-omitfibers">
+                            <label class="pp-bt-checkbox">
+                                <input type="checkbox" data-bt-field="omitFibersFace"${ticket.omitFibersFace ? ' checked' : ''}>
+                                Omit Fibers from Face Mix
+                            </label>
+                            <span class="pp-bt-field-hint">For Direct Cast mixes — leaves fibers out of the Face Mix batch (ticket and Mix Day Totals). Back Up mixes keep their fibers.</span>
+                        </div>
+                        <div class="pp-bt-field pp-bt-cowbayfinal">
+                            <label class="pp-bt-checkbox">
+                                <input type="checkbox" data-bt-field="cowbayFinalBackup"${ticket.cowbayFinalBackup ? ' checked' : ''}>
+                                Switch to Cowbay for Final Back Up
+                            </label>
+                            <span class="pp-bt-field-hint">For Direct Cast mixes — overrides the FINAL Back Up sand to Bulk Sand (Cowbay) on the ticket and Mix Day Totals. The Face Mix keeps the color-log sand.</span>
+                        </div>
+                    </div>
+                </details>
                 <details class="pp-bt-advanced"${parseFloat(ticket.cuFtPer250) !== 4.28 ? ' open' : ''}>
                     <summary>Advanced</summary>
                     <div class="pp-bt-advanced-body">
