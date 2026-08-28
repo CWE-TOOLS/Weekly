@@ -4106,12 +4106,15 @@ function printCastingLayout() {
     if (!svgEl) { alert('No layout to print yet.'); return; }
     const w = window.open('', '_blank');
     if (!w) return;
+    // Print on 11x17 (tabloid) portrait so the layout scales up and stays
+    // readable. The SVG has a portrait viewBox + preserveAspectRatio="meet", so
+    // sizing it to the printable area scales it up to fit without distortion.
     w.document.write(`<!DOCTYPE html>
 <html><head><title>Casting Layout</title>
 <style>
-  @page { size: letter portrait; margin: 0.5in; }
+  @page { size: 11in 17in; margin: 0.5in; }
   html, body { margin: 0; padding: 0; }
-  svg { width: 7.5in; height: 10in; display: block; margin: 0 auto; }
+  svg { width: 10in; height: 16in; display: block; margin: 0 auto; }
 </style></head>
 <body>${svgEl.outerHTML}</body></html>`);
     w.document.close();
