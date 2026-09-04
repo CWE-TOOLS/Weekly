@@ -8,7 +8,7 @@
  */
 
 import { getMonday, getWeekMonth, getWeekOfMonth } from '../../utils/date-utils.js';
-import { TRACKING_ITEMS, TRACKING_ITEM_LABELS, STATUS, STATUS_DISPLAY } from '../../config/releasability-config.js';
+import { TRACKING_ITEMS, TRACKING_ITEM_LABELS, STATUS, STATUS_DISPLAY } from '../../config/releasability-config.js?v=20260807-1';
 import { isWeekCollapsed } from './releasability-state.js';
 
 // Callbacks for project actions (set by releasability-page.js to avoid circular dependency)
@@ -89,10 +89,10 @@ export function renderReleasabilityGrid(projects, manualWeeks = []) {
  */
 const COLUMN_GROUPS = [
   { label: 'Classroom', startIndex: 0, endIndex: 2, className: 'group-classroom' },
-  { label: 'Project Manager', startIndex: 3, endIndex: 8, className: 'group-pm' },
-  { label: 'Fab Coordinator', startIndex: 9, endIndex: 12, className: 'group-fab-coordinator' },
-  { label: 'Engineering', startIndex: 13, endIndex: 17, className: 'group-engineering' },
-  { label: 'Release', startIndex: 18, endIndex: 18, className: 'group-release' }
+  { label: 'Project Manager', startIndex: 3, endIndex: 9, className: 'group-pm' },
+  { label: 'Fab Coordinator', startIndex: 10, endIndex: 14, className: 'group-fab-coordinator' },
+  { label: 'Engineering', startIndex: 15, endIndex: 19, className: 'group-engineering' },
+  { label: 'Release', startIndex: 20, endIndex: 20, className: 'group-release' }
 ];
 
 /**

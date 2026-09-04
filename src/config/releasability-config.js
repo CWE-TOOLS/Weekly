@@ -78,10 +78,12 @@ export const TRACKING_ITEMS = [
   'Color Log',
   'Final Optimizer HRS',
   'Rebar/Drilling Layout',
+  'Casting Inventory',
   'Labels',
   'Final Tracking',
   'Batching Sheets',
   'Casting Layout',
+  'Shop Folder Cover',
   'Inflow Sales Ticket',
   '3D Drawings/Parts List',
   'Toolpath Program',
@@ -125,7 +127,9 @@ export const TRACKING_ITEM_ABBREVIATIONS = {
   '3D Drawings Parts List': '3D Parts',
   'Classroom #3': 'Class #3',
   'Toolpath Program': 'Toolpath',
-  'Mill 3D Staging': '3D Staging'
+  'Mill 3D Staging': '3D Staging',
+  'Casting Inventory': 'Cast Inv',
+  'Shop Folder Cover': 'Folder Cover'
 };
 
 // ============================================================================
