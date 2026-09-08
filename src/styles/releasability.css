@@ -38,8 +38,8 @@
   /* Tracking Item Header Colors - Saturated, grouped by category */
   /* Tracking column header colors — POSITIONAL by data-tracking-index, which is
      the item's position in TRACKING_ITEMS. Keep in sync with that array and with
-     COLUMN_GROUPS (Classroom 0-2, Project Manager 3-9, Fab Coordinator 10-14,
-     Engineering 15-19, Release 20). */
+     COLUMN_GROUPS (Classroom 0-2, Project Manager 3-9, Fab Coordinator 10-15,
+     Engineering 16-20, Release 21). */
   --tracking-0-color: #B39DDB;   /* Classroom #1 - Purple */
   --tracking-1-color: #B39DDB;   /* Classroom #2 - Purple */
   --tracking-2-color: #B39DDB;   /* Classroom #3 - Purple */
@@ -55,12 +55,13 @@
   --tracking-12-color: #FFF59D;  /* Batching Sheets - Pastel Yellow (Fab Coordinator) */
   --tracking-13-color: #FFF59D;  /* Casting Layout - Pastel Yellow (Fab Coordinator) */
   --tracking-14-color: #FFF59D;  /* Shop Folder Cover - Pastel Yellow (Fab Coordinator) */
-  --tracking-15-color: #A5D6A7;  /* Inflow Sales Ticket - Green (Engineering) */
-  --tracking-16-color: #A5D6A7;  /* 3D Drawings/Parts List - Green (Engineering) */
-  --tracking-17-color: #A5D6A7;  /* Toolpath Program - Green (Engineering) */
-  --tracking-18-color: #A5D6A7;  /* Jig List - Green (Engineering) */
-  --tracking-19-color: #A5D6A7;  /* Staging - Green (Engineering) */
-  --tracking-20-color: #66BB6A;  /* Green Sticker - Release */
+  --tracking-15-color: #FFF59D;  /* Mitti QC Template - Pastel Yellow (Fab Coordinator) */
+  --tracking-16-color: #A5D6A7;  /* Inflow Sales Ticket - Green (Engineering) */
+  --tracking-17-color: #A5D6A7;  /* 3D Drawings/Parts List - Green (Engineering) */
+  --tracking-18-color: #A5D6A7;  /* Toolpath Program - Green (Engineering) */
+  --tracking-19-color: #A5D6A7;  /* Jig List - Green (Engineering) */
+  --tracking-20-color: #A5D6A7;  /* Staging - Green (Engineering) */
+  --tracking-21-color: #66BB6A;  /* Green Sticker - Release */
 }
 
 /* ============================================================================
@@ -650,7 +651,7 @@ html {
   grid-template-columns:
     var(--grid-project-column-width)
     70px
-    repeat(21, minmax(50px, 1fr));
+    repeat(22, minmax(50px, 1fr));
   gap: var(--grid-cell-gap);
   background-color: #E8E7E4;
   width: fit-content;
@@ -795,12 +796,13 @@ html {
 .tracking-item-header[data-tracking-index="12"] { background-color: var(--tracking-12-color); } /* Batching Sheets */
 .tracking-item-header[data-tracking-index="13"] { background-color: var(--tracking-13-color); } /* Casting Layout */
 .tracking-item-header[data-tracking-index="14"] { background-color: var(--tracking-14-color); } /* Shop Folder Cover */
-.tracking-item-header[data-tracking-index="15"] { background-color: var(--tracking-15-color); } /* Inflow Sales Ticket (Engineering) */
-.tracking-item-header[data-tracking-index="16"] { background-color: var(--tracking-16-color); } /* 3D Drawings/Parts List */
-.tracking-item-header[data-tracking-index="17"] { background-color: var(--tracking-17-color); } /* Toolpath Program */
-.tracking-item-header[data-tracking-index="18"] { background-color: var(--tracking-18-color); } /* Jig List */
-.tracking-item-header[data-tracking-index="19"] { background-color: var(--tracking-19-color); } /* Staging */
-.tracking-item-header[data-tracking-index="20"] { background-color: var(--tracking-20-color); } /* Green Sticker (Release) */
+.tracking-item-header[data-tracking-index="15"] { background-color: var(--tracking-15-color); } /* Mitti QC Template */
+.tracking-item-header[data-tracking-index="16"] { background-color: var(--tracking-16-color); } /* Inflow Sales Ticket (Engineering) */
+.tracking-item-header[data-tracking-index="17"] { background-color: var(--tracking-17-color); } /* 3D Drawings/Parts List */
+.tracking-item-header[data-tracking-index="18"] { background-color: var(--tracking-18-color); } /* Toolpath Program */
+.tracking-item-header[data-tracking-index="19"] { background-color: var(--tracking-19-color); } /* Jig List */
+.tracking-item-header[data-tracking-index="20"] { background-color: var(--tracking-20-color); } /* Staging */
+.tracking-item-header[data-tracking-index="21"] { background-color: var(--tracking-21-color); } /* Green Sticker (Release) */
 
 /* Week Section */
 .week-section {

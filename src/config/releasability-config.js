@@ -84,6 +84,7 @@ export const TRACKING_ITEMS = [
   'Batching Sheets',
   'Casting Layout',
   'Shop Folder Cover',
+  'Mitti QC Template',
   'Inflow Sales Ticket',
   '3D Drawings/Parts List',
   'Toolpath Program',
@@ -129,7 +130,8 @@ export const TRACKING_ITEM_ABBREVIATIONS = {
   'Toolpath Program': 'Toolpath',
   'Mill 3D Staging': '3D Staging',
   'Casting Inventory': 'Cast Inv',
-  'Shop Folder Cover': 'Folder Cover'
+  'Shop Folder Cover': 'Folder Cover',
+  'Mitti QC Template': 'Mitti QC'
 };
 
 // ============================================================================
