@@ -3948,6 +3948,45 @@ body.pp-printing .pp-tab-panel[data-panel="color-log"] { display: none !importan
     max-width: 850px;
 }
 
+/* Link to a project's dedicated batching page (Batch Tickets tab, special projects only —
+   see SPECIAL_BATCHING_PAGES). Deliberately loud: green button, red outline. */
+.pp-bt-special {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px 18px;
+    padding: 14px 16px;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 10px;
+}
+.pp-bt-special[hidden] { display: none; }
+.pp-bt-special-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    background: #16a34a;
+    color: #fff;
+    font-size: 17px;
+    font-weight: 800;
+    letter-spacing: 0.2px;
+    text-decoration: none;
+    padding: 14px 26px;
+    border-radius: 10px;
+    outline: 3px solid #dc2626;
+    outline-offset: 2px;
+    box-shadow: 0 2px 6px rgba(22, 163, 74, 0.35);
+    white-space: nowrap;
+}
+.pp-bt-special-btn:hover { background: #15803d; }
+.pp-bt-special-btn:focus-visible { outline-width: 4px; }
+.pp-bt-special-note {
+    flex: 1 1 260px;
+    font-size: 14px;
+    font-weight: 700;
+    color: #991b1b;
+}
+
 /* Project-wide slump targets panel (Batch Tickets tab). Warm tint echoes the
    orange slump graphic on the printed ticket. */
 .pp-bt-slump-targets {

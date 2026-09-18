@@ -7742,7 +7742,27 @@ async function refreshBatchColorLogs() {
     }
 }
 
+// Projects whose batching is done on a dedicated page instead of this tab (job-specific
+// batch sizes / mix rules the standard planner doesn't cover). The Batch Tickets tab shows
+// a button to that page, plus a notice, for these project numbers only.
+const SPECIAL_BATCHING_PAGES = {
+    '0860': { href: 'jane-street-batching.html', label: 'Open Jane Street Batching Page' }
+};
+
+function renderSpecialBatchingLink() {
+    const wrap = document.getElementById('pp-bt-special');
+    if (!wrap) return;
+    const special = SPECIAL_BATCHING_PAGES[currentProjectNumber];
+    wrap.hidden = !special;
+    if (!special) return;
+    const link = document.getElementById('pp-bt-special-link');
+    const label = document.getElementById('pp-bt-special-label');
+    if (link) link.href = special.href;
+    if (label) label.textContent = special.label;
+}
+
 async function activateBatchTicketsTab() {
+    renderSpecialBatchingLink();
     const needsSave    = document.getElementById('pp-bt-needs-save');
     const needsCL      = document.getElementById('pp-bt-needs-color-log');
     const noCastings   = document.getElementById('pp-bt-no-castings');
