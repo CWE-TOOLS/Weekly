@@ -13,6 +13,13 @@
 
 export const BATCH_SIZES = [250, 150, 100];
 
+// Allowed batch sizes per "largest batch" choice, for projects with job-specific sizing
+// (see config/special-batching.js). 250 is the standard set above.
+export const SIZE_SETS = { 100: [100], 200: [200, 100], 250: BATCH_SIZES };
+export function sizesFor(maxSize) {
+    return SIZE_SETS[maxSize] || BATCH_SIZES;
+}
+
 // Multiplier to convert weight in lbs INTO the target unit.
 //   weightInUnit = weightInLbs * FROM_LBS[unit]
 export const FROM_LBS = {
@@ -51,11 +58,14 @@ export function cuFtFor(sandLbs, cuFtPer250 = 4.28) {
  * Greedy: break required cu ft into 250 / 150 / 100 lb batches, then consolidate
  * weight-equivalent combos (150+100→250) so total sand is preserved but batch
  * count is minimized. Pure.
+ *
+ * `sizes` (largest first) defaults to the standard set; special projects pass a
+ * smaller set, e.g. [100] or [200, 100].
  */
-export function fillBatches(cuFtNeeded, cuFtPer250 = 4.28) {
+export function fillBatches(cuFtNeeded, cuFtPer250 = 4.28, sizes = BATCH_SIZES) {
     const batches = [];
     let remaining = cuFtNeeded;
-    for (const size of BATCH_SIZES) {
+    for (const size of sizes) {
         const cuFt = cuFtFor(size, cuFtPer250);
         const count = Math.floor(remaining / cuFt);
         for (let i = 0; i < count; i++) batches.push(size);
@@ -63,18 +73,18 @@ export function fillBatches(cuFtNeeded, cuFtPer250 = 4.28) {
     }
     // Cover any sub-batch remainder with a 100 lb (smallest available).
     if (remaining > 0.01) {
-        for (let i = BATCH_SIZES.length - 1; i >= 0; i--) {
-            if (cuFtFor(BATCH_SIZES[i], cuFtPer250) >= remaining || i === BATCH_SIZES.length - 1) {
-                batches.push(BATCH_SIZES[i]);
+        for (let i = sizes.length - 1; i >= 0; i--) {
+            if (cuFtFor(sizes[i], cuFtPer250) >= remaining || i === sizes.length - 1) {
+                batches.push(sizes[i]);
                 break;
             }
         }
     }
-    return consolidateBatches(batches);
+    return consolidateBatches(batches, sizes);
 }
 
-/** Roll up weight-equivalent combos (150+100→250). Pure. */
-export function consolidateBatches(batches) {
+/** Roll up weight-equivalent combos (150+100→250; 100+100→200 for the 200 lb set). Pure. */
+export function consolidateBatches(batches, sizes = BATCH_SIZES) {
     const result = batches.slice();
     const countSize = (size) => result.filter(b => b === size).length;
     const removeOne = (size) => {
@@ -84,9 +94,14 @@ export function consolidateBatches(batches) {
     let changed = true;
     while (changed) {
         changed = false;
-        if (countSize(150) >= 1 && countSize(100) >= 1) {
+        if (sizes.includes(250) && countSize(150) >= 1 && countSize(100) >= 1) {
             removeOne(150); removeOne(100);
             result.push(250);
+            changed = true;
+        }
+        if (sizes[0] === 200 && countSize(100) >= 2) {
+            removeOne(100); removeOne(100);
+            result.push(200);
             changed = true;
         }
     }
@@ -104,53 +119,64 @@ export function consolidateBatches(batches) {
  *
  * @returns {{ batches: number[], types: string[], faceCuFt: number }}
  */
-export function planBatches({ totalCuFt, faceSqFt = 0, cuFtPer250 = 4.28, castMethod = 'sprayUp' }) {
+export function planBatches({ totalCuFt, faceSqFt = 0, cuFtPer250 = 4.28, castMethod = 'sprayUp', sizing = null }) {
+    // Job-specific sizing (config/special-batching.js): Face Mix and Back Up layers can have their
+    // own largest batch, and the First Back Up layer can be dropped (everything behind the face is
+    // FINAL Back Up). Without `sizing` this is the standard plan, unchanged.
+    const faceSizes = sizing ? sizesFor(sizing.face) : BATCH_SIZES;
+    const backupSizes = sizing ? sizesFor(sizing.backup) : BATCH_SIZES;
+    const useFirstBackUp = sizing ? !!sizing.firstBackUp : true;
+
     const directCast = castMethod === 'directCast';
     const faceCuFt = faceSqFt > 0 ? (faceSqFt * (3 / 16) / 12) : 0;
     let batches = [];
     let types = [];
+    const sumCuFt = (arr) => arr.reduce((s, b) => s + cuFtFor(b, cuFtPer250), 0);
 
     if (!totalCuFt || totalCuFt <= 0) return { batches, types, faceCuFt };
 
     if (directCast) {
-        const halfCuFt = totalCuFt / 2;
-        const faceBatches = fillBatches(halfCuFt, cuFtPer250);
-        const faceTotal = faceBatches.reduce((s, b) => s + cuFtFor(b, cuFtPer250), 0);
+        const faceBatches = fillBatches(totalCuFt / 2, cuFtPer250, faceSizes);
         batches.push(...faceBatches);
         types.push(...faceBatches.map(() => 'face'));
-        const finalNeeded = totalCuFt - faceTotal;
+        const finalNeeded = totalCuFt - sumCuFt(faceBatches);
         if (finalNeeded > 0.01) {
-            const finalBatches = fillBatches(finalNeeded, cuFtPer250);
+            const finalBatches = fillBatches(finalNeeded, cuFtPer250, backupSizes);
             batches.push(...finalBatches);
             types.push(...finalBatches.map(() => 'finalBackUp'));
         }
     } else if (faceSqFt > 0) {
-        const faceBatches = fillBatches(Math.min(faceCuFt, totalCuFt), cuFtPer250);
-        const faceTotal = faceBatches.reduce((s, b) => s + cuFtFor(b, cuFtPer250), 0);
+        const faceBatches = fillBatches(Math.min(faceCuFt, totalCuFt), cuFtPer250, faceSizes);
         batches.push(...faceBatches);
         types.push(...faceBatches.map(() => 'face'));
 
-        let used = faceTotal;
-        const backupNeeded = Math.min(faceCuFt, totalCuFt - used);
+        let used = sumCuFt(faceBatches);
+        const backupNeeded = useFirstBackUp ? Math.min(faceCuFt, totalCuFt - used) : 0;
         if (backupNeeded > 0.01) {
-            const backupBatches = fillBatches(backupNeeded, cuFtPer250);
-            const backupTotal = backupBatches.reduce((s, b) => s + cuFtFor(b, cuFtPer250), 0);
+            const backupBatches = fillBatches(backupNeeded, cuFtPer250, backupSizes);
             batches.push(...backupBatches);
             types.push(...backupBatches.map(() => 'firstBackUp'));
-            used += backupTotal;
+            used += sumCuFt(backupBatches);
         }
         const finalNeeded = totalCuFt - used;
         if (finalNeeded > 0.01) {
-            const finalBatches = fillBatches(finalNeeded, cuFtPer250);
+            const finalBatches = fillBatches(finalNeeded, cuFtPer250, backupSizes);
             batches.push(...finalBatches);
             types.push(...finalBatches.map(() => 'finalBackUp'));
         }
     } else {
-        batches = fillBatches(totalCuFt, cuFtPer250);
+        if (faceSizes[0] === backupSizes[0]) {
+            batches = fillBatches(totalCuFt, cuFtPer250, faceSizes);
+        } else {
+            // One face batch (largest face size, or less if the whole pour is smaller), rest at back up sizes.
+            batches = fillBatches(Math.min(totalCuFt, cuFtFor(faceSizes[0], cuFtPer250)), cuFtPer250, faceSizes).slice(0, 1);
+            const rest = totalCuFt - sumCuFt(batches);
+            if (rest > 0.01) batches.push(...fillBatches(rest, cuFtPer250, backupSizes));
+        }
         types = batches.map((_size, idx) => {
             if (idx === 0) return 'face';
             if (idx === batches.length - 1 && batches.length > 1) return 'finalBackUp';
-            return 'firstBackUp';
+            return useFirstBackUp ? 'firstBackUp' : 'finalBackUp';
         });
     }
     return { batches, types, faceCuFt };
@@ -177,6 +203,7 @@ export function getColorLogSandLbs(colorLog) {
  * @param {string} [opts.castMethod='sprayUp']
  * @param {number} opts.colorLogSandLbs
  * @param {Array<{batchLbs:number,type:string}>} [opts.manualOverrides] — if its length === batches.length, replaces auto types
+ * @param {{face:number,backup:number,firstBackUp:boolean}|null} [opts.sizing] — job-specific sizing (config/special-batching.js); omit for the standard plan
  * @returns {{
  *   batches: Array<{batchSandLbs:number, scaleFactor:number, cuFt:number, num:number, total:number, type:string}>,
  *   summary: {count250:number,count150:number,count100:number,actualCuFt:number,total:number},
@@ -189,9 +216,10 @@ export function buildBatchPlan({
     cuFtPer250 = 4.28,
     castMethod = 'sprayUp',
     colorLogSandLbs,
-    manualOverrides
+    manualOverrides,
+    sizing = null
 }) {
-    const { batches, types: autoTypes, faceCuFt } = planBatches({ totalCuFt, faceSqFt, cuFtPer250, castMethod });
+    const { batches, types: autoTypes, faceCuFt } = planBatches({ totalCuFt, faceSqFt, cuFtPer250, castMethod, sizing });
 
     let types = autoTypes;
     if (Array.isArray(manualOverrides) && manualOverrides.length === batches.length) {
@@ -209,6 +237,7 @@ export function buildBatchPlan({
 
     const summary = {
         count250: batches.filter(b => b === 250).length,
+        count200: batches.filter(b => b === 200).length,
         count150: batches.filter(b => b === 150).length,
         count100: batches.filter(b => b === 100).length,
         actualCuFt: result.reduce((s, b) => s + b.cuFt, 0),

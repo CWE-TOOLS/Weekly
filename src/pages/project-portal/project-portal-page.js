@@ -108,6 +108,7 @@ import {
     roundSig,
     FROM_LBS
 } from '../../utils/batch-calc.js';
+import { getSpecialBatching } from '../../config/special-batching.js';
 import { fetchAllTasks } from '../../services/data-service.js';
 import { loadActualHoursForProject } from '../../services/actual-hours-service.js';
 import { parseDate } from '../../utils/date-utils.js';
@@ -6661,6 +6662,7 @@ function wireEvents() {
     document.getElementById('pp-print-btn').addEventListener('click', (e) => {
         e.preventDefault();
         if (currentTab === 'batch-tickets') {
+            if (printSpecialBatching()) return;
             if (currentBatchCastingId) handlePrintBatchTickets(currentBatchCastingId);
             else showToast('Select a casting first', 'error');
             return;
@@ -7742,33 +7744,79 @@ async function refreshBatchColorLogs() {
     }
 }
 
-// Projects whose batching is done on a dedicated page instead of this tab (job-specific
-// batch sizes / mix rules the standard planner doesn't cover). The Batch Tickets tab shows
-// a button to that page, plus a notice, for these project numbers only.
-const SPECIAL_BATCHING_PAGES = {
-    '0860': { href: 'jane-street-batching.html', label: 'Open Jane Street Batching Page' }
-};
+// ---------- Special batching projects (config/special-batching.js) ----------
+// Their Batch Tickets tab shows the project's dedicated batching page, embedded, instead of the
+// standard form. The page is same-origin: it reports its height, relays its toasts, and hands
+// the top-bar Print button its print HTML.
 
-function renderSpecialBatchingLink() {
-    const wrap = document.getElementById('pp-bt-special');
-    if (!wrap) return;
-    const special = SPECIAL_BATCHING_PAGES[currentProjectNumber];
-    wrap.hidden = !special;
-    if (!special) return;
-    const link = document.getElementById('pp-bt-special-link');
-    const label = document.getElementById('pp-bt-special-label');
-    if (link) link.href = special.href;
-    if (label) label.textContent = special.label;
+function getSpecialBatchingFrame() {
+    return document.getElementById('pp-bt-special-frame');
 }
 
+/** Show / hide the embedded page for the current project. Returns true when it is showing. */
+function renderSpecialBatching() {
+    const wrap = document.getElementById('pp-bt-special');
+    const frame = getSpecialBatchingFrame();
+    if (!wrap || !frame) return false;
+    const special = getSpecialBatching(currentProjectNumber);
+    wrap.hidden = !special;
+    wrap.closest('.pp-bt-wrap')?.classList.toggle('pp-bt-wrap--special', !!special);
+    if (!special) {
+        if (frame.getAttribute('src')) frame.removeAttribute('src');
+        return false;
+    }
+    const src = special.href + '?embed=1';
+    if (frame.getAttribute('src') !== src) {
+        frame.setAttribute('src', src);
+    } else {
+        // Coming back to the tab: let the page re-pull (inventory / castings may have changed).
+        frame.contentWindow?.postMessage({ type: 'jsb-activate' }, location.origin);
+    }
+    const popout = document.getElementById('pp-bt-special-popout');
+    if (popout) popout.href = special.href;
+    return true;
+}
+
+/** Top-bar "Print Batch Tickets" for a special project: print from the embedded page. */
+function printSpecialBatching() {
+    if (!getSpecialBatching(currentProjectNumber)) return false;
+    const build = getSpecialBatchingFrame()?.contentWindow?.jsbBuildPrintHtml;
+    if (typeof build !== 'function') { showToast('The batching page is still loading — try again in a moment', 'error'); return true; }
+    const html = build();
+    if (!html) { showToast('Enter Total Cu Ft to generate tickets', 'error'); return true; }
+    const w = window.open('', '_blank');
+    if (!w) { showToast('Pop-up blocked — allow pop-ups for printing', 'error'); return true; }
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+    return true;
+}
+
+window.addEventListener('message', (e) => {
+    const frame = getSpecialBatchingFrame();
+    if (e.origin !== location.origin || !frame || e.source !== frame.contentWindow) return;
+    if (e.data?.type === 'jsb-height' && Number(e.data.height) > 0) {
+        frame.style.height = Math.ceil(Number(e.data.height)) + 'px';
+    } else if (e.data?.type === 'jsb-toast' && e.data.message) {
+        showToast(String(e.data.message), e.data.isError ? 'error' : 'success');
+    }
+});
+
 async function activateBatchTicketsTab() {
-    renderSpecialBatchingLink();
     const needsSave    = document.getElementById('pp-bt-needs-save');
     const needsCL      = document.getElementById('pp-bt-needs-color-log');
     const noCastings   = document.getElementById('pp-bt-no-castings');
     const pills        = document.getElementById('pp-bt-pills');
     const content      = document.getElementById('pp-bt-content');
     const slumpPanel   = document.getElementById('pp-bt-slump-targets');
+
+    // Special batching project: the dedicated page replaces everything below.
+    if (renderSpecialBatching()) {
+        for (const el of [needsSave, needsCL, noCastings, slumpPanel]) if (el) el.hidden = true;
+        if (pills) pills.innerHTML = '';
+        if (content) content.innerHTML = '';
+        return;
+    }
 
     if (!content) return;
     // Project-wide slump panel: hidden by default; revealed only on the success path.

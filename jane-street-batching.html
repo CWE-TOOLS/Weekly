@@ -79,6 +79,11 @@ table.tbl tr.sel td { background: var(--accent-soft); }
 .tickets { display: flex; flex-direction: column; align-items: center; gap: 18px; }
 .tickets .bt-page { width: 7.7in; max-width: 100%; background: #fff; min-height: 0; }
 .status { color: var(--muted); padding: 30px; text-align: center; }
+/* Embedded in the portal's Batch Tickets tab (?embed=1): the portal supplies the title and page chrome. */
+body.embed { background: transparent; overflow: hidden; }
+body.embed .app { max-width: none; padding: 0 2px 8px; }
+body.embed .title-block { display: none; }
+body.embed #toast { display: none; }
 .import-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 12px; padding: 8px 10px; background: #f8fafc; border: 1px dashed var(--line); border-radius: 10px; }
 .import-row [data-import] { outline: 3px solid #dc2626; outline-offset: 2px; }
 .import-row .inv { font-size: 13px; color: var(--muted); }
@@ -94,7 +99,7 @@ table.tbl tr.sel td { background: var(--accent-soft); }
 <body>
 <div class="app">
     <div class="top">
-        <div>
+        <div class="title-block">
             <h1 id="title">0860 — Jane Street 11th &amp; 12th Floor</h1>
             <div class="sub">Batch tickets · shared with everyone through the Project Portal database · <span id="loaded-at"></span></div>
         </div>
@@ -137,10 +142,17 @@ table.tbl tr.sel td { background: var(--accent-soft); }
 // Config
 // ======================================================================
 const PROJECT_NUMBER = '0860';
-const SERVICES = 'https://cwe-tools.github.io/Weekly/src/services/';
+// Opened as a file (S: drive copy) → use the live site's modules. Served from the site → use the
+// modules sitting next to this page.
+const SITE = location.protocol === 'file:' ? 'https://cwe-tools.github.io/Weekly/' : new URL('.', location.href).href;
+const SERVICES = SITE + 'src/services/';
+const EMBED = new URLSearchParams(location.search).has('embed') && window.parent !== window;   // inside the portal's tab
+if (EMBED) document.body.classList.add('embed');
 // Batch sizes (lbs of sand) allowed for each "largest batch" choice. 250 = the portal's standard set.
 const SIZE_SETS = { 100: [100], 200: [200, 100], 250: [250, 150, 100] };
-const DEFAULT_SIZING = { face: 100, backup: 200 };   // this project: 100 lb face mixes, 200 lb back ups
+// This project: 100 lb face mixes, 200 lb back ups, no First Back Up layer. The site's
+// src/config/special-batching.js is the source of truth (loaded in loadData); these are the fallback.
+const DEFAULT_SIZING = { face: 100, backup: 200, firstBackUp: false };
 const STANDARD_SIZING = { face: 250, backup: 250, firstBackUp: true };  // what the portal does (comparison only)
 
 // JOB RULE — back up mixes (First and FINAL) use this ADVA dose in place of the color log's, on the
@@ -508,6 +520,14 @@ async function loadData() {
             .map(f => import(SERVICES + f))
     );
     S.svc = { ps, bt, inv };
+    if (!S.sizingLoaded) {
+        S.sizingLoaded = true;
+        const cfg = await import(SITE + 'src/config/special-batching.js').then(m => m.getSpecialBatching(PROJECT_NUMBER)).catch(() => null);
+        if (cfg?.sizing && SIZE_SETS[cfg.sizing.face] && SIZE_SETS[cfg.sizing.backup]) {
+            Object.assign(DEFAULT_SIZING, { face: cfg.sizing.face, backup: cfg.sizing.backup, firstBackUp: !!cfg.sizing.firstBackUp });
+            S.sizing = { ...DEFAULT_SIZING };
+        }
+    }
     const [project, castings, logs] = await Promise.all([
         ps.loadProject(PROJECT_NUMBER),
         cs.loadCastings(PROJECT_NUMBER),
@@ -627,6 +647,9 @@ async function handleImport(all) {
 
 let toastTimer = null;
 function toast(msg, isError = false) {
+    // Embedded: this frame is as tall as its content, so a toast pinned to its bottom would be
+    // off-screen — let the portal show it instead.
+    if (EMBED) { window.parent.postMessage({ type: 'jsb-toast', message: msg, isError }, location.origin); return; }
     const el = document.getElementById('toast');
     el.textContent = msg;
     el.className = 'show' + (isError ? ' error' : '');
@@ -994,6 +1017,7 @@ function render() {
     renderOverview();
     renderForm(casting, ticket);
     renderPreview(casting, ticket);
+    reportHeight();
 }
 
 function slumpCardHtml() {
@@ -1135,8 +1159,8 @@ function renderForm(casting, ticket) {
 function renderPreview(casting, ticket) {
     const el = document.getElementById('preview');
     const log = logById(ticket.colorLogId);
-    if (!(parseFloat(ticket.cuFt) > 0)) { el.innerHTML = '<div class="card status">Enter Total Cu Ft to generate the batch plan.</div>'; return; }
-    if (!getColorLogSandLbs(log)) { el.innerHTML = '<div class="card status">This color log has no sand weight in its base ingredients — add one in the portal to enable scaling.</div>'; return; }
+    if (!(parseFloat(ticket.cuFt) > 0)) { el.innerHTML = '<div class="card status">Enter Total Cu Ft to generate the batch plan.</div>'; reportHeight(); return; }
+    if (!getColorLogSandLbs(log)) { el.innerHTML = '<div class="card status">This color log has no sand weight in its base ingredients — add one in the portal to enable scaling.</div>'; reportHeight(); return; }
 
     const plan = planFor(ticket);
     const n = countTypes(plan);
@@ -1174,6 +1198,7 @@ function renderPreview(casting, ticket) {
             <div>${renderTotals(entries)}</div>
         </div>
         <div class="tickets">${ticketPagesHtml(casting, [ticket])}</div>`;
+    reportHeight();
 }
 
 // ======================================================================
@@ -1181,7 +1206,11 @@ function renderPreview(casting, ticket) {
 // ======================================================================
 root.addEventListener('click', (e) => {
     const cast = e.target.closest('[data-cast]');
-    if (cast) { S.activeCastingId = cast.dataset.cast; render(); window.scrollTo({ top: 0 }); return; }
+    if (cast) {
+        S.activeCastingId = cast.dataset.cast; render();
+        if (EMBED) document.querySelector('.pills')?.scrollIntoView({ block: 'start' }); else window.scrollTo({ top: 0 });
+        return;
+    }
     const color = e.target.closest('[data-color]');
     if (color) { S.activeColor.set(S.activeCastingId, color.dataset.color); render(); return; }
     if (e.target.closest('[data-import-all]')) { handleImport(true); return; }
@@ -1315,17 +1344,45 @@ body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 // On-screen preview: same ticket rules, reset scoped to the ticket so it can't touch the app UI.
 document.getElementById('ticket-css').textContent = '.bt-page, .bt-page * { margin:0; padding:0; box-sizing:border-box; }\n' + TICKET_CSS;
 
-document.getElementById('btn-print').addEventListener('click', () => {
+/** Print document for the active casting (every color on it), or '' when there is nothing to print. */
+function buildPrintHtml() {
     const casting = S.castings.find(c => c.id === S.activeCastingId);
-    if (!casting) return;
-    const pages = ticketPagesHtml(casting, getTicketList(casting.id));   // every color on this casting
-    if (!pages.trim()) { alert('Enter Total Cu Ft first — there are no tickets to print for this casting.'); return; }
+    if (!casting) return '';
+    const pages = ticketPagesHtml(casting, getTicketList(casting.id));
+    if (!pages.trim()) return '';
     const title = `Batch Tickets (face ${S.sizing.face} lb / back ups ${S.sizing.backup} lb) — ${S.project?.project_name || ''} — Cast ${casting.casting_number || ''}`;
-    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>${PRINT_CSS}</style></head><body>${pages}<script>window.addEventListener('load',()=>{setTimeout(()=>window.print(),200);});<\/script></body></html>`;
+    return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>${PRINT_CSS}</style></head><body>${pages}<script>window.addEventListener('load',()=>{setTimeout(()=>window.print(),200);});<\/script></body></html>`;
+}
+window.jsbBuildPrintHtml = buildPrintHtml;   // the portal's top-bar Print button uses this when the page is embedded
+
+document.getElementById('btn-print').addEventListener('click', () => {
+    const html = buildPrintHtml();
+    if (!html) { toast('Enter Total Cu Ft first — there are no tickets to print for this casting.', true); return; }
     const w = window.open('', '_blank');
-    if (!w) { alert('Pop-up blocked — allow pop-ups for this page to print.'); return; }
+    if (!w) { toast('Pop-up blocked — allow pop-ups for this page to print.', true); return; }
     w.document.open(); w.document.write(html); w.document.close();
 });
+
+// ---------- Embedded in the portal ----------
+/**
+ * Tell the portal how tall our content is so its frame never needs its own scrollbar. Called after
+ * every render (a ResizeObserver alone is not enough — it doesn't fire while the tab isn't painted).
+ * Measures the content itself, not the document, which never reports less than the frame's height.
+ */
+function reportHeight() {
+    if (!EMBED) return;
+    window.parent.postMessage({ type: 'jsb-height', height: document.querySelector('.app').offsetHeight + 8 }, location.origin);
+}
+if (EMBED) {
+    new ResizeObserver(reportHeight).observe(document.body);
+    window.addEventListener('load', reportHeight);
+    // The portal tells us when its Batch Tickets tab is shown again → re-pull fresh data.
+    window.addEventListener('message', async (e) => {
+        if (e.origin !== location.origin || e.source !== window.parent || e.data?.type !== 'jsb-activate') return;
+        if (pendingSaves.size > 0 || savesInFlight > 0) await flushSaves();
+        boot();
+    });
+}
 
 // ======================================================================
 // Boot

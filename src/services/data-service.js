@@ -34,6 +34,7 @@ import { loadAllInventoryForProject } from './inventory-service.js';
 import { loadBatchTicketsForCastings } from './batch-ticket-service.js';
 import { loadColorLogsForProjects } from './color-log-service.js';
 import { buildBatchPlan, getColorLogSandLbs } from '../utils/batch-calc.js';
+import { getSpecialBatching } from '../config/special-batching.js';
 import { parseDate } from '../utils/date-utils.js';
 import { setAllTasks, getAllTasks } from '../core/state.js';
 
@@ -520,6 +521,9 @@ export async function enrichTasksWithPieces(tasks) {
                 const projectLogs = colorLogsByProject.get(projectByCastingId.get(castingId)) || [];
                 const logById = new Map(projectLogs.map(l => [l.id, l]));
                 const tickets = ticketsByCasting.get(castingId) || [];
+                // Projects batched on a dedicated page plan with their own sizing, so the
+                // count shown on the board matches that page (config/special-batching.js).
+                const sizing = getSpecialBatching(projectByCastingId.get(castingId))?.sizing || null;
 
                 const names = [];
                 const methods = [];
@@ -546,7 +550,8 @@ export async function enrichTasksWithPieces(tasks) {
                             cuFtPer250: parseFloat(ticket.cuFtPer250) || 4.28,
                             castMethod: log?.castMethod || 'sprayUp',
                             colorLogSandLbs: sandLbs,
-                            manualOverrides: ticket.batchAssignments
+                            manualOverrides: ticket.batchAssignments,
+                            sizing
                         });
                         batchTotal += plan?.summary?.total || 0;
                     }
