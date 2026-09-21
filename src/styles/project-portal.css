@@ -6255,6 +6255,8 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
         padding:7px 12px;font-size:13px;font-weight:600;cursor:pointer;transition:background 0.15s}
 .pp-tab-panel[data-panel="jig-list"] .addbtn:hover{background:#dbeafe}
 /* Jig List — import from casting inventory */
+.pp-tab-panel[data-panel="jig-list"] .cncnote{margin:10px 0 2px;border:2px solid #b91c1c;border-radius:6px;padding:9px 12px;font-size:13px;line-height:1.55;color:#1e293b;background:#fff}
+.pp-tab-panel[data-panel="jig-list"] .cnctag{display:inline-block;background:#b91c1c;color:#fff;font-weight:800;letter-spacing:1px;padding:1px 9px;border-radius:3px;margin-right:6px;font-size:12px}
 .pp-tab-panel[data-panel="jig-list"] .jig-cut-frame{display:block;width:11.2in;border:0;margin:6px auto 0;background:transparent}
 .pp-tab-panel[data-panel="jig-list"] .jig-linked{display:block;padding:5px 6px;font-size:12px;color:#075985;font-weight:600}
 .pp-tab-panel[data-panel="jig-list"] .fields select{border:1px solid #cbd5e1;border-radius:6px;padding:7px 8px;font-size:13px;background:#fff;min-width:130px}

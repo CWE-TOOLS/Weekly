@@ -690,6 +690,8 @@ function drawingPages(jigs, opt){
 function renderOutput(){
   if (!S) return;
   renderCutSummary();
+  const cncEl = document.getElementById('jig-xsec-cnc');
+  if (cncEl) cncEl.innerHTML = cncNoteHTML();
   // validate the active group still exists
   const groups = activeGroups();
   if (currentGroup && !groups.includes(currentGroup)) currentGroup = null;
@@ -829,6 +831,21 @@ function renderXsec(){
   });
   document.getElementById('jig-xsec-warn').textContent = bad.join(' · ');
 }
+/**
+ * "CNC-cut jigs" call-out for the cross-section sheet — on a CNC job that sheet is the only
+ * thing printed from this tab, so it has to say how the jigs are made. Empty when no panel
+ * is set to Custom CNC.
+ */
+function cncNoteHTML(){
+  const cnc = [...new Set(S.panels.filter(p => p.custom === 'cnc').map(p => (p.label || '').trim() || '?'))];
+  if (!cnc.length) return '';
+  const sawCut = S.panels.some(p => p.custom !== 'cnc' && parseInches(p.W) > 0);
+  return `<div class="cncnote"><span class="cnctag">CNC-CUT JIGS</span> `
+    + (sawCut
+        ? `The jigs for these parts are <b>cut on the CNC</b> (custom shape) — not on the table saw, and not on the jig list or cut maps:`
+        : `<b>All jigs for this casting are cut on the CNC</b> (custom shape) — there is no table-saw jig list or cut map. Parts:`)
+    + ` <b>${cnc.map(esc).join(', ')}</b></div>`;
+}
 /** Inner HTML of the cross-section print page (goes inside a `.page`). */
 function xsecPrintHTML(){
   const T = parseInches(S.xsec.thickness);
@@ -845,6 +862,7 @@ function xsecPrintHTML(){
     <p class="listnote">Total concrete thickness <b>${T != null ? fmt16(T) : '?'}″</b>.
       Grey = concrete; dashed lines = scrim layers. Heights are measured from the bottom (face) of the panel;
       “depth from top” matches the jig foot depth pressed from the top of the pour.</p>
+    ${cncNoteHTML()}
     <div class="pfoot"><span>Scrim Jigs · ${esc(projTitle())}</span><span>Panel Cross-Section</span></div>`;
 }
 function printXsec(){
@@ -933,6 +951,8 @@ const PRINT_DOC_CSS = `
   .il{font-style:italic;font-size:11px;fill:#777}
 
   .conc{fill:#c9c9c9;stroke:var(--line);stroke-width:1.5}
+  .cncnote{margin-top:0.3in;border:2.5px solid #b91c1c;border-radius:6px;padding:12px 14px;font-size:15px;line-height:1.55}
+  .cnctag{display:inline-block;background:#b91c1c;color:#fff;font-weight:800;letter-spacing:1px;padding:2px 10px;border-radius:3px;margin-right:6px}
   .xsec-wrap{margin:12px auto 2px;text-align:center}
   .xsec-wrap svg{max-width:100%;height:auto}
 `;
@@ -1809,6 +1829,7 @@ ${MARKER_DEFS}
     <div class="fields" id="jig-xsec-fields"></div>
     <div class="fields" id="jig-xsec-heights" style="margin-top:10px"></div>
     <div class="xsec-wrap" id="jig-xsec-preview"></div>
+    <div id="jig-xsec-cnc"></div>
     <div class="warn" id="jig-xsec-warn"></div>
     <div class="toolrow"><button type="button" data-act="even-xsec" title="Space the scrim layers evenly through the concrete thickness">↕ Split scrims evenly</button>
       <button type="button" data-act="print-xsec">🖨 Print cross-section</button></div>
