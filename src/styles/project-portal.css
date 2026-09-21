@@ -6295,6 +6295,7 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
 .jig-imp-preview h3 span{font-weight:400;color:#64748b}
 .jig-imp-preview ul{margin:0;padding-left:18px;font-size:13px;line-height:1.7;color:#1e293b}
 .jig-imp-preview li.cus{color:#92400e}
+.jig-imp-preview li.nofoot{color:#b91c1c}
 .jig-imp-preview .fit{color:#64748b;font-size:12px}
 .jig-imp-preview .q{color:#64748b}
 .jig-imp-empty{font-size:13px;color:#64748b;padding:14px 4px}

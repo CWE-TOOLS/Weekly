@@ -1248,7 +1248,10 @@ function collapseInventory(rows){
 
 function choiceOf(inv, p){
   const c = inv.choices[p.key];
-  return (c && c.mode) ? c : { mode: 'short', W: '' };
+  if (c && c.mode) return c;
+  // Short side is the default — but only when both sizes are on file. With a single size
+  // nobody can tell whether it is the short side, so the part waits for an explicit pick.
+  return { mode: (p.short16 != null && p.long16 != null) ? 'short' : 'none', W: '' };
 }
 
 /**
@@ -1268,6 +1271,7 @@ function planImport(parts, inv){
       w = parseInches(c.W);
       if (w == null || w <= 0){ missing.push(p); continue; }
     } else {
+      if (c.mode === 'none'){ unreadable.push(p); continue; }
       w = c.mode === 'long' ? (p.long16 != null ? p.long16 : p.short16) : p.short16;
       if (w == null){ unreadable.push(p); continue; }
     }
@@ -1340,7 +1344,7 @@ function renderImportModal(){
         return `<tr data-imp-key="${esc(p.key)}">
           <td class="b">${esc(p.label)}</td><td>${esc(p.sizeTxt)}</td><td class="c">${p.qty || ''}</td>
           <td><div class="jig-imp-seg">
-            ${seg('short', p.short16 != null ? `${fmt16(p.short16)}″ ${square ? '' : 'short side'}` : 'no readable size', p.short16 == null)}
+            ${seg('short', p.short16 != null ? `${fmt16(p.short16)}″ ${p.long16 == null ? '— only size on file' : (square ? '' : 'short side')}` : 'no size on file', p.short16 == null)}
             ${square ? '' : seg('long', `${fmt16(p.long16)}″ long side`, false)}
             ${seg('saw', 'Custom width', false)}
             ${seg('cnc', 'Custom CNC', false)}
@@ -1360,13 +1364,13 @@ function renderImportPreview(){
     el.textContent = `Enter the width being screeded — ${fmt16(clr)}″ is subtracted from it for the jig foot, like every other jig.`;
   });
   const lines = plan.groups.map(g =>
-    `<li><b>${fmt16(g.lo)}″</b> → foot <b>${fmt16(g.lo - clr)}″</b>${g.hi > g.lo ? ` <span class="fit">fits ${fmt16(g.lo)}″–${fmt16(g.hi)}″</span>` : ''}`
+    `<li${g.lo - clr <= 0 ? ' class="nofoot"' : ''}><b>${fmt16(g.lo)}″</b> → foot <b>${fmt16(g.lo - clr)}″</b>${g.lo - clr <= 0 ? ' <b>— no foot left: the clearance is as big as the part</b>' : ''}${g.hi > g.lo ? ` <span class="fit">fits ${fmt16(g.lo)}″–${fmt16(g.hi)}″</span>` : ''}`
     + ` — ${esc(g.label)}${qty ? ` <span class="q">×${qty}</span>` : ''}</li>`);
   plan.custom.forEach(k => lines.push(
     `<li class="cus"><b>Custom CNC</b> (reminder only — not drawn, not on the cut maps) — ${esc(k.p.label)}</li>`));
   let bad = '';
   if (plan.missing.length) bad += `<div class="jig-imp-err">Enter a custom width for: ${plan.missing.map(p => esc(p.label)).join(', ')}</div>`;
-  if (plan.unreadable.length) bad += `<div class="jig-imp-err">No readable size in the inventory — set these to Custom width or Custom CNC: ${plan.unreadable.map(p => esc(p.label)).join(', ')}</div>`;
+  if (plan.unreadable.length) bad += `<div class="jig-imp-err">These parts don’t have both sizes in the Casting Inventory, so the jig side can’t be picked for you — choose an option for each (or fill in the inventory and import again): ${plan.unreadable.map(p => esc(p.label)).join(', ')}</div>`;
   const n = plan.groups.length + plan.custom.length;
   document.getElementById('jig-imp-preview').innerHTML =
     `<h3>Jig rows this will create <span>(${n}) — each one is cut once per foot depth</span></h3><ul>${lines.join('')}</ul>${bad}`;
@@ -1376,7 +1380,9 @@ function renderImportPreview(){
 function setImportMode(key, mode){
   if (!impDraft) return;
   const prev = impDraft.choices[key] || {};
-  if (mode === 'short') delete impDraft.choices[key];          // default — nothing to remember
+  const part = impParts.find(p => p.key === key);
+  const shortIsDefault = !!part && part.short16 != null && part.long16 != null;
+  if (mode === 'short' && shortIsDefault) delete impDraft.choices[key];   // default — nothing to remember
   else impDraft.choices[key] = { mode, W: mode === 'saw' ? (prev.W || '') : '' };
   renderImportModal();
 }
@@ -1496,8 +1502,9 @@ function buildCutPlan(){
                 foot16: j.foot16, depth16: j.depth16, qty, maps: [] };
     seen.set(key, b); blanks.push(b);
   });
-  const tooBig = blanks.filter(b => b.L > SL || b.H > SW || b.L <= 0 || b.foot16 <= 0);
-  const ok = blanks.filter(b => !tooBig.includes(b));
+  const noFoot = blanks.filter(b => b.foot16 <= 0 || b.L <= 0);   // clearance is as big as the part
+  const tooBig = blanks.filter(b => !noFoot.includes(b) && (b.L > SL || b.H > SW));
+  const ok = blanks.filter(b => !tooBig.includes(b) && !noFoot.includes(b));
 
   // Strips: fill the long edge first. Each strip is opened by the tallest (then longest) blank
   // still waiting and ripped at that height; it is then filled along the sheet length with the
@@ -1544,7 +1551,7 @@ function buildCutPlan(){
     m.consumption = frac >= 0.8 ? 1 : Math.ceil(frac * 4) / 4;   // 1/4-sheet rounding, 80% = full sheet
     m.sheet.strips.forEach(s => s.pieces.forEach(p => { if (!p.b.maps.includes(m.no)) p.b.maps.push(m.no); }));
   });
-  return { c, SL, SW, blanks, ok, tooBig, customs, maps,
+  return { c, SL, SW, blanks, ok, tooBig, noFoot, customs, maps,
            pieceCount: ok.reduce((t,b) => t + b.qty, 0),
            physical: maps.reduce((t,m) => t + m.qty, 0),
            consumption: maps.reduce((t,m) => t + m.consumption * m.qty, 0) };
@@ -1575,7 +1582,7 @@ function cutBestFill(pool, room){
 function renderCutLive(plan){
   const host = document.getElementById('jig-cut-output');
   if (!host) return;
-  const show = plan.blanks.length && !plan.tooBig.length;
+  const show = plan.blanks.length && !plan.tooBig.length && !plan.noFoot.length;
   const docHtml = show
     ? `<!doctype html><html><head><meta charset="utf-8"><style>${CUT_DOC_CSS}
         html,body{background:transparent}
@@ -1585,8 +1592,10 @@ function renderCutLive(plan){
   if (docHtml === lastCutDoc && host.childElementCount) return;
   lastCutDoc = docHtml;
   if (!show){
-    host.innerHTML = plan.tooBig.length
-      ? `<div class="emptyhint" style="color:#b91c1c">Cut maps are on hold — a jig is longer than the chosen sheet. Pick a longer sheet size in “Operator cut maps”.</div>` : '';
+    host.innerHTML = plan.noFoot.length
+      ? `<div class="emptyhint" style="color:#b91c1c">Cut maps are on hold — a jig has no foot left (the foot clearance is as big as the part). See the note in “Operator cut maps”.</div>`
+      : (plan.tooBig.length
+        ? `<div class="emptyhint" style="color:#b91c1c">Cut maps are on hold — a jig is longer than the chosen sheet. Pick a longer sheet size in “Operator cut maps”.</div>` : '');
     return;
   }
   let frame = host.querySelector('iframe');
@@ -1622,6 +1631,8 @@ function renderCutSummary(){
   let html = `<b>${plan.pieceCount}</b> blank${plan.pieceCount === 1 ? '' : 's'} → <b>${plan.physical}</b> sheet${plan.physical === 1 ? '' : 's'} of `
     + `<b>${esc(cutMaterialName(c))} ${c.thickness}″ — ${esc(c.sheet)}</b> at the saw · consumption <b>${plan.consumption}</b> sheet${plan.consumption === 1 ? '' : 's'} · `
     + `${plan.maps.length} cut map${plan.maps.length === 1 ? '' : 's'}`;
+  if (plan.noFoot.length) html += `<div class="bad">No foot left — the foot clearance (${esc(S.clearance)}″) is as big as the part, so these jigs cannot be made as entered (printing is blocked until this clears): `
+    + plan.noFoot.map(b => `Jig ${b.n} ${esc(b.names.join(', '))} (foot ${fmt16(b.foot16)}″)`).join('; ') + `</div>`;
   if (plan.tooBig.length) html += `<div class="bad">Cannot be cut from a ${esc(c.sheet)} sheet — pick a longer sheet (printing is blocked until this clears): `
     + plan.tooBig.map(b => `Jig ${b.n} ${esc(b.names.join(', '))} (${fmt16(b.L)}″)`).join('; ') + `</div>`;
   if (c.material === 'bb' && c.sheet !== '5x12') html += `<div class="note">Black Board is stocked as 5x12 only.</div>`;
@@ -1741,6 +1752,12 @@ function printCutMaps(){
   if (!S) return;
   const plan = buildCutPlan();
   if (!plan.blanks.length){ alert('Add at least one panel width and one foot depth first — there are no jigs to nest.'); return; }
+  if (plan.noFoot.length){
+    alert('These jigs have no foot left — the foot clearance (' + S.clearance + '″) is as big as the part:\n\n'
+      + plan.noFoot.map(b => `Jig ${b.n} — ${b.names.join(', ')} (foot ${fmt16(b.foot16)}″)`).join('\n')
+      + '\n\nChange the width or the foot clearance, then print again.');
+    return;
+  }
   if (plan.tooBig.length){
     alert('These jigs cannot be cut from a ' + plan.c.sheet + ' sheet:\n\n'
       + plan.tooBig.map(b => `Jig ${b.n} — ${b.names.join(', ')} (${fmt16(b.L)}″ long)`).join('\n')
