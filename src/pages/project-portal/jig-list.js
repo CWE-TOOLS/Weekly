@@ -1438,7 +1438,6 @@ function refreshImportStamp(){
 /* ===================== operator cut maps ===================== */
 
 const KERF16 = 2;   // 1/8″ on all table-saw work
-const CUT_MAP_ASPECT = 0.52;   // tallest map drawing that still fits the page, as a share of its width
 const CUT_SVG_ML = 13, CUT_SVG_MR = 3.5;   // map drawing margins (inches at sheet scale): strip labels / width dimension
 const CUT_SHEETS = { '4x8': { L: 96, W: 48 }, '5x9': { L: 108, W: 60 }, '5x12': { L: 144, W: 60 } };
 const CUT_MATERIALS = { hdo: 'HDO', bb: 'Black Board', other: 'Other' };
@@ -1621,13 +1620,8 @@ function cutMapSVG(plan, m){
   const SLi = plan.SL / 16, SWi = plan.SW / 16, ML = CUT_SVG_ML, MT = 3.2, MB = 1;
   const vbW = SLi + ML + CUT_SVG_MR;
   const usedIn = Math.min(SWi, Math.max(0, m.sheet.used - KERF16) / 16), rest = SWi - usedIn;
-  // Lengths are always to scale. A part-used sheet draws its strips taller (up to 3×) and the
-  // untouched offcut as a short band, so the labels are readable; a full sheet is true to scale.
-  const maxBody = vbW * CUT_MAP_ASPECT - MT - MB;
-  let restBand = rest > 0.05 ? Math.min(rest, 4.5) : 0;
-  let k = Math.min(3, (maxBody - restBand) / Math.max(usedIn, 0.01));
-  if (k <= 1.05){ k = Math.min(1, maxBody / SWi); restBand = rest * k; }
-  m.stretch = k;
+  // The sheet is drawn true to scale in both directions — what you see is proportional.
+  const k = 1, restBand = rest;
   const bodyH = usedIn * k + restBand, vbH = bodyH + MT + MB;
   let s = `<svg class="cutsvg" viewBox="0 0 ${vbW} ${vbH}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Cut map ${m.no}">`;
   s += `<text class="cdim" x="${ML + SLi/2}" y="${MT - 1.1}" text-anchor="middle">${fmt16(plan.SL)}″</text>`;
@@ -1705,7 +1699,7 @@ function buildCutPages(plan){
       ${cutPageHead('OPERATOR CUT MAPS', 'blue', 'WHAT TO CUT — SEE THE JIG DRAWINGS FOR THE FOOT NOTCH', `Map ${m.no} of ${plan.maps.length}`)}
       <div class="maphead">${head}</div>
       ${cutMapSVG(plan, m)}
-      <div class="legend"><span class="sw sw-p"></span> <u>${esc(mat)}</u> jig blank &nbsp;&nbsp; <span class="sw sw-s"></span> Gray = spare / offcut &nbsp;&nbsp; Lengths to scale: 1″ on paper = ${(vbW / 10).toFixed(1)}″ on the sheet${m.stretch > 1.05 ? ` · strip heights drawn ×${m.stretch.toFixed(1)} so the labels read` : ''}</div>
+      <div class="legend"><span class="sw sw-p"></span> <u>${esc(mat)}</u> jig blank &nbsp;&nbsp; <span class="sw sw-s"></span> Gray = spare / offcut &nbsp;&nbsp; Drawn to scale: 1″ on paper = ${(vbW / 10).toFixed(1)}″ on the sheet</div>
       <p class="fine"><b>Cut sequence:</b> sheet long edge against the fence. Rip top to bottom as drawn — ${ripTxt} — 1/8″ kerf each rip. Then crosscut each strip left to right to the length printed on each blank. Cut to the printed numbers, not by scaling this drawing. Notch the foot afterwards from the jig drawings.</p>` });
   });
 
