@@ -440,7 +440,6 @@ function buildJigs(){
     // A shared jig (import) spans widths W…Wmax: foot from the narrowest, handle from the widest.
     const hi16 = (p.max16 != null && p.max16 > p.w16) ? p.max16 : p.w16;
     const notes = [];
-    if (hi16 > p.w16) notes.push(`Shared jig — fits parts ${fmt16(p.w16)}″ to ${fmt16(hi16)}″ wide`);
     if (p.custom) notes.push('custom — ' + customLabel(p.custom));
     if (others.length) notes.push('same as ' + others.join(', '));
     const note = notes.join(' · ');
@@ -452,7 +451,7 @@ function buildJigs(){
       jigs.push({
         n, pi, label: p.label || ('Panel ' + (pi+1)), qty: p.qty,
         W: fmt16(p.w16), foot: fmt16(foot), handle: fmt16(handle), foot16: foot, handle16: handle,
-        depth: fmt16(d16), depth16: d16, depthLabel: depthLabelOf(dp), kind: dp.kind || '', note, shared: hi16 > p.w16
+        depth: fmt16(d16), depth16: d16, depthLabel: depthLabelOf(dp), kind: dp.kind || '', note
       });
     });
   });
@@ -716,8 +715,7 @@ function renderOutput(){
   const legend = `<p class="listnote">${customNote}
       <b>Foot depth</b> = how deep the scrim is pressed; one jig per depth listed.
       Cut each jig from <b>one piece of plywood</b>: the foot is ${fmt16(Math.round(clr/2))}″ narrower per side so it drops into the form, and the handle overhangs ${fmt16(Math.round(over/2))}″ per side to ride on the form walls.<br>
-      <b style="color:#b23">“same as …”</b> = another panel shares this width — cut the jig once and reuse it.${jigs.some(x => x.shared) ? `<br>
-      <b style="color:#b23">“Shared jig”</b> = one jig made for several parts whose widths are close together. Its <b>foot</b> is sized from the <b>narrowest</b> of those parts (so it drops into every form) and its <b>handle</b> from the <b>widest</b> (so it still rides on the walls of every form) — that is why its handle is wider than “W + ${fmt16(over)}″”.` : ''}</p>`;
+      <b style="color:#b23">“same as …”</b> = another panel shares this width — cut the jig once and reuse it.</p>`;
   const listHead = listHeadHTML(over, clr);
 
   let html = '', page0list = 1;   // no explanatory page — start straight at the jig list
