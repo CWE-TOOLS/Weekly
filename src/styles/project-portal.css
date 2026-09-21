@@ -6270,7 +6270,6 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
 .pp-tab-panel[data-panel="jig-list"] table.edit td.src{font-size:11px;white-space:nowrap;padding:3px 6px}
 .pp-tab-panel[data-panel="jig-list"] .jig-tag{display:inline-block;background:#e0f2fe;color:#075985;border-radius:999px;padding:1px 7px;font-weight:600}
 .pp-tab-panel[data-panel="jig-list"] .jig-tag-c{background:#fef3c7;color:#92400e}
-.pp-tab-panel[data-panel="jig-list"] .jig-tag-fit{color:#64748b}
 .pp-tab-panel[data-panel="jig-list"] .jig-imp-row{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:4px 0 10px}
 .pp-tab-panel[data-panel="jig-list"] .jig-imp-btn{background:#15803d;border:1px solid #166534;color:#fff;border-radius:6px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer}
 .pp-tab-panel[data-panel="jig-list"] .jig-imp-btn:hover{background:#166534}

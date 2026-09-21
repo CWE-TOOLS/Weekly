@@ -1097,8 +1097,6 @@ function panelSourceTag(p){
   const tags = [];
   if (p.src === 'inv') tags.push('<span class="jig-tag">inventory</span>');
   if (p.custom) tags.push(`<span class="jig-tag jig-tag-c">${customLabel(p.custom)}</span>`);
-  const w = parseInches(p.W), m = parseInches(p.Wmax);
-  if (w != null && m != null && m > w) tags.push(`<span class="jig-tag-fit">fits to ${fmt16(m)}″</span>`);
   return tags.join(' ');
 }
 /** Generated "Height Check Jig" labels follow the depth / thickness as they are typed. */
