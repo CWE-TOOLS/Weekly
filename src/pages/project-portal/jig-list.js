@@ -185,6 +185,8 @@ function selectCasting(castingId) {
   }
   S = st;
   fixXsec();
+  // S.xsec.auto: the scrim heights follow the thickness (even split) until one is typed by hand.
+  if (S.xsec.auto == null) S.xsec.auto = xsecIsEvenSplit();
   syncDepthsFromXsec(true);
   // The printed title always mirrors the portal project record (Info tab),
   // even for states saved under an older project name.
@@ -329,7 +331,7 @@ function freshState(){
   if (currentProjectName) st.project = currentProjectName;
   return st;
 }
-function defaultXsec(){ return { thickness:'3/4', heights:['1/4','1/2'] }; }
+function defaultXsec(){ return { thickness:'3/4', heights:['1/4','1/2'], auto:true }; }
 /* Legacy projects have no cross-section: derive one from the foot depths
    (scrim depth from top → height from bottom = thickness − depth).
    Total thickness isn't in legacy data, so it falls back to the 3/4″ default. */
@@ -766,6 +768,19 @@ function buildXsecHeights(){
        <span class="u">from bottom</span></div>`).join('');
 }
 
+/** Scrim heights that split the concrete thickness evenly (n scrims -> n+1 equal layers), to the 1/16″. */
+function evenScrimHeights(n){
+  const T = parseInches(S.xsec.thickness);
+  if (T == null || T <= 0 || n < 1) return null;
+  return Array.from({ length: n }, (_, i) => fmt16(Math.round(T * (i + 1) / (n + 1))));
+}
+/** True when the current heights are empty or exactly the even split of the current thickness. */
+function xsecIsEvenSplit(){
+  const hs = S.xsec.heights;
+  if (hs.every(h => !(h || '').trim())) return true;
+  const even = evenScrimHeights(hs.length);
+  return !!even && hs.every((h, i) => parseInches(h) === parseInches(even[i]));
+}
 function xsecScrims(T){
   return S.xsec.heights
     .map((h,i)=>({ n:i+1, v:parseInches(h) }))
@@ -1091,14 +1106,24 @@ function onEditorInput(e){
   if (!S) return;
   const el = e.target; const sec = el.dataset.sec;
   if (sec === 'xsec'){
-    if (el.dataset.field === 'thickness'){ S.xsec.thickness = el.value; }
+    if (el.dataset.field === 'thickness'){
+      // Heights that were an even split (or still empty) follow the new thickness;
+      // heights somebody typed by hand are left alone.
+      S.xsec.thickness = el.value;
+      const even = S.xsec.auto ? evenScrimHeights(S.xsec.heights.length) : null;
+      if (even){ S.xsec.heights = even; buildXsecHeights(); }
+    }
     else if (el.dataset.field === 'count'){
       const n = Math.max(0, Math.min(10, parseInt(el.value, 10) || 0));
       while (S.xsec.heights.length < n) S.xsec.heights.push('');
       if (S.xsec.heights.length > n) S.xsec.heights.length = n;
+      // A new layer count re-splits the thickness evenly between the scrims.
+      const even = evenScrimHeights(n);
+      if (even) S.xsec.heights = even;
+      S.xsec.auto = true;
       buildXsecHeights();
     }
-    else if (el.dataset.field === 'h'){ S.xsec.heights[+el.dataset.idx] = el.value; }
+    else if (el.dataset.field === 'h'){ S.xsec.heights[+el.dataset.idx] = el.value; S.xsec.auto = false; }   // typed by hand — stop following
     // The cross-section owns the scrim foot depths — keep them in step.
     syncDepthsFromXsec(); buildDepthTable();
     renderXsec(); liveUpdate();
@@ -1136,6 +1161,12 @@ function onEditorClick(e){
   else if (act === 'add-depth'){ S.depths.push({d:'',label:''}); }
   else if (act === 'del-depth'){ S.depths.splice(idx,1); }
   else if (act === 'print-xsec'){ printXsec(); return; }
+  else if (act === 'even-xsec'){
+    const even = evenScrimHeights(S.xsec.heights.length);
+    if (!even){ alert('Enter the total concrete thickness and at least one scrim first.'); return; }
+    S.xsec.heights = even; S.xsec.auto = true;
+    syncDepthsFromXsec();
+  }
   else if (act === 'import-inv'){ openImportModal(); return; }
   else if (act === 'print-cut'){ printCutMaps(); return; }
   else if (act === 'example'){ if(confirm('Replace the current project with the example?')){ S = exampleState(); afterLoad(); } return; }
@@ -1170,7 +1201,7 @@ function exampleState(){
       {label:'C·2', W:'35-1/8', qty:'3', group:'Casting 2'},
       {label:'C·3', W:'32-3/8', qty:'2', group:'Casting 2'}
     ],
-    xsec:{ thickness:'3/4', heights:['1/4','1/2'] }
+    xsec:{ thickness:'3/4', heights:['1/4','1/2'], auto:true }
   };
 }
 
@@ -1407,6 +1438,7 @@ function refreshImportStamp(){
 /* ===================== operator cut maps ===================== */
 
 const KERF16 = 2;   // 1/8″ on all table-saw work
+const CUT_MAP_ASPECT = 0.52;   // tallest map drawing that still fits the page, as a share of its width
 const CUT_SVG_ML = 13, CUT_SVG_MR = 3.5;   // map drawing margins (inches at sheet scale): strip labels / width dimension
 const CUT_SHEETS = { '4x8': { L: 96, W: 48 }, '5x9': { L: 108, W: 60 }, '5x12': { L: 144, W: 60 } };
 const CUT_MATERIALS = { hdo: 'HDO', bb: 'Black Board', other: 'Other' };
@@ -1511,10 +1543,52 @@ function buildCutPlan(){
            consumption: maps.reduce((t,m) => t + m.consumption * m.qty, 0) };
 }
 
+let lastCutDoc = '';   // what the live frame currently shows — skip rewrites when nothing changed
+
+/** Live cut-map pages under the jig drawings. They are the printout's own pages, shown in a frame
+    so they keep their own (landscape) stylesheet. */
+function renderCutLive(plan){
+  const host = document.getElementById('jig-cut-output');
+  if (!host) return;
+  const show = plan.blanks.length && !plan.tooBig.length;
+  const docHtml = show
+    ? `<!doctype html><html><head><meta charset="utf-8"><style>${CUT_DOC_CSS}
+        html,body{background:transparent}
+        .page{margin:0 auto 18px;background:#fff;border:1px solid #e2e8f0;box-shadow:0 1px 4px rgba(15,23,42,.10)}
+       </style></head><body>${buildCutPages(plan)}</body></html>`
+    : '';
+  if (docHtml === lastCutDoc && host.childElementCount) return;
+  lastCutDoc = docHtml;
+  if (!show){
+    host.innerHTML = plan.tooBig.length
+      ? `<div class="emptyhint" style="color:#b91c1c">Cut maps are on hold — a jig is longer than the chosen sheet. Pick a longer sheet size in “Operator cut maps”.</div>` : '';
+    return;
+  }
+  let frame = host.querySelector('iframe');
+  if (!frame){
+    host.innerHTML = '<iframe class="jig-cut-frame" title="Operator cut maps" scrolling="no"></iframe>';
+    frame = host.querySelector('iframe');
+  }
+  // Landscape pages are 11in wide — shrink the whole frame document to the room there is.
+  const fit = () => { try {
+    const FULL = 11.2 * 96, root = frame.contentDocument.documentElement;
+    const z = Math.min(1, Math.max(0.4, (host.clientWidth - 4) / FULL));
+    root.style.zoom = z;
+    frame.style.width = Math.round(FULL * z) + 'px';
+    const pages = frame.contentDocument.querySelectorAll('.page');
+    const last = pages[pages.length - 1];
+    frame.style.height = Math.ceil(last ? last.getBoundingClientRect().bottom + 24 : root.scrollHeight) + 'px';
+  } catch (e) { /* frame gone */ } };
+  frame.onload = fit;
+  frame.srcdoc = docHtml;
+  setTimeout(fit, 250);   // onload can be missed in a background tab
+}
+
 function renderCutSummary(){
   const el = document.getElementById('jig-cut-summary');
   if (!el || !S) return;
   const plan = buildCutPlan();
+  renderCutLive(plan);
   if (!plan.blanks.length){ el.innerHTML = '<span class="muted">No jigs yet — nothing to nest.</span>'; return; }
   const c = plan.c;
   let html = `<b>${plan.pieceCount}</b> blank${plan.pieceCount === 1 ? '' : 's'} → <b>${plan.physical}</b> sheet${plan.physical === 1 ? '' : 's'} of `
@@ -1545,35 +1619,50 @@ function cutFoot(label, pageNo, pageCount){
 
 function cutMapSVG(plan, m){
   const SLi = plan.SL / 16, SWi = plan.SW / 16, ML = CUT_SVG_ML, MT = 3.2, MB = 1;
-  const vbW = SLi + ML + CUT_SVG_MR, vbH = SWi + MT + MB;
+  const vbW = SLi + ML + CUT_SVG_MR;
+  const usedIn = Math.min(SWi, Math.max(0, m.sheet.used - KERF16) / 16), rest = SWi - usedIn;
+  // Lengths are always to scale. A part-used sheet draws its strips taller (up to 3×) and the
+  // untouched offcut as a short band, so the labels are readable; a full sheet is true to scale.
+  const maxBody = vbW * CUT_MAP_ASPECT - MT - MB;
+  let restBand = rest > 0.05 ? Math.min(rest, 4.5) : 0;
+  let k = Math.min(3, (maxBody - restBand) / Math.max(usedIn, 0.01));
+  if (k <= 1.05){ k = Math.min(1, maxBody / SWi); restBand = rest * k; }
+  m.stretch = k;
+  const bodyH = usedIn * k + restBand, vbH = bodyH + MT + MB;
   let s = `<svg class="cutsvg" viewBox="0 0 ${vbW} ${vbH}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Cut map ${m.no}">`;
   s += `<text class="cdim" x="${ML + SLi/2}" y="${MT - 1.1}" text-anchor="middle">${fmt16(plan.SL)}″</text>`;
-  s += `<text class="cdim" x="${ML + SLi + 1}" y="${MT + SWi/2}" text-anchor="middle" transform="rotate(90 ${ML + SLi + 1} ${MT + SWi/2})">${fmt16(plan.SW)}″</text>`;
-  s += `<rect class="csheet" x="${ML}" y="${MT}" width="${SLi}" height="${SWi}"/>`;
+  s += `<text class="cdim" x="${ML + SLi + 1}" y="${MT + bodyH/2}" text-anchor="middle" transform="rotate(90 ${ML + SLi + 1} ${MT + bodyH/2})">${fmt16(plan.SW)}″</text>`;
+  s += `<rect class="csheet" x="${ML}" y="${MT}" width="${SLi}" height="${bodyH}"/>`;
   m.sheet.strips.forEach((st, si) => {
-    const y = MT + st.y / 16, h = st.H / 16, fs = Math.min(1.15, h * 0.62);
-    s += `<text class="cstrip" x="${ML - 0.5}" y="${y + h/2 + fs*0.35}" text-anchor="end" style="font-size:${fs}px">S${si+1} · rip ${fmt16(st.H)}″</text>`;
+    const y = MT + st.y / 16 * k, h = st.H / 16 * k, fs = Math.min(1.9, h * 0.6);
+    s += `<text class="cstrip" x="${ML - 0.5}" y="${y + h/2 + fs*0.35}" text-anchor="end" style="font-size:${Math.min(fs, 1.5)}px">S${si+1} · rip ${fmt16(st.H)}″</text>`;
     st.pieces.forEach(p => {
       const x = ML + p.x / 16, w = p.b.L / 16;
       s += `<rect class="cpiece" x="${x}" y="${y}" width="${w}" height="${h}"/>`;
       const full = `JIG ${p.b.n} · ${p.b.names.join(', ')} · ${fmt16(p.b.L)}″`;
       const short = `JIG ${p.b.n} · ${fmt16(p.b.L)}″`;
-      const fits = t => t.length * fs * 0.56 <= w - 0.6;
-      const txt = fits(full) ? full : (fits(short) ? short : (fits('' + p.b.n) ? '' + p.b.n : ''));
-      if (txt) s += `<text class="cname" x="${x + 0.35}" y="${y + h/2 + fs*0.35}" style="font-size:${fs}px">${esc(txt)}</text>`;
+      // Full label if it fits; else "JIG n · length", shrunk as far as half size so a short blank still shows its length.
+      const fits = (t, f) => t.length * f * 0.56 <= w - 0.6;
+      let txt = '', f = fs;
+      if (fits(full, fs)) txt = full;
+      else {
+        f = Math.min(fs, (w - 0.6) / (short.length * 0.56));
+        if (f >= fs * 0.5) txt = short; else { f = fs; txt = fits('' + p.b.n, fs) ? '' + p.b.n : ''; }
+      }
+      if (txt) s += `<text class="cname" x="${x + 0.35}" y="${y + h/2 + f*0.35}" style="font-size:${f}px">${esc(txt)}</text>`;
     });
     const tail = SLi - Math.min(SLi, st.used / 16);
     if (tail > 0.05) s += `<rect class="cspare" x="${ML + SLi - tail}" y="${y}" width="${tail}" height="${h}"/>`;
   });
-  const usedIn = Math.min(SWi, m.sheet.used / 16), rest = SWi - usedIn;
   if (rest > 0.05){
-    s += `<rect class="cspare" x="${ML}" y="${MT + usedIn}" width="${SLi}" height="${rest}"/>`;
-    if (rest >= 2.5) s += `<text class="ckeep" x="${ML + SLi/2}" y="${MT + usedIn + rest/2 + 0.6}" text-anchor="middle">KEEP — ${fmt16(plan.SL)}″ × ${fmt16(Math.round(rest*16))}″ OFFCUT · BACK TO THE RACK</text>`;
+    const y0 = MT + usedIn * k;
+    s += `<rect class="cspare" x="${ML}" y="${y0}" width="${SLi}" height="${restBand}"/>`;
+    if (rest >= 2.5 && restBand >= 2.4) s += `<text class="ckeep" x="${ML + SLi/2}" y="${y0 + restBand/2 + 0.6}" text-anchor="middle">KEEP — ${fmt16(plan.SL)}″ × ${fmt16(Math.round(rest*16))}″ OFFCUT · BACK TO THE RACK</text>`;
   }
   return s + '</svg>';
 }
 
-/** Full print document: cover, parts required, then a map + strip schedule per sheet layout. */
+/** Full print document: the takeoff cover, then one map per sheet layout. */
 function buildCutPages(plan){
   const c = plan.c, mat = `${cutMaterialName(c)} ${c.thickness}″`, stock = cutStockName(c);
   const pages = [];   // {label, html}
@@ -1601,25 +1690,12 @@ function buildCutPages(plan){
     <h2>Standing Rules</h2>
     <ul class="body">
       <li>Kerf is <b>1/8″</b> on every cut and is included in the maps.</li>
-      <li><b>Rip the strips first, then crosscut</b> each strip to the lengths in its strip schedule.</li>
+      <li><b>Rip the strips first, then crosscut</b> each strip left to right to the lengths printed on the blanks.</li>
       <li>Blanks are <b>square-cut rectangles</b>: handle width × (handle height + foot depth). <b>Notch the foot afterwards</b> from the jig drawings — the maps do not show the notch.</li>
-      <li>Jigs with identical cut sizes are made once and shared; the parts list shows every part each jig fits.</li>
+      <li>Jigs with identical cut sizes are made once and shared. The <b>jig list printout</b> is the parts list — it shows every part each jig fits.</li>
     </ul>` });
 
-  // ---- parts required (paginated)
-  const nameLines = names => Math.max(1, Math.ceil(names.join(', ').length / 26));
-  const rows = plan.ok.map(b => ({ h: 10 + 20 * nameLines(b.names), html: `<tr><td class="c b">${b.n}</td><td class="b wrap">${esc(b.names.join(', '))}</td><td>${esc(b.depthLabel)}</td>
-      <td>${fmt16(b.L)}″ × ${fmt16(b.H)}″</td><td>${fmt16(b.foot16)}″ × ${fmt16(b.depth16)}″</td><td class="c b">${b.qty}</td><td class="c">${b.maps.join(', ')}</td></tr>` }))
-    .concat(plan.customs.map(k => ({ h: 10 + 20 * nameLines([k.label]), html: `<tr><td class="c">—</td><td class="b wrap">${esc(k.label)}</td><td>Custom ${customLabel(k.kind)}</td><td>—</td><td>—</td>
-      <td class="c b" colspan="2">EXCLUDED - CNC NEST</td></tr>` })));
-  cutPaginate(rows, 500).forEach(chunk => {
-    pages.push({ label: 'Parts Required', html: `
-      ${cutPageHead('PARTS REQUIRED', 'orange', 'EVERY PART ON THE CAST — REFERENCE, NOT A CUT ORDER', `${esc(mat)} — ${esc(stock)}`)}
-      <table class="list"><thead><tr><th class="c">Jig</th><th>Fits parts</th><th>Type</th><th>Blank to cut (L × H)</th><th>Foot after notching (W × depth)</th><th class="c">QTY</th><th class="c">Map</th></tr></thead>
-        <tbody>${chunk.join('')}</tbody></table>` });
-  });
-
-  // ---- maps + strip schedules
+  // ---- maps (the jig list printout is the parts list; lengths are printed on the blanks)
   plan.maps.forEach(m => {
     const head = `MAP ${m.no} OF ${plan.maps.length} — <u>${esc(mat)}</u> — ${esc(stock)} — QTY ${m.qty} SHEET${m.qty === 1 ? '' : 'S'}`;
     const rips = {}; m.sheet.strips.forEach(s => { rips[s.H] = (rips[s.H] || 0) + 1; });
@@ -1629,33 +1705,11 @@ function buildCutPages(plan){
       ${cutPageHead('OPERATOR CUT MAPS', 'blue', 'WHAT TO CUT — SEE THE JIG DRAWINGS FOR THE FOOT NOTCH', `Map ${m.no} of ${plan.maps.length}`)}
       <div class="maphead">${head}</div>
       ${cutMapSVG(plan, m)}
-      <div class="legend"><span class="sw sw-p"></span> <u>${esc(mat)}</u> jig blank &nbsp;&nbsp; <span class="sw sw-s"></span> Gray = spare / offcut &nbsp;&nbsp; Scale: 1″ on paper = ${(vbW / 10).toFixed(1)}″ on the sheet</div>
-      <p class="fine"><b>Cut sequence:</b> sheet long edge against the fence. Rip top to bottom as drawn — ${ripTxt} — 1/8″ kerf each rip. Then crosscut each strip left to right to the lengths in the strip schedule on the next page. Cut from the schedule, not by scaling this drawing. Notch the foot afterwards from the jig drawings.</p>` });
-    const srows = m.sheet.strips.map((st, si) => {
-      const tail = plan.SL - Math.min(plan.SL, st.used - KERF16);
-      return { h: 10 + 24 * Math.max(1, Math.ceil(st.pieces.length / 5)), html: `<tr><td class="c b">S${si+1}</td><td class="c b">${fmt16(st.H)}″</td>
-        <td class="wrap">${st.pieces.map(p => `<span class="pc"><b>JIG ${p.b.n}</b> ${fmt16(p.b.L)}″</span>`).join(' ')}</td>
-        <td>${tail >= 16 ? fmt16(tail) + '″ spare' : '—'}</td></tr>` }; });
-    cutPaginate(srows, 510).forEach(chunk => {
-      pages.push({ label: `Cut Map ${m.no} strip schedule`, html: `
-        ${cutPageHead('OPERATOR CUT MAPS', 'blue', 'WHAT TO CUT — SEE THE JIG DRAWINGS FOR THE FOOT NOTCH', 'Strip schedule')}
-        <div class="maphead">${head} — STRIP SCHEDULE</div>
-        <table class="list"><thead><tr><th class="c" style="width:7%">Strip</th><th class="c" style="width:10%">Rip width</th><th>Crosscut left → right (1/8″ kerf between cuts)</th><th style="width:14%">Tail</th></tr></thead>
-          <tbody>${chunk.join('')}</tbody></table>` });
-    });
+      <div class="legend"><span class="sw sw-p"></span> <u>${esc(mat)}</u> jig blank &nbsp;&nbsp; <span class="sw sw-s"></span> Gray = spare / offcut &nbsp;&nbsp; Lengths to scale: 1″ on paper = ${(vbW / 10).toFixed(1)}″ on the sheet${m.stretch > 1.05 ? ` · strip heights drawn ×${m.stretch.toFixed(1)} so the labels read` : ''}</div>
+      <p class="fine"><b>Cut sequence:</b> sheet long edge against the fence. Rip top to bottom as drawn — ${ripTxt} — 1/8″ kerf each rip. Then crosscut each strip left to right to the length printed on each blank. Cut to the printed numbers, not by scaling this drawing. Notch the foot afterwards from the jig drawings.</p>` });
   });
 
   return pages.map((p, i) => `<section class="page">${p.html}${cutFoot(p.label, i + 1, pages.length)}</section>`).join('');
-}
-
-/** Split table rows ({h: estimated px, html}) into page-sized chunks. Always returns at least one chunk. */
-function cutPaginate(rows, budgetPx){
-  const chunks = [[]]; let used = 0;
-  rows.forEach(r => {
-    if (used + r.h > budgetPx && chunks[chunks.length - 1].length){ chunks.push([]); used = 0; }
-    chunks[chunks.length - 1].push(r.html); used += r.h;
-  });
-  return chunks;
 }
 
 function printCutMaps(){
@@ -1705,7 +1759,7 @@ const CUT_DOC_CSS = `
   .legend{font-size:14px;font-weight:700;margin-top:6px}
   .sw{display:inline-block;width:22px;height:12px;border:1px solid #111;vertical-align:-1px}
   .sw-p{background:#efe2c2}.sw-s{background:#cfcfcf}
-  .cutsvg{display:block;width:10in;max-height:5.1in;margin:0 auto}
+  .cutsvg{display:block;width:10in;max-height:5.3in;margin:0 auto}
   .csheet{fill:#fff;stroke:#111;stroke-width:.25}
   .cpiece{fill:#efe2c2;stroke:#111;stroke-width:.09}
   .cspare{fill:#cfcfcf;stroke:#777;stroke-width:.06}
@@ -1746,12 +1800,13 @@ ${MARKER_DEFS}
   <section class="editor" id="jig-editor">
 
     <h2>Panel cross-section <span style="font-weight:400;text-transform:none;color:#888;font-size:12px">— scrim placement diagram</span></h2>
-    <p class="hint">Enter the total concrete thickness, the number of scrims, and each scrim’s height measured from the <b>bottom (face) of the panel</b>. Dimensions accept <b>3/4</b>, <b>1-1/2</b> or <b>0.75</b>.</p>
+    <p class="hint">Enter the total concrete thickness and the number of scrims — the scrim heights are filled in so the layers <b>split the thickness evenly</b> (measured from the <b>bottom / face of the panel</b>). Type over any height for a special case; <b>Split scrims evenly</b> puts them back. Dimensions accept <b>3/4</b>, <b>1-1/2</b> or <b>0.75</b>.</p>
     <div class="fields" id="jig-xsec-fields"></div>
     <div class="fields" id="jig-xsec-heights" style="margin-top:10px"></div>
     <div class="xsec-wrap" id="jig-xsec-preview"></div>
     <div class="warn" id="jig-xsec-warn"></div>
-    <div class="toolrow"><button type="button" data-act="print-xsec">🖨 Print cross-section</button></div>
+    <div class="toolrow"><button type="button" data-act="even-xsec" title="Space the scrim layers evenly through the concrete thickness">↕ Split scrims evenly</button>
+      <button type="button" data-act="print-xsec">🖨 Print cross-section</button></div>
 
     <h2 style="margin-top:22px">Project</h2>
     <div class="fields" id="jig-proj-fields"></div>
@@ -1791,6 +1846,9 @@ ${MARKER_DEFS}
 
   <!-- ====================== GENERATED OUTPUT ====================== -->
   <div id="jig-output"></div>
+
+  <!-- ============ LIVE OPERATOR CUT MAPS (own document in a frame — same pages as the printout) ============ -->
+  <div id="jig-cut-output"></div>
 
 </div>
 
