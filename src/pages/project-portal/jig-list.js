@@ -1169,8 +1169,7 @@ function onEditorClick(e){
   }
   else if (act === 'import-inv'){ openImportModal(); return; }
   else if (act === 'print-cut'){ printCutMaps(); return; }
-  else if (act === 'example'){ if(confirm('Replace the current project with the example?')){ S = exampleState(); afterLoad(); } return; }
-  else if (act === 'clear'){ if(confirm('Clear all panels, depths and settings?')){ S = freshState(); afterLoad(); } return; }
+  else if (act === 'clear'){ if(confirm('Clear all panels, depths and settings for THIS casting? Other castings are not touched.')){ S = freshState(); afterLoad(); } return; }
   else return;
   scheduleSave(); buildEditor(); renderOutput();
 }
@@ -1179,30 +1178,11 @@ function afterLoad(){
   fixXsec(); currentGroup = null;
   // The printed title always mirrors the portal project record (Info tab).
   if (currentProjectName) S.project = currentProjectName;
-  // example/clear replaced the state object — keep the per-casting map in sync.
+  // Clear all replaced the state object — keep the per-casting map in sync.
   if (currentCastingId) stateByCasting.set(currentCastingId, S);
-  // Immediate save (not debounced) — example/clear should persist now.
+  // Immediate save (not debounced) — a clear should persist now.
   if (currentProjectNumber && currentCastingId) doSave(currentProjectNumber, currentCastingId, S);
   buildEditor(); renderOutput();
-}
-
-/* ===================== example project ==================== */
-function exampleState(){
-  return {
-    project:'Example — 2 castings', date: todayISO(),
-    overhang:'4', clearance:'1', handleH:'1-1/2',
-    depths:[ {d:'1/2', label:'First Scrim', scrim:0}, {d:'1/4', label:'Second Scrim', scrim:1} ],
-    panels:[
-      {label:'A·1', W:'38',     qty:'2', group:'Casting 1'},
-      {label:'A·2', W:'42-3/16',qty:'2', group:'Casting 1'},
-      {label:'B·1', W:'46-7/8', qty:'4', group:'Casting 1'},
-      {label:'B·2', W:'38',     qty:'2', group:'Casting 1'},
-      {label:'C·1', W:'44-1/8', qty:'7', group:'Casting 2'},
-      {label:'C·2', W:'35-1/8', qty:'3', group:'Casting 2'},
-      {label:'C·3', W:'32-3/8', qty:'2', group:'Casting 2'}
-    ],
-    xsec:{ thickness:'3/4', heights:['1/4','1/2'], auto:true }
-  };
 }
 
 /* ================= import from casting inventory ================= */
@@ -1830,9 +1810,8 @@ ${MARKER_DEFS}
     <div class="jig-cut-summary" id="jig-cut-summary"></div>
     <div class="toolrow"><button type="button" data-act="print-cut">🖨 Print cut maps &amp; summary</button></div>
 
-    <h2 style="margin-top:22px">Project file</h2>
+    <h2 style="margin-top:22px">Start over</h2>
     <div class="toolrow">
-      <button type="button" data-act="example">Load example</button>
       <button type="button" class="danger" data-act="clear">Clear all</button>
     </div>
     <p class="hint" style="margin-top:8px">Work auto-saves to the selected casting.</p>
