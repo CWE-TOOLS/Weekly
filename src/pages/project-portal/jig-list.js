@@ -1636,10 +1636,10 @@ function cutTitle(kind){
   const job = ((currentProjectNumber ? currentProjectNumber + ' ' : '') + (S.project || '')).trim();
   return `${job} — ${kind}${cast}${currentGroup ? ' — ' + currentGroup : ''}`.toUpperCase();
 }
-function cutPageHead(kind, color, strap, right){
+function cutPageHead(kind, color, strap, right, strapHl){
   return `<div class="thead hl-${color}"><h1><span>${esc(cutTitle(kind))}</span></h1>
       <div class="meta">${right || ''}</div></div>
-    <div class="strap">${esc(strap)}</div>`;
+    <div class="strap">${strapHl ? `<span class="strap-hl">${esc(strap)}</span>` : esc(strap)}</div>`;
 }
 function cutFoot(label, pageNo, pageCount){
   return `<div class="pfoot"><span>Jig blanks · ${esc(projTitle())} · ${esc(S.date)}</span><span>${esc(label)} — page ${pageNo} of ${pageCount}</span></div>`;
@@ -1696,7 +1696,7 @@ function buildCutPages(plan){
   const ripSummary = {};
   plan.maps.forEach(m => m.sheet.strips.forEach(s => { ripSummary[s.H] = (ripSummary[s.H] || 0) + m.qty; }));
   pages.push({ label: 'Material Takeoff', html: `
-    ${cutPageHead('MATERIAL TAKEOFF', 'yellow', 'SCRIM / HEIGHT-CHECK JIG BLANKS — TABLE SAW — ONE DOCUMENT PER CAST', `Issued ${esc(S.date)}`)}
+    ${cutPageHead('MATERIAL TAKEOFF', 'yellow', 'SCRIM / HEIGHT-CHECK JIG BLANKS — TABLE SAW — ONE DOCUMENT PER CAST', `Issued ${esc(S.date)}`, true)}
     <h2>Sheet Count Summary</h2>
     <table class="list"><thead><tr><th>Material</th><th>Stock size</th><th>Process</th><th class="c">Consumption</th><th class="c">Physical sheets at the saw</th></tr></thead>
       <tbody><tr><td class="b">${esc(mat)}</td><td>${esc(stock)}</td><td>Table saw — ${plan.physical} sheet${plan.physical === 1 ? '' : 's'}</td>
@@ -1769,6 +1769,7 @@ const CUT_DOC_CSS = `
   .hl-orange{border-color:#fb923c}.hl-orange h1 span{background:#fdba74}
   .hl-blue{border-color:#60a5fa}.hl-blue h1 span{background:#93c5fd}
   .strap{font-size:12.5px;font-weight:700;letter-spacing:.6px;margin:6px 0 12px;color:#222}
+  .strap-hl{background:#bbf7d0;padding:2px 8px;border-radius:2px}   /* light green: tells this cover apart from the main takeoff cover */
   h2{font-size:13px;text-transform:uppercase;letter-spacing:.8px;margin:16px 0 6px;color:#333}
   table.list{border-collapse:collapse;width:100%;font-size:12.5px}
   table.list thead th{background:#eaeaea;border:1px solid #111;padding:6px 8px;text-align:left;font-size:11.5px}
