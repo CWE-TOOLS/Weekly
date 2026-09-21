@@ -39,6 +39,15 @@
  *     import (their Qty is kept per width); hand-added rows are never touched.
  *   - Foot depths can be typed "Height check jig" (dp.kind === 'check'): the
  *     label is then generated — "Height Check Jig · <thickness − depth>″".
+ *   - The cross-section drives the scrim foot depths: every scrim layer owns
+ *     one depth row (dp.scrim = its index, depth = thickness − height), kept
+ *     in step whenever the cross-section is edited. Rows without dp.scrim are
+ *     hand-added extras (e.g. a height check jig between two scrim layers).
+ *   - Operator cut maps (portal-only): nests the jig blanks (handle width ×
+ *     handle height + foot depth) on the chosen sheet, table-saw style — rip
+ *     strips first, then crosscut, 1/8″ kerf — and prints a takeoff cover,
+ *     parts list, maps and strip schedules following the shop's Material
+ *     Takeoff Workflow rules (page titles / colours, 1/4-sheet rounding).
  *
  * Screen styles live in src/styles/project-portal.css scoped under
  * `.pp-tab-panel[data-panel="jig-list"]`; the print iframe carries its own
@@ -176,6 +185,7 @@ function selectCasting(castingId) {
   }
   S = st;
   fixXsec();
+  syncDepthsFromXsec(true);
   // The printed title always mirrors the portal project record (Info tab),
   // even for states saved under an older project name.
   if (currentProjectName) S.project = currentProjectName;
@@ -308,7 +318,7 @@ function defaultState(){
   return {
     project:'New Project', date:todayISO(),
     overhang:'4', clearance:'1', handleH:'1-1/2',
-    depths:[ {d:'1/4', label:'First Scrim'}, {d:'1/2', label:'Second Scrim'} ],
+    depths:[ {d:'1/2', label:'First Scrim', scrim:0}, {d:'1/4', label:'Second Scrim', scrim:1} ],
     panels:[ {label:'', W:'', qty:'', group:''} ],
     xsec: defaultXsec()
   };
@@ -434,18 +444,19 @@ function buildJigs(){
     const note = notes.join(' · ');
     const foot = p.w16 - clr, handle = hi16 + over;
     S.depths.forEach(dp => {
+      if (dp.scrim != null && parseInches(dp.d) == null) return;   // that scrim's height isn't filled in yet
       n++;
       const d16 = parseInches(dp.d) || 0;
       jigs.push({
         n, pi, label: p.label || ('Panel ' + (pi+1)), qty: p.qty,
-        W: fmt16(p.w16), foot: fmt16(foot), handle: fmt16(handle),
+        W: fmt16(p.w16), foot: fmt16(foot), handle: fmt16(handle), foot16: foot, handle16: handle,
         depth: fmt16(d16), depth16: d16, depthLabel: depthLabelOf(dp), kind: dp.kind || '', note
       });
     });
   });
   return { jigs, over, clr, customs };
 }
-function customLabel(kind){ return kind === 'cnc' ? 'CNC' : 'table saw'; }
+function customLabel(kind){ return kind === 'cnc' ? 'CNC' : 'custom'; }
 /** Label of a foot depth. "Height check jig" depths get a generated label
     carrying the concrete height the jig checks (thickness − foot depth). */
 function depthLabelOf(dp){
@@ -676,6 +687,7 @@ function drawingPages(jigs, opt){
 /* ===================== render the document ==================== */
 function renderOutput(){
   if (!S) return;
+  renderCutSummary();
   // validate the active group still exists
   const groups = activeGroups();
   if (currentGroup && !groups.includes(currentGroup)) currentGroup = null;
@@ -686,7 +698,7 @@ function renderOutput(){
   if (!out) return;
 
   if (!jigs.length){
-    out.innerHTML = `<div class="emptyhint">Add at least one panel with a valid width to generate jigs.</div>`;
+    out.innerHTML = `<div class="emptyhint">Add at least one panel with a valid width — and at least one foot depth — to generate jigs.</div>`;
     return;
   }
 
@@ -914,9 +926,9 @@ const PRINT_DOC_CSS = `
  * Print via a hidden iframe (portal pattern) — build a complete document,
  * write it in, print it, remove the iframe.
  */
-function printViaIframe(title, bodyHTML){
+function printViaIframe(title, bodyHTML, css){
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title>`
-    + `<style>${PRINT_DOC_CSS}</style></head><body>${MARKER_DEFS}${bodyHTML}</body></html>`;
+    + `<style>${css || PRINT_DOC_CSS}</style></head><body>${MARKER_DEFS}${bodyHTML}</body></html>`;
 
   // Remove any leftover iframe from a prior print attempt.
   const prior = document.getElementById('jig-print-frame');
@@ -979,20 +991,7 @@ function buildEditor(){
     geoFld('handleH',  'Handle height',           S.handleH,  'label only')
   ].join('');
 
-  // depths
-  document.getElementById('jig-depth-wrap').innerHTML = `<table class="edit"><thead><tr>
-      <th class="row-n">#</th><th style="width:22%">Depth</th><th style="width:26%">Type</th><th>Label</th><th class="del"></th></tr></thead><tbody>`
-    + S.depths.map((d,i)=>`<tr>
-        <td class="row-n">${i+1}</td>
-        <td><input data-sec="depth" data-idx="${i}" data-field="d" value="${esc(d.d)}" placeholder="1/4"></td>
-        <td><select data-sec="depth" data-idx="${i}" data-field="kind">
-              <option value=""${d.kind === 'check' ? '' : ' selected'}>Scrim (type your label)</option>
-              <option value="check"${d.kind === 'check' ? ' selected' : ''}>Height check jig</option></select></td>
-        <td>${d.kind === 'check'
-              ? `<input data-auto-label="${i}" value="${esc(depthLabelOf(d))}" disabled title="Generated: total concrete thickness − this depth">`
-              : `<input data-sec="depth" data-idx="${i}" data-field="label" value="${esc(d.label)}" placeholder="First Scrim">`}</td>
-        <td class="del"><button type="button" data-act="del-depth" data-idx="${i}" title="Remove">×</button></td>
-      </tr>`).join('') + `</tbody></table>`;
+  buildDepthTable();
 
   // panels
   document.getElementById('jig-panel-wrap').innerHTML = `<table class="edit"><thead><tr>
@@ -1011,6 +1010,54 @@ function buildEditor(){
 
   refreshWarnings();
   refreshImportStamp();
+  buildCutFields();
+}
+function buildDepthTable(){
+  document.getElementById('jig-depth-wrap').innerHTML = `<table class="edit"><thead><tr>
+      <th class="row-n">#</th><th style="width:22%">Depth</th><th style="width:26%">Type</th><th>Label</th><th class="del"></th></tr></thead><tbody>`
+    + S.depths.map((d,i)=>{
+        const linked = d.scrim != null;
+        const depthCell = linked
+          ? `<input value="${esc(d.d)}" disabled title="Comes from the cross-section: total thickness − Scrim ${d.scrim+1} height">`
+          : `<input data-sec="depth" data-idx="${i}" data-field="d" value="${esc(d.d)}" placeholder="1/4">`;
+        const typeCell = linked
+          ? `<span class="jig-linked">Scrim ${d.scrim+1} · from cross-section</span>`
+          : `<select data-sec="depth" data-idx="${i}" data-field="kind">
+              <option value=""${d.kind === 'check' ? '' : ' selected'}>Extra (type your label)</option>
+              <option value="check"${d.kind === 'check' ? ' selected' : ''}>Height check jig</option></select>`;
+        const labelCell = (!linked && d.kind === 'check')
+          ? `<input data-auto-label="${i}" value="${esc(depthLabelOf(d))}" disabled title="Generated: total concrete thickness − this depth">`
+          : `<input data-sec="depth" data-idx="${i}" data-field="label" value="${esc(d.label)}" placeholder="First Scrim">`;
+        const delCell = linked ? '' : `<button type="button" data-act="del-depth" data-idx="${i}" title="Remove">×</button>`;
+        return `<tr><td class="row-n">${i+1}</td><td>${depthCell}</td><td>${typeCell}</td><td>${labelCell}</td><td class="del">${delCell}</td></tr>`;
+      }).join('') + `</tbody></table>`;
+}
+const SCRIM_ORDINALS = ['First','Second','Third','Fourth','Fifth','Sixth','Seventh','Eighth','Ninth','Tenth'];
+/**
+ * Keep one foot depth per cross-section scrim (depth = thickness − height).
+ * A scrim with no row yet first adopts an unlinked depth that already has the
+ * right value (lists saved before the link existed); otherwise a row is added.
+ * Hand-added rows are never changed. Runs only when the cross-section is edited.
+ */
+function syncDepthsFromXsec(adoptOnly){
+  const T = parseInches(S.xsec.thickness);
+  const n = S.xsec.heights.length;
+  if (!adoptOnly) S.depths = S.depths.filter(dp => dp.scrim == null || dp.scrim < n);
+  for (let i = 0; i < n; i++){
+    const h = parseInches(S.xsec.heights[i]);
+    const ok = T != null && h != null && h > 0 && h < T;
+    let dp = S.depths.find(x => x.scrim === i);
+    if (!dp && ok){
+      dp = S.depths.find(x => x.scrim == null && x.kind !== 'check' && parseInches(x.d) === T - h);
+      if (dp) dp.scrim = i;
+    }
+    if (adoptOnly) continue;   // on load: only recognise what is already there, change nothing
+    if (!dp){ dp = { d:'', label: (SCRIM_ORDINALS[i] || ('#' + (i+1))) + ' Scrim', scrim: i }; S.depths.push(dp); }
+    dp.d = ok ? fmt16(T - h) : '';
+  }
+  if (adoptOnly) return;
+  S.depths = S.depths.filter(x => x.scrim != null).sort((a,b) => a.scrim - b.scrim)
+    .concat(S.depths.filter(x => x.scrim == null));
 }
 function panelSourceTag(p){
   const tags = [];
@@ -1052,9 +1099,17 @@ function onEditorInput(e){
       buildXsecHeights();
     }
     else if (el.dataset.field === 'h'){ S.xsec.heights[+el.dataset.idx] = el.value; }
-    scheduleSave(); renderXsec();
-    if (el.dataset.field === 'thickness'){ refreshDepthLabels(); liveUpdate(); }   // jig cards show the concrete depth
+    // The cross-section owns the scrim foot depths — keep them in step.
+    syncDepthsFromXsec(); buildDepthTable();
+    renderXsec(); liveUpdate();
     return;
+  }
+  if (sec === 'cut'){
+    const c = cutState();
+    c[el.dataset.field] = el.value;
+    // Stock follows the material unless the user then picks otherwise.
+    if (el.dataset.field === 'material'){ c.sheet = el.value === 'bb' ? '5x12' : '4x8'; buildCutFields(); }
+    scheduleSave(); renderCutSummary(); return;
   }
   if (sec === 'settings'){ S[el.dataset.field] = el.value; }
   else if (sec === 'depth'){
@@ -1079,9 +1134,10 @@ function onEditorClick(e){
   if (act === 'add-panel'){ S.panels.push({label:'',W:'',qty:'',group: currentGroup||''}); }
   else if (act === 'del-panel'){ S.panels.splice(idx,1); if(!S.panels.length) S.panels.push({label:'',W:'',qty:'',group:''}); }
   else if (act === 'add-depth'){ S.depths.push({d:'',label:''}); }
-  else if (act === 'del-depth'){ S.depths.splice(idx,1); if(!S.depths.length) S.depths.push({d:'1/4',label:'First Scrim'}); }
+  else if (act === 'del-depth'){ S.depths.splice(idx,1); }
   else if (act === 'print-xsec'){ printXsec(); return; }
   else if (act === 'import-inv'){ openImportModal(); return; }
+  else if (act === 'print-cut'){ printCutMaps(); return; }
   else if (act === 'example'){ if(confirm('Replace the current project with the example?')){ S = exampleState(); afterLoad(); } return; }
   else if (act === 'clear'){ if(confirm('Clear all panels, depths and settings?')){ S = freshState(); afterLoad(); } return; }
   else return;
@@ -1104,7 +1160,7 @@ function exampleState(){
   return {
     project:'Example — 2 castings', date: todayISO(),
     overhang:'4', clearance:'1', handleH:'1-1/2',
-    depths:[ {d:'1/4', label:'First Scrim'}, {d:'1/2', label:'Second Scrim'} ],
+    depths:[ {d:'1/2', label:'First Scrim', scrim:0}, {d:'1/4', label:'Second Scrim', scrim:1} ],
     panels:[
       {label:'A·1', W:'38',     qty:'2', group:'Casting 1'},
       {label:'A·2', W:'42-3/16',qty:'2', group:'Casting 1'},
@@ -1172,13 +1228,18 @@ function choiceOf(inv, p){
 function planImport(parts, inv){
   const tolParsed = parseInches(inv.tol);
   const tol16 = tolParsed == null ? 16 : Math.max(0, tolParsed);
-  const sized = [], custom = [], unreadable = [];
+  const sized = [], custom = [], unreadable = [], missing = [];
   for (const p of parts){
     const c = choiceOf(inv, p);
-    if (c.mode === 'cnc'){ custom.push({ p, kind: 'cnc', w16: null }); continue; }
-    if (c.mode === 'saw'){ const w = parseInches(c.W); custom.push({ p, kind: 'saw', w16: (w != null && w > 0) ? w : null }); continue; }
-    const w = c.mode === 'long' ? (p.long16 != null ? p.long16 : p.short16) : p.short16;
-    if (w == null){ unreadable.push(p); continue; }
+    if (c.mode === 'cnc'){ custom.push({ p, kind: 'cnc' }); continue; }
+    let w;
+    if (c.mode === 'saw'){                       // custom width — a normal table-saw jig, width required
+      w = parseInches(c.W);
+      if (w == null || w <= 0){ missing.push(p); continue; }
+    } else {
+      w = c.mode === 'long' ? (p.long16 != null ? p.long16 : p.short16) : p.short16;
+      if (w == null){ unreadable.push(p); continue; }
+    }
     sized.push({ p, w });
   }
   sized.sort((a,b) => a.w - b.w);
@@ -1189,7 +1250,7 @@ function planImport(parts, inv){
     else groups.push({ lo: s.w, hi: s.w, items: [s] });
   }
   groups.forEach(g => { g.label = [...new Set(g.items.map(s => s.p.label))].join(', '); });
-  return { groups, custom, unreadable };
+  return { groups, custom, unreadable, missing };
 }
 
 async function openImportModal(){
@@ -1250,9 +1311,10 @@ function renderImportModal(){
           <td><div class="jig-imp-seg">
             ${seg('short', p.short16 != null ? `${fmt16(p.short16)}″ ${square ? '' : 'short side'}` : 'no readable size', p.short16 == null)}
             ${square ? '' : seg('long', `${fmt16(p.long16)}″ long side`, false)}
-            ${seg('saw', 'Custom · table saw', false)}
-            ${seg('cnc', 'Custom · CNC', false)}
-            <input data-imp-saw value="${esc(c.W || '')}" placeholder="jig width (optional)"${c.mode === 'saw' ? '' : ' hidden'}>
+            ${seg('saw', 'Custom width', false)}
+            ${seg('cnc', 'Custom CNC', false)}
+            ${c.mode === 'saw' ? `<input data-imp-saw value="${esc(c.W || '')}" placeholder="width — required">
+              <span class="jig-imp-note" data-imp-note></span>` : ''}
           </div></td></tr>`;
       }).join('') + `</tbody></table>`;
   renderImportPreview();
@@ -1263,17 +1325,21 @@ function renderImportPreview(){
   const plan = planImport(impParts, impDraft);
   const clr = parseInches(impDraft.clearance) || 0;
   const qty = esc(String(impDraft.jigQty || '').trim());
+  document.querySelectorAll('#jig-imp-parts [data-imp-note]').forEach(el => {
+    el.textContent = `Enter the width being screeded — ${fmt16(clr)}″ is subtracted from it for the jig foot, like every other jig.`;
+  });
   const lines = plan.groups.map(g =>
     `<li><b>${fmt16(g.lo)}″</b> → foot <b>${fmt16(g.lo - clr)}″</b>${g.hi > g.lo ? ` <span class="fit">fits ${fmt16(g.lo)}″–${fmt16(g.hi)}″</span>` : ''}`
     + ` — ${esc(g.label)}${qty ? ` <span class="q">×${qty}</span>` : ''}</li>`);
   plan.custom.forEach(k => lines.push(
-    `<li class="cus"><b>Custom · ${customLabel(k.kind)}</b>${k.w16 != null ? ` ${fmt16(k.w16)}″` : ' (reminder only — not drawn)'} — ${esc(k.p.label)}</li>`));
-  const bad = plan.unreadable.length
-    ? `<div class="jig-imp-err">No readable size — skipped unless set to Custom: ${plan.unreadable.map(p => esc(p.label)).join(', ')}</div>` : '';
+    `<li class="cus"><b>Custom CNC</b> (reminder only — not drawn, not on the cut maps) — ${esc(k.p.label)}</li>`));
+  let bad = '';
+  if (plan.missing.length) bad += `<div class="jig-imp-err">Enter a custom width for: ${plan.missing.map(p => esc(p.label)).join(', ')}</div>`;
+  if (plan.unreadable.length) bad += `<div class="jig-imp-err">No readable size in the inventory — set these to Custom width or Custom CNC: ${plan.unreadable.map(p => esc(p.label)).join(', ')}</div>`;
   const n = plan.groups.length + plan.custom.length;
   document.getElementById('jig-imp-preview').innerHTML =
     `<h3>Jig rows this will create <span>(${n}) — each one is cut once per foot depth</span></h3><ul>${lines.join('')}</ul>${bad}`;
-  document.getElementById('jig-imp-confirm').disabled = !n;
+  document.getElementById('jig-imp-confirm').disabled = !n || plan.missing.length > 0 || plan.unreadable.length > 0;
 }
 
 function setImportMode(key, mode){
@@ -1309,7 +1375,7 @@ function confirmImport(){
     made.push(row);
   });
   plan.custom.forEach(k => made.push(
-    { label: k.p.label, W: k.w16 != null ? fmt16(k.w16) : '', qty: defQty, group: '', src: 'inv', custom: k.kind }));
+    { label: k.p.label, W: '', qty: defQty, group: '', src: 'inv', custom: k.kind }));
   made.forEach(r => { const q = keptQty.get(importRowKey(r)); if (q) r.qty = q; });
   const manual = S.panels.filter(p => p.src !== 'inv' && ((p.label || '').trim() || (p.W || '').trim()));
   S.panels = made.concat(manual);
@@ -1338,6 +1404,319 @@ function refreshImportStamp(){
     : 'never') + '</b>';
 }
 
+/* ===================== operator cut maps ===================== */
+
+const KERF16 = 2;   // 1/8″ on all table-saw work
+const CUT_SVG_ML = 13, CUT_SVG_MR = 3.5;   // map drawing margins (inches at sheet scale): strip labels / width dimension
+const CUT_SHEETS = { '4x8': { L: 96, W: 48 }, '5x9': { L: 108, W: 60 }, '5x12': { L: 144, W: 60 } };
+const CUT_MATERIALS = { hdo: 'HDO', bb: 'Black Board', other: 'Other' };
+
+/** S.cut = { material, other, thickness, sheet } — created / repaired on demand. */
+function cutState(){
+  if (!S.cut || typeof S.cut !== 'object') S.cut = {};
+  const c = S.cut;
+  if (!CUT_MATERIALS[c.material]) c.material = 'hdo';
+  if (c.other == null) c.other = '';
+  if (c.thickness !== '1/2' && c.thickness !== '3/4') c.thickness = '3/4';
+  if (!CUT_SHEETS[c.sheet]) c.sheet = c.material === 'bb' ? '5x12' : '4x8';
+  return c;
+}
+function cutMaterialName(c){
+  return c.material === 'other' ? ((c.other || '').trim() || 'Other material') : CUT_MATERIALS[c.material];
+}
+function cutStockName(c){ const s = CUT_SHEETS[c.sheet]; return `${c.sheet} (${s.L}″ × ${s.W}″)`; }
+
+function buildCutFields(){
+  const el = document.getElementById('jig-cut-fields');
+  if (!el || !S) return;
+  const c = cutState();
+  const opt = (v, text, cur) => `<option value="${v}"${v === cur ? ' selected' : ''}>${text}</option>`;
+  el.innerHTML = `
+    <div class="fld"><label>Material</label>
+      <select data-sec="cut" data-field="material">${Object.keys(CUT_MATERIALS).map(k => opt(k, CUT_MATERIALS[k], c.material)).join('')}</select></div>
+    ${c.material === 'other' ? `<div class="fld"><label>Material name</label>
+      <input data-sec="cut" data-field="other" value="${esc(c.other)}" style="width:180px" placeholder="type the material"></div>` : ''}
+    <div class="fld"><label>Thickness</label>
+      <select data-sec="cut" data-field="thickness">${['1/2','3/4'].map(t => opt(t, t + '″', c.thickness)).join('')}</select></div>
+    <div class="fld"><label>Sheet size</label>
+      <select data-sec="cut" data-field="sheet">${Object.keys(CUT_SHEETS).map(k => opt(k, k, c.sheet)).join('')}</select></div>`;
+}
+
+/**
+ * Nest the jig blanks. Table-saw logic: blanks of one height share strips
+ * (first-fit, longest first, kerf after every crosscut); strips are then
+ * stacked across the sheet (tallest first, kerf after every rip). Jigs with
+ * identical cut dimensions are made once. Identical sheets become one map.
+ */
+function buildCutPlan(){
+  const c = cutState();
+  const SL = CUT_SHEETS[c.sheet].L * 16, SW = CUT_SHEETS[c.sheet].W * 16;
+  const { jigs, customs } = buildJigs();
+  const hH = parseInches(S.handleH);
+  const handleH16 = (hH != null && hH > 0) ? hH : 24;
+
+  const blanks = [], seen = new Map();
+  jigs.forEach(j => {
+    const key = j.handle16 + '|' + j.foot16 + '|' + j.depth16;
+    const qty = Math.max(1, parseInt(j.qty, 10) || 1);
+    const ex = seen.get(key);
+    if (ex){ if (!ex.names.includes(j.label)) ex.names.push(j.label); ex.qty = Math.max(ex.qty, qty); return; }
+    const b = { n: j.n, names: [j.label], depthLabel: j.depthLabel, L: j.handle16, H: handleH16 + j.depth16,
+                foot16: j.foot16, depth16: j.depth16, qty, maps: [] };
+    seen.set(key, b); blanks.push(b);
+  });
+  const tooBig = blanks.filter(b => b.L > SL || b.H > SW || b.L <= 0 || b.foot16 <= 0);
+  const ok = blanks.filter(b => !tooBig.includes(b));
+
+  // strips per blank height
+  const strips = [];
+  [...new Set(ok.map(b => b.H))].sort((a,b) => b - a).forEach(H => {
+    const pieces = [];
+    ok.filter(b => b.H === H).forEach(b => { for (let i = 0; i < b.qty; i++) pieces.push(b); });
+    pieces.sort((a,b) => b.L - a.L || a.n - b.n);
+    const mine = [];
+    pieces.forEach(b => {
+      let s = mine.find(st => st.used + b.L <= SL);
+      if (!s){ s = { H, used: 0, pieces: [] }; mine.push(s); }
+      s.pieces.push({ b, x: s.used });
+      s.used += b.L + KERF16;
+    });
+    strips.push(...mine);
+  });
+  // sheets
+  const sheets = [];
+  strips.forEach(st => {
+    let sh = sheets.find(x => x.used + st.H <= SW);
+    if (!sh){ sh = { used: 0, strips: [] }; sheets.push(sh); }
+    sh.strips.push({ ...st, y: sh.used });
+    sh.used += st.H + KERF16;
+  });
+  // identical sheets -> one map with a QTY
+  const maps = [];
+  sheets.forEach(sh => {
+    const sig = sh.strips.map(s => s.H + ':' + s.pieces.map(p => p.b.n).join(',')).join(';');
+    const m = maps.find(x => x.sig === sig);
+    if (m) m.qty++; else maps.push({ sig, qty: 1, sheet: sh });
+  });
+  maps.forEach((m, i) => {
+    m.no = i + 1;
+    const frac = Math.min(1, Math.max(0, m.sheet.used - KERF16) / SW);
+    m.frac = frac;
+    m.consumption = frac >= 0.8 ? 1 : Math.ceil(frac * 4) / 4;   // 1/4-sheet rounding, 80% = full sheet
+    m.sheet.strips.forEach(s => s.pieces.forEach(p => { if (!p.b.maps.includes(m.no)) p.b.maps.push(m.no); }));
+  });
+  return { c, SL, SW, blanks, ok, tooBig, customs, maps,
+           pieceCount: ok.reduce((t,b) => t + b.qty, 0),
+           physical: maps.reduce((t,m) => t + m.qty, 0),
+           consumption: maps.reduce((t,m) => t + m.consumption * m.qty, 0) };
+}
+
+function renderCutSummary(){
+  const el = document.getElementById('jig-cut-summary');
+  if (!el || !S) return;
+  const plan = buildCutPlan();
+  if (!plan.blanks.length){ el.innerHTML = '<span class="muted">No jigs yet — nothing to nest.</span>'; return; }
+  const c = plan.c;
+  let html = `<b>${plan.pieceCount}</b> blank${plan.pieceCount === 1 ? '' : 's'} → <b>${plan.physical}</b> sheet${plan.physical === 1 ? '' : 's'} of `
+    + `<b>${esc(cutMaterialName(c))} ${c.thickness}″ — ${esc(c.sheet)}</b> at the saw · consumption <b>${plan.consumption}</b> sheet${plan.consumption === 1 ? '' : 's'} · `
+    + `${plan.maps.length} cut map${plan.maps.length === 1 ? '' : 's'}`;
+  if (plan.tooBig.length) html += `<div class="bad">Cannot be cut from a ${esc(c.sheet)} sheet — pick a longer sheet (printing is blocked until this clears): `
+    + plan.tooBig.map(b => `Jig ${b.n} ${esc(b.names.join(', '))} (${fmt16(b.L)}″)`).join('; ') + `</div>`;
+  if (c.material === 'bb' && c.sheet !== '5x12') html += `<div class="note">Black Board is stocked as 5x12 only.</div>`;
+  if (c.material === 'other' && !(c.other || '').trim()) html += `<div class="note">Type the material name so it prints on the maps.</div>`;
+  el.innerHTML = html;
+}
+
+function cutTitle(kind){
+  const cst = activeCasting();
+  const num = cst ? String(cst.casting_number || '').trim() : '';
+  const cast = num ? ' — ' + (/^cast/i.test(num) ? num : 'CAST ' + num) : '';
+  const job = ((currentProjectNumber ? currentProjectNumber + ' ' : '') + (S.project || '')).trim();
+  return `${job} — ${kind}${cast}${currentGroup ? ' — ' + currentGroup : ''}`.toUpperCase();
+}
+function cutPageHead(kind, color, strap, right){
+  return `<div class="thead hl-${color}"><h1><span>${esc(cutTitle(kind))}</span></h1>
+      <div class="meta">${right || ''}</div></div>
+    <div class="strap">${esc(strap)}</div>`;
+}
+function cutFoot(label, pageNo, pageCount){
+  return `<div class="pfoot"><span>Jig blanks · ${esc(projTitle())} · ${esc(S.date)}</span><span>${esc(label)} — page ${pageNo} of ${pageCount}</span></div>`;
+}
+
+function cutMapSVG(plan, m){
+  const SLi = plan.SL / 16, SWi = plan.SW / 16, ML = CUT_SVG_ML, MT = 3.2, MB = 1;
+  const vbW = SLi + ML + CUT_SVG_MR, vbH = SWi + MT + MB;
+  let s = `<svg class="cutsvg" viewBox="0 0 ${vbW} ${vbH}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Cut map ${m.no}">`;
+  s += `<text class="cdim" x="${ML + SLi/2}" y="${MT - 1.1}" text-anchor="middle">${fmt16(plan.SL)}″</text>`;
+  s += `<text class="cdim" x="${ML + SLi + 1}" y="${MT + SWi/2}" text-anchor="middle" transform="rotate(90 ${ML + SLi + 1} ${MT + SWi/2})">${fmt16(plan.SW)}″</text>`;
+  s += `<rect class="csheet" x="${ML}" y="${MT}" width="${SLi}" height="${SWi}"/>`;
+  m.sheet.strips.forEach((st, si) => {
+    const y = MT + st.y / 16, h = st.H / 16, fs = Math.min(1.15, h * 0.62);
+    s += `<text class="cstrip" x="${ML - 0.5}" y="${y + h/2 + fs*0.35}" text-anchor="end" style="font-size:${fs}px">S${si+1} · rip ${fmt16(st.H)}″</text>`;
+    st.pieces.forEach(p => {
+      const x = ML + p.x / 16, w = p.b.L / 16;
+      s += `<rect class="cpiece" x="${x}" y="${y}" width="${w}" height="${h}"/>`;
+      const full = `JIG ${p.b.n} · ${p.b.names.join(', ')} · ${fmt16(p.b.L)}″`;
+      const short = `JIG ${p.b.n} · ${fmt16(p.b.L)}″`;
+      const fits = t => t.length * fs * 0.56 <= w - 0.6;
+      const txt = fits(full) ? full : (fits(short) ? short : (fits('' + p.b.n) ? '' + p.b.n : ''));
+      if (txt) s += `<text class="cname" x="${x + 0.35}" y="${y + h/2 + fs*0.35}" style="font-size:${fs}px">${esc(txt)}</text>`;
+    });
+    const tail = SLi - Math.min(SLi, st.used / 16);
+    if (tail > 0.05) s += `<rect class="cspare" x="${ML + SLi - tail}" y="${y}" width="${tail}" height="${h}"/>`;
+  });
+  const usedIn = Math.min(SWi, m.sheet.used / 16), rest = SWi - usedIn;
+  if (rest > 0.05){
+    s += `<rect class="cspare" x="${ML}" y="${MT + usedIn}" width="${SLi}" height="${rest}"/>`;
+    if (rest >= 2.5) s += `<text class="ckeep" x="${ML + SLi/2}" y="${MT + usedIn + rest/2 + 0.6}" text-anchor="middle">KEEP — ${fmt16(plan.SL)}″ × ${fmt16(Math.round(rest*16))}″ OFFCUT · BACK TO THE RACK</text>`;
+  }
+  return s + '</svg>';
+}
+
+/** Full print document: cover, parts required, then a map + strip schedule per sheet layout. */
+function buildCutPages(plan){
+  const c = plan.c, mat = `${cutMaterialName(c)} ${c.thickness}″`, stock = cutStockName(c);
+  const pages = [];   // {label, html}
+
+  // ---- cover
+  const ripSummary = {};
+  plan.maps.forEach(m => m.sheet.strips.forEach(s => { ripSummary[s.H] = (ripSummary[s.H] || 0) + m.qty; }));
+  pages.push({ label: 'Material Takeoff', html: `
+    ${cutPageHead('MATERIAL TAKEOFF', 'yellow', 'SCRIM / HEIGHT-CHECK JIG BLANKS — TABLE SAW — ONE DOCUMENT PER CAST', `Issued ${esc(S.date)}`)}
+    <h2>Sheet Count Summary</h2>
+    <table class="list"><thead><tr><th>Material</th><th>Stock size</th><th>Process</th><th class="c">Consumption</th><th class="c">Physical sheets at the saw</th></tr></thead>
+      <tbody><tr><td class="b">${esc(mat)}</td><td>${esc(stock)}</td><td>Table saw — ${plan.physical} sheet${plan.physical === 1 ? '' : 's'}</td>
+        <td class="c b">${plan.consumption}</td><td class="c b">${plan.physical}</td></tr></tbody></table>
+    <p class="fine">Consumption is rounded up to the nearest 1/4 sheet per map; a map using 80% or more of a sheet counts as a full sheet. Physical sheets are what gets handled at the saw.</p>
+    <h2>Cut Maps</h2>
+    <table class="list"><thead><tr><th class="c">Map</th><th class="c">QTY sheets</th><th class="c">Strips</th><th class="c">Blanks per sheet</th><th>Sheet used</th><th>Full-length offcut to keep</th></tr></thead><tbody>
+      ${plan.maps.map(m => { const rest = plan.SW - Math.min(plan.SW, m.sheet.used);
+        return `<tr><td class="c b">${m.no}</td><td class="c">${m.qty}</td><td class="c">${m.sheet.strips.length}</td>
+          <td class="c">${m.sheet.strips.reduce((t,s) => t + s.pieces.length, 0)}</td><td>${Math.round(m.frac*100)}% of the width → counts as ${m.consumption}</td>
+          <td>${rest >= 40 ? `${fmt16(plan.SL)}″ × ${fmt16(rest)}″` : '—'}</td></tr>`; }).join('')}
+    </tbody></table>
+    <h2>Jigs</h2>
+    <p class="body"><b>${plan.pieceCount}</b> blanks for <b>${plan.ok.length}</b> different jigs · foot depths: ${S.depths.filter(d => parseInches(d.d) != null).map(d => `<b>${fmt16(parseInches(d.d))}″</b> ${esc(depthLabelOf(d))}`).join(' · ') || '—'}
+      · handle height <b>${esc(S.handleH)}″</b> · rips: ${Object.keys(ripSummary).sort((a,b) => b - a).map(H => `${ripSummary[H]} × ${fmt16(+H)}″`).join(', ')}</p>
+    <h2>Standing Rules</h2>
+    <ul class="body">
+      <li>Kerf is <b>1/8″</b> on every cut and is included in the maps.</li>
+      <li><b>Rip the strips first, then crosscut</b> each strip to the lengths in its strip schedule.</li>
+      <li>Blanks are <b>square-cut rectangles</b>: handle width × (handle height + foot depth). <b>Notch the foot afterwards</b> from the jig drawings — the maps do not show the notch.</li>
+      <li>Jigs with identical cut sizes are made once and shared; the parts list shows every part each jig fits.</li>
+    </ul>` });
+
+  // ---- parts required (paginated)
+  const nameLines = names => Math.max(1, Math.ceil(names.join(', ').length / 26));
+  const rows = plan.ok.map(b => ({ h: 10 + 20 * nameLines(b.names), html: `<tr><td class="c b">${b.n}</td><td class="b wrap">${esc(b.names.join(', '))}</td><td>${esc(b.depthLabel)}</td>
+      <td>${fmt16(b.L)}″ × ${fmt16(b.H)}″</td><td>${fmt16(b.foot16)}″ × ${fmt16(b.depth16)}″</td><td class="c b">${b.qty}</td><td class="c">${b.maps.join(', ')}</td></tr>` }))
+    .concat(plan.customs.map(k => ({ h: 10 + 20 * nameLines([k.label]), html: `<tr><td class="c">—</td><td class="b wrap">${esc(k.label)}</td><td>Custom ${customLabel(k.kind)}</td><td>—</td><td>—</td>
+      <td class="c b" colspan="2">EXCLUDED - CNC NEST</td></tr>` })));
+  cutPaginate(rows, 500).forEach(chunk => {
+    pages.push({ label: 'Parts Required', html: `
+      ${cutPageHead('PARTS REQUIRED', 'orange', 'EVERY PART ON THE CAST — REFERENCE, NOT A CUT ORDER', `${esc(mat)} — ${esc(stock)}`)}
+      <table class="list"><thead><tr><th class="c">Jig</th><th>Fits parts</th><th>Type</th><th>Blank to cut (L × H)</th><th>Foot after notching (W × depth)</th><th class="c">QTY</th><th class="c">Map</th></tr></thead>
+        <tbody>${chunk.join('')}</tbody></table>` });
+  });
+
+  // ---- maps + strip schedules
+  plan.maps.forEach(m => {
+    const head = `MAP ${m.no} OF ${plan.maps.length} — <u>${esc(mat)}</u> — ${esc(stock)} — QTY ${m.qty} SHEET${m.qty === 1 ? '' : 'S'}`;
+    const rips = {}; m.sheet.strips.forEach(s => { rips[s.H] = (rips[s.H] || 0) + 1; });
+    const ripTxt = Object.keys(rips).sort((a,b) => b - a).map(H => `${rips[H]} strip${rips[H] === 1 ? '' : 's'} at ${fmt16(+H)}″`).join(', ');
+    const vbW = plan.SL / 16 + CUT_SVG_ML + CUT_SVG_MR;
+    pages.push({ label: `Cut Map ${m.no}`, html: `
+      ${cutPageHead('OPERATOR CUT MAPS', 'blue', 'WHAT TO CUT — SEE THE JIG DRAWINGS FOR THE FOOT NOTCH', `Map ${m.no} of ${plan.maps.length}`)}
+      <div class="maphead">${head}</div>
+      ${cutMapSVG(plan, m)}
+      <div class="legend"><span class="sw sw-p"></span> <u>${esc(mat)}</u> jig blank &nbsp;&nbsp; <span class="sw sw-s"></span> Gray = spare / offcut &nbsp;&nbsp; Scale: 1″ on paper = ${(vbW / 10).toFixed(1)}″ on the sheet</div>
+      <p class="fine"><b>Cut sequence:</b> sheet long edge against the fence. Rip top to bottom as drawn — ${ripTxt} — 1/8″ kerf each rip. Then crosscut each strip left to right to the lengths in the strip schedule on the next page. Cut from the schedule, not by scaling this drawing. Notch the foot afterwards from the jig drawings.</p>` });
+    const srows = m.sheet.strips.map((st, si) => {
+      const tail = plan.SL - Math.min(plan.SL, st.used - KERF16);
+      return { h: 10 + 24 * Math.max(1, Math.ceil(st.pieces.length / 5)), html: `<tr><td class="c b">S${si+1}</td><td class="c b">${fmt16(st.H)}″</td>
+        <td class="wrap">${st.pieces.map(p => `<span class="pc"><b>JIG ${p.b.n}</b> ${fmt16(p.b.L)}″</span>`).join(' ')}</td>
+        <td>${tail >= 16 ? fmt16(tail) + '″ spare' : '—'}</td></tr>` }; });
+    cutPaginate(srows, 510).forEach(chunk => {
+      pages.push({ label: `Cut Map ${m.no} strip schedule`, html: `
+        ${cutPageHead('OPERATOR CUT MAPS', 'blue', 'WHAT TO CUT — SEE THE JIG DRAWINGS FOR THE FOOT NOTCH', 'Strip schedule')}
+        <div class="maphead">${head} — STRIP SCHEDULE</div>
+        <table class="list"><thead><tr><th class="c" style="width:7%">Strip</th><th class="c" style="width:10%">Rip width</th><th>Crosscut left → right (1/8″ kerf between cuts)</th><th style="width:14%">Tail</th></tr></thead>
+          <tbody>${chunk.join('')}</tbody></table>` });
+    });
+  });
+
+  return pages.map((p, i) => `<section class="page">${p.html}${cutFoot(p.label, i + 1, pages.length)}</section>`).join('');
+}
+
+/** Split table rows ({h: estimated px, html}) into page-sized chunks. Always returns at least one chunk. */
+function cutPaginate(rows, budgetPx){
+  const chunks = [[]]; let used = 0;
+  rows.forEach(r => {
+    if (used + r.h > budgetPx && chunks[chunks.length - 1].length){ chunks.push([]); used = 0; }
+    chunks[chunks.length - 1].push(r.html); used += r.h;
+  });
+  return chunks;
+}
+
+function printCutMaps(){
+  if (!S) return;
+  const plan = buildCutPlan();
+  if (!plan.blanks.length){ alert('Add at least one panel width and one foot depth first — there are no jigs to nest.'); return; }
+  if (plan.tooBig.length){
+    alert('These jigs cannot be cut from a ' + plan.c.sheet + ' sheet:\n\n'
+      + plan.tooBig.map(b => `Jig ${b.n} — ${b.names.join(', ')} (${fmt16(b.L)}″ long)`).join('\n')
+      + '\n\nPick a longer sheet size, then print again.');
+    return;
+  }
+  if (plan.c.material === 'other' && !(plan.c.other || '').trim()){ alert('Type the material name first — it prints on every map.'); return; }
+  printViaIframe('Jig Cut Maps — ' + projTitle(), buildCutPages(plan), CUT_DOC_CSS);
+}
+
+/* Landscape letter; page titles highlighted per the Material Takeoff Workflow rules
+   (takeoff yellow, parts orange, cut maps blue). */
+const CUT_DOC_CSS = `
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{font-family:'Segoe UI',Arial,Helvetica,sans-serif;color:#1a1a1a;background:#fff;
+       -webkit-print-color-adjust:exact;print-color-adjust:exact}
+  @page{size:letter landscape;margin:0}
+  .page{width:11in;height:8.4in;overflow:hidden;padding:0.45in 0.5in;position:relative;page-break-after:always}
+  .page:last-child{page-break-after:auto}
+  .thead{display:flex;justify-content:space-between;align-items:flex-end;padding-bottom:6px;border-bottom:4px solid #999}
+  .thead h1{font-size:21px;font-weight:800;margin:0;letter-spacing:.3px}
+  .thead h1 span{padding:2px 8px;border-radius:2px}
+  .thead .meta{font-size:12px;color:#444;text-align:right;white-space:nowrap;padding-left:16px}
+  .hl-yellow{border-color:#facc15}.hl-yellow h1 span{background:#fde047}
+  .hl-orange{border-color:#fb923c}.hl-orange h1 span{background:#fdba74}
+  .hl-blue{border-color:#60a5fa}.hl-blue h1 span{background:#93c5fd}
+  .strap{font-size:12.5px;font-weight:700;letter-spacing:.6px;margin:6px 0 12px;color:#222}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:.8px;margin:16px 0 6px;color:#333}
+  table.list{border-collapse:collapse;width:100%;font-size:12.5px}
+  table.list thead th{background:#eaeaea;border:1px solid #111;padding:6px 8px;text-align:left;font-size:11.5px}
+  table.list tbody td{border:1px solid #bbb;padding:5px 8px;vertical-align:top}
+  table.list .c{text-align:center}
+  table.list .b{font-weight:700}
+  table.list td.wrap{white-space:normal;line-height:1.7}
+  .pc{display:inline-block;border:1px solid #999;border-radius:3px;padding:0 6px;margin:1px 3px 1px 0;background:#f4ead0;white-space:nowrap}
+  .body{font-size:13px;line-height:1.65;margin:4px 0}
+  ul.body{padding-left:20px}
+  .fine{font-size:11.5px;color:#333;line-height:1.55;margin:8px 0 0}
+  .maphead{font-size:15px;font-weight:800;margin:0 0 6px}
+  .legend{font-size:14px;font-weight:700;margin-top:6px}
+  .sw{display:inline-block;width:22px;height:12px;border:1px solid #111;vertical-align:-1px}
+  .sw-p{background:#efe2c2}.sw-s{background:#cfcfcf}
+  .cutsvg{display:block;width:10in;max-height:5.1in;margin:0 auto}
+  .csheet{fill:#fff;stroke:#111;stroke-width:.25}
+  .cpiece{fill:#efe2c2;stroke:#111;stroke-width:.09}
+  .cspare{fill:#cfcfcf;stroke:#777;stroke-width:.06}
+  .cname{font-weight:700;fill:#111}
+  .cstrip{fill:#1f3a93;font-weight:700}
+  .cdim{font-size:1.9px;font-weight:700;fill:#1f3a93}
+  .ckeep{font-size:1.7px;font-weight:800;fill:#333;letter-spacing:.05px}
+  .pfoot{position:absolute;left:0.5in;right:0.5in;bottom:0.25in;border-top:.5px solid #bbb;padding-top:4px;
+         font-size:10px;color:#777;display:flex;justify-content:space-between}
+`;
+
 /* ============================ shell ============================ */
 
 /** Build the static UI skeleton once and wire the (delegated) events. */
@@ -1355,6 +1734,7 @@ ${MARKER_DEFS}
   <span class="actions">
     <button type="button" id="jig-btn-copy" class="ghost">Copy to Casting…</button>
     <button type="button" id="jig-btn-print-jigs">Print Jigs</button>
+    <button type="button" id="jig-btn-print-cut">Print Cut Maps</button>
     <button type="button" id="jig-btn-print-xsec">Print Cross-Section</button>
   </span>
 </div>
@@ -1381,8 +1761,9 @@ ${MARKER_DEFS}
     <div class="fields" id="jig-geo-fields"></div>
 
     <h2 style="margin-top:20px">Foot depths <span style="font-weight:400;text-transform:none;color:#888;font-size:12px">— one jig per depth, per width</span></h2>
+    <p class="hint">Every scrim layer in the cross-section above gets its foot depth here automatically (thickness − scrim height). Use <b>+ Add extra depth</b> for anything else — e.g. a <b>height check jig</b> between two scrim layers, or for parts that get no scrim at all (set # of scrims to 0).</p>
     <div id="jig-depth-wrap"></div>
-    <button type="button" class="addbtn" data-act="add-depth">+ Add depth</button>
+    <button type="button" class="addbtn" data-act="add-depth">+ Add extra depth</button>
 
     <h2 style="margin-top:22px">Panels</h2>
     <p class="hint">Enter each panel’s width and quantity. Widths accept <b>44</b>, <b>44-1/8</b>, <b>44 1/8</b> or <b>44.125</b>. <b>Group</b> is optional — fill it to get per-group print buttons (like castings); leave blank for one flat list.</p>
@@ -1393,6 +1774,12 @@ ${MARKER_DEFS}
     <div id="jig-panel-wrap"></div>
     <button type="button" class="addbtn" data-act="add-panel">+ Add panel</button>
     <div class="warn" id="jig-panel-warn"></div>
+
+    <h2 style="margin-top:22px">Operator cut maps <span style="font-weight:400;text-transform:none;color:#888;font-size:12px">— jig blanks nested for the table saw</span></h2>
+    <p class="hint">Each jig is cut from one rectangular blank: <b>handle width × (handle height + foot depth)</b>. Blanks are nested rip-first with a <b>1/8″ kerf</b>; the printout has a takeoff cover with the sheet count, the parts list, a map per sheet and a strip schedule for the saw.</p>
+    <div class="fields" id="jig-cut-fields"></div>
+    <div class="jig-cut-summary" id="jig-cut-summary"></div>
+    <div class="toolrow"><button type="button" data-act="print-cut">🖨 Print cut maps &amp; summary</button></div>
 
     <h2 style="margin-top:22px">Project file</h2>
     <div class="toolrow">
@@ -1459,6 +1846,7 @@ ${MARKER_DEFS}
 
   document.getElementById('jig-btn-print-jigs').onclick = printJigs;
   document.getElementById('jig-btn-print-xsec').onclick = printXsec;
+  document.getElementById('jig-btn-print-cut').onclick = printCutMaps;
 
   // Copy-to-casting modal.
   document.getElementById('jig-btn-copy').onclick = openCopyModal;
