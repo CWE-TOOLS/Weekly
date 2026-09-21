@@ -1479,21 +1479,29 @@ function buildCutPlan(){
   const tooBig = blanks.filter(b => b.L > SL || b.H > SW || b.L <= 0 || b.foot16 <= 0);
   const ok = blanks.filter(b => !tooBig.includes(b));
 
-  // strips per blank height
+  // Strips: fill the long edge first. Each strip is opened by the tallest (then longest) blank
+  // still waiting and ripped at that height; it is then filled along the sheet length with the
+  // combination of waiting blanks that leaves the shortest tail — same-height blanks first, then
+  // lower ones (those get ripped down to their own height after the crosscut).
+  const waiting = [];
+  ok.forEach(b => { for (let i = 0; i < b.qty; i++) waiting.push(b); });
+  waiting.sort((a,b) => b.H - a.H || b.L - a.L || a.n - b.n);
   const strips = [];
-  [...new Set(ok.map(b => b.H))].sort((a,b) => b - a).forEach(H => {
-    const pieces = [];
-    ok.filter(b => b.H === H).forEach(b => { for (let i = 0; i < b.qty; i++) pieces.push(b); });
-    pieces.sort((a,b) => b.L - a.L || a.n - b.n);
-    const mine = [];
-    pieces.forEach(b => {
-      let s = mine.find(st => st.used + b.L <= SL);
-      if (!s){ s = { H, used: 0, pieces: [] }; mine.push(s); }
-      s.pieces.push({ b, x: s.used });
-      s.used += b.L + KERF16;
+  while (waiting.length){
+    const first = waiting.shift();
+    const st = { H: first.H, used: first.L + KERF16, pieces: [first] };
+    [p => p.H === st.H, () => true].forEach(allowed => {
+      const pool = waiting.filter(allowed);
+      cutBestFill(pool, SL + KERF16 - st.used).forEach(b => {
+        waiting.splice(waiting.indexOf(b), 1);
+        st.pieces.push(b); st.used += b.L + KERF16;
+      });
     });
-    strips.push(...mine);
-  });
+    st.pieces.sort((a,b) => b.H - a.H || b.L - a.L || a.n - b.n);
+    let x = 0;
+    st.pieces = st.pieces.map(b => { const p = { b, x }; x += b.L + KERF16; return p; });
+    strips.push(st);
+  }
   // sheets
   const sheets = [];
   strips.forEach(st => {
@@ -1526,6 +1534,24 @@ let lastCutDoc = '';   // what the live frame currently shows — skip rewrites 
 
 /** Live cut-map pages under the jig drawings. They are the printout's own pages, shown in a frame
     so they keep their own (landscape) stylesheet. */
+/** The blanks from `pool` whose lengths (+ kerf each) best fill `room` sixteenths — subset-sum. */
+function cutBestFill(pool, room){
+  if (room <= 0 || !pool.length) return [];
+  const reach = new Array(room + 1).fill(-1);   // reach[w] = index of the last blank used to total w
+  const prev = new Array(room + 1).fill(-1);
+  reach[0] = -2;
+  pool.forEach((b, i) => {
+    const w = b.L + KERF16;
+    for (let t = room; t >= w; t--){
+      if (reach[t] === -1 && reach[t - w] !== -1 && reach[t - w] !== i){ reach[t] = i; prev[t] = t - w; }
+    }
+  });
+  let best = room; while (best > 0 && reach[best] === -1) best--;
+  const picked = [];
+  for (let t = best; t > 0; t = prev[t]) picked.push(pool[reach[t]]);
+  return picked;
+}
+
 function renderCutLive(plan){
   const host = document.getElementById('jig-cut-output');
   if (!host) return;
@@ -1558,9 +1584,12 @@ function renderCutLive(plan){
     const last = pages[pages.length - 1];
     frame.style.height = Math.ceil(last ? last.getBoundingClientRect().bottom + 24 : root.scrollHeight) + 'px';
   } catch (e) { /* frame gone */ } };
-  frame.onload = fit;
-  frame.srcdoc = docHtml;
-  setTimeout(fit, 250);   // onload can be missed in a background tab
+  // Written straight into the frame (not srcdoc): a frame navigation can be held back or
+  // coalesced while the tab is in the background, which left stale maps on screen.
+  const d = frame.contentDocument;
+  d.open(); d.write(docHtml); d.close();
+  fit();
+  setTimeout(fit, 250);   // once more after fonts / layout settle
 }
 
 function renderCutSummary(){
@@ -1611,10 +1640,12 @@ function cutMapSVG(plan, m){
     const y = MT + st.y / 16 * k, h = st.H / 16 * k, fs = Math.min(1.9, h * 0.6);
     s += `<text class="cstrip" x="${ML - 0.5}" y="${y + h/2 + fs*0.35}" text-anchor="end" style="font-size:${Math.min(fs, 1.5)}px">S${si+1} · rip ${fmt16(st.H)}″</text>`;
     st.pieces.forEach(p => {
-      const x = ML + p.x / 16, w = p.b.L / 16;
-      s += `<rect class="cpiece" x="${x}" y="${y}" width="${w}" height="${h}"/>`;
-      const full = `JIG ${p.b.n} · ${p.b.names.join(', ')} · ${fmt16(p.b.L)}″`;
-      const short = `JIG ${p.b.n} · ${fmt16(p.b.L)}″`;
+      const x = ML + p.x / 16, w = p.b.L / 16, ph = p.b.H / 16 * k, low = p.b.H < st.H;
+      if (low) s += `<rect class="cspare" x="${x}" y="${y}" width="${w}" height="${h}"/>`;
+      s += `<rect class="cpiece" x="${x}" y="${y}" width="${w}" height="${ph}"/>`;
+      const trim = low ? ` · rip to ${fmt16(p.b.H)}″` : '';
+      const full = `JIG ${p.b.n} · ${p.b.names.join(', ')} · ${fmt16(p.b.L)}″${trim}`;
+      const short = `JIG ${p.b.n} · ${fmt16(p.b.L)}″${trim}`;
       // Full label if it fits; else "JIG n · length", shrunk as far as half size so a short blank still shows its length.
       const fits = (t, f) => t.length * f * 0.56 <= w - 0.6;
       let txt = '', f = fs;
@@ -1664,7 +1695,7 @@ function buildCutPages(plan){
     <h2>Standing Rules</h2>
     <ul class="body">
       <li>Kerf is <b>1/8″</b> on every cut and is included in the maps.</li>
-      <li><b>Rip the strips first, then crosscut</b> each strip left to right to the lengths printed on the blanks.</li>
+      <li><b>Rip the strips first, then crosscut</b> each strip left to right to the lengths printed on the blanks. Strips are filled along the long edge first; a lower blank riding in a taller strip is marked <b>rip to …</b>.</li>
       <li>Blanks are <b>square-cut rectangles</b>: handle width × (handle height + foot depth). <b>Notch the foot afterwards</b> from the jig drawings — the maps do not show the notch.</li>
       <li>Jigs with identical cut sizes are made once and shared. The <b>jig list printout</b> is the parts list — it shows every part each jig fits.</li>
     </ul>` });
@@ -1680,7 +1711,7 @@ function buildCutPages(plan){
       <div class="maphead">${head}</div>
       ${cutMapSVG(plan, m)}
       <div class="legend"><span class="sw sw-p"></span> <u>${esc(mat)}</u> jig blank &nbsp;&nbsp; <span class="sw sw-s"></span> Gray = spare / offcut &nbsp;&nbsp; Drawn to scale: 1″ on paper = ${(vbW / 10).toFixed(1)}″ on the sheet</div>
-      <p class="fine"><b>Cut sequence:</b> sheet long edge against the fence. Rip top to bottom as drawn — ${ripTxt} — 1/8″ kerf each rip. Then crosscut each strip left to right to the length printed on each blank. Cut to the printed numbers, not by scaling this drawing. Notch the foot afterwards from the jig drawings.</p>` });
+      <p class="fine"><b>Cut sequence:</b> sheet long edge against the fence. Rip top to bottom as drawn — ${ripTxt} — 1/8″ kerf each rip. Then crosscut each strip left to right to the length printed on each blank. A blank marked <b>rip to …</b> is lower than its strip — rip it down to that height after the crosscut. Cut to the printed numbers, not by scaling this drawing. Notch the foot afterwards from the jig drawings.</p>` });
   });
 
   return pages.map((p, i) => `<section class="page">${p.html}${cutFoot(p.label, i + 1, pages.length)}</section>`).join('');
