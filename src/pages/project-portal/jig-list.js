@@ -27,6 +27,18 @@
  *     generated pages scroll with the tab panel.
  *   - Every element id is prefixed `jig-` (including the SVG arrow marker,
  *     `jig-ar`) to avoid collisions with the rest of the portal.
+ *   - "Import from Casting Inventory" (portal-only): fills the Panels table
+ *     from the active casting's inventory. Each distinct part (type + size)
+ *     gets a choice — jig across the short side (default), the long side, a
+ *     custom table-saw jig or a custom CNC jig. Chosen widths within the
+ *     share tolerance (default 1″) become ONE row: W = the narrowest width,
+ *     Wmax = the widest (handle is sized from Wmax), label = every part it
+ *     fits. Choices live in S.inv.choices keyed by type|size, so they survive
+ *     a re-import and carry over when a list is copied to the next casting.
+ *     Rows created by the import carry src:'inv' and are rebuilt on every
+ *     import (their Qty is kept per width); hand-added rows are never touched.
+ *   - Foot depths can be typed "Height check jig" (dp.kind === 'check'): the
+ *     label is then generated — "Height Check Jig · <thickness − depth>″".
  *
  * Screen styles live in src/styles/project-portal.css scoped under
  * `.pp-tab-panel[data-panel="jig-list"]`; the print iframe carries its own
@@ -36,6 +48,7 @@
  */
 
 import { loadJigListsForProject, saveJigListForCasting } from '../../services/jig-list-service.js';
+import { loadCastingInventory } from '../../services/inventory-service.js';
 import { logger } from '../../utils/logger.js';
 
 /* ============================ module state ============================ */
@@ -400,7 +413,11 @@ function buildJigs(){
   const clr  = parseInches(S.clearance) || 0;
   let src = S.panels;
   if (currentGroup) src = src.filter(p => (p.group||'').trim() === currentGroup);
-  const panels = src.map((p,i)=>({ label:(p.label||'').trim(), W:p.W, qty:p.qty, w16:parseInches(p.W), idx:i }))
+  // Custom jigs with no width (CNC / table saw) are not drawn — listed as reminders.
+  const customs = src.filter(p => p.custom && !(parseInches(p.W) > 0))
+                     .map(p => ({ label:(p.label||'').trim() || '?', kind:p.custom, qty:(p.qty||'').trim() }));
+  const panels = src.map((p,i)=>({ label:(p.label||'').trim(), W:p.W, qty:p.qty, w16:parseInches(p.W),
+                                   max16:parseInches(p.Wmax), custom:p.custom || '', idx:i }))
                     .filter(p => p.w16 != null && p.w16 > 0);
   // duplicate-width detection
   const byW = {};
@@ -408,19 +425,34 @@ function buildJigs(){
   const jigs = []; let n = 0;
   panels.forEach((p, pi) => {
     const others = [...new Set(byW[p.w16])].filter(l => l !== (p.label || '?'));
-    const note = others.length ? 'same as ' + others.join(', ') : '';
-    const foot = p.w16 - clr, handle = p.w16 + over;
+    // A shared jig (import) spans widths W…Wmax: foot from the narrowest, handle from the widest.
+    const hi16 = (p.max16 != null && p.max16 > p.w16) ? p.max16 : p.w16;
+    const notes = [];
+    if (hi16 > p.w16) notes.push(`fits W ${fmt16(p.w16)}″–${fmt16(hi16)}″ (handle from widest)`);
+    if (p.custom) notes.push('custom — ' + customLabel(p.custom));
+    if (others.length) notes.push('same as ' + others.join(', '));
+    const note = notes.join(' · ');
+    const foot = p.w16 - clr, handle = hi16 + over;
     S.depths.forEach(dp => {
       n++;
       const d16 = parseInches(dp.d) || 0;
       jigs.push({
         n, pi, label: p.label || ('Panel ' + (pi+1)), qty: p.qty,
         W: fmt16(p.w16), foot: fmt16(foot), handle: fmt16(handle),
-        depth: fmt16(d16), depth16: d16, depthLabel: (dp.label||'').trim(), note
+        depth: fmt16(d16), depth16: d16, depthLabel: depthLabelOf(dp), kind: dp.kind || '', note
       });
     });
   });
-  return { jigs, over, clr };
+  return { jigs, over, clr, customs };
+}
+function customLabel(kind){ return kind === 'cnc' ? 'CNC' : 'table saw'; }
+/** Label of a foot depth. "Height check jig" depths get a generated label
+    carrying the concrete height the jig checks (thickness − foot depth). */
+function depthLabelOf(dp){
+  if (!dp || dp.kind !== 'check') return ((dp && dp.label) || '').trim();
+  const T = parseInches(S.xsec && S.xsec.thickness), d = parseInches(dp.d);
+  if (T != null && d != null && d >= 0 && d < T) return `Height Check Jig · ${fmt16(T - d)}″`;
+  return 'Height Check Jig';
 }
 
 /* ===================== output page builders ==================== */
@@ -491,7 +523,7 @@ function instrPage(over, clr){
 function rowHTML(j){
   return `<tr class="${j.pi % 2 ? 'w1' : ''}">
        <td class="c">${j.n}</td>
-       <td class="b">${esc(j.label)}${j.depthLabel ? ' · ' + esc(j.depthLabel) : ''}</td>
+       <td class="b"${j.label.length > 14 ? ' style="white-space:normal"' : ''}>${esc(j.label)}${j.depthLabel ? ' · ' + esc(j.depthLabel) : ''}</td>
        <td class="c">${j.depth}″</td>
        <td>${j.foot}″</td>
        <td>${j.handle}″</td>
@@ -615,7 +647,7 @@ function cardConc(j){
   const T = parseInches(S.xsec && S.xsec.thickness);
   if (T == null || T <= 0) return '';
   const h16 = (j.depth16 > 0 && j.depth16 < T) ? T - j.depth16 : null;
-  return ` &nbsp;·&nbsp; <b>Conc</b> ${fmt16(T)}″${h16 != null ? ` · <b>Scrim</b> ${fmt16(h16)}″ up from face` : ''}`;
+  return ` &nbsp;·&nbsp; <b>Conc</b> ${fmt16(T)}″${h16 != null ? ` · <b>${j.kind === 'check' ? 'Height' : 'Scrim'}</b> ${fmt16(h16)}″ up from face` : ''}`;
 }
 function card(j){
   return `<div class="card">
@@ -649,7 +681,7 @@ function renderOutput(){
   if (currentGroup && !groups.includes(currentGroup)) currentGroup = null;
   buildPrintSetBar(groups);
 
-  const { jigs, over, clr } = buildJigs();
+  const { jigs, over, clr, customs } = buildJigs();
   const out = document.getElementById('jig-output');
   if (!out) return;
 
@@ -661,7 +693,11 @@ function renderOutput(){
   const widths = new Set(jigs.map(j => j.W)).size;
   const summaryBase = currentGroup ? `${esc(currentGroup)} · ${widths} widths · ${jigs.length} jigs`
                                    : `${widths} widths · ${jigs.length} jigs`;
-  const legend = `<p class="listnote">
+  const customNote = customs.length
+    ? `<b style="color:#b23">Custom jigs — not drawn here:</b> ${customs.map(c =>
+        `${esc(c.label)} — ${customLabel(c.kind)}${c.qty ? ' ×' + esc(c.qty) : ''}`).join('; ')}<br>`
+    : '';
+  const legend = `<p class="listnote">${customNote}
       <b>Foot depth</b> = how deep the scrim is pressed; one jig per depth listed.
       Cut each jig from <b>one piece of plywood</b>: the foot is ${fmt16(Math.round(clr/2))}″ narrower per side so it drops into the form, and the handle overhangs ${fmt16(Math.round(over/2))}″ per side to ride on the form walls.<br>
       <b style="color:#b23">“same as …”</b> = another panel shares this width — cut the jig once and reuse it.</p>`;
@@ -945,28 +981,51 @@ function buildEditor(){
 
   // depths
   document.getElementById('jig-depth-wrap').innerHTML = `<table class="edit"><thead><tr>
-      <th class="row-n">#</th><th style="width:30%">Depth</th><th>Label</th><th class="del"></th></tr></thead><tbody>`
+      <th class="row-n">#</th><th style="width:22%">Depth</th><th style="width:26%">Type</th><th>Label</th><th class="del"></th></tr></thead><tbody>`
     + S.depths.map((d,i)=>`<tr>
         <td class="row-n">${i+1}</td>
         <td><input data-sec="depth" data-idx="${i}" data-field="d" value="${esc(d.d)}" placeholder="1/4"></td>
-        <td><input data-sec="depth" data-idx="${i}" data-field="label" value="${esc(d.label)}" placeholder="First Scrim"></td>
+        <td><select data-sec="depth" data-idx="${i}" data-field="kind">
+              <option value=""${d.kind === 'check' ? '' : ' selected'}>Scrim (type your label)</option>
+              <option value="check"${d.kind === 'check' ? ' selected' : ''}>Height check jig</option></select></td>
+        <td>${d.kind === 'check'
+              ? `<input data-auto-label="${i}" value="${esc(depthLabelOf(d))}" disabled title="Generated: total concrete thickness − this depth">`
+              : `<input data-sec="depth" data-idx="${i}" data-field="label" value="${esc(d.label)}" placeholder="First Scrim">`}</td>
         <td class="del"><button type="button" data-act="del-depth" data-idx="${i}" title="Remove">×</button></td>
       </tr>`).join('') + `</tbody></table>`;
 
   // panels
   document.getElementById('jig-panel-wrap').innerHTML = `<table class="edit"><thead><tr>
-      <th class="row-n">#</th><th style="width:30%">Label / type</th><th style="width:20%">Width</th>
-      <th style="width:14%">Qty</th><th style="width:22%">Group <span style="font-weight:400;color:#999">(optional)</span></th><th class="del"></th></tr></thead><tbody>`
+      <th class="row-n">#</th><th style="width:30%">Label / type</th><th style="width:18%">Width</th>
+      <th style="width:10%">Qty</th><th style="width:18%">Group <span style="font-weight:400;color:#999">(optional)</span></th>
+      <th style="width:14%">Source</th><th class="del"></th></tr></thead><tbody>`
     + S.panels.map((p,i)=>`<tr>
         <td class="row-n">${i+1}</td>
         <td><input data-sec="panel" data-idx="${i}" data-field="label" value="${esc(p.label)}" placeholder="e.g. A·1"></td>
-        <td><input data-sec="panel" data-idx="${i}" data-field="W" value="${esc(p.W)}" placeholder="44-1/8"></td>
+        <td><input data-sec="panel" data-idx="${i}" data-field="W" value="${esc(p.W)}" placeholder="${p.custom ? 'custom — no width' : '44-1/8'}"></td>
         <td><input data-sec="panel" data-idx="${i}" data-field="qty" value="${esc(p.qty)}" placeholder="0"></td>
         <td><input data-sec="panel" data-idx="${i}" data-field="group" value="${esc(p.group)}" placeholder="Casting 1"></td>
+        <td class="src">${panelSourceTag(p)}</td>
         <td class="del"><button type="button" data-act="del-panel" data-idx="${i}" title="Remove">×</button></td>
       </tr>`).join('') + `</tbody></table>`;
 
   refreshWarnings();
+  refreshImportStamp();
+}
+function panelSourceTag(p){
+  const tags = [];
+  if (p.src === 'inv') tags.push('<span class="jig-tag">inventory</span>');
+  if (p.custom) tags.push(`<span class="jig-tag jig-tag-c">${customLabel(p.custom)}</span>`);
+  const w = parseInches(p.W), m = parseInches(p.Wmax);
+  if (w != null && m != null && m > w) tags.push(`<span class="jig-tag-fit">fits to ${fmt16(m)}″</span>`);
+  return tags.join(' ');
+}
+/** Generated "Height Check Jig" labels follow the depth / thickness as they are typed. */
+function refreshDepthLabels(){
+  document.querySelectorAll('#jig-depth-wrap [data-auto-label]').forEach(el => {
+    const dp = S.depths[+el.dataset.autoLabel];
+    if (dp) el.value = depthLabelOf(dp);
+  });
 }
 function geoFld(field, label, val, unit){
   return `<div class="fld"><label>${label}</label>
@@ -994,12 +1053,22 @@ function onEditorInput(e){
     }
     else if (el.dataset.field === 'h'){ S.xsec.heights[+el.dataset.idx] = el.value; }
     scheduleSave(); renderXsec();
-    if (el.dataset.field === 'thickness') liveUpdate();   // jig cards show the concrete depth
+    if (el.dataset.field === 'thickness'){ refreshDepthLabels(); liveUpdate(); }   // jig cards show the concrete depth
     return;
   }
   if (sec === 'settings'){ S[el.dataset.field] = el.value; }
-  else if (sec === 'depth'){ S.depths[+el.dataset.idx][el.dataset.field] = el.value; }
+  else if (sec === 'depth'){
+    const dp = S.depths[+el.dataset.idx];
+    if (el.dataset.field === 'kind'){
+      if (el.value) dp.kind = el.value; else delete dp.kind;
+      scheduleSave(); buildEditor(); renderOutput(); return;
+    }
+    dp[el.dataset.field] = el.value;
+    if (el.dataset.field === 'd') refreshDepthLabels();
+  }
   else if (sec === 'panel'){ S.panels[+el.dataset.idx][el.dataset.field] = el.value;
+    // A hand-typed width replaces the imported "fits up to" range.
+    if (el.dataset.field === 'W') delete S.panels[+el.dataset.idx].Wmax;
     if (el.dataset.field === 'group'){ scheduleSave(); buildPrintSetBar(activeGroups()); } }
   liveUpdate();
 }
@@ -1012,6 +1081,7 @@ function onEditorClick(e){
   else if (act === 'add-depth'){ S.depths.push({d:'',label:''}); }
   else if (act === 'del-depth'){ S.depths.splice(idx,1); if(!S.depths.length) S.depths.push({d:'1/4',label:'First Scrim'}); }
   else if (act === 'print-xsec'){ printXsec(); return; }
+  else if (act === 'import-inv'){ openImportModal(); return; }
   else if (act === 'example'){ if(confirm('Replace the current project with the example?')){ S = exampleState(); afterLoad(); } return; }
   else if (act === 'clear'){ if(confirm('Clear all panels, depths and settings?')){ S = freshState(); afterLoad(); } return; }
   else return;
@@ -1046,6 +1116,226 @@ function exampleState(){
     ],
     xsec:{ thickness:'3/4', heights:['1/4','1/2'] }
   };
+}
+
+/* ================= import from casting inventory ================= */
+
+const IMPORT_DEFAULTS = { tol: '1', jigQty: '2', clearance: '3' };
+let impParts = [];     // distinct parts (type + size) of the active casting's inventory
+let impDraft = null;   // working copy of S.inv while the modal is open
+
+/** S.inv = { tol, jigQty, choices:{partKey:{mode,W}}, importedAt } — created on demand. */
+function invState(){
+  if (!S.inv || typeof S.inv !== 'object') S.inv = {};
+  if (!S.inv.choices || typeof S.inv.choices !== 'object') S.inv.choices = {};
+  if (S.inv.tol == null) S.inv.tol = IMPORT_DEFAULTS.tol;
+  if (S.inv.jigQty == null) S.inv.jigQty = IMPORT_DEFAULTS.jigQty;
+  return S.inv;
+}
+
+/** Inventory rows -> one entry per distinct part (same type + same two sizes). */
+function collapseInventory(rows){
+  const map = new Map();
+  for (const r of rows || []){
+    const type = String(r.type || '').trim();
+    const dims = [parseInches(r.width), parseInches(r.length)].filter(v => v != null && v > 0).sort((a,b) => a - b);
+    const key = type.toLowerCase() + '|' + (dims.length ? dims.join('x') : String(r.width || '') + 'x' + String(r.length || ''));
+    let p = map.get(key);
+    if (!p){
+      p = { key, type, sizeTxt: [r.width, r.length].map(v => String(v || '').trim() || '?').join(' × '),
+            short16: dims.length ? dims[0] : null, long16: dims.length > 1 ? dims[1] : null, qty: 0 };
+      map.set(key, p);
+    }
+    p.qty += (parseInt(r.quantity, 10) || 0);
+  }
+  const parts = [...map.values()];
+  // A type cast in more than one size needs the size in its label to stay unambiguous.
+  const perType = {};
+  parts.forEach(p => { const t = p.type.toLowerCase(); perType[t] = (perType[t] || 0) + 1; });
+  parts.forEach(p => {
+    const size = p.short16 != null ? ` (${fmt16(p.short16)}${p.long16 != null ? '×' + fmt16(p.long16) : ''})` : '';
+    p.label = (p.type || '?') + (perType[p.type.toLowerCase()] > 1 ? size : '');
+  });
+  return parts;
+}
+
+function choiceOf(inv, p){
+  const c = inv.choices[p.key];
+  return (c && c.mode) ? c : { mode: 'short', W: '' };
+}
+
+/**
+ * Turn parts + choices into jig rows. Standard widths (short / long side) are
+ * sorted and swept from the narrowest: every width within `tol` of a group's
+ * narrowest joins that group. Custom jigs never share.
+ */
+function planImport(parts, inv){
+  const tolParsed = parseInches(inv.tol);
+  const tol16 = tolParsed == null ? 16 : Math.max(0, tolParsed);
+  const sized = [], custom = [], unreadable = [];
+  for (const p of parts){
+    const c = choiceOf(inv, p);
+    if (c.mode === 'cnc'){ custom.push({ p, kind: 'cnc', w16: null }); continue; }
+    if (c.mode === 'saw'){ const w = parseInches(c.W); custom.push({ p, kind: 'saw', w16: (w != null && w > 0) ? w : null }); continue; }
+    const w = c.mode === 'long' ? (p.long16 != null ? p.long16 : p.short16) : p.short16;
+    if (w == null){ unreadable.push(p); continue; }
+    sized.push({ p, w });
+  }
+  sized.sort((a,b) => a.w - b.w);
+  const groups = [];
+  for (const s of sized){
+    const g = groups[groups.length - 1];
+    if (g && s.w - g.lo <= tol16){ g.items.push(s); g.hi = Math.max(g.hi, s.w); }
+    else groups.push({ lo: s.w, hi: s.w, items: [s] });
+  }
+  groups.forEach(g => { g.label = [...new Set(g.items.map(s => s.p.label))].join(', '); });
+  return { groups, custom, unreadable };
+}
+
+async function openImportModal(){
+  if (!S || !currentCastingId) return;
+  const c = activeCasting();
+  const castingId = currentCastingId;
+  impDraft = structuredClone(invState());
+  // First import on this list proposes the shop's shared-jig clearance; after that the
+  // Geometry setting is the truth.
+  impDraft.clearance = S.inv.importedAt ? S.clearance : IMPORT_DEFAULTS.clearance;
+  impParts = [];
+  document.getElementById('jig-imp-hint').innerHTML =
+    `Casting <b>${esc((c && c.casting_number) || '')}</b> — pick which side each part’s jig runs across. `
+    + `The <b>short side</b> is pre-selected; your picks are remembered for the next import. `
+    + `Rows made by an earlier import are rebuilt (their Qty is kept); rows you added by hand are not touched.`;
+  document.getElementById('jig-imp-opts').innerHTML = '';
+  document.getElementById('jig-imp-parts').innerHTML = '<div class="jig-imp-empty">Loading inventory…</div>';
+  document.getElementById('jig-imp-preview').innerHTML = '';
+  document.getElementById('jig-imp-confirm').disabled = true;
+  document.getElementById('jig-imp-modal').hidden = false;
+  let rows = [];
+  try { rows = await loadCastingInventory(castingId); }
+  catch (err) {
+    logger.error('[jig-list] inventory load failed:', err);
+    document.getElementById('jig-imp-parts').innerHTML = '<div class="jig-imp-empty jig-imp-err">Could not load the casting inventory.</div>';
+    return;
+  }
+  if (castingId !== currentCastingId || !impDraft) return;   // switched / closed meanwhile
+  impParts = collapseInventory(rows);
+  renderImportModal();
+}
+
+function closeImportModal(){
+  document.getElementById('jig-imp-modal').hidden = true;
+  impDraft = null; impParts = [];
+}
+
+function renderImportModal(){
+  if (!impDraft) return;
+  if (!impParts.length){
+    document.getElementById('jig-imp-parts').innerHTML =
+      '<div class="jig-imp-empty">This casting has no inventory yet — fill in the Casting Inventory first.</div>';
+    return;
+  }
+  document.getElementById('jig-imp-opts').innerHTML = `
+    <label>Widths within <input data-imp-opt="tol" value="${esc(impDraft.tol)}">″ share one jig</label>
+    <label>Foot = narrowest width − <input data-imp-opt="clearance" value="${esc(impDraft.clearance)}">″</label>
+    <label>Jigs per width <input data-imp-opt="jigQty" value="${esc(impDraft.jigQty)}"></label>`;
+  document.getElementById('jig-imp-parts').innerHTML = `<table class="jig-imp-table"><thead><tr>
+      <th>Part</th><th>Size (inventory)</th><th class="c">Qty</th><th>Jig runs across</th></tr></thead><tbody>`
+    + impParts.map(p => {
+        const c = choiceOf(impDraft, p);
+        const square = p.long16 == null || p.long16 === p.short16;
+        const seg = (mode, text, disabled) =>
+          `<button type="button" data-imp-mode="${mode}" class="${c.mode === mode ? 'on' : ''}"${disabled ? ' disabled' : ''}>${text}</button>`;
+        return `<tr data-imp-key="${esc(p.key)}">
+          <td class="b">${esc(p.label)}</td><td>${esc(p.sizeTxt)}</td><td class="c">${p.qty || ''}</td>
+          <td><div class="jig-imp-seg">
+            ${seg('short', p.short16 != null ? `${fmt16(p.short16)}″ ${square ? '' : 'short side'}` : 'no readable size', p.short16 == null)}
+            ${square ? '' : seg('long', `${fmt16(p.long16)}″ long side`, false)}
+            ${seg('saw', 'Custom · table saw', false)}
+            ${seg('cnc', 'Custom · CNC', false)}
+            <input data-imp-saw value="${esc(c.W || '')}" placeholder="jig width (optional)"${c.mode === 'saw' ? '' : ' hidden'}>
+          </div></td></tr>`;
+      }).join('') + `</tbody></table>`;
+  renderImportPreview();
+}
+
+function renderImportPreview(){
+  if (!impDraft) return;
+  const plan = planImport(impParts, impDraft);
+  const clr = parseInches(impDraft.clearance) || 0;
+  const qty = esc(String(impDraft.jigQty || '').trim());
+  const lines = plan.groups.map(g =>
+    `<li><b>${fmt16(g.lo)}″</b> → foot <b>${fmt16(g.lo - clr)}″</b>${g.hi > g.lo ? ` <span class="fit">fits ${fmt16(g.lo)}″–${fmt16(g.hi)}″</span>` : ''}`
+    + ` — ${esc(g.label)}${qty ? ` <span class="q">×${qty}</span>` : ''}</li>`);
+  plan.custom.forEach(k => lines.push(
+    `<li class="cus"><b>Custom · ${customLabel(k.kind)}</b>${k.w16 != null ? ` ${fmt16(k.w16)}″` : ' (reminder only — not drawn)'} — ${esc(k.p.label)}</li>`));
+  const bad = plan.unreadable.length
+    ? `<div class="jig-imp-err">No readable size — skipped unless set to Custom: ${plan.unreadable.map(p => esc(p.label)).join(', ')}</div>` : '';
+  const n = plan.groups.length + plan.custom.length;
+  document.getElementById('jig-imp-preview').innerHTML =
+    `<h3>Jig rows this will create <span>(${n}) — each one is cut once per foot depth</span></h3><ul>${lines.join('')}</ul>${bad}`;
+  document.getElementById('jig-imp-confirm').disabled = !n;
+}
+
+function setImportMode(key, mode){
+  if (!impDraft) return;
+  const prev = impDraft.choices[key] || {};
+  if (mode === 'short') delete impDraft.choices[key];          // default — nothing to remember
+  else impDraft.choices[key] = { mode, W: mode === 'saw' ? (prev.W || '') : '' };
+  renderImportModal();
+}
+
+function onImportInput(e){
+  if (!impDraft) return;
+  const el = e.target;
+  if (el.dataset.impOpt){ impDraft[el.dataset.impOpt] = el.value; renderImportPreview(); return; }
+  if (el.dataset.impSaw !== undefined){
+    const key = el.closest('[data-imp-key]').dataset.impKey;
+    impDraft.choices[key] = { mode: 'saw', W: el.value };
+    renderImportPreview();
+  }
+}
+
+/** Rebuild the imported rows from the draft; keep hand-added rows and per-width Qty edits. */
+function confirmImport(){
+  if (!S || !impDraft) return;
+  const plan = planImport(impParts, impDraft);
+  const keptQty = new Map();
+  S.panels.forEach(p => { if (p.src === 'inv' && (p.qty || '').trim()) keptQty.set(importRowKey(p), p.qty); });
+  const defQty = String(impDraft.jigQty || '').trim();
+  const made = [];
+  plan.groups.forEach(g => {
+    const row = { label: g.label, W: fmt16(g.lo), qty: defQty, group: '', src: 'inv' };
+    if (g.hi > g.lo) row.Wmax = fmt16(g.hi);
+    made.push(row);
+  });
+  plan.custom.forEach(k => made.push(
+    { label: k.p.label, W: k.w16 != null ? fmt16(k.w16) : '', qty: defQty, group: '', src: 'inv', custom: k.kind }));
+  made.forEach(r => { const q = keptQty.get(importRowKey(r)); if (q) r.qty = q; });
+  const manual = S.panels.filter(p => p.src !== 'inv' && ((p.label || '').trim() || (p.W || '').trim()));
+  S.panels = made.concat(manual);
+  if (!S.panels.length) S.panels.push({ label:'', W:'', qty:'', group:'' });
+
+  const { clearance, ...inv } = impDraft;
+  S.inv = inv;
+  S.inv.importedAt = new Date().toISOString();
+  if (parseInches(clearance) != null) S.clearance = String(clearance).trim();
+  closeImportModal();
+  scheduleSave(); buildEditor(); renderOutput();
+}
+/** Identity of an imported row for keeping its Qty: custom rows by label, the rest by width. */
+function importRowKey(r){
+  return r.custom ? 'c:' + r.custom + ':' + (r.label || '') : 'w:' + parseInches(r.W);
+}
+
+function refreshImportStamp(){
+  const el = document.getElementById('jig-imp-stamp');
+  if (!el) return;
+  const iso = S && S.inv && S.inv.importedAt;
+  const d = iso ? new Date(iso) : null;
+  el.innerHTML = 'Last imported: <b>' + ((d && !isNaN(d))
+    ? esc(d.toLocaleDateString(undefined, { weekday:'short', year:'numeric', month:'short', day:'numeric' })
+        + ' at ' + d.toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' }))
+    : 'never') + '</b>';
 }
 
 /* ============================ shell ============================ */
@@ -1096,6 +1386,10 @@ ${MARKER_DEFS}
 
     <h2 style="margin-top:22px">Panels</h2>
     <p class="hint">Enter each panel’s width and quantity. Widths accept <b>44</b>, <b>44-1/8</b>, <b>44 1/8</b> or <b>44.125</b>. <b>Group</b> is optional — fill it to get per-group print buttons (like castings); leave blank for one flat list.</p>
+    <div class="jig-imp-row">
+      <button type="button" class="jig-imp-btn" data-act="import-inv">⭳ Import from Casting Inventory…</button>
+      <span class="jig-imp-stamp" id="jig-imp-stamp"></span>
+    </div>
     <div id="jig-panel-wrap"></div>
     <button type="button" class="addbtn" data-act="add-panel">+ Add panel</button>
     <div class="warn" id="jig-panel-warn"></div>
@@ -1130,6 +1424,26 @@ ${MARKER_DEFS}
       <button type="button" class="pp-primary-btn" id="jig-copy-confirm" disabled>Copy</button>
     </div>
   </div>
+</div>
+
+<!-- Import-from-inventory modal (jig-imp-* ids) -->
+<div class="pp-modal-backdrop" id="jig-imp-modal" role="dialog" aria-modal="true" aria-labelledby="jig-imp-title" hidden>
+  <div class="pp-modal jig-imp-modal">
+    <div class="pp-modal-header">
+      <h2 id="jig-imp-title">Import from Casting Inventory</h2>
+      <button type="button" class="pp-modal-close" id="jig-imp-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="pp-modal-body">
+      <p class="pp-modal-hint" id="jig-imp-hint"></p>
+      <div class="jig-imp-opts" id="jig-imp-opts"></div>
+      <div class="jig-imp-parts" id="jig-imp-parts"></div>
+      <div class="jig-imp-preview" id="jig-imp-preview"></div>
+    </div>
+    <div class="pp-modal-actions">
+      <button type="button" class="pp-secondary-btn" id="jig-imp-cancel">Cancel</button>
+      <button type="button" class="pp-primary-btn" id="jig-imp-confirm" disabled>Update jig list</button>
+    </div>
+  </div>
 </div>`;
 
   const editor = document.getElementById('jig-editor');
@@ -1159,4 +1473,16 @@ ${MARKER_DEFS}
       .forEach(cb => { cb.checked = e.target.checked; });
     updateCopyConfirmState();
   });
+
+  // Import-from-inventory modal.
+  document.getElementById('jig-imp-close').onclick = closeImportModal;
+  document.getElementById('jig-imp-cancel').onclick = closeImportModal;
+  document.getElementById('jig-imp-confirm').onclick = confirmImport;
+  const impModal = document.getElementById('jig-imp-modal');
+  impModal.addEventListener('click', (e) => {
+    if (e.target === impModal) { closeImportModal(); return; }
+    const btn = e.target.closest('[data-imp-mode]');
+    if (btn) setImportMode(btn.closest('[data-imp-key]').dataset.impKey, btn.dataset.impMode);
+  });
+  impModal.addEventListener('input', onImportInput);
 }
