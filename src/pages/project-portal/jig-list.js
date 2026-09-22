@@ -1995,7 +1995,7 @@ ${MARKER_DEFS}
     <h2>Panel cross-section <span style="font-weight:400;text-transform:none;color:#888;font-size:12px">— scrim placement diagram</span></h2>
     <p class="hint">Enter the total concrete thickness and the number of layers — the heights are filled in so the layers <b>split the thickness evenly</b> (measured from the <b>bottom / face of the panel</b>). Each layer is a <b>Scrim</b> or a <b>Height check</b>; the printed sheet and the foot depths follow. Type over any height for a special case; <b>Split layers evenly</b> puts them back. A casting with parts of <b>different thicknesses</b> gets one entry per thickness (<b>+ Add thickness</b>); each part is then assigned its thickness in the import window or in the Panels table. Dimensions accept <b>3/4</b>, <b>1-1/2</b> or <b>0.75</b>.</p>
     <div id="jig-xsec-list"></div>
-    <div class="toolrow" style="margin-top:10px"><button type="button" class="addbtn" style="margin-top:0" data-act="add-xsec">+ Add thickness</button>
+    <div class="toolrow" style="margin-top:10px"><button type="button" class="addbtn xsec-add" style="margin-top:0" data-act="add-xsec">+ Add thickness</button>
       <button type="button" data-act="print-xsec">🖨 Print cross-section (one sheet per thickness)</button></div>
 
     <h2 style="margin-top:22px">Project</h2>
