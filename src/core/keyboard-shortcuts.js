@@ -46,6 +46,7 @@ export const SHORTCUTS = {
     CLOSE_MODAL: { key: 'Escape', description: 'Close modal/dialog' },
     NEXT_WEEK: { key: 'ArrowRight', altKey: true, description: 'Next week' },
     PREV_WEEK: { key: 'ArrowLeft', altKey: true, description: 'Previous week' },
+    CURRENT_WEEK: { key: 'Home', altKey: true, description: 'Current week' },
     SHOW_HELP: { key: '?', shiftKey: true, description: 'Show keyboard shortcuts' },
     FULLSCREEN: { key: 'f', altKey: true, description: 'Toggle fullscreen' },
     ADD_TASK: { key: 'n', ctrlKey: true, description: 'Add new task' }
@@ -152,6 +153,15 @@ function registerDefaultShortcuts() {
         const prevBtn = document.getElementById('prev-week-btn');
         if (prevBtn && !prevBtn.disabled) {
             prevBtn.click();
+        }
+    });
+
+    // Current week (Alt+Home)
+    registerShortcut(SHORTCUTS.CURRENT_WEEK, () => {
+        logger.debug('⌨️ Shortcut: Current week');
+        const currentBtn = document.getElementById('current-week-btn');
+        if (currentBtn && !currentBtn.disabled) {
+            currentBtn.click();
         }
     });
 

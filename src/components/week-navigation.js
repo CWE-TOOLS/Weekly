@@ -10,7 +10,7 @@ import {
     setCurrentViewedWeekIndex
 } from '../core/state.js';
 import { emit, on, EVENTS } from '../core/event-bus.js';
-import { getMonday, getWeekMonth, getWeekOfMonth } from '../utils/date-utils.js';
+import { getMonday, getWeekMonth, getWeekOfMonth, getLocalDateString } from '../utils/date-utils.js';
 
 import { logger } from '../utils/logger.js';
 import { RENDER_DELAY } from '../config/timing-constants.js';
@@ -56,6 +56,36 @@ function showPreviousWeek() {
     if (wrapper) {
         wrapper.scrollBy({ left: -wrapper.offsetWidth, behavior: 'smooth' });
     }
+}
+
+/**
+ * Scroll the board to today's week. If today's week is not on the board (a gap in
+ * the schedule), go to the nearest week after today — the same rule the board uses
+ * on first load — or the last week when nothing later exists.
+ */
+export function showCurrentWeek() {
+    const wrapper = document.getElementById('schedule-wrapper');
+    const container = document.getElementById('schedule-container');
+    if (!wrapper || !container) return;
+
+    const allWeekStartDates = getAllWeekStartDates();
+    if (!allWeekStartDates.length) return;
+
+    const currentMonday = getMonday(new Date());
+    const currentMondayStr = getLocalDateString(currentMonday);
+    let weekIndex = allWeekStartDates.findIndex(d => getLocalDateString(d) === currentMondayStr);
+    if (weekIndex === -1) weekIndex = allWeekStartDates.findIndex(d => d > currentMonday);
+    if (weekIndex === -1) weekIndex = allWeekStartDates.length - 1;
+
+    const grids = container.querySelectorAll('.schedule-grid');
+    const grid = grids[weekIndex];
+    if (!grid) return;
+
+    wrapper.scrollTo({ left: grid.offsetLeft, behavior: 'smooth' });
+    // The scroll listener updates the header once the scroll settles; set it now
+    // as well so the header never lags behind the click.
+    setCurrentViewedWeekIndex(weekIndex);
+    emit(EVENTS.WEEK_CHANGED, { weekIndex, weekDate: allWeekStartDates[weekIndex] });
 }
 
 /**
@@ -136,6 +166,13 @@ export function initializeWeekNavigation() {
     if (nextBtn) {
         nextBtn.addEventListener('click', () => {
             showNextWeek();
+        });
+    }
+
+    const currentBtn = document.getElementById('current-week-btn');
+    if (currentBtn) {
+        currentBtn.addEventListener('click', () => {
+            showCurrentWeek();
         });
     }
 

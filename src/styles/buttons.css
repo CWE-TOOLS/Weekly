@@ -31,6 +31,12 @@
   border-color: var(--border-secondary);
 }
 
+/* "Current Week" — sits after Next; a touch more visible than the arrows */
+.navigation-group .current-week-btn {
+  margin-left: 0.5rem;
+  font-weight: 600;
+}
+
 /* Task Card Buttons */
 .task-edit-btn {
   position: absolute;
