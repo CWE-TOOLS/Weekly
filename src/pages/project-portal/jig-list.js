@@ -361,6 +361,19 @@ function secT16(o){ return parseInches(secOf(o).thickness); }
 /** "1″" — used to tag labels when a casting has more than one thickness. */
 function secTag(o){ const T = secT16(o); return T != null ? fmt16(T) + '″' : '?″'; }
 const multiSec = () => S.sections.length > 1;
+/** Layer type of layer i in a section: '' = scrim (default), 'check' = height check. */
+function layerKind(sec, i){ return (sec.kinds && sec.kinds[i] === 'check') ? 'check' : ''; }
+/** Which scrim a scrim layer is (1-based, counting scrim layers only) — 0 for a height check. */
+function scrimNo(sec, i){
+  if (layerKind(sec, i) === 'check') return 0;
+  let n = 0;
+  for (let k = 0; k <= i; k++) if (layerKind(sec, k) !== 'check') n++;
+  return n;
+}
+/** Short name of a layer for drawings / tables: "Scrim 2" or "Height check". */
+function layerName(sec, i){
+  return layerKind(sec, i) === 'check' ? 'Height check' : 'Scrim ' + scrimNo(sec, i);
+}
 /* Legacy projects have no cross-section: derive one from the foot depths
    (scrim depth from top → height from bottom = thickness − depth).
    Total thickness isn't in legacy data, so it falls back to the 3/4″ default. */
@@ -494,6 +507,11 @@ function depthLabelOf(dp){
   if (!dp) return '';
   const T = secT16(dp);
   const pre = multiSec() ? secTag(dp) + ' · ' : '';
+  if (dp.scrim != null && dp.kind !== 'check'){
+    // Linked scrim layer: "First Scrim" counted among the scrim layers of its thickness.
+    const n = scrimNo(secOf(dp), dp.scrim);
+    return pre + ((SCRIM_ORDINALS[n - 1] || ('#' + n)) + ' Scrim');
+  }
   if (dp.kind !== 'check') return pre + ((dp.label || '').trim());
   const d = parseInches(dp.d);
   if (T != null && d != null && d >= 0 && d < T) return `${pre}Height Check Jig · ${fmt16(T - d)}″`;
@@ -799,7 +817,7 @@ function buildXsecList(){
       <div class="xsec-wrap" data-xsec-preview></div>
       <div data-xsec-cnc></div>
       <div class="warn" data-xsec-warn></div>
-      <div class="toolrow"><button type="button" data-act="even-xsec" data-si="${si}" title="Space the scrim layers evenly through the concrete thickness">↕ Split scrims evenly</button></div>
+      <div class="toolrow"><button type="button" data-act="even-xsec" data-si="${si}" title="Space the layers evenly through the concrete thickness">↕ Split layers evenly</button></div>
     </div>`).join('');
   S.sections.forEach((sec, si) => { buildXsecFields(si); renderXsec(si); });
 }
@@ -811,7 +829,7 @@ function buildXsecFields(si){
     `<div class="fld"><label>Total concrete thickness</label>
        <input data-sec="xsec" data-si="${si}" data-field="thickness" value="${esc(sec.thickness)}" style="width:140px" placeholder="3/4">
        <span class="u">inches</span></div>
-     <div class="fld"><label># of scrims</label>
+     <div class="fld"><label># of layers</label>
        <input type="number" min="0" max="10" data-sec="xsec" data-si="${si}" data-field="count" value="${sec.heights.length}" style="width:80px">
        <span class="u">layers</span></div>`;
   buildXsecHeights(si);
@@ -820,7 +838,10 @@ function buildXsecHeights(si){
   const sec = S.sections[si], blk = xsecBlock(si);
   if (!blk) return;
   blk.querySelector('[data-xsec-heights]').innerHTML = sec.heights.map((h,i)=>
-    `<div class="fld"><label>Scrim ${i+1} height</label>
+    `<div class="fld"><label>Layer ${i+1}</label>
+       <select data-sec="xsec" data-si="${si}" data-field="kind" data-idx="${i}" class="xsec-kind">
+         <option value=""${layerKind(sec, i) === 'check' ? '' : ' selected'}>Scrim</option>
+         <option value="check"${layerKind(sec, i) === 'check' ? ' selected' : ''}>Height check</option></select>
        <input data-sec="xsec" data-si="${si}" data-field="h" data-idx="${i}" value="${esc(h)}" style="width:110px" placeholder="1/4">
        <span class="u">from bottom</span></div>`).join('');
 }
@@ -840,7 +861,7 @@ function xsecIsEvenSplit(sec){
 }
 function xsecScrims(sec, T){
   return sec.heights
-    .map((h,i)=>({ n:i+1, v:parseInches(h) }))
+    .map((h,i)=>({ n:i+1, v:parseInches(h), kind: layerKind(sec, i), name: layerName(sec, i) }))
     .filter(o => o.v != null && o.v > 0 && (T == null || o.v < T))
     .sort((a,b)=> a.v - b.v);
 }
@@ -864,8 +885,8 @@ function xsecSVG(sec){
   // scrim lines + stacked height dimensions (right)
   scr.forEach((o,k)=>{
     const yy = y(o.v), dx = x2 + 36 + k*58;
-    s += `<line class="scr" x1="${x1-6}" y1="${yy}" x2="${x2+6}" y2="${yy}" style="stroke-width:1.4"/>`;
-    s += `<text class="rlbl" x="${x1+8}" y="${yy-5}" text-anchor="start" style="font-size:10px">SCRIM ${o.n}</text>`;
+    s += `<line class="${o.kind === 'check' ? 'chk' : 'scr'}" x1="${x1-6}" y1="${yy}" x2="${x2+6}" y2="${yy}" style="stroke-width:1.4"/>`;
+    s += `<text class="rlbl" x="${x1+8}" y="${yy-5}" text-anchor="start" style="font-size:10px">${esc(o.name.toUpperCase())}</text>`;
     s += `<line class="de" x1="${x2+8}" y1="${yy}" x2="${dx+8}" y2="${yy}"/>`;
     s += `<line class="de" x1="${x2+8}" y1="${bot}" x2="${dx+8}" y2="${bot}"/>`;
     s += `<line class="dl" x1="${dx}" y1="${yy}" x2="${dx}" y2="${bot}" marker-start="url(#jig-ar)" marker-end="url(#jig-ar)"/>`;
@@ -884,8 +905,8 @@ function renderXsec(si){
   const bad = [];
   sec.heights.forEach((h,i)=>{
     const v = parseInches(h);
-    if ((h||'').trim() && v == null) bad.push(`Scrim ${i+1} height is unreadable`);
-    else if (v != null && T != null && v >= T) bad.push(`Scrim ${i+1} (${fmt16(v)}″) is at or above the total thickness`);
+    if ((h||'').trim() && v == null) bad.push(`Layer ${i+1} height is unreadable`);
+    else if (v != null && T != null && v >= T) bad.push(`Layer ${i+1} (${fmt16(v)}″) is at or above the total thickness`);
   });
   if (multiSec() && T != null && S.sections.some((o, k) => k !== si && parseInches(o.thickness) === T))
     bad.push(`Another thickness is also ${fmt16(T)}″ — use one entry per thickness`);
@@ -914,21 +935,21 @@ function xsecPrintHTML(si){
   const T = parseInches(sec.thickness);
   const svg = xsecSVG(sec);
   const rows = xsecScrims(sec, T).map(o =>
-    `<tr><td class="c b">Scrim ${o.n}</td><td>${fmt16(o.v)}″ from bottom</td><td>${fmt16(T - o.v)}″ from top</td></tr>`).join('');
+    `<tr><td class="c">${o.n}</td><td class="b">${esc(o.name)}</td><td>${fmt16(o.v)}″ from bottom</td><td>${fmt16(T - o.v)}″ from top</td></tr>`).join('');
   const parts = multiSec()
     ? [...new Set(S.panels.filter(p => (p.sec || 0) === si && ((p.label || '').trim())).map(p => p.label.trim()))]
     : [];
   const thk = T != null ? fmt16(T) + '″' : '?';
   return `
-    <div class="titlerow"><h1>Panel Cross-Section${multiSec() ? ' — ' + thk : ''} — Scrim Placement</h1>
+    <div class="titlerow"><h1>Panel Cross-Section${multiSec() ? ' — ' + thk : ''} — ${xsecScrims(sec, T).some(o => o.kind !== 'check') ? (xsecScrims(sec, T).some(o => o.kind === 'check') ? 'Scrim & Height Check Layers' : 'Scrim Placement') : 'Height Check Layers'}</h1>
       <div class="meta"><b style="font-size:13px;color:#333">${esc(projTitle())}</b><br>${multiSec() ? `Thickness ${si + 1} of ${S.sections.length}<br>` : ''}${esc(S.date)}</div></div>
     ${parts.length ? `<p class="rules" style="margin:0 0 4px"><b>${thk} parts:</b> ${parts.map(esc).join(', ')}</p>` : ''}
     <div class="xsec-wrap" style="margin-top:0.35in">${svg || '<p>No section — enter a total concrete thickness.</p>'}</div>
     ${rows ? `<table class="list" style="margin-top:0.35in"><thead><tr>
-      <th style="width:20%" class="c">Scrim</th><th style="width:40%">Height from bottom</th><th style="width:40%">Depth from top</th>
+      <th style="width:8%" class="c">#</th><th style="width:24%">Layer</th><th style="width:34%">Height from bottom</th><th style="width:34%">Depth from top</th>
     </tr></thead><tbody>${rows}</tbody></table>` : ''}
     <p class="listnote">Total concrete thickness <b>${thk}</b>.
-      Grey = concrete; dashed lines = scrim layers. Heights are measured from the bottom (face) of the panel;
+      Grey = concrete; dashed lines = scrim layers; dotted red lines = height check levels. Heights are measured from the bottom (face) of the panel;
       “depth from top” matches the jig foot depth pressed from the top of the pour.</p>
     ${cncNoteHTML(si)}
     <div class="pfoot"><span>Scrim Jigs · ${esc(projTitle())}</span><span>Panel Cross-Section${multiSec() ? ` — ${thk} (${si + 1} of ${S.sections.length})` : ''}</span></div>`;
@@ -1012,6 +1033,7 @@ const PRINT_DOC_CSS = `
   .pl{fill:var(--tan);stroke:var(--line);stroke-width:1.6;stroke-linejoin:round}
   .wl{fill:var(--wall);stroke:var(--line);stroke-width:.8}
   .scr{stroke:var(--line);stroke-width:.8;stroke-dasharray:5 3}
+  .chk{stroke:#b91c1c;stroke-width:.8;stroke-dasharray:2 3}
   .rlbl{font-size:11px;font-weight:700;letter-spacing:.5px;fill:var(--ink)}
   .dnum{font-size:13px;font-weight:700;fill:var(--blue)}
   .dl{stroke:var(--blue);stroke-width:1;fill:none}
@@ -1128,12 +1150,12 @@ function buildDepthTable(){
         const secPick = (multiSec() && !linked)
           ? `<select data-sec="depth" data-idx="${i}" data-field="sec" style="width:auto;margin-right:4px">${secOptions(d.sec || 0)}</select>` : '';
         const typeCell = linked
-          ? `<span class="jig-linked">${multiSec() ? secTag(d) + ' · ' : ''}Scrim ${d.scrim+1} · from cross-section</span>`
+          ? `<span class="jig-linked">${multiSec() ? secTag(d) + ' · ' : ''}Layer ${d.scrim+1} · ${d.kind === 'check' ? 'Height check' : 'Scrim'} · from cross-section</span>`
           : secPick + `<select data-sec="depth" data-idx="${i}" data-field="kind"${multiSec() ? ' style="width:auto"' : ''}>
               <option value=""${d.kind === 'check' ? '' : ' selected'}>Extra (type your label)</option>
               <option value="check"${d.kind === 'check' ? ' selected' : ''}>Height check jig</option></select>`;
-        const labelCell = (!linked && d.kind === 'check')
-          ? `<input data-auto-label="${i}" value="${esc(depthLabelOf(d))}" disabled title="Generated: total concrete thickness − this depth">`
+        const labelCell = (linked || d.kind === 'check')
+          ? `<input data-auto-label="${i}" value="${esc(depthLabelOf(d))}" disabled title="${linked ? 'Generated from the cross-section layer' : 'Generated: total concrete thickness − this depth'}">`
           : `<input data-sec="depth" data-idx="${i}" data-field="label" value="${esc(d.label)}" placeholder="First Scrim">`;
         const delCell = linked ? '' : `<button type="button" data-act="del-depth" data-idx="${i}" title="Remove">×</button>`;
         return `<tr><td class="row-n">${i+1}</td><td>${depthCell}</td><td>${typeCell}</td><td>${labelCell}</td><td class="del">${delCell}</td></tr>`;
@@ -1161,9 +1183,16 @@ function syncDepthsFromXsec(adoptOnly){
         dp = S.depths.find(x => x.scrim == null && (x.sec || 0) === si && x.kind !== 'check' && parseInches(x.d) === T - h);
         if (dp) dp.scrim = i;
       }
+      if (dp && adoptOnly && dp.kind === 'check' && layerKind(sec, i) !== 'check'){
+        // A list saved before layer types existed: keep its height-check row as one.
+        sec.kinds = sec.kinds || []; sec.kinds[i] = 'check';
+      }
       if (adoptOnly) continue;   // on load: only recognise what is already there, change nothing
-      if (!dp){ dp = { d:'', label: (SCRIM_ORDINALS[i] || ('#' + (i+1))) + ' Scrim', scrim: i, sec: si }; S.depths.push(dp); }
+      if (!dp){ dp = { d:'', label: '', scrim: i, sec: si }; S.depths.push(dp); }
       dp.d = ok ? fmt16(T - h) : '';
+      // Type and label come from the cross-section layer.
+      if (layerKind(sec, i) === 'check') dp.kind = 'check'; else delete dp.kind;
+      dp.label = layerKind(sec, i) === 'check' ? '' : (SCRIM_ORDINALS[scrimNo(sec, i) - 1] || ('#' + scrimNo(sec, i))) + ' Scrim';
     }
   });
   if (adoptOnly) return;
@@ -1231,6 +1260,10 @@ function onEditorInput(e){
       buildXsecHeights(si);
     }
     else if (el.dataset.field === 'h'){ xs.heights[+el.dataset.idx] = el.value; xs.auto = false; }   // typed by hand — stop following
+    else if (el.dataset.field === 'kind'){
+      xs.kinds = xs.kinds || [];
+      xs.kinds[+el.dataset.idx] = el.value;
+    }
     // The cross-section owns the scrim foot depths — keep them in step.
     syncDepthsFromXsec(); buildDepthTable();
     S.sections.forEach((o, k) => renderXsec(k));
@@ -1960,7 +1993,7 @@ ${MARKER_DEFS}
   <section class="editor" id="jig-editor">
 
     <h2>Panel cross-section <span style="font-weight:400;text-transform:none;color:#888;font-size:12px">— scrim placement diagram</span></h2>
-    <p class="hint">Enter the total concrete thickness and the number of scrims — the scrim heights are filled in so the layers <b>split the thickness evenly</b> (measured from the <b>bottom / face of the panel</b>). Type over any height for a special case; <b>Split scrims evenly</b> puts them back. A casting with parts of <b>different thicknesses</b> gets one entry per thickness (<b>+ Add thickness</b>); each part is then assigned its thickness in the import window or in the Panels table. Dimensions accept <b>3/4</b>, <b>1-1/2</b> or <b>0.75</b>.</p>
+    <p class="hint">Enter the total concrete thickness and the number of layers — the heights are filled in so the layers <b>split the thickness evenly</b> (measured from the <b>bottom / face of the panel</b>). Each layer is a <b>Scrim</b> or a <b>Height check</b>; the printed sheet and the foot depths follow. Type over any height for a special case; <b>Split layers evenly</b> puts them back. A casting with parts of <b>different thicknesses</b> gets one entry per thickness (<b>+ Add thickness</b>); each part is then assigned its thickness in the import window or in the Panels table. Dimensions accept <b>3/4</b>, <b>1-1/2</b> or <b>0.75</b>.</p>
     <div id="jig-xsec-list"></div>
     <div class="toolrow" style="margin-top:10px"><button type="button" class="addbtn" style="margin-top:0" data-act="add-xsec">+ Add thickness</button>
       <button type="button" data-act="print-xsec">🖨 Print cross-section (one sheet per thickness)</button></div>
@@ -1973,7 +2006,7 @@ ${MARKER_DEFS}
     <div class="fields" id="jig-geo-fields"></div>
 
     <h2 style="margin-top:20px">Foot depths <span style="font-weight:400;text-transform:none;color:#888;font-size:12px">— one jig per depth, per width</span></h2>
-    <p class="hint">Every scrim layer in the cross-section above gets its foot depth here automatically (thickness − scrim height). Use <b>+ Add extra depth</b> for anything else — e.g. a <b>height check jig</b> between two scrim layers, or for parts that get no scrim at all (set # of scrims to 0).</p>
+    <p class="hint">Every layer in the cross-section above gets its foot depth here automatically (thickness − layer height), with its type and label. Use <b>+ Add extra depth</b> only for a jig that is not a layer of the cross-section.</p>
     <div id="jig-depth-wrap"></div>
     <button type="button" class="addbtn" data-act="add-depth">+ Add extra depth</button>
 
