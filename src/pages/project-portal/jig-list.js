@@ -39,6 +39,12 @@
  *     import (their Qty is kept per width); hand-added rows are never touched.
  *   - Foot depths can be typed "Height check jig" (dp.kind === 'check'): the
  *     label is then generated — "Height Check Jig · <thickness − depth>″".
+ *   - A casting can carry SEVERAL concrete thicknesses (S.sections[] — each
+ *     {thickness, heights, auto}; S.xsec is kept as an alias of sections[0] so
+ *     older single-thickness data and code keep working). Every panel row
+ *     (p.sec) and every foot depth (dp.sec) belongs to one section by index;
+ *     a jig is only made where the panel's and the depth's section agree.
+ *     The import window assigns a thickness per part (S.inv.secs).
  *   - The cross-section drives the scrim foot depths: every scrim layer owns
  *     one depth row (dp.scrim = its index, depth = thickness − height), kept
  *     in step whenever the cross-section is edited. Rows without dp.scrim are
@@ -184,9 +190,7 @@ function selectCasting(castingId) {
     stateByCasting.set(castingId, st);
   }
   S = st;
-  fixXsec();
-  // S.xsec.auto: the scrim heights follow the thickness (even split) until one is typed by hand.
-  if (S.xsec.auto == null) S.xsec.auto = xsecIsEvenSplit();
+  normalizeSections();
   syncDepthsFromXsec(true);
   // The printed title always mirrors the portal project record (Info tab),
   // even for states saved under an older project name.
@@ -332,6 +336,31 @@ function freshState(){
   return st;
 }
 function defaultXsec(){ return { thickness:'3/4', heights:['1/4','1/2'], auto:true }; }
+/**
+ * S.sections = the casting's concrete thicknesses. Lists saved before this existed carry
+ * only S.xsec — it becomes sections[0]. S.xsec always stays the same object as sections[0].
+ */
+function normalizeSections(){
+  if (!Array.isArray(S.sections) || !S.sections.length){
+    fixXsec();
+    S.sections = [S.xsec];
+  }
+  S.sections.forEach(sec => {
+    if (!Array.isArray(sec.heights)) sec.heights = [];
+    if (sec.thickness == null) sec.thickness = '';
+    // sec.auto: the scrim heights follow the thickness (even split) until one is typed by hand.
+    if (sec.auto == null) sec.auto = xsecIsEvenSplit(sec);
+  });
+  S.xsec = S.sections[0];
+  S.panels.forEach(p => { if (!(p.sec >= 0 && p.sec < S.sections.length)) p.sec = 0; });
+  S.depths.forEach(dp => { if (!(dp.sec >= 0 && dp.sec < S.sections.length)) dp.sec = 0; });
+}
+/** Section (thickness) a panel / depth belongs to. */
+function secOf(o){ return S.sections[(o && o.sec) || 0] || S.sections[0]; }
+function secT16(o){ return parseInches(secOf(o).thickness); }
+/** "1″" — used to tag labels when a casting has more than one thickness. */
+function secTag(o){ const T = secT16(o); return T != null ? fmt16(T) + '″' : '?″'; }
+const multiSec = () => S.sections.length > 1;
 /* Legacy projects have no cross-section: derive one from the foot depths
    (scrim depth from top → height from bottom = thickness − depth).
    Total thickness isn't in legacy data, so it falls back to the 3/4″ default. */
@@ -429,7 +458,7 @@ function buildJigs(){
   const customs = src.filter(p => p.custom && !(parseInches(p.W) > 0))
                      .map(p => ({ label:(p.label||'').trim() || '?', kind:p.custom, qty:(p.qty||'').trim() }));
   const panels = src.map((p,i)=>({ label:(p.label||'').trim(), W:p.W, qty:p.qty, w16:parseInches(p.W),
-                                   max16:parseInches(p.Wmax), custom:p.custom || '', idx:i }))
+                                   max16:parseInches(p.Wmax), custom:p.custom || '', sec:p.sec || 0, T16:secT16(p), idx:i }))
                     .filter(p => p.w16 != null && p.w16 > 0);
   // duplicate-width detection
   const byW = {};
@@ -445,13 +474,14 @@ function buildJigs(){
     const note = notes.join(' · ');
     const foot = p.w16 - clr, handle = hi16 + over;
     S.depths.forEach(dp => {
+      if ((dp.sec || 0) !== p.sec) return;                           // depth belongs to another thickness
       if (dp.scrim != null && parseInches(dp.d) == null) return;   // that scrim's height isn't filled in yet
       n++;
       const d16 = parseInches(dp.d) || 0;
       jigs.push({
         n, pi, label: p.label || ('Panel ' + (pi+1)), qty: p.qty,
         W: fmt16(p.w16), foot: fmt16(foot), handle: fmt16(handle), foot16: foot, handle16: handle,
-        depth: fmt16(d16), depth16: d16, depthLabel: depthLabelOf(dp), kind: dp.kind || '', note
+        depth: fmt16(d16), depth16: d16, depthLabel: depthLabelOf(dp), kind: dp.kind || '', note, T16: p.T16
       });
     });
   });
@@ -461,10 +491,13 @@ function customLabel(kind){ return kind === 'cnc' ? 'CNC' : 'custom'; }
 /** Label of a foot depth. "Height check jig" depths get a generated label
     carrying the concrete height the jig checks (thickness − foot depth). */
 function depthLabelOf(dp){
-  if (!dp || dp.kind !== 'check') return ((dp && dp.label) || '').trim();
-  const T = parseInches(S.xsec && S.xsec.thickness), d = parseInches(dp.d);
-  if (T != null && d != null && d >= 0 && d < T) return `Height Check Jig · ${fmt16(T - d)}″`;
-  return 'Height Check Jig';
+  if (!dp) return '';
+  const T = secT16(dp);
+  const pre = multiSec() ? secTag(dp) + ' · ' : '';
+  if (dp.kind !== 'check') return pre + ((dp.label || '').trim());
+  const d = parseInches(dp.d);
+  if (T != null && d != null && d >= 0 && d < T) return `${pre}Height Check Jig · ${fmt16(T - d)}″`;
+  return pre + 'Height Check Jig';
 }
 
 /* ===================== output page builders ==================== */
@@ -615,7 +648,7 @@ function buildListPages(jigs, opt){
 }
 
 function cardSVG(j){
-  const T = parseInches(S.xsec && S.xsec.thickness);
+  const T = j.T16;
   const hasT = T != null && T > 0;
   const h16 = (hasT && j.depth16 > 0 && j.depth16 < T) ? T - j.depth16 : null;
   // concrete depth (left) and scrim height from face (right); schematic like the rest of the profile
@@ -656,7 +689,7 @@ function cardSVG(j){
   </svg>`;
 }
 function cardConc(j){
-  const T = parseInches(S.xsec && S.xsec.thickness);
+  const T = j.T16;
   if (T == null || T <= 0) return '';
   const h16 = (j.depth16 > 0 && j.depth16 < T) ? T - j.depth16 : null;
   return ` &nbsp;·&nbsp; <b>Conc</b> ${fmt16(T)}″${h16 != null ? ` · <b>${j.kind === 'check' ? 'Height' : 'Scrim'}</b> ${fmt16(h16)}″ up from face` : ''}`;
@@ -689,8 +722,10 @@ function drawingPages(jigs, opt){
 function renderOutput(){
   if (!S) return;
   renderCutSummary();
-  const cncEl = document.getElementById('jig-xsec-cnc');
-  if (cncEl) cncEl.innerHTML = cncNoteHTML();
+  document.querySelectorAll('#jig-xsec-list [data-xsec]').forEach(blk => {
+    const el = blk.querySelector('[data-xsec-cnc]');
+    if (el) el.innerHTML = cncNoteHTML(+blk.dataset.xsec);
+  });
   // validate the active group still exists
   const groups = activeGroups();
   if (currentGroup && !groups.includes(currentGroup)) currentGroup = null;
@@ -752,46 +787,67 @@ function buildPrintSetBar(groups){
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
 /* ==================== cross-section designer =================== */
-function buildXsecFields(){
-  document.getElementById('jig-xsec-fields').innerHTML =
+function buildXsecList(){
+  const host = document.getElementById('jig-xsec-list');
+  if (!host) return;
+  host.innerHTML = S.sections.map((sec, si) => `
+    <div class="xsec-block" data-xsec="${si}">
+      ${multiSec() ? `<div class="xsec-head"><b>Thickness ${si + 1}</b>
+        <button type="button" class="xsec-del" data-act="del-xsec" data-si="${si}" title="Remove this thickness">× remove</button></div>` : ''}
+      <div class="fields" data-xsec-fields></div>
+      <div class="fields" data-xsec-heights style="margin-top:10px"></div>
+      <div class="xsec-wrap" data-xsec-preview></div>
+      <div data-xsec-cnc></div>
+      <div class="warn" data-xsec-warn></div>
+      <div class="toolrow"><button type="button" data-act="even-xsec" data-si="${si}" title="Space the scrim layers evenly through the concrete thickness">↕ Split scrims evenly</button></div>
+    </div>`).join('');
+  S.sections.forEach((sec, si) => { buildXsecFields(si); renderXsec(si); });
+}
+function xsecBlock(si){ return document.querySelector(`#jig-xsec-list [data-xsec="${si}"]`); }
+function buildXsecFields(si){
+  const sec = S.sections[si], blk = xsecBlock(si);
+  if (!blk) return;
+  blk.querySelector('[data-xsec-fields]').innerHTML =
     `<div class="fld"><label>Total concrete thickness</label>
-       <input data-sec="xsec" data-field="thickness" value="${esc(S.xsec.thickness)}" style="width:140px" placeholder="3/4">
+       <input data-sec="xsec" data-si="${si}" data-field="thickness" value="${esc(sec.thickness)}" style="width:140px" placeholder="3/4">
        <span class="u">inches</span></div>
      <div class="fld"><label># of scrims</label>
-       <input type="number" min="0" max="10" data-sec="xsec" data-field="count" value="${S.xsec.heights.length}" style="width:80px">
+       <input type="number" min="0" max="10" data-sec="xsec" data-si="${si}" data-field="count" value="${sec.heights.length}" style="width:80px">
        <span class="u">layers</span></div>`;
-  buildXsecHeights();
+  buildXsecHeights(si);
 }
-function buildXsecHeights(){
-  document.getElementById('jig-xsec-heights').innerHTML = S.xsec.heights.map((h,i)=>
+function buildXsecHeights(si){
+  const sec = S.sections[si], blk = xsecBlock(si);
+  if (!blk) return;
+  blk.querySelector('[data-xsec-heights]').innerHTML = sec.heights.map((h,i)=>
     `<div class="fld"><label>Scrim ${i+1} height</label>
-       <input data-sec="xsec" data-field="h" data-idx="${i}" value="${esc(h)}" style="width:110px" placeholder="1/4">
+       <input data-sec="xsec" data-si="${si}" data-field="h" data-idx="${i}" value="${esc(h)}" style="width:110px" placeholder="1/4">
        <span class="u">from bottom</span></div>`).join('');
 }
 
 /** Scrim heights that split the concrete thickness evenly (n scrims -> n+1 equal layers), to the 1/16″. */
-function evenScrimHeights(n){
-  const T = parseInches(S.xsec.thickness);
+function evenScrimHeights(sec, n){
+  const T = parseInches(sec.thickness);
   if (T == null || T <= 0 || n < 1) return null;
   return Array.from({ length: n }, (_, i) => fmt16(Math.round(T * (i + 1) / (n + 1))));
 }
 /** True when the current heights are empty or exactly the even split of the current thickness. */
-function xsecIsEvenSplit(){
-  const hs = S.xsec.heights;
+function xsecIsEvenSplit(sec){
+  const hs = sec.heights;
   if (hs.every(h => !(h || '').trim())) return true;
-  const even = evenScrimHeights(hs.length);
+  const even = evenScrimHeights(sec, hs.length);
   return !!even && hs.every((h, i) => parseInches(h) === parseInches(even[i]));
 }
-function xsecScrims(T){
-  return S.xsec.heights
+function xsecScrims(sec, T){
+  return sec.heights
     .map((h,i)=>({ n:i+1, v:parseInches(h) }))
     .filter(o => o.v != null && o.v > 0 && (T == null || o.v < T))
     .sort((a,b)=> a.v - b.v);
 }
-function xsecSVG(){
-  const T = parseInches(S.xsec.thickness);
+function xsecSVG(sec){
+  const T = parseInches(sec.thickness);
   if (T == null || T <= 0) return null;
-  const scr = xsecScrims(T);
+  const scr = xsecScrims(sec, T);
   const top = 46, bot = 316, H = bot - top, x1 = 150, x2 = 400;
   const vbW = x2 + 60 + Math.max(1, scr.length) * 58;
   const y = v => bot - (v / T) * H;
@@ -817,57 +873,70 @@ function xsecSVG(){
   });
   return s + '</svg>';
 }
-function renderXsec(){
-  const svg = xsecSVG();
-  document.getElementById('jig-xsec-preview').innerHTML =
+function renderXsec(si){
+  const sec = S.sections[si], blk = xsecBlock(si);
+  if (!blk) return;
+  const svg = xsecSVG(sec);
+  blk.querySelector('[data-xsec-preview]').innerHTML =
     svg || '<p class="hint" style="margin:8px 0">Enter a total thickness to draw the section.</p>';
-  const T = parseInches(S.xsec.thickness);
+  blk.querySelector('[data-xsec-cnc]').innerHTML = cncNoteHTML(si);
+  const T = parseInches(sec.thickness);
   const bad = [];
-  S.xsec.heights.forEach((h,i)=>{
+  sec.heights.forEach((h,i)=>{
     const v = parseInches(h);
     if ((h||'').trim() && v == null) bad.push(`Scrim ${i+1} height is unreadable`);
     else if (v != null && T != null && v >= T) bad.push(`Scrim ${i+1} (${fmt16(v)}″) is at or above the total thickness`);
   });
-  document.getElementById('jig-xsec-warn').textContent = bad.join(' · ');
+  if (multiSec() && T != null && S.sections.some((o, k) => k !== si && parseInches(o.thickness) === T))
+    bad.push(`Another thickness is also ${fmt16(T)}″ — use one entry per thickness`);
+  blk.querySelector('[data-xsec-warn]').textContent = bad.join(' · ');
 }
 /**
  * "CNC-cut jigs" call-out for the cross-section sheet — on a CNC job that sheet is the only
  * thing printed from this tab, so it has to say how the jigs are made. Empty when no panel
  * is set to Custom CNC.
  */
-function cncNoteHTML(){
-  const cnc = [...new Set(S.panels.filter(p => p.custom === 'cnc').map(p => (p.label || '').trim() || '?'))];
+function cncNoteHTML(si){
+  // With several thicknesses each sheet only speaks for its own parts.
+  const mine = multiSec() ? S.panels.filter(p => (p.sec || 0) === si) : S.panels;
+  const cnc = [...new Set(mine.filter(p => p.custom === 'cnc').map(p => (p.label || '').trim() || '?'))];
   if (!cnc.length) return '';
-  const sawCut = S.panels.some(p => p.custom !== 'cnc' && parseInches(p.W) > 0);
+  const sawCut = mine.some(p => p.custom !== 'cnc' && parseInches(p.W) > 0);
   return `<div class="cncnote"><span class="cnctag">CNC-CUT JIGS</span> `
     + (sawCut
         ? `The jigs for these parts are <b>cut on the CNC</b> (custom shape) — not on the table saw, and not on the jig list or cut maps:`
-        : `<b>All jigs for this casting are cut on the CNC</b> (custom shape) — there is no table-saw jig list or cut map. Parts:`)
+        : `<b>All jigs for ${multiSec() ? 'the ' + secTag({ sec: si }) + ' parts' : 'this casting'} are cut on the CNC</b> (custom shape) — there is no table-saw jig list or cut map. Parts:`)
     + ` <b>${cnc.map(esc).join(', ')}</b></div>`;
 }
 /** Inner HTML of the cross-section print page (goes inside a `.page`). */
-function xsecPrintHTML(){
-  const T = parseInches(S.xsec.thickness);
-  const svg = xsecSVG();
-  const rows = xsecScrims(T).map(o =>
+function xsecPrintHTML(si){
+  const sec = S.sections[si];
+  const T = parseInches(sec.thickness);
+  const svg = xsecSVG(sec);
+  const rows = xsecScrims(sec, T).map(o =>
     `<tr><td class="c b">Scrim ${o.n}</td><td>${fmt16(o.v)}″ from bottom</td><td>${fmt16(T - o.v)}″ from top</td></tr>`).join('');
+  const parts = multiSec()
+    ? [...new Set(S.panels.filter(p => (p.sec || 0) === si && ((p.label || '').trim())).map(p => p.label.trim()))]
+    : [];
+  const thk = T != null ? fmt16(T) + '″' : '?';
   return `
-    <div class="titlerow"><h1>Panel Cross-Section — Scrim Placement</h1>
-      <div class="meta"><b style="font-size:13px;color:#333">${esc(projTitle())}</b><br>${esc(S.date)}</div></div>
+    <div class="titlerow"><h1>Panel Cross-Section${multiSec() ? ' — ' + thk : ''} — Scrim Placement</h1>
+      <div class="meta"><b style="font-size:13px;color:#333">${esc(projTitle())}</b><br>${multiSec() ? `Thickness ${si + 1} of ${S.sections.length}<br>` : ''}${esc(S.date)}</div></div>
+    ${parts.length ? `<p class="rules" style="margin:0 0 4px"><b>${thk} parts:</b> ${parts.map(esc).join(', ')}</p>` : ''}
     <div class="xsec-wrap" style="margin-top:0.35in">${svg || '<p>No section — enter a total concrete thickness.</p>'}</div>
     ${rows ? `<table class="list" style="margin-top:0.35in"><thead><tr>
       <th style="width:20%" class="c">Scrim</th><th style="width:40%">Height from bottom</th><th style="width:40%">Depth from top</th>
     </tr></thead><tbody>${rows}</tbody></table>` : ''}
-    <p class="listnote">Total concrete thickness <b>${T != null ? fmt16(T) : '?'}″</b>.
+    <p class="listnote">Total concrete thickness <b>${thk}</b>.
       Grey = concrete; dashed lines = scrim layers. Heights are measured from the bottom (face) of the panel;
       “depth from top” matches the jig foot depth pressed from the top of the pour.</p>
-    ${cncNoteHTML()}
-    <div class="pfoot"><span>Scrim Jigs · ${esc(projTitle())}</span><span>Panel Cross-Section</span></div>`;
+    ${cncNoteHTML(si)}
+    <div class="pfoot"><span>Scrim Jigs · ${esc(projTitle())}</span><span>Panel Cross-Section${multiSec() ? ` — ${thk} (${si + 1} of ${S.sections.length})` : ''}</span></div>`;
 }
 function printXsec(){
   if (!S) return;
   printViaIframe('Panel Cross-Section — ' + projTitle(),
-    `<section class="page">${xsecPrintHTML()}</section>`);
+    S.sections.map((sec, si) => `<section class="page">${xsecPrintHTML(si)}</section>`).join(''));
 }
 function printJigs(){
   if (!S) return;
@@ -1010,8 +1079,8 @@ function printViaIframe(title, bodyHTML, css){
 
 function buildEditor(){
   if (!S) return;
-  // cross-section designer
-  buildXsecFields(); renderXsec();
+  // cross-section designer — one block per thickness
+  buildXsecList();
 
   // project fields — the title comes from the portal project record (Info tab)
   document.getElementById('jig-proj-fields').innerHTML =
@@ -1029,13 +1098,15 @@ function buildEditor(){
 
   // panels
   document.getElementById('jig-panel-wrap').innerHTML = `<table class="edit"><thead><tr>
-      <th class="row-n">#</th><th style="width:30%">Label / type</th><th style="width:18%">Width</th>
-      <th style="width:10%">Qty</th><th style="width:18%">Group <span style="font-weight:400;color:#999">(optional)</span></th>
-      <th style="width:14%">Source</th><th class="del"></th></tr></thead><tbody>`
+      <th class="row-n">#</th><th style="width:${multiSec() ? 26 : 30}%">Label / type</th><th style="width:16%">Width</th>
+      ${multiSec() ? '<th style="width:12%">Thickness</th>' : ''}
+      <th style="width:9%">Qty</th><th style="width:${multiSec() ? 14 : 18}%">Group <span style="font-weight:400;color:#999">(optional)</span></th>
+      <th style="width:12%">Source</th><th class="del"></th></tr></thead><tbody>`
     + S.panels.map((p,i)=>`<tr>
         <td class="row-n">${i+1}</td>
         <td><input data-sec="panel" data-idx="${i}" data-field="label" value="${esc(p.label)}" placeholder="e.g. A·1"></td>
         <td><input data-sec="panel" data-idx="${i}" data-field="W" value="${esc(p.W)}" placeholder="${p.custom ? 'custom — no width' : '44-1/8'}"></td>
+        ${multiSec() ? `<td><select data-sec="panel" data-idx="${i}" data-field="sec">${secOptions(p.sec || 0)}</select></td>` : ''}
         <td><input data-sec="panel" data-idx="${i}" data-field="qty" value="${esc(p.qty)}" placeholder="0"></td>
         <td><input data-sec="panel" data-idx="${i}" data-field="group" value="${esc(p.group)}" placeholder="Casting 1"></td>
         <td class="src">${panelSourceTag(p)}</td>
@@ -1054,9 +1125,11 @@ function buildDepthTable(){
         const depthCell = linked
           ? `<input value="${esc(d.d)}" disabled title="Comes from the cross-section: total thickness − Scrim ${d.scrim+1} height">`
           : `<input data-sec="depth" data-idx="${i}" data-field="d" value="${esc(d.d)}" placeholder="1/4">`;
+        const secPick = (multiSec() && !linked)
+          ? `<select data-sec="depth" data-idx="${i}" data-field="sec" style="width:auto;margin-right:4px">${secOptions(d.sec || 0)}</select>` : '';
         const typeCell = linked
-          ? `<span class="jig-linked">Scrim ${d.scrim+1} · from cross-section</span>`
-          : `<select data-sec="depth" data-idx="${i}" data-field="kind">
+          ? `<span class="jig-linked">${multiSec() ? secTag(d) + ' · ' : ''}Scrim ${d.scrim+1} · from cross-section</span>`
+          : secPick + `<select data-sec="depth" data-idx="${i}" data-field="kind"${multiSec() ? ' style="width:auto"' : ''}>
               <option value=""${d.kind === 'check' ? '' : ' selected'}>Extra (type your label)</option>
               <option value="check"${d.kind === 'check' ? ' selected' : ''}>Height check jig</option></select>`;
         const labelCell = (!linked && d.kind === 'check')
@@ -1074,30 +1147,44 @@ const SCRIM_ORDINALS = ['First','Second','Third','Fourth','Fifth','Sixth','Seven
  * Hand-added rows are never changed. Runs only when the cross-section is edited.
  */
 function syncDepthsFromXsec(adoptOnly){
-  const T = parseInches(S.xsec.thickness);
-  const n = S.xsec.heights.length;
-  if (!adoptOnly) S.depths = S.depths.filter(dp => dp.scrim == null || dp.scrim < n);
-  for (let i = 0; i < n; i++){
-    const h = parseInches(S.xsec.heights[i]);
-    const ok = T != null && h != null && h > 0 && h < T;
-    let dp = S.depths.find(x => x.scrim === i);
-    if (!dp && ok){
-      dp = S.depths.find(x => x.scrim == null && x.kind !== 'check' && parseInches(x.d) === T - h);
-      if (dp) dp.scrim = i;
+  const nSec = S.sections.length;
+  if (!adoptOnly) S.depths = S.depths.filter(dp => dp.scrim == null
+    || ((dp.sec || 0) < nSec && dp.scrim < S.sections[dp.sec || 0].heights.length));
+  S.sections.forEach((sec, si) => {
+    const T = parseInches(sec.thickness);
+    const n = sec.heights.length;
+    for (let i = 0; i < n; i++){
+      const h = parseInches(sec.heights[i]);
+      const ok = T != null && h != null && h > 0 && h < T;
+      let dp = S.depths.find(x => x.scrim === i && (x.sec || 0) === si);
+      if (!dp && ok){
+        dp = S.depths.find(x => x.scrim == null && (x.sec || 0) === si && x.kind !== 'check' && parseInches(x.d) === T - h);
+        if (dp) dp.scrim = i;
+      }
+      if (adoptOnly) continue;   // on load: only recognise what is already there, change nothing
+      if (!dp){ dp = { d:'', label: (SCRIM_ORDINALS[i] || ('#' + (i+1))) + ' Scrim', scrim: i, sec: si }; S.depths.push(dp); }
+      dp.d = ok ? fmt16(T - h) : '';
     }
-    if (adoptOnly) continue;   // on load: only recognise what is already there, change nothing
-    if (!dp){ dp = { d:'', label: (SCRIM_ORDINALS[i] || ('#' + (i+1))) + ' Scrim', scrim: i }; S.depths.push(dp); }
-    dp.d = ok ? fmt16(T - h) : '';
-  }
+  });
   if (adoptOnly) return;
-  S.depths = S.depths.filter(x => x.scrim != null).sort((a,b) => a.scrim - b.scrim)
+  S.depths = S.depths.filter(x => x.scrim != null).sort((a,b) => (a.sec || 0) - (b.sec || 0) || a.scrim - b.scrim)
     .concat(S.depths.filter(x => x.scrim == null));
+}
+/** <option>s for a thickness picker. */
+function secOptions(cur){
+  return S.sections.map((sec, k) => `<option value="${k}"${k === cur ? ' selected' : ''}>${esc(secTag({ sec: k }))}</option>`).join('');
 }
 function panelSourceTag(p){
   const tags = [];
   if (p.src === 'inv') tags.push('<span class="jig-tag">inventory</span>');
   if (p.custom) tags.push(`<span class="jig-tag jig-tag-c">${customLabel(p.custom)}</span>`);
   return tags.join(' ');
+}
+/** Thickness pickers show the thickness value — keep their text current while it is typed. */
+function refreshSecPickers(){
+  document.querySelectorAll('#jig-editor select[data-field="sec"]').forEach(sel => {
+    [...sel.options].forEach(o => { o.textContent = secTag({ sec: +o.value }); });
+  });
 }
 /** Generated "Height Check Jig" labels follow the depth / thickness as they are typed. */
 function refreshDepthLabels(){
@@ -1123,27 +1210,31 @@ function onEditorInput(e){
   if (!S) return;
   const el = e.target; const sec = el.dataset.sec;
   if (sec === 'xsec'){
+    const si = +el.dataset.si, xs = S.sections[si];
+    if (!xs) return;
     if (el.dataset.field === 'thickness'){
       // Heights that were an even split (or still empty) follow the new thickness;
       // heights somebody typed by hand are left alone.
-      S.xsec.thickness = el.value;
-      const even = S.xsec.auto ? evenScrimHeights(S.xsec.heights.length) : null;
-      if (even){ S.xsec.heights = even; buildXsecHeights(); }
+      xs.thickness = el.value;
+      const even = xs.auto ? evenScrimHeights(xs, xs.heights.length) : null;
+      if (even){ xs.heights = even; buildXsecHeights(si); }
+      refreshSecPickers();
     }
     else if (el.dataset.field === 'count'){
       const n = Math.max(0, Math.min(10, parseInt(el.value, 10) || 0));
-      while (S.xsec.heights.length < n) S.xsec.heights.push('');
-      if (S.xsec.heights.length > n) S.xsec.heights.length = n;
+      while (xs.heights.length < n) xs.heights.push('');
+      if (xs.heights.length > n) xs.heights.length = n;
       // A new layer count re-splits the thickness evenly between the scrims.
-      const even = evenScrimHeights(n);
-      if (even) S.xsec.heights = even;
-      S.xsec.auto = true;
-      buildXsecHeights();
+      const even = evenScrimHeights(xs, n);
+      if (even) xs.heights = even;
+      xs.auto = true;
+      buildXsecHeights(si);
     }
-    else if (el.dataset.field === 'h'){ S.xsec.heights[+el.dataset.idx] = el.value; S.xsec.auto = false; }   // typed by hand — stop following
+    else if (el.dataset.field === 'h'){ xs.heights[+el.dataset.idx] = el.value; xs.auto = false; }   // typed by hand — stop following
     // The cross-section owns the scrim foot depths — keep them in step.
     syncDepthsFromXsec(); buildDepthTable();
-    renderXsec(); liveUpdate();
+    S.sections.forEach((o, k) => renderXsec(k));
+    liveUpdate();
     return;
   }
   if (sec === 'cut'){
@@ -1156,6 +1247,7 @@ function onEditorInput(e){
   if (sec === 'settings'){ S[el.dataset.field] = el.value; }
   else if (sec === 'depth'){
     const dp = S.depths[+el.dataset.idx];
+    if (el.dataset.field === 'sec'){ dp.sec = +el.value; scheduleSave(); buildDepthTable(); renderOutput(); return; }
     if (el.dataset.field === 'kind'){
       if (el.value) dp.kind = el.value; else delete dp.kind;
       scheduleSave(); buildEditor(); renderOutput(); return;
@@ -1163,7 +1255,9 @@ function onEditorInput(e){
     dp[el.dataset.field] = el.value;
     if (el.dataset.field === 'd') refreshDepthLabels();
   }
-  else if (sec === 'panel'){ S.panels[+el.dataset.idx][el.dataset.field] = el.value;
+  else if (sec === 'panel'){
+    if (el.dataset.field === 'sec'){ S.panels[+el.dataset.idx].sec = +el.value; liveUpdate(); return; }
+    S.panels[+el.dataset.idx][el.dataset.field] = el.value;
     // A hand-typed width replaces the imported "fits up to" range.
     if (el.dataset.field === 'W') delete S.panels[+el.dataset.idx].Wmax;
     if (el.dataset.field === 'group'){ scheduleSave(); buildPrintSetBar(activeGroups()); } }
@@ -1173,15 +1267,30 @@ function onEditorClick(e){
   if (!S) return;
   const act = e.target.dataset.act; if (!act) return;
   const idx = +e.target.dataset.idx;
-  if (act === 'add-panel'){ S.panels.push({label:'',W:'',qty:'',group: currentGroup||''}); }
+  if (act === 'add-panel'){ S.panels.push({label:'',W:'',qty:'',group: currentGroup||'', sec: 0}); }
   else if (act === 'del-panel'){ S.panels.splice(idx,1); if(!S.panels.length) S.panels.push({label:'',W:'',qty:'',group:''}); }
-  else if (act === 'add-depth'){ S.depths.push({d:'',label:''}); }
+  else if (act === 'add-depth'){ S.depths.push({d:'',label:'', sec: 0}); }
+  else if (act === 'add-xsec'){
+    S.sections.push({ thickness:'', heights:[], auto:true });
+  }
+  else if (act === 'del-xsec'){
+    const si = +e.target.dataset.si;
+    if (S.sections.length < 2) return;
+    const used = S.panels.filter(p => (p.sec || 0) === si && ((p.label || '').trim() || (p.W || '').trim())).length;
+    if (!confirm(`Remove thickness ${secTag({ sec: si })}?` + (used ? ` ${used} panel row${used === 1 ? '' : 's'} on it will move to ${secTag({ sec: si === 0 ? 1 : 0 })}.` : ''))) return;
+    S.sections.splice(si, 1);
+    S.depths = S.depths.filter(dp => !(dp.scrim != null && (dp.sec || 0) === si));
+    const remap = o => { const s = o.sec || 0; o.sec = s === si ? 0 : (s > si ? s - 1 : s); };
+    S.panels.forEach(remap); S.depths.forEach(remap);
+    S.xsec = S.sections[0];
+  }
   else if (act === 'del-depth'){ S.depths.splice(idx,1); }
   else if (act === 'print-xsec'){ printXsec(); return; }
   else if (act === 'even-xsec'){
-    const even = evenScrimHeights(S.xsec.heights.length);
+    const xs = S.sections[+e.target.dataset.si];
+    const even = xs && evenScrimHeights(xs, xs.heights.length);
     if (!even){ alert('Enter the total concrete thickness and at least one scrim first.'); return; }
-    S.xsec.heights = even; S.xsec.auto = true;
+    xs.heights = even; xs.auto = true;
     syncDepthsFromXsec();
   }
   else if (act === 'import-inv'){ openImportModal(); return; }
@@ -1192,7 +1301,7 @@ function onEditorClick(e){
 }
 
 function afterLoad(){
-  fixXsec(); currentGroup = null;
+  normalizeSections(); currentGroup = null;
   // The printed title always mirrors the portal project record (Info tab).
   if (currentProjectName) S.project = currentProjectName;
   // Clear all replaced the state object — keep the per-casting map in sync.
@@ -1212,6 +1321,7 @@ let impDraft = null;   // working copy of S.inv while the modal is open
 function invState(){
   if (!S.inv || typeof S.inv !== 'object') S.inv = {};
   if (!S.inv.choices || typeof S.inv.choices !== 'object') S.inv.choices = {};
+  if (!S.inv.secs || typeof S.inv.secs !== 'object') S.inv.secs = {};     // partKey -> thickness index
   if (S.inv.tol == null) S.inv.tol = IMPORT_DEFAULTS.tol;
   if (S.inv.jigQty == null) S.inv.jigQty = IMPORT_DEFAULTS.jigQty;
   return S.inv;
@@ -1256,13 +1366,18 @@ function choiceOf(inv, p){
  * sorted and swept from the narrowest: every width within `tol` of a group's
  * narrowest joins that group. Custom jigs never share.
  */
+function importSecOf(inv, p){
+  const s = inv.secs ? inv.secs[p.key] : 0;
+  return (s >= 0 && s < S.sections.length) ? s : 0;
+}
 function planImport(parts, inv){
   const tolParsed = parseInches(inv.tol);
   const tol16 = tolParsed == null ? 16 : Math.max(0, tolParsed);
   const sized = [], custom = [], unreadable = [], missing = [];
   for (const p of parts){
     const c = choiceOf(inv, p);
-    if (c.mode === 'cnc'){ custom.push({ p, kind: 'cnc' }); continue; }
+    const sec = importSecOf(inv, p);
+    if (c.mode === 'cnc'){ custom.push({ p, kind: 'cnc', sec }); continue; }
     let w;
     if (c.mode === 'saw'){                       // custom width — a normal table-saw jig, width required
       w = parseInches(c.W);
@@ -1272,14 +1387,15 @@ function planImport(parts, inv){
       w = c.mode === 'long' ? (p.long16 != null ? p.long16 : p.short16) : p.short16;
       if (w == null){ unreadable.push(p); continue; }
     }
-    sized.push({ p, w });
+    sized.push({ p, w, sec });
   }
-  sized.sort((a,b) => a.w - b.w);
+  // Parts only share a jig within the same thickness.
+  sized.sort((a,b) => a.sec - b.sec || a.w - b.w);
   const groups = [];
   for (const s of sized){
     const g = groups[groups.length - 1];
-    if (g && s.w - g.lo <= tol16){ g.items.push(s); g.hi = Math.max(g.hi, s.w); }
-    else groups.push({ lo: s.w, hi: s.w, items: [s] });
+    if (g && g.sec === s.sec && s.w - g.lo <= tol16){ g.items.push(s); g.hi = Math.max(g.hi, s.w); }
+    else groups.push({ lo: s.w, hi: s.w, sec: s.sec, items: [s] });
   }
   groups.forEach(g => { g.label = [...new Set(g.items.map(s => s.p.label))].join(', '); });
   return { groups, custom, unreadable, missing };
@@ -1297,6 +1413,7 @@ async function openImportModal(){
   document.getElementById('jig-imp-hint').innerHTML =
     `Casting <b>${esc((c && c.casting_number) || '')}</b> — pick which side each part’s jig runs across. `
     + `The <b>short side</b> is pre-selected; your picks are remembered for the next import. `
+    + (multiSec() ? `This casting has <b>${S.sections.length} thicknesses</b> — set each part’s thickness too; parts only share a jig within one thickness. ` : '')
     + `Rows made by an earlier import are rebuilt (their Qty is kept); rows you added by hand are not touched.`;
   document.getElementById('jig-imp-opts').innerHTML = '';
   document.getElementById('jig-imp-parts').innerHTML = '<div class="jig-imp-empty">Loading inventory…</div>';
@@ -1332,14 +1449,17 @@ function renderImportModal(){
     <label>Foot = narrowest width − <input data-imp-opt="clearance" value="${esc(impDraft.clearance)}">″</label>
     <label>Jigs per width <input data-imp-opt="jigQty" value="${esc(impDraft.jigQty)}"></label>`;
   document.getElementById('jig-imp-parts').innerHTML = `<table class="jig-imp-table"><thead><tr>
-      <th>Part</th><th>Size (inventory)</th><th class="c">Qty</th><th>Jig runs across</th></tr></thead><tbody>`
+      <th>Part</th><th>Size (inventory)</th><th class="c">Qty</th>${multiSec() ? '<th>Thickness</th>' : ''}<th>Jig runs across</th></tr></thead><tbody>`
     + impParts.map(p => {
         const c = choiceOf(impDraft, p);
         const square = p.long16 == null || p.long16 === p.short16;
         const seg = (mode, text, disabled) =>
           `<button type="button" data-imp-mode="${mode}" class="${c.mode === mode ? 'on' : ''}"${disabled ? ' disabled' : ''}>${text}</button>`;
+        const sec = importSecOf(impDraft, p);
+        const secCell = multiSec() ? `<td><div class="jig-imp-seg">${S.sections.map((o, k) =>
+          `<button type="button" data-imp-sec="${k}" class="${k === sec ? 'on' : ''}">${esc(secTag({ sec: k }))}</button>`).join('')}</div></td>` : '';
         return `<tr data-imp-key="${esc(p.key)}">
-          <td class="b">${esc(p.label)}</td><td>${esc(p.sizeTxt)}</td><td class="c">${p.qty || ''}</td>
+          <td class="b">${esc(p.label)}</td><td>${esc(p.sizeTxt)}</td><td class="c">${p.qty || ''}</td>${secCell}
           <td><div class="jig-imp-seg">
             ${seg('short', p.short16 != null ? `${fmt16(p.short16)}″ ${p.long16 == null ? '— only size on file' : (square ? '' : 'short side')}` : 'no size on file', p.short16 == null)}
             ${square ? '' : seg('long', `${fmt16(p.long16)}″ long side`, false)}
@@ -1361,10 +1481,10 @@ function renderImportPreview(){
     el.textContent = `Enter the width being screeded — ${fmt16(clr)}″ is subtracted from it for the jig foot, like every other jig.`;
   });
   const lines = plan.groups.map(g =>
-    `<li${g.lo - clr <= 0 ? ' class="nofoot"' : ''}><b>${fmt16(g.lo)}″</b> → foot <b>${fmt16(g.lo - clr)}″</b>${g.lo - clr <= 0 ? ' <b>— no foot left: the clearance is as big as the part</b>' : ''}${g.hi > g.lo ? ` <span class="fit">fits ${fmt16(g.lo)}″–${fmt16(g.hi)}″</span>` : ''}`
+    `<li${g.lo - clr <= 0 ? ' class="nofoot"' : ''}>${multiSec() ? `<span class="q">${esc(secTag({ sec: g.sec }))} ·</span> ` : ''}<b>${fmt16(g.lo)}″</b> → foot <b>${fmt16(g.lo - clr)}″</b>${g.lo - clr <= 0 ? ' <b>— no foot left: the clearance is as big as the part</b>' : ''}${g.hi > g.lo ? ` <span class="fit">fits ${fmt16(g.lo)}″–${fmt16(g.hi)}″</span>` : ''}`
     + ` — ${esc(g.label)}${qty ? ` <span class="q">×${qty}</span>` : ''}</li>`);
   plan.custom.forEach(k => lines.push(
-    `<li class="cus"><b>Custom CNC</b> (reminder only — not drawn, not on the cut maps) — ${esc(k.p.label)}</li>`));
+    `<li class="cus">${multiSec() ? `<span class="q">${esc(secTag({ sec: k.sec }))} ·</span> ` : ''}<b>Custom CNC</b> (reminder only — not drawn, not on the cut maps) — ${esc(k.p.label)}</li>`));
   let bad = '';
   if (plan.missing.length) bad += `<div class="jig-imp-err">Enter a custom width for: ${plan.missing.map(p => esc(p.label)).join(', ')}</div>`;
   if (plan.unreadable.length) bad += `<div class="jig-imp-err">These parts don’t have both sizes in the Casting Inventory, so the jig side can’t be picked for you — choose an option for each (or fill in the inventory and import again): ${plan.unreadable.map(p => esc(p.label)).join(', ')}</div>`;
@@ -1404,12 +1524,12 @@ function confirmImport(){
   const defQty = String(impDraft.jigQty || '').trim();
   const made = [];
   plan.groups.forEach(g => {
-    const row = { label: g.label, W: fmt16(g.lo), qty: defQty, group: '', src: 'inv' };
+    const row = { label: g.label, W: fmt16(g.lo), qty: defQty, group: '', src: 'inv', sec: g.sec };
     if (g.hi > g.lo) row.Wmax = fmt16(g.hi);
     made.push(row);
   });
   plan.custom.forEach(k => made.push(
-    { label: k.p.label, W: '', qty: defQty, group: '', src: 'inv', custom: k.kind }));
+    { label: k.p.label, W: '', qty: defQty, group: '', src: 'inv', custom: k.kind, sec: k.sec }));
   made.forEach(r => { const q = keptQty.get(importRowKey(r)); if (q) r.qty = q; });
   const manual = S.panels.filter(p => p.src !== 'inv' && ((p.label || '').trim() || (p.W || '').trim()));
   S.panels = made.concat(manual);
@@ -1424,7 +1544,7 @@ function confirmImport(){
 }
 /** Identity of an imported row for keeping its Qty: custom rows by label, the rest by width. */
 function importRowKey(r){
-  return r.custom ? 'c:' + r.custom + ':' + (r.label || '') : 'w:' + parseInches(r.W);
+  return (r.sec || 0) + ':' + (r.custom ? 'c:' + r.custom + ':' + (r.label || '') : 'w:' + parseInches(r.W));
 }
 
 function refreshImportStamp(){
@@ -1840,14 +1960,10 @@ ${MARKER_DEFS}
   <section class="editor" id="jig-editor">
 
     <h2>Panel cross-section <span style="font-weight:400;text-transform:none;color:#888;font-size:12px">— scrim placement diagram</span></h2>
-    <p class="hint">Enter the total concrete thickness and the number of scrims — the scrim heights are filled in so the layers <b>split the thickness evenly</b> (measured from the <b>bottom / face of the panel</b>). Type over any height for a special case; <b>Split scrims evenly</b> puts them back. Dimensions accept <b>3/4</b>, <b>1-1/2</b> or <b>0.75</b>.</p>
-    <div class="fields" id="jig-xsec-fields"></div>
-    <div class="fields" id="jig-xsec-heights" style="margin-top:10px"></div>
-    <div class="xsec-wrap" id="jig-xsec-preview"></div>
-    <div id="jig-xsec-cnc"></div>
-    <div class="warn" id="jig-xsec-warn"></div>
-    <div class="toolrow"><button type="button" data-act="even-xsec" title="Space the scrim layers evenly through the concrete thickness">↕ Split scrims evenly</button>
-      <button type="button" data-act="print-xsec">🖨 Print cross-section</button></div>
+    <p class="hint">Enter the total concrete thickness and the number of scrims — the scrim heights are filled in so the layers <b>split the thickness evenly</b> (measured from the <b>bottom / face of the panel</b>). Type over any height for a special case; <b>Split scrims evenly</b> puts them back. A casting with parts of <b>different thicknesses</b> gets one entry per thickness (<b>+ Add thickness</b>); each part is then assigned its thickness in the import window or in the Panels table. Dimensions accept <b>3/4</b>, <b>1-1/2</b> or <b>0.75</b>.</p>
+    <div id="jig-xsec-list"></div>
+    <div class="toolrow" style="margin-top:10px"><button type="button" class="addbtn" style="margin-top:0" data-act="add-xsec">+ Add thickness</button>
+      <button type="button" data-act="print-xsec">🖨 Print cross-section (one sheet per thickness)</button></div>
 
     <h2 style="margin-top:22px">Project</h2>
     <div class="fields" id="jig-proj-fields"></div>
@@ -1969,6 +2085,12 @@ ${MARKER_DEFS}
     if (e.target === impModal) { closeImportModal(); return; }
     const btn = e.target.closest('[data-imp-mode]');
     if (btn) setImportMode(btn.closest('[data-imp-key]').dataset.impKey, btn.dataset.impMode);
+    const sb = e.target.closest('[data-imp-sec]');
+    if (sb && impDraft){
+      const key = sb.closest('[data-imp-key]').dataset.impKey, k = +sb.dataset.impSec;
+      if (k === 0) delete impDraft.secs[key]; else impDraft.secs[key] = k;   // first thickness is the default
+      renderImportModal();
+    }
   });
   impModal.addEventListener('input', onImportInput);
 }

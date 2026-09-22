@@ -6255,6 +6255,12 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
         padding:7px 12px;font-size:13px;font-weight:600;cursor:pointer;transition:background 0.15s}
 .pp-tab-panel[data-panel="jig-list"] .addbtn:hover{background:#dbeafe}
 /* Jig List — import from casting inventory */
+.pp-tab-panel[data-panel="jig-list"] .xsec-block{border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px 10px;margin-bottom:12px;background:#fafbfc}
+.pp-tab-panel[data-panel="jig-list"] .xsec-block:only-child{border:0;padding:0;background:transparent;margin-bottom:0}
+.pp-tab-panel[data-panel="jig-list"] .xsec-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;font-size:13px}
+.pp-tab-panel[data-panel="jig-list"] .xsec-del{background:#fff;border:1px solid #fca5a5;color:#b91c1c;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer}
+.pp-tab-panel[data-panel="jig-list"] .xsec-del:hover{background:#fef2f2}
+.pp-tab-panel[data-panel="jig-list"] table.edit select[data-field=sec]{width:auto;min-width:64px;display:inline-block}
 .pp-tab-panel[data-panel="jig-list"] .cncnote{margin:10px 0 2px;border:2px solid #b91c1c;border-radius:6px;padding:9px 12px;font-size:13px;line-height:1.55;color:#1e293b;background:#fff}
 .pp-tab-panel[data-panel="jig-list"] .cnctag{display:inline-block;background:#b91c1c;color:#fff;font-weight:800;letter-spacing:1px;padding:1px 9px;border-radius:3px;margin-right:6px;font-size:12px}
 .pp-tab-panel[data-panel="jig-list"] .jig-cut-frame{display:block;width:11.2in;border:0;margin:6px auto 0;background:transparent}
