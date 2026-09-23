@@ -311,7 +311,17 @@ function buildBatchPlan({ totalCuFt, faceSqFt = 0, cuFtPer250 = 4.28, castMethod
     // Manual batch-type picks ({ sig, types }) are never thrown away — they simply only apply
     // while the batch list is exactly the one they were made for (same sizes, same order).
     let types = autoTypes;
-    const manualApplied = !!manual && Array.isArray(manual.types) && manual.sig === batches.join(',');
+    let manualApplied = !!manual && Array.isArray(manual.types) && manual.sig === batches.join(',');
+    if (manualApplied && sizing.backupType && sizing.backupType !== 'finalBackUp') {
+        // Picks saved while this job still defaulted to FINAL Back Up (before 2026-09-23) simply
+        // repeat that old default — they are not a decision, so the current default wins.
+        const oldDefault = planBatches({
+            totalCuFt, faceSqFt, cuFtPer250, castMethod,
+            faceSizes: sizesFor(sizing.face), backupSizes: sizesFor(sizing.backup),
+            firstBackUp: !!sizing.firstBackUp, backupType: 'finalBackUp'
+        }).types;
+        if (manual.types.length === oldDefault.length && manual.types.every((t, i) => t === oldDefault[i])) manualApplied = false;
+    }
     if (manualApplied) types = manual.types.map((t, i) => t || autoTypes[i]);
     const result = batches.map((batchSandLbs, idx) => ({
         batchSandLbs,
@@ -1004,7 +1014,8 @@ function render() {
     root.innerHTML = `
         ${legacyBannerHtml()}
         <div class="card"><h2>Project overview — every casting at ${isStandardSizing() ? 'portal standard' : `face ${S.sizing.face} lb / back ups ${S.sizing.backup} lb`}
-            <button class="btn btn-small" data-import-all title="Pull Total Cu Ft and Face Sq Ft for every casting from the portal's Casting Inventory">Import all castings from Casting Inventory</button></h2><div id="overview"></div></div>
+            <button class="btn btn-small" data-import-all title="Pull Total Cu Ft and Face Sq Ft for every casting from the portal's Casting Inventory">Import all castings from Casting Inventory</button>
+            <button class="btn btn-small" data-types-reset-all title="One step: every casting goes back to the job defaults (Face Mix + First Back Up, hand-made batch type picks forgotten) and its Cu Ft / Face Sq Ft are re-imported from the Casting Inventory">Reset to Jane Street defaults</button></h2><div id="overview"></div></div>
         <div class="card" id="slump-card">${slumpCardHtml()}</div>
         <div class="pills">${castPills}</div>
         ${colorPills}
@@ -1213,6 +1224,17 @@ root.addEventListener('click', (e) => {
     if (e.target.closest('[data-types-reset]')) {
         const ticket = getActiveTicket(S.activeCastingId);
         if (ticket) { ticket.assignments = []; scheduleSave(ticket); render(); }
+        return;
+    }
+    if (e.target.closest('[data-types-reset-all]')) {
+        if (!confirm(`Reset every casting to the Jane Street defaults?
+
+- batch types back to Face Mix + First Back Up (hand-made picks are forgotten)
+- Total Cu Ft and Face Sq Ft re-imported from the Casting Inventory
+
+Pigment reduction, the option checkboxes, notes and slump targets stay as they are.`)) return;
+        for (const list of S.tickets.values()) for (const t of list) if (t.assignments && t.assignments.length) { t.assignments = []; scheduleSave(t); }
+        handleImport(true);      // re-imports and saves every casting, then reports
         return;
     }
     const legacy = e.target.closest('[data-legacy]');

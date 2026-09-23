@@ -25,7 +25,7 @@ export const SPECIAL_BATCHING = {
     '0860': {
         href: 'jane-street-batching.html',
         label: 'Jane Street Batching',
-        version: '20260923-2',   // bumped whenever jane-street-batching.html changes, so the tab's frame skips the old cached copy
+        version: '20260923-3',   // bumped whenever jane-street-batching.html changes, so the tab's frame skips the old cached copy
         sizing: { face: 100, backup: 200, firstBackUp: false, backupType: 'firstBackUp' }
     }
 };
