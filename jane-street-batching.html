@@ -3,16 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>0860 Jane Street — Batching</title>
+<title>Jane Street — Batching</title>
 <!--
-  Stand-alone batching view for project 0860 (Jane Street 11th & 12th Floor).
+  Stand-alone batching view for the Jane Street projects (0860 11th & 12th Floor, 0892 14th Floor
+  Tile). The project comes from the page URL (?project=NNNN, default 0860); a project only gets this
+  page when it is listed in src/config/special-batching.js, which is also where the job defaults live.
 
   Same logic as the Project Portal "Batch Tickets" tab, except the largest batch size is
   picked separately for the Face Mix and for the Back Ups (100 / 200 / 250 lb of sand;
   default 100 lb face, 200 lb back ups) instead of the standard 250 / 150 / 100 mix.
 
   SHARED DATA: everything is read and saved through the portal's own service modules, so every
-  user sees the same values. This page WRITES, for project 0860 only:
+  user sees the same values. This page WRITES, for the project in its URL only:
     - batch_tickets rows (cu ft, face sq ft, pigment %, option checkboxes, batched by, notes,
       batch types + a "last imported" stamp inside batch_assignments) — the same rows the
       portal's Batch Tickets tab uses; that tab is not used for this project.
@@ -100,7 +102,7 @@ body.embed #toast { display: none; }
 <div class="app">
     <div class="top">
         <div class="title-block">
-            <h1 id="title">0860 — Jane Street 11th &amp; 12th Floor</h1>
+            <h1 id="title">Jane Street — Batching</h1>
             <div class="sub">Batch tickets · shared with everyone through the Project Portal database · <span id="loaded-at"></span></div>
         </div>
         <span class="badge" id="size-badge">100 LB BATCHES</span>
@@ -129,7 +131,7 @@ body.embed #toast { display: none; }
         (100 lb sand = 1.71 cu ft, 200 lb = 3.42 cu ft, at the standard 4.28 cu ft / 250 lb). A layer's last bit of volume gets a 100 lb batch when that covers it.
         <br><strong>Job rules:</strong> mixes are Face Mix + First Back Up (switch individual batches to FINAL Back Up in the Batch types table if ever needed) ·
         back up mixes use <strong>ADVA 0.5 oz</strong> per color-log batch instead of the color log's amount, get the pigment reduction below and <strong>no Cowbay sand</strong> (the color log's sand throughout) — the color logs themselves are never changed.<br>
-        Changes save automatically and are <strong>shared with everyone who opens this page</strong> (they are stored on project 0860's batch tickets in the portal database).
+        Changes save automatically and are <strong>shared with everyone who opens this page</strong> (they are stored on this project's batch tickets in the portal database).
         Click <em>Refresh data</em> to pick up changes other people made. The batch-size dropdowns always start at 100 lb face / 200 lb back ups.
     </div>
 
@@ -141,7 +143,9 @@ body.embed #toast { display: none; }
 // ======================================================================
 // Config
 // ======================================================================
-const PROJECT_NUMBER = '0860';
+// Which project: ?project=NNNN in the URL (the portal's Batch Tickets tab passes it); 0860 when
+// opened by itself with no project (the original Jane Street 11th & 12th Floor page).
+const PROJECT_NUMBER = (new URLSearchParams(location.search).get('project') || '0860').trim();
 // Opened as a file (S: drive copy) → use the live site's modules. Served from the site → use the
 // modules sitting next to this page.
 const SITE = location.protocol === 'file:' ? 'https://cwe-tools.github.io/Weekly/' : new URL('.', location.href).href;
@@ -538,7 +542,10 @@ async function loadData() {
     S.svc = { ps, bt, inv };
     if (!S.sizingLoaded) {
         S.sizingLoaded = true;
-        const cfg = await import(SITE + 'src/config/special-batching.js').then(m => m.getSpecialBatching(PROJECT_NUMBER)).catch(() => null);
+        const cfg = await import(SITE + 'src/config/special-batching.js').then(m => m.getSpecialBatching(PROJECT_NUMBER)).catch(() => undefined);
+        // Only projects listed in special-batching.js are batched here (cfg === null means "looked, not listed";
+        // undefined = the config could not be loaded, so fall back to the built-in Jane Street defaults).
+        if (cfg === null && PROJECT_NUMBER !== '0860') throw new Error('Project ' + PROJECT_NUMBER + ' is not set up for this batching page (src/config/special-batching.js).');
         if (cfg?.sizing && SIZE_SETS[cfg.sizing.face] && SIZE_SETS[cfg.sizing.backup]) {
             Object.assign(DEFAULT_SIZING, { face: cfg.sizing.face, backup: cfg.sizing.backup, firstBackUp: !!cfg.sizing.firstBackUp,
                                             backupType: TYPE_LABEL[cfg.sizing.backupType] ? cfg.sizing.backupType : DEFAULT_SIZING.backupType });
@@ -990,6 +997,7 @@ const isStandardSizing = () => S.sizing.face === 250 && S.sizing.backup === 250;
 
 function render() {
     document.getElementById('title').textContent = `${PROJECT_NUMBER} — ${S.project?.project_name || ''}`;
+    document.title = `${PROJECT_NUMBER} ${S.project?.project_name || 'Jane Street'} — Batching`;
     document.getElementById('size-badge').textContent = isStandardSizing() ? 'PORTAL BATCH SIZES (250 / 150 / 100)' : `FACE ${S.sizing.face} LB · BACK UPS ${S.sizing.backup} LB`;
     document.getElementById('size-note').textContent = isStandardSizing()
         ? 'every layer the portal-standard way (250 / 150 / 100 lb batches)'
@@ -1037,6 +1045,7 @@ function slumpCardHtml() {
 
 // Edits an earlier (browser-only) version of this page left behind on this computer.
 function readLegacy() {
+    if (PROJECT_NUMBER !== '0860') return null;   // the browser-only version of this page only ever existed for 0860
     try {
         const raw = JSON.parse(localStorage.getItem(LEGACY_STORE_KEY) || 'null');
         if (!raw) return null;

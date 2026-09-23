@@ -17,17 +17,22 @@
  *                   (labels only; batch counts are the same either way)
  *
  * The dedicated page reads its defaults from here too, so this is the single place to change them.
+ * The portal opens `href` with `?project=NNNN`, so one page can serve several projects.
  *
  * @module config/special-batching
  */
 
+/** Jane Street: 100 lb face mixes, 200 lb back ups, one back up layer typed First Back Up, no Cowbay. */
+const JANE_STREET = {
+    href: 'jane-street-batching.html',
+    label: 'Jane Street Batching',
+    version: '20260923-4',   // bumped whenever jane-street-batching.html changes, so the tab's frame skips the old cached copy
+    sizing: { face: 100, backup: 200, firstBackUp: false, backupType: 'firstBackUp' }
+};
+
 export const SPECIAL_BATCHING = {
-    '0860': {
-        href: 'jane-street-batching.html',
-        label: 'Jane Street Batching',
-        version: '20260923-3',   // bumped whenever jane-street-batching.html changes, so the tab's frame skips the old cached copy
-        sizing: { face: 100, backup: 200, firstBackUp: false, backupType: 'firstBackUp' }
-    }
+    '0860': JANE_STREET,   // Jane Street 11th & 12th Floor
+    '0892': JANE_STREET    // Jane St. 14th Floor Tile (Full Scope) — same rules, added 2026-09-23
 };
 
 /** @returns {{href:string,label:string,sizing:{face:number,backup:number,firstBackUp:boolean}}|null} */

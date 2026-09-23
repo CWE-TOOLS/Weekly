@@ -7765,7 +7765,7 @@ function renderSpecialBatching() {
         if (frame.getAttribute('src')) frame.removeAttribute('src');
         return false;
     }
-    const src = special.href + '?embed=1' + (special.version ? '&v=' + special.version : '');
+    const src = special.href + '?embed=1&project=' + encodeURIComponent(currentProjectNumber) + (special.version ? '&v=' + special.version : '');
     if (frame.getAttribute('src') !== src) {
         frame.setAttribute('src', src);
     } else {
@@ -7773,7 +7773,7 @@ function renderSpecialBatching() {
         frame.contentWindow?.postMessage({ type: 'jsb-activate' }, location.origin);
     }
     const popout = document.getElementById('pp-bt-special-popout');
-    if (popout) popout.href = special.href;
+    if (popout) popout.href = special.href + '?project=' + encodeURIComponent(currentProjectNumber);
     return true;
 }
 
