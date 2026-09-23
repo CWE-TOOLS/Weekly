@@ -167,7 +167,7 @@ const LEGACY_STORE_KEY = 'cwe-0860-100lb-batching-v1';   // earlier versions kep
 const META_TAG = 'jane-street-batching-page';            // marks this page's own entry inside batch_assignments
 const TICKET_FIELDS = ['cuFt', 'faceSqFt', 'cuFtPer250', 'pigReduction', 'pigReduceFirstBackup', 'omitAggFinalBackup', 'omitFibersFace', 'cowbayFinalBackup', 'batchedBy', 'notes', 'colorLogId'];
 const FINAL_BACKUP_PIG_REDUCTION_PCT = 50;
-const SLUMP_TARGET_DEFAULTS = { face: 6, firstBackUp: 5, finalBackUp: 5 };
+const SLUMP_TARGET_DEFAULTS = { face: 7, firstBackUp: 6, finalBackUp: 6 };   // job defaults (2026-09-23); the project record overrides when set
 const TYPE_LABEL = { face: 'Face Mix', firstBackUp: 'First Back Up', finalBackUp: 'FINAL Back Up' };
 
 // ======================================================================
