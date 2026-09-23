@@ -127,8 +127,8 @@ body.embed #toast { display: none; }
     <div class="note">
         This page plans <strong id="size-note">Face Mix and Back Up batches at the sizes picked above</strong>
         (100 lb sand = 1.71 cu ft, 200 lb = 3.42 cu ft, at the standard 4.28 cu ft / 250 lb). A layer's last bit of volume gets a 100 lb batch when that covers it.
-        <br><strong>Job rules:</strong> mixes are Face Mix + FINAL Back Up only (switch individual batches to First Back Up in the Batch types table if that ever changes) ·
-        back up mixes use <strong>ADVA 0.5 oz</strong> per color-log batch instead of the color log's amount — the color logs themselves are never changed.<br>
+        <br><strong>Job rules:</strong> mixes are Face Mix + First Back Up (switch individual batches to FINAL Back Up in the Batch types table if ever needed) ·
+        back up mixes use <strong>ADVA 0.5 oz</strong> per color-log batch instead of the color log's amount, get the pigment reduction below and <strong>no Cowbay sand</strong> (the color log's sand throughout) — the color logs themselves are never changed.<br>
         Changes save automatically and are <strong>shared with everyone who opens this page</strong> (they are stored on project 0860's batch tickets in the portal database).
         Click <em>Refresh data</em> to pick up changes other people made. The batch-size dropdowns always start at 100 lb face / 200 lb back ups.
     </div>
@@ -150,14 +150,18 @@ const EMBED = new URLSearchParams(location.search).has('embed') && window.parent
 if (EMBED) document.body.classList.add('embed');
 // Batch sizes (lbs of sand) allowed for each "largest batch" choice. 250 = the portal's standard set.
 const SIZE_SETS = { 100: [100], 200: [200, 100], 250: [250, 150, 100] };
-// This project: 100 lb face mixes, 200 lb back ups, no First Back Up layer. The site's
-// src/config/special-batching.js is the source of truth (loaded in loadData); these are the fallback.
-const DEFAULT_SIZING = { face: 100, backup: 200, firstBackUp: false };
-const STANDARD_SIZING = { face: 250, backup: 250, firstBackUp: true };  // what the portal does (comparison only)
+// This project: 100 lb face mixes, 200 lb back ups, ONE back up layer whose batches are typed
+// `backupType` (First Back Up). The site's src/config/special-batching.js is the source of truth
+// (loaded in loadData); these are the fallback.
+const DEFAULT_SIZING = { face: 100, backup: 200, firstBackUp: false, backupType: 'firstBackUp' };
+const STANDARD_SIZING = { face: 250, backup: 250, firstBackUp: true, backupType: 'finalBackUp' };  // what the portal does (comparison only)
 
-// JOB RULE — back up mixes (First and FINAL) use this ADVA dose in place of the color log's, on the
-// color log's own sand basis (so it scales with the batch like every other additive). Face Mix keeps
-// the color log's ADVA. The color logs themselves are never modified — this only changes the math here.
+// JOB RULES for the back up mixes (any batch typed First or FINAL Back Up):
+//   - ADVA: this dose in place of the color log's, on the color log's own sand basis (so it scales
+//     with the batch like every other additive). Face Mix keeps the color log's ADVA.
+//   - the Back Up Pigment Reduction applies to every back up batch;
+//   - NO Cowbay bulk sand anywhere on this job — every batch uses the color log's sand.
+// The color logs themselves are never modified — this only changes the math here.
 const BACKUP_ADVA = { amount: 0.5, unit: 'oz' };
 const LEGACY_STORE_KEY = 'cwe-0860-100lb-batching-v1';   // earlier versions kept edits in the browser; only read to offer an upload
 const META_TAG = 'jane-street-batching-page';            // marks this page's own entry inside batch_assignments
@@ -229,12 +233,13 @@ function consolidateBatches(batches, sizes) {
  *
  * Face batches are filled from `faceSizes`; First and FINAL Back Up from `backupSizes`.
  *
- * THIS JOB only uses Face Mix + FINAL Back Up, so by default (`firstBackUp` false) everything
- * behind the face is FINAL Back Up. Individual batches can still be switched to First Back Up
- * by hand in the Batch types table. `firstBackUp: true` gives the portal's three-layer split
- * described above — only used for the "portal standard would be" comparison.
+ * THIS JOB only uses Face Mix + one back up layer, so by default (`firstBackUp` false) everything
+ * behind the face is one layer typed `backupType` — First Back Up on this job. Individual batches
+ * can still be switched to the other back up type by hand in the Batch types table.
+ * `firstBackUp: true` gives the portal's three-layer split described above — only used for the
+ * "portal standard would be" comparison.
  */
-function planBatches({ totalCuFt, faceSqFt = 0, cuFtPer250 = 4.28, castMethod = 'sprayUp', faceSizes, backupSizes, firstBackUp = false }) {
+function planBatches({ totalCuFt, faceSqFt = 0, cuFtPer250 = 4.28, castMethod = 'sprayUp', faceSizes, backupSizes, firstBackUp = false, backupType = 'finalBackUp' }) {
     const directCast = castMethod === 'directCast';
     const faceCuFt = faceSqFt > 0 ? (faceSqFt * (3 / 16) / 12) : 0;
     let batches = [];
@@ -251,7 +256,7 @@ function planBatches({ totalCuFt, faceSqFt = 0, cuFtPer250 = 4.28, castMethod = 
         if (finalNeeded > 0.01) {
             const finalBatches = fillBatches(finalNeeded, cuFtPer250, backupSizes);
             batches.push(...finalBatches);
-            types.push(...finalBatches.map(() => 'finalBackUp'));
+            types.push(...finalBatches.map(() => backupType));
         }
     } else if (faceSqFt > 0) {
         const faceBatches = fillBatches(Math.min(faceCuFt, totalCuFt), cuFtPer250, faceSizes);
@@ -270,7 +275,8 @@ function planBatches({ totalCuFt, faceSqFt = 0, cuFtPer250 = 4.28, castMethod = 
         if (finalNeeded > 0.01) {
             const finalBatches = fillBatches(finalNeeded, cuFtPer250, backupSizes);
             batches.push(...finalBatches);
-            types.push(...finalBatches.map(() => 'finalBackUp'));
+            // Portal split: the remainder is FINAL. This job's single back up layer: `backupType`.
+            types.push(...finalBatches.map(() => firstBackUp ? 'finalBackUp' : backupType));
         }
     } else {
         if (faceSizes[0] === backupSizes[0]) {
@@ -283,8 +289,8 @@ function planBatches({ totalCuFt, faceSqFt = 0, cuFtPer250 = 4.28, castMethod = 
         }
         types = batches.map((_size, idx) => {
             if (idx === 0) return 'face';
-            if (idx === batches.length - 1 && batches.length > 1) return 'finalBackUp';
-            return firstBackUp ? 'firstBackUp' : 'finalBackUp';
+            if (!firstBackUp) return backupType;
+            return (idx === batches.length - 1 && batches.length > 1) ? 'finalBackUp' : 'firstBackUp';
         });
     }
     return { batches, types, faceCuFt };
@@ -300,7 +306,7 @@ function buildBatchPlan({ totalCuFt, faceSqFt = 0, cuFtPer250 = 4.28, castMethod
     const { batches, types: autoTypes, faceCuFt } = planBatches({
         totalCuFt, faceSqFt, cuFtPer250, castMethod,
         faceSizes: sizesFor(sizing.face), backupSizes: sizesFor(sizing.backup),
-        firstBackUp: !!sizing.firstBackUp
+        firstBackUp: !!sizing.firstBackUp, backupType: sizing.backupType || 'finalBackUp'
     });
     // Manual batch-type picks ({ sig, types }) are never thrown away — they simply only apply
     // while the batch list is exactly the one they were made for (same sizes, same order).
@@ -524,7 +530,8 @@ async function loadData() {
         S.sizingLoaded = true;
         const cfg = await import(SITE + 'src/config/special-batching.js').then(m => m.getSpecialBatching(PROJECT_NUMBER)).catch(() => null);
         if (cfg?.sizing && SIZE_SETS[cfg.sizing.face] && SIZE_SETS[cfg.sizing.backup]) {
-            Object.assign(DEFAULT_SIZING, { face: cfg.sizing.face, backup: cfg.sizing.backup, firstBackUp: !!cfg.sizing.firstBackUp });
+            Object.assign(DEFAULT_SIZING, { face: cfg.sizing.face, backup: cfg.sizing.backup, firstBackUp: !!cfg.sizing.firstBackUp,
+                                            backupType: TYPE_LABEL[cfg.sizing.backupType] ? cfg.sizing.backupType : DEFAULT_SIZING.backupType });
             S.sizing = { ...DEFAULT_SIZING };
         }
     }
@@ -710,7 +717,8 @@ function renderBatchTicketCard({ colorLog, batch, project, castNumber, castDate,
     const pigReductionPct = parsePigReduction(ticket.pigReduction);
     const { batchSandLbs, scaleFactor, num, total, type: batchType } = batch;
     const slump = slumpTarget(batchType);
-    const applyPigReduction = batchType === 'finalBackUp' || (batchType === 'firstBackUp' && ticket.pigReduceFirstBackup);
+    const isBackupBatch = batchType === 'firstBackUp' || batchType === 'finalBackUp';
+    const applyPigReduction = isBackupBatch;                       // job rule: every back up batch
     const pigMultiplier = applyPigReduction ? (1 - pigReductionPct / 100) : 1;
     const cb = (checked) => `<span class="bt-cb-box ${checked ? 'checked' : ''}"></span>`;
 
@@ -736,7 +744,7 @@ function renderBatchTicketCard({ colorLog, batch, project, castNumber, castDate,
     const sand = scaleBase('Sand');
     const pozzo = scaleBase('Pozzotive');
 
-    const omitAggHere = ticket.omitAggFinalBackup && batchType === 'finalBackUp';
+    const omitAggHere = ticket.omitAggFinalBackup && isBackupBatch;   // the flag covers every back up batch on this job
     const aggs = omitAggHere ? [] : (colorLog?.aggregates || []).filter(a => a && a.name);
     const aggRows = aggs.length
         ? aggs.map(agg => {
@@ -798,9 +806,7 @@ function renderBatchTicketCard({ colorLog, batch, project, castNumber, castDate,
         }
     }
 
-    const isDirectCast = castMethod === 'directCast';
-    const useCowbayFinal = (!isDirectCast || ticket.cowbayFinalBackup) && batchType === 'finalBackUp';
-    const sandTypeDisplay = useCowbayFinal ? 'Bulk Sand (Cowbay)' : esc(sand.type || '');
+    const sandTypeDisplay = esc(sand.type || '');   // job rule: no Cowbay — the color log's sand on every batch
 
     return `
     <div class="batch-ticket bt-${batchType}">
@@ -904,36 +910,26 @@ function renderTotals(entries) {
     for (const { plan, log, ticket } of entries) {
         const pigReductionPct = parsePigReduction(ticket.pigReduction);
         const isDirectCast = log.castMethod === 'directCast';
-        const finalUsesCowbay = !isDirectCast || ticket.cowbayFinalBackup;
-        const hasBulkSand = finalUsesCowbay && plan.batches.some(b => b.type === 'finalBackUp');
 
         for (const ing of (log.baseIngredients || [])) {
             if (!ing?.name) continue;
             const unit = ing.unit || 'lbs';
             const k = ing.name + '__' + unit;
             if (!totals[k]) { totals[k] = { name: ing.name + (ing.note ? ' (' + ing.note + ')' : ''), total: 0, unit, category: 'dry' }; order.push(k); }
-            if (ing.name.trim().toLowerCase() === 'sand' && hasBulkSand) {
-                const bk = 'Sand_bulk__' + unit;
-                if (!totals[bk]) { totals[bk] = { name: 'Sand - Bulk (Cowbay)', total: 0, unit, category: 'dry' }; order.push(bk); }
-            }
         }
 
         for (const b of plan.batches) {
             const { batchSandLbs, scaleFactor, type } = b;
-            const applyPig = type === 'finalBackUp' || (type === 'firstBackUp' && ticket.pigReduceFirstBackup);
-            const pigMultiplier = applyPig ? (1 - pigReductionPct / 100) : 1;
             const isBackup = type === 'firstBackUp' || type === 'finalBackUp';
+            const applyPig = isBackup;                                 // job rule: every back up batch
+            const pigMultiplier = applyPig ? (1 - pigReductionPct / 100) : 1;
 
             for (const ing of (log.baseIngredients || [])) {
                 if (!ing?.weight || !ing?.name) continue;
                 const w = roundSig(Number(ing.weight) * scaleFactor, 4);
-                if (ing.name.trim().toLowerCase() === 'sand' && finalUsesCowbay && type === 'finalBackUp') {
-                    addTotal('Sand_bulk', 'Sand - Bulk (Cowbay)', w, ing.unit || 'lbs', 'dry');
-                } else {
-                    addTotal(ing.name, ing.name + (ing.note ? ' (' + ing.note + ')' : ''), w, ing.unit || 'lbs', 'dry');
-                }
+                addTotal(ing.name, ing.name + (ing.note ? ' (' + ing.note + ')' : ''), w, ing.unit || 'lbs', 'dry');   // no Cowbay on this job
             }
-            if (!(ticket.omitAggFinalBackup && type === 'finalBackUp')) {
+            if (!(ticket.omitAggFinalBackup && isBackup)) {
                 for (const agg of (log.aggregates || [])) {
                     if (!agg?.name || !agg.amount) continue;
                     addTotal('agg_' + agg.name, agg.name, roundSig(Number(agg.amount) * scaleFactor, 4), agg.unit || 'lbs', 'dry');
@@ -1147,11 +1143,10 @@ function renderForm(casting, ticket) {
             <div class="field"><label class="lbl">Batched By</label><input type="text" data-f="batchedBy" value="${esc(ticket.batchedBy)}"></div>
         </div>
         <div class="checks">
-            ${chk('pigReduceFirstBackup', 'Also reduce pigment in First Back Up')}
-            ${chk('omitAggFinalBackup', 'Omit aggregate from Final Back Up')}
+            ${chk('omitAggFinalBackup', 'Omit aggregate from Back Up mixes')}
             ${chk('omitFibersFace', 'Omit fibers from Face Mix')}
-            ${chk('cowbayFinalBackup', 'Cowbay sand for Final Back Up (Direct Cast only)')}
         </div>
+        <div class="hint">Back up mixes on this job always get the pigment reduction above, ADVA 0.5 oz and the color log's sand (no Cowbay).</div>
         <div class="field" style="margin-top:12px"><label class="lbl">Notes (printed on every ticket)</label><textarea rows="2" data-f="notes">${esc(ticket.notes)}</textarea></div>
     </div>`;
 }

@@ -7765,7 +7765,7 @@ function renderSpecialBatching() {
         if (frame.getAttribute('src')) frame.removeAttribute('src');
         return false;
     }
-    const src = special.href + '?embed=1';
+    const src = special.href + '?embed=1' + (special.version ? '&v=' + special.version : '');
     if (frame.getAttribute('src') !== src) {
         frame.setAttribute('src', src);
     } else {

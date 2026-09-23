@@ -12,7 +12,9 @@
  * `sizing` feeds planBatches()/buildBatchPlan() in utils/batch-calc.js:
  *   face / backup — largest batch (lbs of sand) for the Face Mix / the Back Up layers
  *                   (100, 200 or 250; 250 = the standard 250/150/100 set)
- *   firstBackUp   — false: everything behind the face is FINAL Back Up (no First Back Up layer)
+ *   firstBackUp   — false: everything behind the face is ONE back up layer (no three-layer split)
+ *   backupType    — which type that single back up layer is: 'firstBackUp' or 'finalBackUp'
+ *                   (labels only; batch counts are the same either way)
  *
  * The dedicated page reads its defaults from here too, so this is the single place to change them.
  *
@@ -23,7 +25,8 @@ export const SPECIAL_BATCHING = {
     '0860': {
         href: 'jane-street-batching.html',
         label: 'Jane Street Batching',
-        sizing: { face: 100, backup: 200, firstBackUp: false }
+        version: '20260923-1',   // bumped whenever jane-street-batching.html changes, so the tab's frame skips the old cached copy
+        sizing: { face: 100, backup: 200, firstBackUp: false, backupType: 'firstBackUp' }
     }
 };
 
