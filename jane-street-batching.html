@@ -91,6 +91,16 @@ body.embed #toast { display: none; }
 .import-row .inv { font-size: 13px; color: var(--muted); }
 .import-row .inv strong { color: var(--ink); }
 .card h2 .btn { text-transform: none; letter-spacing: 0; margin-left: 8px; }
+/* Print all casts: the cast picker under the top bar */
+#print-picker[hidden] { display: none; }
+.picker { border: 2px solid var(--accent); }
+.picker-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px; margin: 4px 0 12px; }
+.picker-list label { display: flex; gap: 8px; align-items: flex-start; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; background: #fff; }
+.picker-list label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.picker-list label.off { opacity: .5; cursor: not-allowed; }
+.picker-list input { margin-top: 3px; }
+.picker-list small { display: block; color: var(--muted); font-size: 11px; }
+.picker-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 #toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 16px; border-radius: 10px; font-weight: 600; box-shadow: 0 8px 24px rgba(15,23,42,.25); max-width: 90vw; z-index: 50; opacity: 0; pointer-events: none; transition: opacity .2s; }
 #toast.show { opacity: 1; }
 #toast.error { background: #b91c1c; }
@@ -123,14 +133,17 @@ body.embed #toast { display: none; }
             </select>
         </label>
         <button class="btn" id="btn-refresh" title="Re-pull everything from the portal — use it to see changes other people made">Refresh data</button>
+        <button class="btn" id="btn-print-all" title="Pick which castings to print — all their batch tickets in one print">Print all casts…</button>
         <button class="btn btn-primary" id="btn-print">Print Batch Tickets</button>
     </div>
+
+    <div class="card picker" id="print-picker" hidden></div>
 
     <div class="note">
         This page plans <strong id="size-note">Face Mix and Back Up batches at the sizes picked above</strong>
         (100 lb sand = 1.71 cu ft, 200 lb = 3.42 cu ft, at the standard 4.28 cu ft / 250 lb). A layer's last bit of volume gets a 100 lb batch when that covers it.
         <br><strong>Job rules:</strong> mixes are Face Mix + First Back Up (switch individual batches to FINAL Back Up in the Batch types table if ever needed) ·
-        back up mixes use <strong>ADVA 0.5 oz</strong> per color-log batch instead of the color log's amount, get the pigment reduction below and <strong>no Cowbay sand</strong> (the color log's sand throughout) — the color logs themselves are never changed.<br>
+        back up mixes use <strong>ADVA 0.5 oz</strong> per color-log batch instead of the color log's amount, get <strong>no pigment reduction and no aggregate</strong> by default (both can still be changed per casting below) and <strong>no Cowbay sand</strong> (the color log's sand throughout) — the color logs themselves are never changed.<br>
         Changes save automatically and are <strong>shared with everyone who opens this page</strong> (they are stored on this project's batch tickets in the portal database).
         Click <em>Refresh data</em> to pick up changes other people made. The batch-size dropdowns always start at 100 lb face / 200 lb back ups.
     </div>
@@ -170,7 +183,12 @@ const BACKUP_ADVA = { amount: 0.5, unit: 'oz' };
 const LEGACY_STORE_KEY = 'cwe-0860-100lb-batching-v1';   // earlier versions kept edits in the browser; only read to offer an upload
 const META_TAG = 'jane-street-batching-page';            // marks this page's own entry inside batch_assignments
 const TICKET_FIELDS = ['cuFt', 'faceSqFt', 'cuFtPer250', 'pigReduction', 'pigReduceFirstBackup', 'omitAggFinalBackup', 'omitFibersFace', 'cowbayFinalBackup', 'batchedBy', 'notes', 'colorLogId'];
-const FINAL_BACKUP_PIG_REDUCTION_PCT = 50;
+// JOB DEFAULTS for every ticket on this job (2026-09-29): no pigment reduction on the back up mixes and
+// the aggregate left out of every back up mix. New tickets start this way; tickets saved before get them
+// once (JOB_DEFAULTS_VERSION rides in this page's stamp inside batch_assignments), after which a hand
+// change on one casting sticks. "Reset to Jane Street defaults" applies them to every casting again.
+const JOB_TICKET_DEFAULTS = { pigReduction: '0', omitAggFinalBackup: true };
+const JOB_DEFAULTS_VERSION = 2;
 const SLUMP_TARGET_DEFAULTS = { face: 7, firstBackUp: 6, finalBackUp: 6 };   // job defaults (2026-09-23); the project record overrides when set
 const TYPE_LABEL = { face: 'Face Mix', firstBackUp: 'First Back Up', finalBackUp: 'FINAL Back Up' };
 
@@ -364,11 +382,12 @@ const logById = (id) => S.logs.find(l => l.id === id) || null;
 let ticketSeq = 0;
 function emptyTicket(castingId) {
     return {
-        id: null, castingId, cuFt: '', faceSqFt: '', cuFtPer250: '4.28', pigReduction: '50',
-        pigReduceFirstBackup: false, omitAggFinalBackup: false, omitFibersFace: false, cowbayFinalBackup: false,
+        id: null, castingId, cuFt: '', faceSqFt: '', cuFtPer250: '4.28', pigReduction: JOB_TICKET_DEFAULTS.pigReduction,
+        pigReduceFirstBackup: false, omitAggFinalBackup: JOB_TICKET_DEFAULTS.omitAggFinalBackup, omitFibersFace: false, cowbayFinalBackup: false,
         batchedBy: '', notes: '', colorLogId: null,
         assignments: [],     // manual batch types: [{ batchLbs, type }] — the portal's batch_assignments format
         importedAt: null,    // ISO time of the last Import from Casting Inventory
+        defaultsV: JOB_DEFAULTS_VERSION,   // job defaults version this ticket has had (saved tickets: from the stamp)
         _key: 'k' + (++ticketSeq), _fromDb: false
     };
 }
@@ -379,7 +398,9 @@ function fromPortalForm(row) {
     t.id = row.id;
     for (const f of TICKET_FIELDS) if (row[f] !== undefined) t[f] = row[f];
     const list = Array.isArray(row.batchAssignments) ? row.batchAssignments : [];
-    t.importedAt = list.find(a => a && a.meta === META_TAG)?.importedAt || null;
+    const stamp = list.find(a => a && a.meta === META_TAG);
+    t.importedAt = stamp?.importedAt || null;
+    t.defaultsV = Number(stamp?.defaults) || 0;
     t.assignments = list.filter(a => a && a.batchLbs != null && a.type).map(a => ({ batchLbs: Number(a.batchLbs), type: a.type }));
     t._fromDb = true;
     return t;
@@ -390,7 +411,7 @@ function toPortalForm(t) {
     const out = { id: t.id };
     for (const f of TICKET_FIELDS) out[f] = t[f];
     out.batchAssignments = t.assignments.map(a => ({ batchLbs: a.batchLbs, type: a.type }));
-    if (t.importedAt) out.batchAssignments.push({ meta: META_TAG, importedAt: t.importedAt });
+    if (t.importedAt || t.defaultsV) out.batchAssignments.push({ meta: META_TAG, importedAt: t.importedAt || null, defaults: t.defaultsV || 0 });
     return out;
 }
 
@@ -499,8 +520,29 @@ window.addEventListener('beforeunload', (e) => {
 
 function parsePigReduction(raw) {
     const n = parseFloat(raw);
-    if (isNaN(n)) return FINAL_BACKUP_PIG_REDUCTION_PCT;
+    if (isNaN(n)) return Number(JOB_TICKET_DEFAULTS.pigReduction);
     return Math.min(100, Math.max(0, n));
+}
+
+/**
+ * Give tickets the job defaults (JOB_TICKET_DEFAULTS). Normally only saved tickets that never had this
+ * version of the defaults; `force` = every ticket (the Reset button). Saves what it touches; returns how
+ * many tickets actually changed.
+ */
+function applyJobDefaults(force = false) {
+    let changed = 0;
+    for (const list of S.tickets.values()) for (const t of list) {
+        if (!force && (!t._fromDb || t.defaultsV >= JOB_DEFAULTS_VERSION)) continue;
+        const differs = String(t.pigReduction) !== JOB_TICKET_DEFAULTS.pigReduction
+            || !!t.omitAggFinalBackup !== JOB_TICKET_DEFAULTS.omitAggFinalBackup;
+        const stampOld = t.defaultsV < JOB_DEFAULTS_VERSION;
+        t.pigReduction = JOB_TICKET_DEFAULTS.pigReduction;
+        t.omitAggFinalBackup = JOB_TICKET_DEFAULTS.omitAggFinalBackup;
+        t.defaultsV = JOB_DEFAULTS_VERSION;
+        if (differs) changed++;
+        if (t._fromDb && (differs || stampOld)) scheduleSave(t);
+    }
+    return changed;
 }
 
 function planFor(ticket, sizing = S.sizing) {
@@ -1023,7 +1065,7 @@ function render() {
         ${legacyBannerHtml()}
         <div class="card"><h2>Project overview — every casting at ${isStandardSizing() ? 'portal standard' : `face ${S.sizing.face} lb / back ups ${S.sizing.backup} lb`}
             <button class="btn btn-small" data-import-all title="Pull Total Cu Ft and Face Sq Ft for every casting from the portal's Casting Inventory">Import all castings from Casting Inventory</button>
-            <button class="btn btn-small" data-types-reset-all title="One step: every casting goes back to the job defaults (Face Mix + First Back Up, hand-made batch type picks forgotten) and its Cu Ft / Face Sq Ft are re-imported from the Casting Inventory">Reset to Jane Street defaults</button></h2><div id="overview"></div></div>
+            <button class="btn btn-small" data-types-reset-all title="One step: every casting goes back to the job defaults (Face Mix + First Back Up, hand-made batch type picks forgotten, back up pigment reduction 0%, aggregate omitted from back ups) and its Cu Ft / Face Sq Ft are re-imported from the Casting Inventory">Reset to Jane Street defaults</button></h2><div id="overview"></div></div>
         <div class="card" id="slump-card">${slumpCardHtml()}</div>
         <div class="pills">${castPills}</div>
         ${colorPills}
@@ -1166,7 +1208,7 @@ function renderForm(casting, ticket) {
             ${chk('omitAggFinalBackup', 'Omit aggregate from Back Up mixes')}
             ${chk('omitFibersFace', 'Omit fibers from Face Mix')}
         </div>
-        <div class="hint">Back up mixes on this job always get the pigment reduction above, ADVA 0.5 oz and the color log's sand (no Cowbay).</div>
+        <div class="hint">Back up mixes on this job always get ADVA 0.5 oz and the color log's sand (no Cowbay). Job defaults: back up pigment reduction 0% and aggregate omitted from the back up mixes.</div>
         <div class="field" style="margin-top:12px"><label class="lbl">Notes (printed on every ticket)</label><textarea rows="2" data-f="notes">${esc(ticket.notes)}</textarea></div>
     </div>`;
 }
@@ -1239,9 +1281,11 @@ root.addEventListener('click', (e) => {
         if (!confirm(`Reset every casting to the Jane Street defaults?
 
 - batch types back to Face Mix + First Back Up (hand-made picks are forgotten)
+- back up pigment reduction 0% and aggregate omitted from the back up mixes
 - Total Cu Ft and Face Sq Ft re-imported from the Casting Inventory
 
-Pigment reduction, the option checkboxes, notes and slump targets stay as they are.`)) return;
+The fibers option, notes and slump targets stay as they are.`)) return;
+        applyJobDefaults(true);
         for (const list of S.tickets.values()) for (const t of list) if (t.assignments && t.assignments.length) { t.assignments = []; scheduleSave(t); }
         handleImport(true);      // re-imports and saves every casting, then reports
         return;
@@ -1370,23 +1414,101 @@ body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 // On-screen preview: same ticket rules, reset scoped to the ticket so it can't touch the app UI.
 document.getElementById('ticket-css').textContent = '.bt-page, .bt-page * { margin:0; padding:0; box-sizing:border-box; }\n' + TICKET_CSS;
 
+/** A print document around ticket pages (opens the print dialog on load). */
+function printDocHtml(title, pages) {
+    return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>${PRINT_CSS}</style></head><body>${pages}<script>window.addEventListener('load',()=>{setTimeout(()=>window.print(),200);});<\/script></body></html>`;
+}
+
 /** Print document for the active casting (every color on it), or '' when there is nothing to print. */
 function buildPrintHtml() {
     const casting = S.castings.find(c => c.id === S.activeCastingId);
     if (!casting) return '';
     const pages = ticketPagesHtml(casting, getTicketList(casting.id));
     if (!pages.trim()) return '';
-    const title = `Batch Tickets (face ${S.sizing.face} lb / back ups ${S.sizing.backup} lb) — ${S.project?.project_name || ''} — Cast ${casting.casting_number || ''}`;
-    return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>${PRINT_CSS}</style></head><body>${pages}<script>window.addEventListener('load',()=>{setTimeout(()=>window.print(),200);});<\/script></body></html>`;
+    return printDocHtml(`Batch Tickets (face ${S.sizing.face} lb / back ups ${S.sizing.backup} lb) — ${S.project?.project_name || ''} — Cast ${casting.casting_number || ''}`, pages);
 }
+
+/** Print document for the picked castings, in casting order, every color on each; '' when nothing to print. */
+function buildPrintAllHtml(ids) {
+    const chosen = S.castings.filter(c => ids.includes(c.id));
+    const pages = chosen.map(c => ticketPagesHtml(c, getTicketList(c.id))).join('');
+    if (!pages.trim()) return '';
+    const casts = chosen.map(c => c.casting_number || '?').join(', ');
+    return printDocHtml(`Batch Tickets (face ${S.sizing.face} lb / back ups ${S.sizing.backup} lb) — ${S.project?.project_name || ''} — Casts ${casts}`, pages);
+}
+window.jsbBuildPrintAllHtml = buildPrintAllHtml;
+
+function openPrintWindow(html) {
+    const w = window.open('', '_blank');
+    if (!w) { toast('Pop-up blocked — allow pop-ups for this page to print.', true); return false; }
+    w.document.open(); w.document.write(html); w.document.close();
+    return true;
+}
+
+// ---------- Print all casts: pick the castings, print them in one go ----------
+const picker = document.getElementById('print-picker');
+function castTicketCount(c) {
+    return getTicketList(c.id).reduce((n, t) => n + (planFor(t)?.batches.length || 0), 0);
+}
+function openPrintPicker() {
+    if (!S.castings.length) { toast('This project has no castings yet.', true); return; }
+    picker.innerHTML = `<h2>Print all casts — pick the castings to print</h2>
+        <div class="picker-list">${S.castings.map(c => {
+            const n = castTicketCount(c);
+            const colors = getTicketList(c.id).map(t => logById(t.colorLogId)?.name).filter(Boolean).join(', ');
+            return `<label class="${n ? '' : 'off'}"><input type="checkbox" data-pick="${esc(c.id)}"${n ? ' checked' : ' disabled'}>
+                <span><strong>Cast ${esc(c.casting_number || '?')}</strong>${c.casting_date ? ' · ' + esc(c.casting_date) : ''}
+                <small>${n ? `${n} ticket${n === 1 ? '' : 's'}` : 'nothing to print — no cu ft yet'}${colors ? ' · ' + esc(colors) : ''}</small></span></label>`;
+        }).join('')}</div>
+        <div class="picker-actions">
+            <button class="btn btn-small" data-pick-all>Select all</button>
+            <button class="btn btn-small" data-pick-none>Select none</button>
+            <span class="spacer"></span>
+            <span class="sub" id="pick-count"></span>
+            <button class="btn" data-pick-cancel>Cancel</button>
+            <button class="btn btn-primary" data-pick-print>Print selected</button>
+        </div>`;
+    picker.hidden = false;
+    updatePickCount();
+    reportHeight();
+}
+function pickedIds() {
+    return [...picker.querySelectorAll('[data-pick]:checked')].map(i => i.dataset.pick);
+}
+function updatePickCount() {
+    const ids = pickedIds();
+    const n = S.castings.filter(c => ids.includes(c.id)).reduce((s, c) => s + castTicketCount(c), 0);
+    const el = document.getElementById('pick-count');
+    if (el) el.textContent = `${ids.length} cast${ids.length === 1 ? '' : 's'} · ${n} ticket${n === 1 ? '' : 's'}`;
+    const btn = picker.querySelector('[data-pick-print]');
+    if (btn) btn.disabled = !ids.length;
+}
+function closePrintPicker() {
+    picker.hidden = true;
+    picker.innerHTML = '';
+    reportHeight();
+}
+picker.addEventListener('change', updatePickCount);
+picker.addEventListener('click', (e) => {
+    const setAll = (on) => picker.querySelectorAll('[data-pick]:not(:disabled)').forEach(i => { i.checked = on; });
+    if (e.target.closest('[data-pick-all]')) { setAll(true); updatePickCount(); return; }
+    if (e.target.closest('[data-pick-none]')) { setAll(false); updatePickCount(); return; }
+    if (e.target.closest('[data-pick-cancel]')) { closePrintPicker(); return; }
+    if (e.target.closest('[data-pick-print]')) {
+        const html = buildPrintAllHtml(pickedIds());
+        if (!html) { toast('Pick at least one casting that has tickets.', true); return; }
+        if (openPrintWindow(html)) closePrintPicker();
+    }
+});
+document.getElementById('btn-print-all').addEventListener('click', () => {
+    if (picker.hidden) openPrintPicker(); else closePrintPicker();
+});
 window.jsbBuildPrintHtml = buildPrintHtml;   // the portal's top-bar Print button uses this when the page is embedded
 
 document.getElementById('btn-print').addEventListener('click', () => {
     const html = buildPrintHtml();
     if (!html) { toast('Enter Total Cu Ft first — there are no tickets to print for this casting.', true); return; }
-    const w = window.open('', '_blank');
-    if (!w) { toast('Pop-up blocked — allow pop-ups for this page to print.', true); return; }
-    w.document.open(); w.document.write(html); w.document.close();
+    openPrintWindow(html);
 });
 
 // ---------- Embedded in the portal ----------
@@ -1417,6 +1539,8 @@ async function boot() {
     root.innerHTML = '<div class="status">Loading project data…</div>';
     try {
         await loadData();
+        const fixed = applyJobDefaults();
+        if (fixed) toast(`Job defaults applied to ${fixed} ticket${fixed === 1 ? '' : 's'}: back up pigment reduction 0%, aggregate omitted from back up mixes.`);
         S.legacy = readLegacy();
         document.getElementById('loaded-at').textContent = 'loaded ' + new Date().toLocaleTimeString();
         render();
