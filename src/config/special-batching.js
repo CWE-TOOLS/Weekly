@@ -28,7 +28,7 @@
 const JANE_STREET = {
     href: 'jane-street-batching.html',
     label: 'Jane Street Batching',
-    version: '20261007-2',   // bumped whenever jane-street-batching.html changes, so the tab's frame skips the old cached copy
+    version: '20261007-3',   // bumped whenever jane-street-batching.html changes, so the tab's frame skips the old cached copy
     sizing: { face: 100, backup: 200, firstBackUp: false, backupType: 'firstBackUp', faceThicknessIn: 1 / 4 }   // 1/4" face (2026-10-07)
 };
 

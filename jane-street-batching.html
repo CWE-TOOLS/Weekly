@@ -1239,7 +1239,7 @@ function renderPreview(casting, ticket) {
     const perSize = [...new Set(plan.batches.map(b => b.batchSandLbs))].sort((a, b) => a - b)
         .map(sz => `${sz} lb = ${roundSig(cuFtFor(sz, per250), 3)} cu ft`).join(' · ');
     const faceNote = plan.faceCuFt > 0
-        ? `Face layer = ${roundSig(parseFloat(ticket.faceSqFt), 2)} sq ft × ${formatThicknessIn(plan.faceThicknessIn)} thick = ${roundSig(plan.faceCuFt, 2)} cu ft. Everything behind the face is one back up layer (${TYPE_LABEL[S.sizing.backupType] || 'First Back Up'} on this job).`
+        ? `Face layer = ${roundSig(parseFloat(ticket.faceSqFt), 2)} sq ft × <strong style="color:#b91c1c">${formatThicknessIn(plan.faceThicknessIn)}</strong> thick = ${roundSig(plan.faceCuFt, 2)} cu ft. Everything behind the face is one back up layer (${TYPE_LABEL[S.sizing.backupType] || 'First Back Up'} on this job).`
         : (log.castMethod === 'directCast' ? 'Direct Cast: half the volume is Face Mix, half is Final Back Up.' : 'No face sq ft: first batch = Face Mix, everything else = FINAL Back Up.');
 
     const assignRows = plan.batches.map((b, idx) => `
