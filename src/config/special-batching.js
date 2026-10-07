@@ -15,6 +15,8 @@
  *   firstBackUp   — false: everything behind the face is ONE back up layer (no three-layer split)
  *   backupType    — which type that single back up layer is: 'firstBackUp' or 'finalBackUp'
  *                   (labels only; batch counts are the same either way)
+ *   faceThicknessIn — how thick the Face Mix is planned over the Face Sq Ft, in inches
+ *                   (omit for the standard 3/16")
  *
  * The dedicated page reads its defaults from here too, so this is the single place to change them.
  * The portal opens `href` with `?project=NNNN`, so one page can serve several projects.
@@ -26,8 +28,8 @@
 const JANE_STREET = {
     href: 'jane-street-batching.html',
     label: 'Jane Street Batching',
-    version: '20260929-1',   // bumped whenever jane-street-batching.html changes, so the tab's frame skips the old cached copy
-    sizing: { face: 100, backup: 200, firstBackUp: false, backupType: 'firstBackUp' }
+    version: '20261007-2',   // bumped whenever jane-street-batching.html changes, so the tab's frame skips the old cached copy
+    sizing: { face: 100, backup: 200, firstBackUp: false, backupType: 'firstBackUp', faceThicknessIn: 1 / 4 }   // 1/4" face (2026-10-07)
 };
 
 export const SPECIAL_BATCHING = {

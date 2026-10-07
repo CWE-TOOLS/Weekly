@@ -142,7 +142,7 @@ body.embed #toast { display: none; }
     <div class="note">
         This page plans <strong id="size-note">Face Mix and Back Up batches at the sizes picked above</strong>
         (100 lb sand = 1.71 cu ft, 200 lb = 3.42 cu ft, at the standard 4.28 cu ft / 250 lb). A layer's last bit of volume gets a 100 lb batch when that covers it.
-        <br><strong>Job rules:</strong> mixes are Face Mix + First Back Up (switch individual batches to FINAL Back Up in the Batch types table if ever needed) ·
+        <br><strong>Job rules:</strong> the Face Mix is planned <strong>1/4&Prime; thick</strong> over the Face Sq Ft (portal standard is 3/16&Prime;) · mixes are Face Mix + First Back Up (switch individual batches to FINAL Back Up in the Batch types table if ever needed) ·
         back up mixes use <strong>ADVA 0.5 oz</strong> per color-log batch instead of the color log's amount, get <strong>no pigment reduction and no aggregate</strong> by default (both can still be changed per casting below) and <strong>no Cowbay sand</strong> (the color log's sand throughout) — the color logs themselves are never changed.<br>
         Changes save automatically and are <strong>shared with everyone who opens this page</strong> (they are stored on this project's batch tickets in the portal database).
         Click <em>Refresh data</em> to pick up changes other people made. The batch-size dropdowns always start at 100 lb face / 200 lb back ups.
@@ -170,8 +170,10 @@ const SIZE_SETS = { 100: [100], 200: [200, 100], 250: [250, 150, 100] };
 // This project: 100 lb face mixes, 200 lb back ups, ONE back up layer whose batches are typed
 // `backupType` (First Back Up). The site's src/config/special-batching.js is the source of truth
 // (loaded in loadData); these are the fallback.
-const DEFAULT_SIZING = { face: 100, backup: 200, firstBackUp: false, backupType: 'firstBackUp' };
-const STANDARD_SIZING = { face: 250, backup: 250, firstBackUp: true, backupType: 'finalBackUp' };  // what the portal does (comparison only)
+// faceThicknessIn: the Face Mix is planned this thick over the Face Sq Ft (job rule 2026-10-07: 1/4"; the
+// portal's standard planner uses 3/16").
+const DEFAULT_SIZING = { face: 100, backup: 200, firstBackUp: false, backupType: 'firstBackUp', faceThicknessIn: 1 / 4 };
+const STANDARD_SIZING = { face: 250, backup: 250, firstBackUp: true, backupType: 'finalBackUp', faceThicknessIn: 3 / 16 };  // what the portal does (comparison only)
 
 // JOB RULES for the back up mixes (any batch typed First or FINAL Back Up):
 //   - ADVA: this dose in place of the color log's, on the color log's own sand basis (so it scales
@@ -250,7 +252,7 @@ function consolidateBatches(batches, sizes) {
 
 /**
  *   directCast             → 50/50 face / finalBackUp split (no firstBackUp)
- *   otherwise, faceSqFt > 0 → face cu ft = faceSqFt × 3/16" thick; firstBackUp = same; remainder = finalBackUp
+ *   otherwise, faceSqFt > 0 → face cu ft = faceSqFt × faceThicknessIn (1/4" on this job); firstBackUp = same; remainder = finalBackUp
  *   no faceSqFt            → first batch = face, last = finalBackUp, middle = firstBackUp
  *
  * Face batches are filled from `faceSizes`; First and FINAL Back Up from `backupSizes`.
@@ -261,9 +263,9 @@ function consolidateBatches(batches, sizes) {
  * `firstBackUp: true` gives the portal's three-layer split described above — only used for the
  * "portal standard would be" comparison.
  */
-function planBatches({ totalCuFt, faceSqFt = 0, cuFtPer250 = 4.28, castMethod = 'sprayUp', faceSizes, backupSizes, firstBackUp = false, backupType = 'finalBackUp' }) {
+function planBatches({ totalCuFt, faceSqFt = 0, cuFtPer250 = 4.28, castMethod = 'sprayUp', faceSizes, backupSizes, firstBackUp = false, backupType = 'finalBackUp', faceThicknessIn = 3 / 16 }) {
     const directCast = castMethod === 'directCast';
-    const faceCuFt = faceSqFt > 0 ? (faceSqFt * (3 / 16) / 12) : 0;
+    const faceCuFt = faceSqFt > 0 ? (faceSqFt * faceThicknessIn / 12) : 0;
     let batches = [];
     let types = [];
     const sumCuFt = (arr) => arr.reduce((s, b) => s + cuFtFor(b, cuFtPer250), 0);
@@ -325,8 +327,9 @@ function getColorLogSandLbs(colorLog) {
 }
 
 function buildBatchPlan({ totalCuFt, faceSqFt = 0, cuFtPer250 = 4.28, castMethod = 'sprayUp', colorLogSandLbs, manual, sizing }) {
+    const faceThicknessIn = sizing.faceThicknessIn > 0 ? sizing.faceThicknessIn : 3 / 16;
     const { batches, types: autoTypes, faceCuFt } = planBatches({
-        totalCuFt, faceSqFt, cuFtPer250, castMethod,
+        totalCuFt, faceSqFt, cuFtPer250, castMethod, faceThicknessIn,
         faceSizes: sizesFor(sizing.face), backupSizes: sizesFor(sizing.backup),
         firstBackUp: !!sizing.firstBackUp, backupType: sizing.backupType || 'finalBackUp'
     });
@@ -338,7 +341,7 @@ function buildBatchPlan({ totalCuFt, faceSqFt = 0, cuFtPer250 = 4.28, castMethod
         // Picks saved while this job still defaulted to FINAL Back Up (before 2026-09-23) simply
         // repeat that old default — they are not a decision, so the current default wins.
         const oldDefault = planBatches({
-            totalCuFt, faceSqFt, cuFtPer250, castMethod,
+            totalCuFt, faceSqFt, cuFtPer250, castMethod, faceThicknessIn,
             faceSizes: sizesFor(sizing.face), backupSizes: sizesFor(sizing.backup),
             firstBackUp: !!sizing.firstBackUp, backupType: 'finalBackUp'
         }).types;
@@ -356,6 +359,7 @@ function buildBatchPlan({ totalCuFt, faceSqFt = 0, cuFtPer250 = 4.28, castMethod
     return {
         batches: result,
         faceCuFt,
+        faceThicknessIn,
         manualApplied,
         actualCuFt: result.reduce((s, b) => s + b.cuFt, 0),
         totalSandLbs: result.reduce((s, b) => s + b.batchSandLbs, 0)
@@ -378,6 +382,14 @@ const S = {
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const logById = (id) => S.logs.find(l => l.id === id) || null;
+/** Inches → fraction to the nearest 1/32 for display ("1/4″"). */
+function formatThicknessIn(n) {
+    const num = Math.round(n * 32);
+    if (Math.abs(n * 32 - num) > 0.001) return `${roundSig(n, 4)}″`;
+    let a = num, b = 32;
+    while (a && a % 2 === 0) { a /= 2; b /= 2; }
+    return `${a}/${b}″`;
+}
 
 let ticketSeq = 0;
 function emptyTicket(castingId) {
@@ -590,7 +602,8 @@ async function loadData() {
         if (cfg === null && PROJECT_NUMBER !== '0860') throw new Error('Project ' + PROJECT_NUMBER + ' is not set up for this batching page (src/config/special-batching.js).');
         if (cfg?.sizing && SIZE_SETS[cfg.sizing.face] && SIZE_SETS[cfg.sizing.backup]) {
             Object.assign(DEFAULT_SIZING, { face: cfg.sizing.face, backup: cfg.sizing.backup, firstBackUp: !!cfg.sizing.firstBackUp,
-                                            backupType: TYPE_LABEL[cfg.sizing.backupType] ? cfg.sizing.backupType : DEFAULT_SIZING.backupType });
+                                            backupType: TYPE_LABEL[cfg.sizing.backupType] ? cfg.sizing.backupType : DEFAULT_SIZING.backupType,
+                                            faceThicknessIn: cfg.sizing.faceThicknessIn > 0 ? cfg.sizing.faceThicknessIn : DEFAULT_SIZING.faceThicknessIn });
             S.sizing = { ...DEFAULT_SIZING };
         }
     }
@@ -1226,7 +1239,7 @@ function renderPreview(casting, ticket) {
     const perSize = [...new Set(plan.batches.map(b => b.batchSandLbs))].sort((a, b) => a - b)
         .map(sz => `${sz} lb = ${roundSig(cuFtFor(sz, per250), 3)} cu ft`).join(' · ');
     const faceNote = plan.faceCuFt > 0
-        ? `Face layer = ${roundSig(parseFloat(ticket.faceSqFt), 2)} sq ft × 3/16&Prime; = ${roundSig(plan.faceCuFt, 2)} cu ft. Everything behind the face is FINAL Back Up (this job's default — no First Back Up).`
+        ? `Face layer = ${roundSig(parseFloat(ticket.faceSqFt), 2)} sq ft × ${formatThicknessIn(plan.faceThicknessIn)} thick = ${roundSig(plan.faceCuFt, 2)} cu ft. Everything behind the face is one back up layer (${TYPE_LABEL[S.sizing.backupType] || 'First Back Up'} on this job).`
         : (log.castMethod === 'directCast' ? 'Direct Cast: half the volume is Face Mix, half is Final Back Up.' : 'No face sq ft: first batch = Face Mix, everything else = FINAL Back Up.');
 
     const assignRows = plan.batches.map((b, idx) => `

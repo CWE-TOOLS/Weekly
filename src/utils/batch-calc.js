@@ -120,6 +120,8 @@ export function consolidateBatches(batches, sizes = BATCH_SIZES) {
  * @returns {{ batches: number[], types: string[], faceCuFt: number }}
  */
 export function planBatches({ totalCuFt, faceSqFt = 0, cuFtPer250 = 4.28, castMethod = 'sprayUp', sizing = null }) {
+    // Face coat thickness over the Face Sq Ft: 3/16" standard; a special project may set its own.
+    const faceThicknessIn = (sizing && sizing.faceThicknessIn > 0) ? sizing.faceThicknessIn : 3 / 16;
     // Job-specific sizing (config/special-batching.js): Face Mix and Back Up layers can have their
     // own largest batch, and the First Back Up layer can be dropped (everything behind the face is
     // FINAL Back Up). Without `sizing` this is the standard plan, unchanged.
@@ -128,7 +130,7 @@ export function planBatches({ totalCuFt, faceSqFt = 0, cuFtPer250 = 4.28, castMe
     const useFirstBackUp = sizing ? !!sizing.firstBackUp : true;
 
     const directCast = castMethod === 'directCast';
-    const faceCuFt = faceSqFt > 0 ? (faceSqFt * (3 / 16) / 12) : 0;
+    const faceCuFt = faceSqFt > 0 ? (faceSqFt * faceThicknessIn / 12) : 0;
     let batches = [];
     let types = [];
     const sumCuFt = (arr) => arr.reduce((s, b) => s + cuFtFor(b, cuFtPer250), 0);
