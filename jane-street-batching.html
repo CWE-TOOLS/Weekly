@@ -71,6 +71,11 @@ button, select, input, textarea { font: inherit; }
 .stale-tbl th { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: #991b1b; }
 .stale-btn { background: #dc2626; border-color: #dc2626; color: #fff; }
 .stale-btn:hover { background: #b91c1c; }
+.stale-float { position: fixed; right: 16px; top: 16px; width: 320px; max-width: calc(100vw - 32px); z-index: 50; margin: 0; box-shadow: 0 10px 30px rgba(185, 28, 28, .35); }
+.stale-float[hidden] { display: none; }
+.stale-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.btn-link { background: none; border: none; color: #b91c1c; text-decoration: underline; font-weight: 700; cursor: pointer; padding: 0; }
+@media print { .stale-float { display: none !important; } }
 .summary { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
 .stat { border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; min-width: 110px; background: #fff; }
 .stat .v { font-size: 20px; font-weight: 800; }
@@ -1210,6 +1215,50 @@ function staleBannerHtml(casting, ticket) {
         <button class="btn stale-btn" data-import>Import from Casting Inventory now</button></div>`;
 }
 
+// Keep the warning on screen while scrolling. Embedded: the portal owns the scrolling page, so it
+// draws the floating copy — we just tell it where our inline warning sits and what it says.
+// Stand-alone: this page draws its own floating copy.
+let staleFloat = null;
+function reportStale() {
+    const casting = S.castings.find(c => c.id === S.activeCastingId);
+    const el = document.querySelector('#stale .stale');
+    const diffs = casting && el ? staleDiffs(casting, getActiveTicket(casting.id)) : [];
+    if (EMBED) {
+        const r = el ? el.getBoundingClientRect() : null;
+        window.parent.postMessage({ type: 'jsb-stale', diffs, top: r ? r.top + window.scrollY : 0, height: r ? r.height : 0 }, location.origin);
+        return;
+    }
+    updateStaleFloat();
+}
+function updateStaleFloat() {
+    if (EMBED) return;
+    const el = document.querySelector('#stale .stale');
+    const show = !!el && el.getBoundingClientRect().bottom < 4;
+    if (!show) { if (staleFloat) staleFloat.hidden = true; return; }
+    if (!staleFloat) {
+        staleFloat = document.createElement('div');
+        staleFloat.className = 'stale stale-float';
+        staleFloat.setAttribute('role', 'alert');
+        document.body.appendChild(staleFloat);
+        staleFloat.addEventListener('click', (e) => {
+            if (e.target.closest('[data-import]')) { handleImport(false); return; }
+            if (e.target.closest('[data-stale-show]')) document.querySelector('#stale .stale')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+        });
+    }
+    const casting = S.castings.find(c => c.id === S.activeCastingId);
+    const diffs = casting ? staleDiffs(casting, getActiveTicket(casting.id)) : [];
+    const key = JSON.stringify(diffs);
+    if (staleFloat.dataset.key !== key) {
+        staleFloat.dataset.key = key;
+        staleFloat.innerHTML = `<div class="t">&#9888; BATCHING IS OUT OF DATE</div><div>This casting's batching no longer matches the Casting Inventory.</div>
+            <table class="stale-tbl">${diffs.map(([l, was, now]) => `<tr><td>${l}</td><td>${esc(was)}</td><td>&rarr; <strong>${esc(now)}</strong></td></tr>`).join('')}</table>
+            <div class="stale-actions"><button class="btn stale-btn" data-import>Import from Casting Inventory now</button><button class="btn-link" data-stale-show>Show me</button></div>`;
+    }
+    staleFloat.hidden = false;
+}
+window.addEventListener('scroll', updateStaleFloat, { passive: true });
+window.addEventListener('resize', updateStaleFloat, { passive: true });
+
 function inventoryHint(casting, ticket) {
     const last = `<span class="inv">Last imported: <strong>${ticket.importedAt ? esc(formatWhen(ticket.importedAt)) : 'never'}</strong></span>`;
     const t = inventoryTotals(casting.id, ticket);
@@ -1374,6 +1423,7 @@ function onFieldChange(e) {
     else {
         const hint = document.getElementById('inv-hint'); if (hint) hint.innerHTML = inventoryHint(casting, ticket);
         const stale = document.getElementById('stale'); if (stale) stale.innerHTML = staleBannerHtml(casting, ticket);
+        reportStale();
     }
 }
 root.addEventListener('input', onFieldChange);
@@ -1565,6 +1615,7 @@ document.getElementById('btn-print').addEventListener('click', () => {
  * Measures the content itself, not the document, which never reports less than the frame's height.
  */
 function reportHeight() {
+    reportStale();
     if (!EMBED) return;
     window.parent.postMessage({ type: 'jsb-height', height: document.querySelector('.app').offsetHeight + 8 }, location.origin);
 }
@@ -1573,7 +1624,9 @@ if (EMBED) {
     window.addEventListener('load', reportHeight);
     // The portal tells us when its Batch Tickets tab is shown again → re-pull fresh data.
     window.addEventListener('message', async (e) => {
-        if (e.origin !== location.origin || e.source !== window.parent || e.data?.type !== 'jsb-activate') return;
+        if (e.origin !== location.origin || e.source !== window.parent) return;
+        if (e.data?.type === 'jsb-import') { handleImport(false); return; }   // the portal's floating warning button
+        if (e.data?.type !== 'jsb-activate') return;
         if (pendingSaves.size > 0 || savesInFlight > 0) await flushSaves();
         boot();
     });

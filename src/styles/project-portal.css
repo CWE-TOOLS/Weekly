@@ -4221,6 +4221,15 @@ body.pp-printing .pp-tab-panel[data-panel="color-log"] { display: none !importan
 .pp-bt-stale-btn { align-self: flex-start; background: #dc2626; color: #fff; border: none; border-radius: 4px; padding: 8px 14px; font-size: 13px; font-weight: 700; cursor: pointer; }
 .pp-bt-stale-btn:hover { background: #b91c1c; }
 .pp-bt-stale-note { font-size: 12px; color: #991b1b; }
+/* floating copy — pinned to the right once the inline warning has scrolled away */
+.pp-bt-stale-float { position: fixed; right: 16px; width: 320px; max-width: calc(100vw - 32px); z-index: 60; box-shadow: 0 10px 30px rgba(185, 28, 28, 0.35); animation: pp-bt-stale-in .25s ease-out; }
+.pp-bt-stale-float[hidden] { display: none; }
+.pp-bt-stale-float-title { font-size: 16px; font-weight: 900; color: #b91c1c; letter-spacing: 0.04em; }
+.pp-bt-stale-float-text { font-size: 12px; font-weight: 600; }
+.pp-bt-stale-float-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.pp-bt-stale-link { background: none; border: none; color: #b91c1c; text-decoration: underline; font-size: 12px; font-weight: 700; cursor: pointer; padding: 0; }
+@keyframes pp-bt-stale-in { from { transform: translateX(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media print { .pp-bt-stale-float { display: none !important; } }
 .pp-bt-import-btn:active { background: rgba(79, 70, 229, 0.12); }
 
 /* Advanced disclosure (Cu Ft per 250lb) */

@@ -538,6 +538,7 @@ function setActiveTab(tab) {
     }
     if (currentTab === 'tracking' && tab !== 'tracking') lastTrackSelectionAnchor = null;
     currentTab = tab;
+    updateStaleFloat();   // the floating out-of-date warning only belongs to the Batch Tickets tab
     document.querySelectorAll('.pp-tab-btn').forEach(btn => {
         btn.classList.toggle('pp-tab-active', btn.dataset.tab === tab);
     });
@@ -7799,6 +7800,10 @@ window.addEventListener('message', (e) => {
         frame.style.height = Math.ceil(Number(e.data.height)) + 'px';
     } else if (e.data?.type === 'jsb-toast' && e.data.message) {
         showToast(String(e.data.message), e.data.isError ? 'error' : 'success');
+    } else if (e.data?.type === 'jsb-stale') {
+        // The special page's own out-of-date warning: where it sits (relative to the frame) and what it says.
+        frameStale = Array.isArray(e.data.diffs) ? { diffs: e.data.diffs, top: Number(e.data.top) || 0, height: Number(e.data.height) || 0 } : null;
+        updateStaleFloat();
     }
 });
 
@@ -7957,7 +7962,7 @@ function renderBatchStaleBanner(casting, ticket) {
     if (differs(ticket.cuFt, t.cuFt, t.cuFtComplete)) diffs.push(['Total Cu Ft', ticket.cuFt, t.cuFt]);
     if (differs(ticket.faceSqFt, t.ff, t.ffComplete)) diffs.push(['Face Sq Ft', ticket.faceSqFt, t.ff]);
     if (!diffs.length) return '';
-    return `<div class="pp-bt-stale" role="alert">
+    return `<div class="pp-bt-stale" role="alert" data-diffs="${escapeAttr(JSON.stringify(diffs))}">
         <div class="pp-bt-stale-title">&#9888; BATCHING IS OUT OF DATE</div>
         <div class="pp-bt-stale-text">The Casting Inventory for this casting no longer matches the numbers this batching was made from. These tickets, the mix totals and the weekly board count are based on the OLD numbers.</div>
         <table class="pp-bt-stale-table"><tr><th></th><th>Batching uses</th><th>Casting Inventory now</th></tr>
@@ -7967,6 +7972,72 @@ function renderBatchStaleBanner(casting, ticket) {
         <div class="pp-bt-stale-note">Importing replaces Total Cu Ft and Face Sq Ft only (hand-picked batch types go back to automatic). Everything else on the ticket stays.</div>
     </div>`;
 }
+
+// ---------- Floating copy of the out-of-date warning: stays on screen once the inline one scrolls away ----------
+let staleFloatEl = null;
+let frameStale = null;   // what the embedded special page last reported: { diffs, top, height } or null
+
+function headerBottom() { return document.querySelector('.pp-header')?.getBoundingClientRect().bottom || 0; }
+
+/** Where the inline warning sits on screen (and what it says), or null when none is showing. */
+function staleAnchor() {
+    if (currentTab !== 'batch-tickets') return null;
+    const frame = getSpecialBatchingFrame();
+    if (frame && frame.getAttribute('src') && !frame.closest('[hidden]')) {
+        // Special page in its frame: it reported its own warning's position (relative to the frame).
+        if (!frameStale || !frameStale.diffs.length) return null;
+        const r = frame.getBoundingClientRect();
+        const top = r.top + frameStale.top;
+        return { bottom: top + frameStale.height, diffs: frameStale.diffs, source: 'frame',
+                 scrollTo: () => window.scrollTo({ top: window.scrollY + top - headerBottom() - 12, behavior: 'smooth' }) };
+    }
+    const el = document.querySelector('#pp-bt-content .pp-bt-stale');
+    if (!el) return null;
+    let diffs = [];
+    try { diffs = JSON.parse(el.dataset.diffs || '[]'); } catch { /* ignore */ }
+    return { bottom: el.getBoundingClientRect().bottom, diffs, source: 'tab',
+             scrollTo: () => window.scrollTo({ top: window.scrollY + el.getBoundingClientRect().top - headerBottom() - 12, behavior: 'smooth' }) };
+}
+
+function staleFloatHtml(diffs, source) {
+    return `<div class="pp-bt-stale-float-title">&#9888; BATCHING IS OUT OF DATE</div>
+        <div class="pp-bt-stale-float-text">This casting's batching no longer matches the Casting Inventory.</div>
+        <table class="pp-bt-stale-table">${diffs.map(([label, was, now]) =>
+            `<tr><td>${escapeHtml(String(label))}</td><td>${escapeHtml(String(was))}</td><td>&rarr; <strong>${escapeHtml(String(now))}</strong></td></tr>`).join('')}</table>
+        <div class="pp-bt-stale-float-actions">
+            <button type="button" class="pp-bt-stale-btn" data-stale-float-import="${source}">Import from Tracking now</button>
+            <button type="button" class="pp-bt-stale-link" data-stale-float-show>Show me</button>
+        </div>`;
+}
+
+/** Show the floating copy only while the inline warning is scrolled out above the header. */
+function updateStaleFloat() {
+    const a = staleAnchor();
+    const show = !!a && a.bottom < headerBottom() + 4;
+    if (!show) { if (staleFloatEl) staleFloatEl.hidden = true; return; }
+    if (!staleFloatEl) {
+        staleFloatEl = document.createElement('div');
+        staleFloatEl.id = 'pp-bt-stale-float';
+        staleFloatEl.className = 'pp-bt-stale pp-bt-stale-float';
+        staleFloatEl.setAttribute('role', 'alert');
+        document.body.appendChild(staleFloatEl);
+        staleFloatEl.addEventListener('click', (e) => {
+            const imp = e.target.closest('[data-stale-float-import]');
+            if (imp) {
+                if (imp.dataset.staleFloatImport === 'frame') getSpecialBatchingFrame()?.contentWindow?.postMessage({ type: 'jsb-import' }, location.origin);
+                else handleImportBatchFromTracking(currentBatchCastingId);
+                return;
+            }
+            if (e.target.closest('[data-stale-float-show]')) staleAnchor()?.scrollTo();
+        });
+    }
+    const key = a.source + JSON.stringify(a.diffs);
+    if (staleFloatEl.dataset.key !== key) { staleFloatEl.innerHTML = staleFloatHtml(a.diffs, a.source); staleFloatEl.dataset.key = key; }
+    staleFloatEl.style.top = Math.round(headerBottom() + 12) + 'px';
+    staleFloatEl.hidden = false;
+}
+window.addEventListener('scroll', updateStaleFloat, { passive: true });
+window.addEventListener('resize', updateStaleFloat, { passive: true });
 
 function renderBatchTicketsContent() {
     const content = document.getElementById('pp-bt-content');
@@ -7983,6 +8054,7 @@ function renderBatchTicketsContent() {
     const showColorPills = list.length > 1 || canAddColor;
     const colorPills = showColorPills ? renderBatchColorPills(list, ticket) : '';
     content.innerHTML = `<div data-casting-id="${escapeAttr(casting.id)}">${colorPills}${renderBatchTicketBody(casting, ticket, showColorPills)}</div>`;
+    updateStaleFloat();
 }
 
 // Label for a ticket's color pill / static color display.
@@ -8911,7 +8983,7 @@ function handleBatchFieldInput(castingId, field, value) {
             // The out-of-date warning compares these two with the Casting Inventory — keep it current while typing.
             const wrap = document.querySelector('#pp-bt-content [data-bt-stale-wrap]');
             const casting2 = currentCastings.find(c => c.id === castingId);
-            if (wrap && casting2) wrap.innerHTML = renderBatchStaleBanner(casting2, ticket);
+            if (wrap && casting2) { wrap.innerHTML = renderBatchStaleBanner(casting2, ticket); updateStaleFloat(); }
         }
     }
     scheduleBatchTicketSave(castingId, ticket);
