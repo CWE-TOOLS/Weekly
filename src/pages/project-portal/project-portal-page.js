@@ -185,7 +185,7 @@ let phaseRenameSaveTimers = new Map();     // phaseId -> debounce handle for ren
 let currentPhaseId = null;                 // active phase for filtering across tabs (null = no phase / phases off)
 // Production phases that can appear as columns on the tracking sheet.
 // Order here is the order they'll print in. Editable per project via the chip bar.
-const TRACKING_PHASES = ['MILL', 'FO', 'CAST', 'DEMOLD', 'FINISH', 'EPOXY', 'SEAL', 'STRIPS', 'DRILL', 'DRY FIT', 'CRATE', 'FINAL', 'LOAD'];
+const TRACKING_PHASES = ['MILL', 'FO', 'POST FO QA', 'CAST', 'DEMOLD', 'FINISH', 'EPOXY', 'SEAL', 'STRIPS', 'DRILL', 'DRY FIT', 'CRATE', 'FINAL', 'LOAD'];   // POST FO QA added 2026-10-13
 let currentTrackingPhases = new Set(TRACKING_PHASES); // default: all phases tracked
 // Tracks which project the phases above belong to, so switching projects resets defaults.
 let trackingPhasesProject = null;
@@ -10571,7 +10571,7 @@ function handlePrintCoverPage() {
 // same order and active set as the project's Tracking tab.
 
 const SHOP_FOLDER_PHASE_LABELS = {
-    MILL: 'Mill', FO: 'FO', CAST: 'Cast', DEMOLD: 'Demold', FINISH: 'Finish',
+    MILL: 'Mill', FO: 'FO', 'POST FO QA': 'FO QA', CAST: 'Cast', DEMOLD: 'Demold', FINISH: 'Finish',   // sticker reads "Post FO QA"
     EPOXY: 'Epoxy', SEAL: 'Seal', STRIPS: 'Strips', DRILL: 'Drill',
     'DRY FIT': 'Dry Fit', CRATE: 'Crate', FINAL: 'Final', LOAD: 'Load'
 };
