@@ -246,10 +246,12 @@ function invRefreshMark(el) {
     const tip = invEditedTip(itemId, field);
     if (tip) el.setAttribute('title', tip); else el.removeAttribute('title');
     const cell = el.closest('.pp-inv-cell');
-    if (!cell) return;
-    const btn = cell.querySelector('.pp-inv-undo');
-    if (marked && !btn) cell.insertAdjacentHTML('beforeend', INV_UNDO_BTN(field));
-    else if (!marked && btn) btn.remove();
+    if (cell) {
+        const btn = cell.querySelector('.pp-inv-undo');
+        if (marked && !btn) cell.insertAdjacentHTML('beforeend', INV_UNDO_BTN(field));
+        else if (!marked && btn) btn.remove();
+    }
+    updateInvFloat();
 }
 /** Put the previous value back (one step), save it, and drop the mark when nothing is left to undo. */
 function invUndo(el) {
@@ -294,6 +296,7 @@ function invChangeList() {
 function invAcceptAll() {
     invEdits.clear();
     document.querySelectorAll('.pp-inv-edited').forEach(el => invRefreshMark(el));
+    updateInvFloat();
 }
 /** Put every changed field back to the value it had before the first change, and save. */
 function invRejectAll() {
@@ -310,13 +313,46 @@ function invRejectAll() {
     }
     invEdits.clear();
     document.querySelectorAll('.pp-inv-edited').forEach(el => invRefreshMark(el));
+    updateInvFloat();
 }
 function invReviewListHtml() {
     const rows = invChangeList().map(ch => `<tr><td>${escapeHtml(String(ch.cast))}</td><td>${escapeHtml(ch.comp)}</td><td>${escapeHtml(ch.label)}</td><td class="pp-inv-review-was">${escapeHtml(String(ch.was).trim() === '' ? '(blank)' : ch.was)}</td><td class="pp-inv-review-now">${escapeHtml(String(ch.now).trim() === '' ? '(blank)' : ch.now)}</td></tr>`).join('');
     return `<table class="pp-inv-review-table"><thead><tr><th>Cast</th><th>Component</th><th>Field</th><th>Was</th><th>Now</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
+// ---- Floating "changes to review" box on the Castings tab: there as soon as a field is marked, stays
+// put while scrolling, so the marks can be accepted or rejected without leaving the tab.
+let invFloatEl = null;
+function updateInvFloat() {
+    const n = invEdits.size;
+    const show = n > 0 && currentTab === 'castings';
+    if (!show) { if (invFloatEl) invFloatEl.hidden = true; return; }
+    if (!invFloatEl) {
+        invFloatEl = document.createElement('div');
+        invFloatEl.id = 'pp-inv-float';
+        invFloatEl.className = 'pp-bt-stale pp-bt-stale-float pp-inv-float';
+        invFloatEl.setAttribute('role', 'status');
+        document.body.appendChild(invFloatEl);
+        invFloatEl.addEventListener('click', (e) => {
+            const act = e.target.closest('[data-inv-float]')?.dataset.invFloat;
+            if (act === 'accept') invAcceptAll();
+            else if (act === 'reject') invRejectAll();
+            else if (act === 'view') openInvReviewModal(null, { showList: true });
+        });
+    }
+    invFloatEl.innerHTML = `<div class="pp-bt-stale-float-title">&#9888; ${n} CHANGE${n === 1 ? '' : 'S'} TO REVIEW</div>
+        <div class="pp-bt-stale-float-text">Casting Inventory values you changed on this screen are outlined red. They are saved; accept them when you are done, or put the old values back.</div>
+        <div class="pp-inv-float-actions">
+            <button type="button" class="pp-inv-float-btn pp-inv-float-accept" data-inv-float="accept">Accept all</button>
+            <button type="button" class="pp-inv-float-btn pp-inv-float-reject" data-inv-float="reject">Reject all</button>
+            <button type="button" class="pp-bt-stale-link" data-inv-float="view">View changes</button>
+        </div>`;
+    invFloatEl.style.top = Math.round(headerBottom() + 12) + 'px';
+    invFloatEl.hidden = false;
+}
+window.addEventListener('resize', updateInvFloat, { passive: true });
+
 /** Ask what to do with the pending marks; `then` runs after Accept or Reject (not after Cancel). */
-function openInvReviewModal(then) {
+function openInvReviewModal(then, opts = {}) {
     invReviewThen = then || null;
     let m = document.getElementById('pp-inv-review-modal');
     if (!m) {
@@ -360,8 +396,8 @@ function openInvReviewModal(then) {
     const n = invEdits.size;
     document.getElementById('pp-inv-review-hint').textContent = `You changed ${n} value${n === 1 ? '' : 's'} on the Casting Inventory. Accept them, or put the old values back. Cancel stays on this tab.`;
     const list = document.getElementById('pp-inv-review-list');
-    list.hidden = true; list.innerHTML = '';
-    m.querySelector('[data-inv-review="view"]').textContent = 'View changes';
+    list.hidden = !opts.showList; list.innerHTML = opts.showList ? invReviewListHtml() : '';
+    m.querySelector('[data-inv-review="view"]').textContent = opts.showList ? 'Hide changes' : 'View changes';
     m.hidden = false;
 }
 // Refresh / close with marks pending: the browser's own "leave page?" prompt (its wording can't be changed).
@@ -747,6 +783,7 @@ function setActiveTab(tab) {
     updateStaleFloat();   // the floating out-of-date warning only belongs to the Batch Tickets tab
     if (tab !== 'castings' && invEdits.size) invEdits.clear();   // leaving the Castings tab accepts every inventory edit
     if (tab !== 'castings') invSelected.clear();
+    updateInvFloat();
     document.querySelectorAll('.pp-tab-btn').forEach(btn => {
         btn.classList.toggle('pp-tab-active', btn.dataset.tab === tab);
     });
@@ -1161,6 +1198,7 @@ const CAST_INV_AUTO_EXPAND_LIMIT = 10;
 async function loadAllInventoryForCurrentProject() {
     invEdits.clear();   // fresh data: nothing to undo
     invSelected.clear();
+    updateInvFloat();
     const ids = currentCastings.map(c => c.id);
     try {
         currentCastingInventory = await loadAllInventoryForProject(ids);

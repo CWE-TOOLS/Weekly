@@ -1261,6 +1261,13 @@ body.pp-inv-dragging, body.pp-inv-dragging * { user-select: none !important; -we
 .pp-inv-undo { position: absolute; right: 3px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; border: none; border-radius: 3px; background: #dc2626; color: #fff; font-size: 12px; line-height: 16px; padding: 0; cursor: pointer; }
 .pp-inv-undo:hover { background: #b91c1c; }
 .pp-inv-review-reject { border-color: #dc2626 !important; color: #b91c1c !important; }
+/* floating "changes to review" box (same shell as the batching warning) */
+.pp-inv-float-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.pp-inv-float-btn { border: none; border-radius: 4px; padding: 7px 12px; font-size: 12px; font-weight: 700; cursor: pointer; color: #fff; }
+.pp-inv-float-accept { background: #15803d; }
+.pp-inv-float-accept:hover { background: #166534; }
+.pp-inv-float-reject { background: #dc2626; }
+.pp-inv-float-reject:hover { background: #b91c1c; }
 .pp-inv-review-list { max-height: 45vh; overflow: auto; margin: 4px 0 12px; }
 .pp-inv-review-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .pp-inv-review-table th, .pp-inv-review-table td { text-align: left; padding: 4px 8px; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
