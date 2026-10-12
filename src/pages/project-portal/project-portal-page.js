@@ -210,7 +210,7 @@ function invEditedTitle(itemId, field) {
     const tip = invEditedTip(itemId, field);
     return tip ? ` title="${escapeAttr(tip)}"` : '';
 }
-const INV_UNDO_BTN = (field) => `<button type="button" class="pp-inv-undo" data-action="inv-undo" data-field="${escapeAttr(field)}" title="Undo this change" aria-label="Undo this change">&#8630;</button>`;
+const INV_UNDO_BTN = (field) => `<button type="button" class="pp-inv-undo" data-action="inv-undo" data-undo-field="${escapeAttr(field)}" title="Undo this change" aria-label="Undo this change">&#8630;</button>`;
 /** Grid cell wrapper so a marked field can show its undo arrow without disturbing the row's columns. */
 function invCell(itemId, field, inputHtml) {
     const undo = invEdits.has(invEditKey(itemId, field)) ? INV_UNDO_BTN(field) : '';
@@ -1306,10 +1306,7 @@ function renderCastings() {
 function renderCastingCard(c) {
     const isOpen = currentCastInvExpanded.has(c.id);
     const items = getInventoryFor(c.id);
-    const totalQty = items.reduce((sum, it) => sum + (parseInt(it.quantity, 10) || 0) + (parseInt(it.extras, 10) || 0), 0);
-    const countLabel = items.length === 0
-        ? '0 components'
-        : `${items.length} ${items.length === 1 ? 'type' : 'types'} · ${totalQty} pcs`;
+    const countLabel = castingCountLabelHtml(items);
     const hasComponentClipboard = Array.isArray(copiedComponents) && copiedComponents.length > 0;
     const copyDisabled = items.length === 0;
     const nSel = items.filter(it => invSelected.has(it.id)).length;
@@ -2219,7 +2216,7 @@ async function saveInventoryItem(itemId, castingId) {
 
     const NUMERIC_FIELDS = new Set(['cu_ft', 'ff_sq_ft']);
     const fields = {};
-    row.querySelectorAll('[data-field]').forEach(input => {
+    row.querySelectorAll('input[data-field], select[data-field]').forEach(input => {
         const field = input.dataset.field;
         if (field === 'quantity') {
             const n = parseInt(input.value, 10);
@@ -2277,16 +2274,33 @@ function scheduleInventorySave(itemId, castingId) {
     inventorySaveTimers.set(itemId, t);
 }
 
+/**
+ * Title-block summary for a casting: types · pcs · cu ft · ff sq ft (2026-10-14). Volume and face area
+ * total the same way Import from Tracking does (value × (quantity + extras)). A total whose rows are
+ * not all filled in is still shown, but flagged "incomplete" with the count of blank rows.
+ */
+function castingCountLabelHtml(items) {
+    if (items.length === 0) return '0 components';
+    const units = (it) => (parseInt(it.quantity, 10) || 0) + (parseInt(it.extras, 10) || 0);
+    const totalQty = items.reduce((sum, it) => sum + units(it), 0);
+    const blank = (v) => v === null || v === undefined || v === '';
+    const part = (field, label) => {
+        const total = items.reduce((sum, it) => sum + (Number(it[field]) || 0) * units(it), 0);
+        const missing = items.filter(it => blank(it[field])).length;
+        const text = `${roundSig(total, 2)} ${label}`;
+        if (!missing) return escapeHtml(text);
+        const tip = `${missing} of ${items.length} component${items.length === 1 ? '' : 's'} ${missing === 1 ? 'has' : 'have'} no ${label} — this total is incomplete`;
+        return `<span class="pp-cast-card-count-warn" title="${escapeAttr(tip)}">${escapeHtml(text)} &#9888; incomplete</span>`;
+    };
+    return `${items.length} ${items.length === 1 ? 'type' : 'types'} · ${totalQty} pcs · ${part('cu_ft', 'cu ft')} · ${part('ff_sq_ft', 'ff sq ft')}`;
+}
+
 function updateCastingInventoryCount(castingId) {
     const card = document.querySelector(`.pp-cast-card[data-casting-id="${castingId}"]`);
     if (!card) return;
     const countEl = card.querySelector('.pp-cast-card-count');
     if (!countEl) return;
-    const items = getInventoryFor(castingId);
-    const totalQty = items.reduce((sum, it) => sum + (parseInt(it.quantity, 10) || 0) + (parseInt(it.extras, 10) || 0), 0);
-    countEl.textContent = items.length === 0
-        ? '0 components'
-        : `${items.length} ${items.length === 1 ? 'type' : 'types'} · ${totalQty} pcs`;
+    countEl.innerHTML = castingCountLabelHtml(getInventoryFor(castingId));
     updateCastingsSummary();
 }
 
@@ -7881,7 +7895,7 @@ function wireEvents() {
         const btn = e.target.closest('[data-action="inv-undo"]');
         if (!btn) return;
         e.preventDefault(); e.stopPropagation();
-        const el = btn.closest('.pp-inv-cell')?.querySelector('[data-field]');
+        const el = btn.closest('.pp-inv-cell')?.querySelector('input[data-field], select[data-field]');
         if (el) invUndo(el);
     });
     castingsList.addEventListener('keydown', (e) => {

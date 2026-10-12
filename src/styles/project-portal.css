@@ -876,6 +876,8 @@ body { overflow: visible; }
     width: 22px;
     height: 28px;
 }
+/* a cu ft / ff sq ft total with blank rows behind it */
+.pp-cast-card-count-warn { color: #b45309; font-weight: 700; background: #fef3c7; padding: 0 5px; border-radius: 6px; cursor: help; }
 .pp-cast-card-count {
     flex: 0 0 auto;
     font-size: 11px;
