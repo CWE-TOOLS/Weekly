@@ -1063,6 +1063,14 @@ body { overflow: visible; }
 }
 .pp-inv-header-grip-spacer { flex: 0 0 18px; }
 .pp-inv-header-copy-spacer { flex: 0 0 44px; }
+.pp-inv-header-cut-spacer { flex: 0 0 36px; }
+/* tick boxes for Copy / Cut selected */
+.pp-inv-row-select { flex: 0 0 15px; width: 15px; height: 15px; margin: 0; cursor: pointer; accent-color: #1d4ed8; }
+.pp-inv-row.pp-inv-row-selected { border-color: #1d4ed8; box-shadow: 0 0 0 1px rgba(29, 78, 216, 0.25); background: #eff6ff; }
+.pp-row-btn-cut { background: #b91c1c; }
+.pp-row-btn-cut:hover { background: #991b1b; }
+/* no text selection anywhere while a row / casting card is being dragged */
+body.pp-inv-dragging, body.pp-inv-dragging * { user-select: none !important; -webkit-user-select: none !important; }
 .pp-inv-header-delete-spacer { flex: 0 0 26px; }
 .pp-inv-header-fields {
     flex: 1 1 auto;
@@ -1306,6 +1314,12 @@ body { overflow: visible; }
     background: #dbeafe;
     color: #1d4ed8;
     border-color: #bfdbfe;
+}
+.pp-inv-row-cut { flex-basis: 36px; width: 36px; }
+.pp-inv-row-cut:hover {
+    background: #fee2e2;
+    color: #b91c1c;
+    border-color: #fecaca;
 }
 
 .pp-inv-row-delete {

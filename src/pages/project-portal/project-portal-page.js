@@ -370,6 +370,29 @@ window.addEventListener('beforeunload', (e) => {
 });
 let inventorySaveTimers = new Map();       // itemId -> debounce handle
 let copiedComponents = null;               // Array<{type,width,length,color,sealer,quantity,extras,cu_ft,ff_sq_ft}> from a copy action
+const invSelected = new Set();             // inventory row ids ticked for "Copy / Cut selected" (2026-10-13); only for this screen
+function invSelectedIn(castingId) { return getInventoryFor(castingId).filter(it => invSelected.has(it.id)); }
+/** Redraw just the Copy / Cut buttons in a casting's title block after ticks change. */
+function invRefreshTitleButtons(card, castingId) {
+    const actions = card.querySelector('.pp-cast-card-actions');
+    if (!actions) return;
+    const nSel = invSelectedIn(castingId).length;
+    const copy = actions.querySelector('[data-action="copy-components"]');
+    if (copy) {
+        copy.textContent = nSel ? `Copy ${nSel} selected` : 'Copy';
+        copy.title = nSel ? `Copy the ${nSel} ticked component${nSel === 1 ? '' : 's'}` : 'Copy all components on this casting';
+    }
+    let cut = actions.querySelector('[data-action="cut-selected"]');
+    if (nSel) {
+        if (!cut) { copy?.insertAdjacentHTML('afterend', '<button class="pp-row-btn pp-row-btn-word pp-row-btn-cut" data-action="cut-selected" type="button"></button>'); cut = actions.querySelector('[data-action="cut-selected"]'); }
+        cut.textContent = `Cut ${nSel} selected`;
+        cut.title = `Cut the ${nSel} ticked component${nSel === 1 ? '' : 's'} — paste them into another casting`;
+    } else if (cut) cut.remove();
+}
+function inventoryClipItem(it) {
+    return { type: it.type, width: it.width, length: it.length, color: it.color, sealer: it.sealer,
+             quantity: it.quantity, extras: it.extras, cu_ft: it.cu_ft, ff_sq_ft: it.ff_sq_ft };
+}
 let currentColorLog = null;                // form-shaped record (id null = unsaved) — currently active log when multi-color on
 let currentColorLogs = [];                 // all non-preset color logs for this project (>=1 when project has any)
 let currentColorLogId = null;              // id of the active log being edited in the Color Log tab
@@ -723,6 +746,7 @@ function setActiveTab(tab) {
     currentTab = tab;
     updateStaleFloat();   // the floating out-of-date warning only belongs to the Batch Tickets tab
     if (tab !== 'castings' && invEdits.size) invEdits.clear();   // leaving the Castings tab accepts every inventory edit
+    if (tab !== 'castings') invSelected.clear();
     document.querySelectorAll('.pp-tab-btn').forEach(btn => {
         btn.classList.toggle('pp-tab-active', btn.dataset.tab === tab);
     });
@@ -1136,6 +1160,7 @@ const CAST_INV_AUTO_EXPAND_LIMIT = 10;
 
 async function loadAllInventoryForCurrentProject() {
     invEdits.clear();   // fresh data: nothing to undo
+    invSelected.clear();
     const ids = currentCastings.map(c => c.id);
     try {
         currentCastingInventory = await loadAllInventoryForProject(ids);
@@ -1287,6 +1312,10 @@ function renderCastingCard(c) {
         : `${items.length} ${items.length === 1 ? 'type' : 'types'} · ${totalQty} pcs`;
     const hasComponentClipboard = Array.isArray(copiedComponents) && copiedComponents.length > 0;
     const copyDisabled = items.length === 0;
+    const nSel = items.filter(it => invSelected.has(it.id)).length;
+    const copyLabel = nSel ? `Copy ${nSel} selected` : 'Copy';
+    const copyTitle = nSel ? `Copy the ${nSel} ticked component${nSel === 1 ? '' : 's'}` : 'Copy all components on this casting';
+    const cutBtn = nSel ? `<button class="pp-row-btn pp-row-btn-word pp-row-btn-cut" data-action="cut-selected" type="button" title="Cut the ${nSel} ticked component${nSel === 1 ? '' : 's'} — paste them into another casting">Cut ${nSel} selected</button>` : '';
 
     return `
         <div class="pp-cast-card${isOpen ? ' pp-cast-card-open' : ''}" data-casting-id="${escapeAttr(c.id)}">
@@ -1310,7 +1339,8 @@ function renderCastingCard(c) {
                 </div>
                 <span class="pp-cast-card-count">${countLabel}</span>
                 <div class="pp-cast-card-actions">
-                    <button class="pp-row-btn pp-row-btn-word" data-action="copy-components" type="button" ${copyDisabled ? 'disabled' : ''} title="Copy all components on this casting">Copy</button>
+                    <button class="pp-row-btn pp-row-btn-word" data-action="copy-components" type="button" ${copyDisabled ? 'disabled' : ''} title="${escapeAttr(copyTitle)}">${copyLabel}</button>
+                    ${cutBtn}
                     <button class="pp-row-btn pp-row-btn-word" data-action="paste-components" type="button" ${hasComponentClipboard ? '' : 'disabled'} title="Paste copied components into this casting">Paste</button>
                     <button class="pp-row-btn pp-row-btn-delete" data-action="delete" type="button" aria-label="Delete casting" title="Delete casting">&times;</button>
                 </div>
@@ -1326,7 +1356,8 @@ function renderInventoryBody(casting, items) {
         : items.map(item => renderInventoryRow(item, casting.id)).join('');
 
     const headerRow = `
-        <div class="pp-inv-header-row" aria-hidden="true">
+        <div class="pp-inv-header-row">
+            <input type="checkbox" class="pp-inv-row-select pp-inv-select-all" data-select-all aria-label="Select every component on this casting" title="Select all / none" ${items.length && items.every(it => invSelected.has(it.id)) ? 'checked' : ''} ${items.length ? '' : 'disabled'}>
             <div class="pp-inv-header-grip-spacer"></div>
             <div class="pp-inv-header-fields">
                 <span class="pp-inv-header-qty">Qty</span>
@@ -1340,6 +1371,7 @@ function renderInventoryBody(casting, items) {
                 <span>Remake Of</span>
             </div>
             <div class="pp-inv-header-copy-spacer"></div>
+            <div class="pp-inv-header-cut-spacer"></div>
             <div class="pp-inv-header-delete-spacer"></div>
         </div>
     `;
@@ -1405,7 +1437,8 @@ function renderInventoryRow(item, castingId) {
         remakeCellHtml = `<span class="pp-inv-input pp-inv-remake-cell" title="Remake of panel ${escapeAttr(item.remake_of_panel_id)} from casting ${escapeAttr(srcNum)}">${escapeHtml(srcLabel)}</span>`;
     }
     return `
-        <div class="pp-inv-row" data-inventory-id="${escapeAttr(item.id)}" data-casting-id="${escapeAttr(castingId)}">
+        <div class="pp-inv-row${invSelected.has(item.id) ? ' pp-inv-row-selected' : ''}" data-inventory-id="${escapeAttr(item.id)}" data-casting-id="${escapeAttr(castingId)}">
+            <input type="checkbox" class="pp-inv-row-select" data-select-row aria-label="Select component" title="Tick to copy or cut several components at once" ${invSelected.has(item.id) ? 'checked' : ''}>
             <div class="pp-inv-row-grip" aria-hidden="true" title="Drag to reorder">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/>
@@ -1427,6 +1460,7 @@ function renderInventoryRow(item, castingId) {
                 ${remakeCellHtml}
             </div>
             <button class="pp-inv-row-copy" type="button" data-action="copy-inventory-row" aria-label="Copy component" title="Copy this component — paste it with another casting's Paste button">Copy</button>
+            <button class="pp-inv-row-copy pp-inv-row-cut" type="button" data-action="cut-inventory-row" aria-label="Cut component" title="Cut this component (removed here, kept on the clipboard) — paste it with another casting's Paste button">Cut</button>
             <button class="pp-inv-row-delete" type="button" data-action="delete-inventory" aria-label="Delete component" title="Delete component">&times;</button>
         </div>
     `;
@@ -1448,6 +1482,10 @@ function ensureCastingsSortable() {
         easing: 'cubic-bezier(0.22, 0.61, 0.36, 1)',
         handle: '.pp-cast-card-grip',
         draggable: '.pp-cast-card',
+            // While a row is held, nothing on the page can be text-selected (the fallback drag otherwise
+            // sweeps a selection across every row it passes).
+            onChoose: () => { document.body.classList.add('pp-inv-dragging'); try { window.getSelection()?.removeAllRanges(); } catch {} },
+            onUnchoose: () => document.body.classList.remove('pp-inv-dragging'),
         ghostClass: 'pp-cast-card-ghost',
         chosenClass: 'pp-cast-card-chosen',
         dragClass: 'pp-cast-card-drag',
@@ -2287,6 +2325,10 @@ function ensureInventorySortables() {
             easing: 'cubic-bezier(0.22, 0.61, 0.36, 1)',
             handle: '.pp-inv-row-grip',
             draggable: '.pp-inv-row',
+            // While a row is held, nothing on the page can be text-selected (the fallback drag otherwise
+            // sweeps a selection across every row it passes).
+            onChoose: () => { document.body.classList.add('pp-inv-dragging'); try { window.getSelection()?.removeAllRanges(); } catch {} },
+            onUnchoose: () => document.body.classList.remove('pp-inv-dragging'),
             ghostClass: 'pp-inv-row-ghost',
             chosenClass: 'pp-inv-row-chosen',
             dragClass: 'pp-inv-row-drag',
@@ -2296,6 +2338,7 @@ function ensureInventorySortables() {
             scrollSensitivity: 60,
             scrollSpeed: 14,
             onEnd: async (evt) => {
+                document.body.classList.remove('pp-inv-dragging');
                 const oldIdx = evt.oldIndex;
                 const newIdx = evt.newIndex;
                 if (oldIdx === newIdx || oldIdx === undefined || newIdx === undefined) return;
@@ -3753,23 +3796,49 @@ async function handlePasteHours(targetCastingId) {
 }
 
 function handleCopyComponents(castingId) {
-    const items = getInventoryFor(castingId);
-    if (items.length === 0) return;
-    copiedComponents = items.map(it => ({
-        type: it.type,
-        width: it.width,
-        length: it.length,
-        color: it.color,
-        sealer: it.sealer,
-        quantity: it.quantity,
-        extras: it.extras,
-        cu_ft: it.cu_ft,
-        ff_sq_ft: it.ff_sq_ft
-    }));
+    const all = getInventoryFor(castingId);
+    if (all.length === 0) return;
+    const picked = invSelectedIn(castingId);
+    const items = picked.length ? picked : all;          // ticked rows only, else the whole casting
+    copiedComponents = items.map(inventoryClipItem);
+    for (const it of items) invSelected.delete(it.id);
     const casting = currentCastings.find(c => c.id === castingId);
     const n = copiedComponents.length;
-    showToast(`Copied ${n} component${n === 1 ? '' : 's'} from Cast ${casting?.casting_number || ''}.`);
+    showToast(`Copied ${n} component${n === 1 ? '' : 's'} from Cast ${casting?.casting_number || ''}. Use Paste on another casting.`);
     renderCastings();
+}
+
+/** Cut = copy to the clipboard, then remove here. Paste puts them into another casting. */
+async function cutInventoryItems(castingId, items, label) {
+    const casting = currentCastings.find(c => c.id === castingId);
+    if (isCastingInventoryLocked(casting)) { showCastingLockedToast(casting); return; }
+    if (!items.length) return;
+    copiedComponents = items.map(inventoryClipItem);
+    try {
+        for (const it of items) {
+            const t = inventorySaveTimers.get(it.id);
+            if (t) { clearTimeout(t); inventorySaveTimers.delete(it.id); }
+        }
+        await Promise.all(items.map(it => deleteInventoryItem(it.id)));
+        const gone = new Set(items.map(it => it.id));
+        setInventoryFor(castingId, getInventoryFor(castingId).filter(c => !gone.has(c.id)));
+        for (const id of gone) invSelected.delete(id);
+        renderCastings();
+        syncTrackingFromInventory();
+        showToast(`Cut ${label} from Cast ${casting?.casting_number || ''} — use Paste on the casting it belongs to.`);
+    } catch (err) {
+        logger.error('[project-portal] cut components failed:', err);
+        showToast('Cut failed: ' + (err.message || err), 'error');
+        renderCastings();
+    }
+}
+function handleCutInventoryRow(castingId, itemId) {
+    const item = getInventoryFor(castingId).find(it => it.id === itemId);
+    if (item) cutInventoryItems(castingId, [item], `"${item.type || '(untitled)'}"`);
+}
+function handleCutSelected(castingId) {
+    const items = invSelectedIn(castingId);
+    cutInventoryItems(castingId, items, `${items.length} component${items.length === 1 ? '' : 's'}`);
 }
 
 function handleCopyInventoryRow(castingId, itemId) {
@@ -7754,7 +7823,36 @@ function wireEvents() {
             const row = btn.closest('.pp-inv-row[data-inventory-id]');
             const itemId = row?.getAttribute('data-inventory-id');
             if (itemId) handleCopyInventoryRow(castingId, itemId);
+        } else if (action === 'cut-inventory-row') {
+            const row = btn.closest('.pp-inv-row[data-inventory-id]');
+            const itemId = row?.getAttribute('data-inventory-id');
+            if (itemId) handleCutInventoryRow(castingId, itemId);
+        } else if (action === 'cut-selected') {
+            handleCutSelected(castingId);
         }
+    });
+    // Tick boxes: per row, or the header box for the whole casting. Only the title block redraws.
+    castingsList.addEventListener('change', (e) => {
+        if (!e.target.matches('.pp-inv-row-select')) return;
+        const card = e.target.closest('.pp-cast-card[data-casting-id]');
+        const castingId = card?.getAttribute('data-casting-id');
+        if (!castingId) return;
+        if (e.target.hasAttribute('data-select-all')) {
+            for (const it of getInventoryFor(castingId)) { if (e.target.checked) invSelected.add(it.id); else invSelected.delete(it.id); }
+            card.querySelectorAll('.pp-inv-row[data-inventory-id]').forEach(r => {
+                r.classList.toggle('pp-inv-row-selected', e.target.checked);
+                const box = r.querySelector('[data-select-row]'); if (box) box.checked = e.target.checked;
+            });
+        } else {
+            const row = e.target.closest('.pp-inv-row[data-inventory-id]');
+            const id = row?.getAttribute('data-inventory-id');
+            if (!id) return;
+            if (e.target.checked) invSelected.add(id); else invSelected.delete(id);
+            row.classList.toggle('pp-inv-row-selected', e.target.checked);
+            const all = card.querySelector('[data-select-all]');
+            if (all) all.checked = getInventoryFor(castingId).every(it => invSelected.has(it.id));
+        }
+        invRefreshTitleButtons(card, castingId);
     });
     castingsList.addEventListener('input', (e) => {
         if (!e.target.matches('input[data-field]')) return;
