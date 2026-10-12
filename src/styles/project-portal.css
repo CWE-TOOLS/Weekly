@@ -1244,6 +1244,12 @@ body { overflow: visible; }
     transition: border-color 0.12s, background 0.12s, box-shadow 0.12s;
 }
 .pp-inv-input::placeholder { color: #94a3b8; }
+/* Casting Inventory edit marks: a changed value is outlined red until you leave the tab; the arrow undoes it */
+.pp-inv-cell { position: relative; min-width: 0; display: flex; }
+.pp-inv-cell > .pp-inv-input { flex: 1 1 auto; }
+.pp-inv-input.pp-inv-edited { border: 2px solid #dc2626 !important; background: #fef2f2; padding-right: 20px; box-shadow: 0 0 0 1px rgba(220, 38, 38, 0.25); }
+.pp-inv-undo { position: absolute; right: 3px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; border: none; border-radius: 3px; background: #dc2626; color: #fff; font-size: 12px; line-height: 16px; padding: 0; cursor: pointer; }
+.pp-inv-undo:hover { background: #b91c1c; }
 .pp-inv-input:hover {
     border-color: #cbd5e1;
     background: #ffffff;

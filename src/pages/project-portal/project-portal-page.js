@@ -193,6 +193,83 @@ let currentCastInvExpanded = new Set();    // castingIds whose inventory section
 let castInvExpandedProject = null;         // tracks which project the expanded-set defaults have been seeded for
 let currentCastingInventory = new Map();   // castingId -> Array<inventory row>
 let currentCastingInventoryLoadedFor = null; // project_number we last loaded inventory for
+// Casting Inventory "what did I just change" marks (2026-10-13). While someone refines values on the
+// Castings tab, every field whose EXISTING value they changed gets a red outline and can be undone
+// (undo arrow / Ctrl+Z, one step per change). Kept only in memory for this screen: leaving the tab,
+// switching project or reloading accepts everything. Key: `${inventoryRowId}|${field}`.
+const invEdits = new Map();   // -> [{ value, label }] previous values, oldest first
+const invEditKey = (itemId, field) => `${itemId}|${field}`;
+function invEditedCls(itemId, field) { return invEdits.has(invEditKey(itemId, field)) ? ' pp-inv-edited' : ''; }
+function invEditedTip(itemId, field) {
+    const stack = invEdits.get(invEditKey(itemId, field));
+    if (!stack || !stack.length) return '';
+    const last = stack[stack.length - 1];
+    return `Changed - was ${String(last.label).trim() === '' ? '(blank)' : last.label}. Undo: the red arrow or Ctrl+Z.`;
+}
+function invEditedTitle(itemId, field) {
+    const tip = invEditedTip(itemId, field);
+    return tip ? ` title="${escapeAttr(tip)}"` : '';
+}
+const INV_UNDO_BTN = (field) => `<button type="button" class="pp-inv-undo" data-action="inv-undo" data-field="${escapeAttr(field)}" title="Undo this change" aria-label="Undo this change">&#8630;</button>`;
+/** Grid cell wrapper so a marked field can show its undo arrow without disturbing the row's columns. */
+function invCell(itemId, field, inputHtml) {
+    const undo = invEdits.has(invEditKey(itemId, field)) ? INV_UNDO_BTN(field) : '';
+    return `<span class="pp-inv-cell">${inputHtml}${undo}</span>`;
+}
+/** Two field values the same? Numbers compare as numbers ("1.020" = "1.02"), everything else as trimmed text. */
+function invSameValue(a, b) {
+    const sa = String(a ?? '').trim(), sb = String(b ?? '').trim();
+    if (sa === sb) return true;
+    const na = parseFloat(sa), nb = parseFloat(sb);
+    return sa !== '' && sb !== '' && Number.isFinite(na) && Number.isFinite(nb) && na === nb;
+}
+/** A field lost focus (or a select changed): if it HAD a value and now has a different one, remember the old one and mark it. */
+function invRecordEdit(el) {
+    if (!el || !el.matches || !el.matches('input[data-field], select[data-field]') || el.dataset.before === undefined) return;
+    const row = el.closest('.pp-inv-row[data-inventory-id]');
+    if (!row) return;
+    const before = el.dataset.before, beforeLabel = el.dataset.beforeLabel ?? before;
+    delete el.dataset.before; delete el.dataset.beforeLabel;
+    if (String(before).trim() === '' || invSameValue(before, el.value)) return;   // first entry, or nothing changed
+    const key = invEditKey(row.getAttribute('data-inventory-id'), el.dataset.field);
+    const stack = invEdits.get(key) || [];
+    stack.push({ value: before, label: beforeLabel });
+    invEdits.set(key, stack);
+    invRefreshMark(el);
+}
+function invRefreshMark(el) {
+    const row = el.closest('.pp-inv-row[data-inventory-id]');
+    if (!row) return;
+    const itemId = row.getAttribute('data-inventory-id'), field = el.dataset.field;
+    const marked = invEdits.has(invEditKey(itemId, field));
+    el.classList.toggle('pp-inv-edited', marked);
+    const tip = invEditedTip(itemId, field);
+    if (tip) el.setAttribute('title', tip); else el.removeAttribute('title');
+    const cell = el.closest('.pp-inv-cell');
+    if (!cell) return;
+    const btn = cell.querySelector('.pp-inv-undo');
+    if (marked && !btn) cell.insertAdjacentHTML('beforeend', INV_UNDO_BTN(field));
+    else if (!marked && btn) btn.remove();
+}
+/** Put the previous value back (one step), save it, and drop the mark when nothing is left to undo. */
+function invUndo(el) {
+    const row = el.closest('.pp-inv-row[data-inventory-id]');
+    if (!row) return false;
+    const itemId = row.getAttribute('data-inventory-id'), castingId = row.getAttribute('data-casting-id');
+    const key = invEditKey(itemId, el.dataset.field);
+    const stack = invEdits.get(key);
+    if (!stack || !stack.length) return false;
+    const prev = stack.pop();
+    if (!stack.length) invEdits.delete(key);
+    el.value = prev.value;
+    delete el.dataset.before; delete el.dataset.beforeLabel;
+    invRefreshMark(el);
+    const t = inventorySaveTimers.get(itemId);
+    if (t) clearTimeout(t);
+    inventorySaveTimers.delete(itemId);
+    saveInventoryItem(itemId, castingId);
+    return true;
+}
 let inventorySaveTimers = new Map();       // itemId -> debounce handle
 let copiedComponents = null;               // Array<{type,width,length,color,sealer,quantity,extras,cu_ft,ff_sq_ft}> from a copy action
 let currentColorLog = null;                // form-shaped record (id null = unsaved) — currently active log when multi-color on
@@ -539,6 +616,7 @@ function setActiveTab(tab) {
     if (currentTab === 'tracking' && tab !== 'tracking') lastTrackSelectionAnchor = null;
     currentTab = tab;
     updateStaleFloat();   // the floating out-of-date warning only belongs to the Batch Tickets tab
+    if (tab !== 'castings' && invEdits.size) invEdits.clear();   // leaving the Castings tab accepts every inventory edit
     document.querySelectorAll('.pp-tab-btn').forEach(btn => {
         btn.classList.toggle('pp-tab-active', btn.dataset.tab === tab);
     });
@@ -951,6 +1029,7 @@ async function loadAndRenderCastings() {
 const CAST_INV_AUTO_EXPAND_LIMIT = 10;
 
 async function loadAllInventoryForCurrentProject() {
+    invEdits.clear();   // fresh data: nothing to undo
     const ids = currentCastings.map(c => c.id);
     try {
         currentCastingInventory = await loadAllInventoryForProject(ids);
@@ -1228,17 +1307,17 @@ function renderInventoryRow(item, castingId) {
                 </svg>
             </div>
             <div class="pp-inv-row-fields">
-                <input type="number" class="pp-inv-input pp-inv-input-qty" data-field="quantity" min="1" step="1" value="${escapeAttr(item.quantity ?? 1)}" />
-                <input type="number" class="pp-inv-input pp-inv-input-qty" data-field="extras" min="0" step="1" placeholder="0" value="${escapeAttr(item.extras ?? 0)}" />
-                <input type="text" class="pp-inv-input" data-field="type" placeholder="Type" value="${escapeAttr(item.type || '')}" />
-                <input type="text" class="pp-inv-input" data-field="width" placeholder="Width" value="${escapeAttr(item.width || '')}" />
-                <input type="text" class="pp-inv-input" data-field="length" placeholder="Length" value="${escapeAttr(item.length || '')}" />
-                ${buildColorLogSelectHtml(item.color_log_id, {
-                    className: 'pp-inv-input pp-inv-color-select',
+                ${invCell(item.id, 'quantity', `<input type="number" class="pp-inv-input pp-inv-input-qty${invEditedCls(item.id, 'quantity')}" data-field="quantity" min="1" step="1" value="${escapeAttr(item.quantity ?? 1)}"${invEditedTitle(item.id, 'quantity')} />`)}
+                ${invCell(item.id, 'extras', `<input type="number" class="pp-inv-input pp-inv-input-qty${invEditedCls(item.id, 'extras')}" data-field="extras" min="0" step="1" placeholder="0" value="${escapeAttr(item.extras ?? 0)}"${invEditedTitle(item.id, 'extras')} />`)}
+                ${invCell(item.id, 'type', `<input type="text" class="pp-inv-input${invEditedCls(item.id, 'type')}" data-field="type" placeholder="Type" value="${escapeAttr(item.type || '')}"${invEditedTitle(item.id, 'type')} />`)}
+                ${invCell(item.id, 'width', `<input type="text" class="pp-inv-input${invEditedCls(item.id, 'width')}" data-field="width" placeholder="Width" value="${escapeAttr(item.width || '')}"${invEditedTitle(item.id, 'width')} />`)}
+                ${invCell(item.id, 'length', `<input type="text" class="pp-inv-input${invEditedCls(item.id, 'length')}" data-field="length" placeholder="Length" value="${escapeAttr(item.length || '')}"${invEditedTitle(item.id, 'length')} />`)}
+                ${invCell(item.id, 'color_log_id', buildColorLogSelectHtml(item.color_log_id, {
+                    className: 'pp-inv-input pp-inv-color-select' + invEditedCls(item.id, 'color_log_id'),
                     dataAttrs: { 'data-field': 'color_log_id' }
-                })}
-                <input type="number" class="pp-inv-input pp-inv-input-num" data-field="cu_ft" step="any" min="0" placeholder="0" value="${item.cu_ft == null ? '' : escapeAttr(item.cu_ft)}" />
-                <input type="number" class="pp-inv-input pp-inv-input-num" data-field="ff_sq_ft" step="any" min="0" placeholder="0" value="${item.ff_sq_ft == null ? '' : escapeAttr(item.ff_sq_ft)}" />
+                }))}
+                ${invCell(item.id, 'cu_ft', `<input type="number" class="pp-inv-input pp-inv-input-num${invEditedCls(item.id, 'cu_ft')}" data-field="cu_ft" step="any" min="0" placeholder="0" value="${item.cu_ft == null ? '' : escapeAttr(item.cu_ft)}"${invEditedTitle(item.id, 'cu_ft')} />`)}
+                ${invCell(item.id, 'ff_sq_ft', `<input type="number" class="pp-inv-input pp-inv-input-num${invEditedCls(item.id, 'ff_sq_ft')}" data-field="ff_sq_ft" step="any" min="0" placeholder="0" value="${item.ff_sq_ft == null ? '' : escapeAttr(item.ff_sq_ft)}"${invEditedTitle(item.id, 'ff_sq_ft')} />`)}
                 ${remakeCellHtml}
             </div>
             <button class="pp-inv-row-copy" type="button" data-action="copy-inventory-row" aria-label="Copy component" title="Copy this component — paste it with another casting's Paste button">Copy</button>
@@ -7587,10 +7666,35 @@ function wireEvents() {
         scheduleCastingSave(card.getAttribute('data-casting-id'));
     });
     // Dropdowns (color log) fire 'change' instead of 'input'.
+    // Edit marks: what the field held when it got focus (selects also keep the option's text for the tooltip).
+    castingsList.addEventListener('focusin', (e) => {
+        if (!e.target.matches('.pp-inv-row[data-inventory-id] input[data-field], .pp-inv-row[data-inventory-id] select[data-field]')) return;
+        e.target.dataset.before = e.target.value;
+        if (e.target.tagName === 'SELECT') e.target.dataset.beforeLabel = e.target.selectedOptions[0]?.text || '';
+    });
+    castingsList.addEventListener('focusout', (e) => { invRecordEdit(e.target); });
+    castingsList.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action="inv-undo"]');
+        if (!btn) return;
+        e.preventDefault(); e.stopPropagation();
+        const el = btn.closest('.pp-inv-cell')?.querySelector('[data-field]');
+        if (el) invUndo(el);
+    });
+    castingsList.addEventListener('keydown', (e) => {
+        if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'z' || e.shiftKey) return;
+        if (!e.target.matches('.pp-inv-row[data-inventory-id] [data-field]')) return;
+        const row = e.target.closest('.pp-inv-row[data-inventory-id]');
+        if (!invEdits.has(invEditKey(row.getAttribute('data-inventory-id'), e.target.dataset.field))) return;   // nothing of ours to undo: leave the browser's own undo alone
+        e.preventDefault();
+        invUndo(e.target);
+    });
     castingsList.addEventListener('change', (e) => {
         if (!e.target.matches('select[data-field]')) return;
         const invRow = e.target.closest('.pp-inv-row[data-inventory-id]');
         if (!invRow) return;
+        invRecordEdit(e.target);
+        e.target.dataset.before = e.target.value;
+        e.target.dataset.beforeLabel = e.target.selectedOptions[0]?.text || '';
         const itemId = invRow.getAttribute('data-inventory-id');
         const castingId = invRow.getAttribute('data-casting-id');
         // Save immediately for selects — no debounce needed.
