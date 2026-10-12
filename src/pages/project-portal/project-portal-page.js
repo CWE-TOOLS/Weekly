@@ -270,6 +270,104 @@ function invUndo(el) {
     saveInventoryItem(itemId, castingId);
     return true;
 }
+
+// ---- Leaving the Castings tab with marks pending: accept them, put every old value back, or look first.
+const INV_FIELD_LABELS = { quantity: 'QTY', extras: 'EXTRAS', type: 'TYPE', width: 'WIDTH', length: 'LENGTH', color_log_id: 'COLOR', cu_ft: 'CU FT', ff_sq_ft: 'FF SQ FT' };
+let invReviewThen = null;   // what to do once the user has accepted or rejected (e.g. finish the tab switch)
+
+/** Every pending change: where it is, what it was first, what it is now. */
+function invChangeList() {
+    const out = [];
+    for (const [key, stack] of invEdits) {
+        const [itemId, field] = key.split('|');
+        const row = document.querySelector(`.pp-inv-row[data-inventory-id="${itemId}"]`);
+        const el = row?.querySelector(`[data-field="${field}"]`);
+        const castingId = row?.getAttribute('data-casting-id');
+        const casting = currentCastings.find(c => c.id === castingId);
+        const item = getInventoryFor(castingId).find(i => i.id === itemId);
+        const now = el ? (el.tagName === 'SELECT' ? (el.selectedOptions[0]?.text || '') : el.value) : '';
+        out.push({ itemId, field, el, cast: casting?.casting_number || '?', comp: item?.type || '', label: INV_FIELD_LABELS[field] || field, was: stack[0].label, now, first: stack[0] });
+    }
+    out.sort((a, b) => String(a.cast).localeCompare(String(b.cast), undefined, { numeric: true }) || String(a.comp).localeCompare(String(b.comp), undefined, { numeric: true }));
+    return out;
+}
+function invAcceptAll() {
+    invEdits.clear();
+    document.querySelectorAll('.pp-inv-edited').forEach(el => invRefreshMark(el));
+}
+/** Put every changed field back to the value it had before the first change, and save. */
+function invRejectAll() {
+    for (const ch of invChangeList()) {
+        if (!ch.el) continue;
+        ch.el.value = ch.first.value;
+        delete ch.el.dataset.before; delete ch.el.dataset.beforeLabel;
+        const row = ch.el.closest('.pp-inv-row[data-inventory-id]');
+        const itemId = row.getAttribute('data-inventory-id');
+        const t = inventorySaveTimers.get(itemId);
+        if (t) clearTimeout(t);
+        inventorySaveTimers.delete(itemId);
+        saveInventoryItem(itemId, row.getAttribute('data-casting-id'));
+    }
+    invEdits.clear();
+    document.querySelectorAll('.pp-inv-edited').forEach(el => invRefreshMark(el));
+}
+function invReviewListHtml() {
+    const rows = invChangeList().map(ch => `<tr><td>${escapeHtml(String(ch.cast))}</td><td>${escapeHtml(ch.comp)}</td><td>${escapeHtml(ch.label)}</td><td class="pp-inv-review-was">${escapeHtml(String(ch.was).trim() === '' ? '(blank)' : ch.was)}</td><td class="pp-inv-review-now">${escapeHtml(String(ch.now).trim() === '' ? '(blank)' : ch.now)}</td></tr>`).join('');
+    return `<table class="pp-inv-review-table"><thead><tr><th>Cast</th><th>Component</th><th>Field</th><th>Was</th><th>Now</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+/** Ask what to do with the pending marks; `then` runs after Accept or Reject (not after Cancel). */
+function openInvReviewModal(then) {
+    invReviewThen = then || null;
+    let m = document.getElementById('pp-inv-review-modal');
+    if (!m) {
+        document.body.insertAdjacentHTML('beforeend', `
+        <div id="pp-inv-review-modal" class="pp-modal-backdrop" hidden>
+            <div class="pp-modal" role="dialog" aria-modal="true" aria-labelledby="pp-inv-review-title">
+                <div class="pp-modal-header">
+                    <h2 id="pp-inv-review-title">Casting Inventory changes</h2>
+                    <button type="button" class="pp-modal-close" data-inv-review="cancel" aria-label="Close">&times;</button>
+                </div>
+                <div class="pp-modal-body">
+                    <p class="pp-modal-hint" id="pp-inv-review-hint"></p>
+                    <div id="pp-inv-review-list" class="pp-inv-review-list" hidden></div>
+                    <div class="pp-modal-actions">
+                        <button type="button" class="pp-secondary-btn" data-inv-review="view">View changes</button>
+                        <button type="button" class="pp-secondary-btn pp-inv-review-reject" data-inv-review="reject">Reject all changes</button>
+                        <button type="button" class="pp-primary-btn" data-inv-review="accept">Accept all changes</button>
+                    </div>
+                </div>
+            </div>
+        </div>`);
+        m = document.getElementById('pp-inv-review-modal');
+        m.addEventListener('click', (e) => {
+            const act = e.target === m ? 'cancel' : e.target.closest('[data-inv-review]')?.dataset.invReview;
+            if (!act) return;
+            if (act === 'view') {
+                const list = document.getElementById('pp-inv-review-list');
+                list.hidden = !list.hidden;
+                if (!list.hidden) list.innerHTML = invReviewListHtml();
+                e.target.closest('[data-inv-review]').textContent = list.hidden ? 'View changes' : 'Hide changes';
+                return;
+            }
+            if (act === 'accept') invAcceptAll();
+            if (act === 'reject') invRejectAll();
+            m.hidden = true;
+            const then = invReviewThen;
+            invReviewThen = null;
+            if (act !== 'cancel' && then) then();
+        });
+    }
+    const n = invEdits.size;
+    document.getElementById('pp-inv-review-hint').textContent = `You changed ${n} value${n === 1 ? '' : 's'} on the Casting Inventory. Accept them, or put the old values back. Cancel stays on this tab.`;
+    const list = document.getElementById('pp-inv-review-list');
+    list.hidden = true; list.innerHTML = '';
+    m.querySelector('[data-inv-review="view"]').textContent = 'View changes';
+    m.hidden = false;
+}
+// Refresh / close with marks pending: the browser's own "leave page?" prompt (its wording can't be changed).
+window.addEventListener('beforeunload', (e) => {
+    if (invEdits.size) { e.preventDefault(); e.returnValue = ''; }
+});
 let inventorySaveTimers = new Map();       // itemId -> debounce handle
 let copiedComponents = null;               // Array<{type,width,length,color,sealer,quantity,extras,cu_ft,ff_sq_ft}> from a copy action
 let currentColorLog = null;                // form-shaped record (id null = unsaved) — currently active log when multi-color on
@@ -369,6 +467,10 @@ const VALID_TABS = new Set([
 ]);
 
 async function showListView() {
+    if (currentTab === 'castings' && invEdits.size) {
+        openInvReviewModal(() => showListView());
+        return;
+    }
     // Flush any pending color-log save before leaving the form view.
     if (colorLogSaveTimer) {
         clearTimeout(colorLogSaveTimer);
@@ -608,6 +710,10 @@ function updateFormContext(project) {
 }
 
 function setActiveTab(tab) {
+    if (currentTab === 'castings' && tab !== 'castings' && invEdits.size) {
+        openInvReviewModal(() => setActiveTab(tab));   // decide first; the switch continues after Accept / Reject
+        return;
+    }
     if (currentTab === 'tracking' && tab !== 'tracking' && selectedComponentIds.size > 0) {
         selectedComponentIds.clear();
         const bar = document.getElementById('pp-track-bulk-bar');

@@ -1250,6 +1250,13 @@ body { overflow: visible; }
 .pp-inv-input.pp-inv-edited { border: 2px solid #dc2626 !important; background: #fef2f2; padding-right: 20px; box-shadow: 0 0 0 1px rgba(220, 38, 38, 0.25); }
 .pp-inv-undo { position: absolute; right: 3px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; border: none; border-radius: 3px; background: #dc2626; color: #fff; font-size: 12px; line-height: 16px; padding: 0; cursor: pointer; }
 .pp-inv-undo:hover { background: #b91c1c; }
+.pp-inv-review-reject { border-color: #dc2626 !important; color: #b91c1c !important; }
+.pp-inv-review-list { max-height: 45vh; overflow: auto; margin: 4px 0 12px; }
+.pp-inv-review-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.pp-inv-review-table th, .pp-inv-review-table td { text-align: left; padding: 4px 8px; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
+.pp-inv-review-table th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; }
+.pp-inv-review-was { color: #64748b; text-decoration: line-through; }
+.pp-inv-review-now { color: #b91c1c; font-weight: 700; }
 .pp-inv-input:hover {
     border-color: #cbd5e1;
     background: #ffffff;
