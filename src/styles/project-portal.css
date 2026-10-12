@@ -1262,7 +1262,7 @@ body.pp-inv-dragging, body.pp-inv-dragging * { user-select: none !important; -we
 .pp-inv-undo:hover { background: #b91c1c; }
 .pp-inv-review-reject { border-color: #dc2626 !important; color: #b91c1c !important; }
 /* floating "changes to review" box (same shell as the batching warning, but green: these are your own edits) */
-.pp-inv-float { background: #f0fdf4; border-color: #15803d; color: #14532d; box-shadow: 0 10px 30px rgba(21, 128, 61, 0.3); }
+.pp-bt-stale.pp-inv-float { background: #f0fdf4; border-color: #15803d; color: #14532d; box-shadow: 0 10px 30px rgba(21, 128, 61, 0.3); }
 .pp-inv-float .pp-bt-stale-float-title { color: #15803d; }
 .pp-inv-float .pp-bt-stale-link { color: #15803d; }
 .pp-inv-float-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
