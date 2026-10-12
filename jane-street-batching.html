@@ -62,6 +62,15 @@ button, select, input, textarea { font: inherit; }
 .ctx .k { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); font-weight: 700; margin-right: 6px; }
 .chip { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
 .chip.warn { background: #fef3c7; color: #92400e; }
+.chip.stale-chip { background: #fee2e2; color: #b91c1c; }
+/* the ticket no longer matches the Casting Inventory */
+.stale { background: #fef2f2; border: 3px solid #dc2626; border-radius: 10px; padding: 12px 14px; color: #7f1d1d; margin-bottom: 12px; font-size: 13px; font-weight: 600; }
+.stale .t { font-size: 18px; font-weight: 900; letter-spacing: .04em; color: #b91c1c; margin-bottom: 4px; }
+.stale-tbl { border-collapse: collapse; margin: 8px 0; }
+.stale-tbl th, .stale-tbl td { text-align: left; padding: 2px 16px 2px 0; }
+.stale-tbl th { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: #991b1b; }
+.stale-btn { background: #dc2626; border-color: #dc2626; color: #fff; }
+.stale-btn:hover { background: #b91c1c; }
 .summary { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
 .stat { border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; min-width: 110px; background: #fff; }
 .stat .v { font-size: 20px; font-weight: 800; }
@@ -1172,7 +1181,7 @@ function renderOverview() {
                 <td class="num"><strong>${plan.batches.length}</strong></td>
                 <td class="num">${plan.totalSandLbs}</td>
                 <td style="color:var(--muted)">${std ? esc(describeSizes(std)) : ''}</td>
-                <td style="color:var(--muted);white-space:nowrap">${t.importedAt ? esc(formatWhen(t.importedAt, true)) : '—'}</td></tr>`;
+                <td style="color:var(--muted);white-space:nowrap">${staleDiffs(c, t).length ? '<span class="chip stale-chip">OUT OF DATE</span> ' : ''}${t.importedAt ? esc(formatWhen(t.importedAt, true)) : '—'}</td></tr>`;
         }
     }
     el.innerHTML = `<table class="tbl"><thead><tr><th>Cast</th><th>Color</th><th class="num">Cu Ft</th><th class="num">Face</th><th class="num">First BU</th><th class="num">Final BU</th><th class="num">Batches</th><th class="num">Sand lb</th><th>Portal standard would be</th><th>Last imported</th></tr></thead>
@@ -1180,6 +1189,27 @@ function renderOverview() {
 }
 
 // What the Casting Inventory says (as of the last load / import), whether the fields agree, and when we last imported.
+/** Big red warning when the ticket's Cu Ft / Face Sq Ft no longer match what the Casting Inventory totals to today. */
+function staleDiffs(casting, ticket) {
+    const t = inventoryTotals(casting.id, ticket);
+    if (!t) return [];
+    const num = (v) => roundSig(parseFloat(v) || 0, 2);
+    const typed = (v) => String(v ?? '').trim() !== '';
+    const diffs = [];
+    if (t.cuFtComplete && typed(ticket.cuFt) && num(ticket.cuFt) !== num(t.cuFt)) diffs.push(['Total Cu Ft', ticket.cuFt, t.cuFt]);
+    if (t.ffComplete && typed(ticket.faceSqFt) && num(ticket.faceSqFt) !== num(t.ff)) diffs.push(['Face Sq Ft', ticket.faceSqFt, t.ff]);
+    return diffs;
+}
+function staleBannerHtml(casting, ticket) {
+    const diffs = staleDiffs(casting, ticket);
+    if (!diffs.length) return '';
+    return `<div class="stale" role="alert"><div class="t">&#9888; BATCHING IS OUT OF DATE</div>
+        <div>The Casting Inventory for this casting no longer matches the numbers this batching was made from — these tickets, the mix totals and the weekly board count are based on the OLD numbers.</div>
+        <table class="stale-tbl"><tr><th></th><th>Batching uses</th><th>Casting Inventory now</th></tr>
+            ${diffs.map(([l, was, now]) => `<tr><td>${l}</td><td>${esc(was)}</td><td><strong>${esc(now)}</strong></td></tr>`).join('')}</table>
+        <button class="btn stale-btn" data-import>Import from Casting Inventory now</button></div>`;
+}
+
 function inventoryHint(casting, ticket) {
     const last = `<span class="inv">Last imported: <strong>${ticket.importedAt ? esc(formatWhen(ticket.importedAt)) : 'never'}</strong></span>`;
     const t = inventoryTotals(casting.id, ticket);
@@ -1206,6 +1236,7 @@ function renderForm(casting, ticket) {
             <span><span class="k">Cast Method</span>${esc(log?.castMethod || '—')}</span>
             ${ticket._fromDb ? '' : '<span class="chip warn" id="new-chip">new ticket — default options, saved on first change or import</span>'}
         </div>
+        <div id="stale">${staleBannerHtml(casting, ticket)}</div>
         <div class="import-row">
             <button class="btn btn-primary btn-small" data-import title="Totals this casting's inventory rows: value × (quantity + extras)">Import from Casting Inventory</button>
             <span id="inv-hint" style="display:contents">${inventoryHint(casting, ticket)}</span>
@@ -1340,7 +1371,10 @@ function onFieldChange(e) {
     scheduleSave(ticket);
     renderOverview(); renderPreview(casting, ticket);
     if (el.tagName === 'SELECT' || el.type === 'checkbox') renderForm(casting, ticket);
-    else { const hint = document.getElementById('inv-hint'); if (hint) hint.innerHTML = inventoryHint(casting, ticket); }
+    else {
+        const hint = document.getElementById('inv-hint'); if (hint) hint.innerHTML = inventoryHint(casting, ticket);
+        const stale = document.getElementById('stale'); if (stale) stale.innerHTML = staleBannerHtml(casting, ticket);
+    }
 }
 root.addEventListener('input', onFieldChange);
 

@@ -7912,6 +7912,62 @@ function renderBatchTicketsPills() {
     }).join('');
 }
 
+// ---------- Is the ticket still in step with the Casting Inventory? ----------
+/** Inventory totals exactly as Import from Tracking computes them (value × (quantity + extras)), for this ticket's rows. */
+function batchInventoryTotals(castingId, ticket) {
+    let rows = getInventoryFor(castingId);
+    if (getBatchTicketList(castingId).length > 1) {
+        rows = rows.filter(r => ticket.colorLogId ? r.color_log_id === ticket.colorLogId : !r.color_log_id);
+    }
+    if (!rows.length) return null;
+    const has = (v) => v !== null && v !== undefined && v !== '';
+    let cuFt = 0, ff = 0;
+    for (const r of rows) {
+        const units = (Number(r.quantity) || 0) + (Number(r.extras) || 0);
+        cuFt += (Number(r.cu_ft) || 0) * units;
+        ff += (Number(r.ff_sq_ft) || 0) * units;
+    }
+    return { cuFt: roundSig(cuFt, 2), ff: roundSig(ff, 2), cuFtComplete: rows.every(r => has(r.cu_ft)), ffComplete: rows.every(r => has(r.ff_sq_ft)) };
+}
+
+let batchInventoryLoading = false;
+/**
+ * Big red warning when the ticket's Total Cu Ft / Face Sq Ft no longer match what the Casting
+ * Inventory totals to today — i.e. someone changed the inventory after this batching was made.
+ * Blank ticket fields never warn (nothing was batched yet); a field the inventory can't total
+ * (a row with no value) is not compared.
+ */
+function renderBatchStaleBanner(casting, ticket) {
+    if (currentCastingInventoryLoadedFor !== currentProjectNumber) {
+        // Inventory loads lazily (Castings tab / import) — fetch it once, then redraw this tab.
+        if (!batchInventoryLoading) {
+            batchInventoryLoading = true;
+            loadAllInventoryForCurrentProject().finally(() => {
+                batchInventoryLoading = false;
+                if (currentBatchCastingId === casting.id) renderBatchTicketsContent();
+            });
+        }
+        return '';
+    }
+    const t = batchInventoryTotals(casting.id, ticket);
+    if (!t) return '';
+    const differs = (val, now, complete) => complete && val !== null && val !== undefined && String(val).trim() !== ''
+        && roundSig(parseFloat(val) || 0, 2) !== now;
+    const diffs = [];
+    if (differs(ticket.cuFt, t.cuFt, t.cuFtComplete)) diffs.push(['Total Cu Ft', ticket.cuFt, t.cuFt]);
+    if (differs(ticket.faceSqFt, t.ff, t.ffComplete)) diffs.push(['Face Sq Ft', ticket.faceSqFt, t.ff]);
+    if (!diffs.length) return '';
+    return `<div class="pp-bt-stale" role="alert">
+        <div class="pp-bt-stale-title">&#9888; BATCHING IS OUT OF DATE</div>
+        <div class="pp-bt-stale-text">The Casting Inventory for this casting no longer matches the numbers this batching was made from. These tickets, the mix totals and the weekly board count are based on the OLD numbers.</div>
+        <table class="pp-bt-stale-table"><tr><th></th><th>Batching uses</th><th>Casting Inventory now</th></tr>
+            ${diffs.map(([label, was, now]) => `<tr><td>${label}</td><td>${escapeHtml(String(was))}</td><td><strong>${now}</strong></td></tr>`).join('')}
+        </table>
+        <button type="button" class="pp-bt-stale-btn" data-bt-import>Import from Tracking now</button>
+        <div class="pp-bt-stale-note">Importing replaces Total Cu Ft and Face Sq Ft only (hand-picked batch types go back to automatic). Everything else on the ticket stays.</div>
+    </div>`;
+}
+
 function renderBatchTicketsContent() {
     const content = document.getElementById('pp-bt-content');
     if (!content) return;
@@ -7998,6 +8054,7 @@ function renderBatchTicketBody(casting, ticket, multi = false) {
                 </div>
             </div>
 
+            <div data-bt-stale-wrap>${renderBatchStaleBanner(casting, ticket)}</div>
             <div class="pp-bt-card">
                 <div class="pp-bt-card-head">
                     <h3 class="pp-bt-card-title">Batch Plan</h3>
@@ -8850,6 +8907,12 @@ function handleBatchFieldInput(castingId, field, value) {
             }
         }
         rerenderBatchPreview(castingId);
+        if (field === 'cuFt' || field === 'faceSqFt') {
+            // The out-of-date warning compares these two with the Casting Inventory — keep it current while typing.
+            const wrap = document.querySelector('#pp-bt-content [data-bt-stale-wrap]');
+            const casting2 = currentCastings.find(c => c.id === castingId);
+            if (wrap && casting2) wrap.innerHTML = renderBatchStaleBanner(casting2, ticket);
+        }
     }
     scheduleBatchTicketSave(castingId, ticket);
 }
