@@ -1357,8 +1357,9 @@ function renderPreview(casting, ticket) {
 root.addEventListener('click', (e) => {
     const cast = e.target.closest('[data-cast]');
     if (cast) {
+        // No forced scroll (2026-10-13): everything above the casting bubbles keeps its size, so the
+        // page stays put and whatever was under the mouse is still there after the redraw.
         S.activeCastingId = cast.dataset.cast; render();
-        if (EMBED) document.querySelector('.pills')?.scrollIntoView({ block: 'start' }); else window.scrollTo({ top: 0 });
         return;
     }
     const color = e.target.closest('[data-color]');
