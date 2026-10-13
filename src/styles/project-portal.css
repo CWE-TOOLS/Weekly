@@ -4267,6 +4267,13 @@ body.pp-printing .pp-tab-panel[data-panel="color-log"] { display: none !importan
 .pp-bt-stale-btn { align-self: flex-start; background: #dc2626; color: #fff; border: none; border-radius: 4px; padding: 8px 14px; font-size: 13px; font-weight: 700; cursor: pointer; }
 .pp-bt-stale-btn:hover { background: #b91c1c; }
 .pp-bt-stale-note { font-size: 12px; color: #991b1b; }
+/* green twin of the warning: the ticket matches the Casting Inventory */
+.pp-bt-stale.pp-bt-fresh { background: #f0fdf4; border-color: #15803d; color: #14532d; padding: 8px 14px; gap: 2px; }
+.pp-bt-stale.pp-bt-fresh .pp-bt-stale-title { color: #15803d; font-size: 14px; }
+.pp-bt-stale.pp-bt-fresh .pp-bt-stale-text { font-weight: 500; }
+.pp-bt-stale.pp-bt-fresh .pp-bt-stale-float-title { color: #15803d; font-size: 14px; }
+.pp-bt-stale.pp-bt-fresh .pp-bt-stale-link { color: #15803d; }
+.pp-bt-stale-float.pp-bt-fresh { box-shadow: 0 10px 30px rgba(21, 128, 61, 0.3); }
 /* floating copy — pinned to the right once the inline warning has scrolled away */
 .pp-bt-stale-float { position: fixed; right: 16px; width: 320px; max-width: calc(100vw - 32px); z-index: 60; box-shadow: 0 10px 30px rgba(185, 28, 28, 0.35); animation: pp-bt-stale-in .25s ease-out; }
 .pp-bt-stale-float[hidden] { display: none; }

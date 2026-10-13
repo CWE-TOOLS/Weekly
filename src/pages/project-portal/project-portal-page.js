@@ -8182,7 +8182,7 @@ window.addEventListener('message', (e) => {
         showToast(String(e.data.message), e.data.isError ? 'error' : 'success');
     } else if (e.data?.type === 'jsb-stale') {
         // The special page's own out-of-date warning: where it sits (relative to the frame) and what it says.
-        frameStale = Array.isArray(e.data.diffs) ? { diffs: e.data.diffs, top: Number(e.data.top) || 0, height: Number(e.data.height) || 0 } : null;
+        frameStale = Array.isArray(e.data.diffs) ? { diffs: e.data.diffs, fresh: !!e.data.fresh, top: Number(e.data.top) || 0, height: Number(e.data.height) || 0 } : null;
         updateStaleFloat();
     }
 });
@@ -8342,7 +8342,19 @@ function renderBatchStaleBanner(casting, ticket) {
     const diffs = [];
     if (differs(ticket.cuFt, t.cuFt, t.cuFtComplete)) diffs.push(['Total Cu Ft', ticket.cuFt, t.cuFt]);
     if (differs(ticket.faceSqFt, t.ff, t.ffComplete)) diffs.push(['Face Sq Ft', ticket.faceSqFt, t.ff]);
-    if (!diffs.length) return '';
+    if (!diffs.length) {
+        // Nothing differs: say so in green (same spot, same floating copy) — but only when something was compared.
+        const typed = (v) => v !== null && v !== undefined && String(v).trim() !== '';
+        const compared = [];
+        if (t.cuFtComplete && typed(ticket.cuFt)) compared.push(`Total Cu Ft ${t.cuFt}`);
+        if (t.ffComplete && typed(ticket.faceSqFt)) compared.push(`Face Sq Ft ${t.ff}`);
+        if (!compared.length) return '';
+        const blanks = (!t.cuFtComplete || !t.ffComplete) ? ' · some inventory rows are blank, so not everything could be compared' : '';
+        return `<div class="pp-bt-stale pp-bt-fresh" role="status" data-fresh="1">
+            <div class="pp-bt-stale-title">&#10003; MATCHES CURRENT CASTING INVENTORY</div>
+            <div class="pp-bt-stale-text">${escapeHtml(compared.join(' · ') + blanks)}</div>
+        </div>`;
+    }
     return `<div class="pp-bt-stale" role="alert" data-diffs="${escapeAttr(JSON.stringify(diffs))}">
         <div class="pp-bt-stale-title">&#9888; BATCHING IS OUT OF DATE</div>
         <div class="pp-bt-stale-text">The Casting Inventory for this casting no longer matches the numbers this batching was made from. These tickets, the mix totals and the weekly board count are based on the OLD numbers.</div>
@@ -8366,21 +8378,26 @@ function staleAnchor() {
     const frame = getSpecialBatchingFrame();
     if (frame && frame.getAttribute('src') && !frame.closest('[hidden]')) {
         // Special page in its frame: it reported its own warning's position (relative to the frame).
-        if (!frameStale || !frameStale.diffs.length) return null;
+        if (!frameStale || (!frameStale.diffs.length && !frameStale.fresh)) return null;
         const r = frame.getBoundingClientRect();
         const top = r.top + frameStale.top;
-        return { bottom: top + frameStale.height, diffs: frameStale.diffs, source: 'frame',
+        return { bottom: top + frameStale.height, diffs: frameStale.diffs, fresh: !!frameStale.fresh, source: 'frame',
                  scrollTo: () => window.scrollTo({ top: window.scrollY + top - headerBottom() - 12, behavior: 'smooth' }) };
     }
     const el = document.querySelector('#pp-bt-content .pp-bt-stale');
     if (!el) return null;
     let diffs = [];
     try { diffs = JSON.parse(el.dataset.diffs || '[]'); } catch { /* ignore */ }
-    return { bottom: el.getBoundingClientRect().bottom, diffs, source: 'tab',
+    return { bottom: el.getBoundingClientRect().bottom, diffs, fresh: el.hasAttribute('data-fresh'), source: 'tab',
              scrollTo: () => window.scrollTo({ top: window.scrollY + el.getBoundingClientRect().top - headerBottom() - 12, behavior: 'smooth' }) };
 }
 
-function staleFloatHtml(diffs, source) {
+function staleFloatHtml(diffs, source, fresh = false) {
+    if (fresh) {
+        return `<div class="pp-bt-stale-float-title">&#10003; MATCHES CURRENT CASTING INVENTORY</div>
+        <div class="pp-bt-stale-float-text">This casting's batching is in step with the Casting Inventory.</div>
+        <div class="pp-bt-stale-float-actions"><button type="button" class="pp-bt-stale-link" data-stale-float-show>Show me</button></div>`;
+    }
     return `<div class="pp-bt-stale-float-title">&#9888; BATCHING IS OUT OF DATE</div>
         <div class="pp-bt-stale-float-text">This casting's batching no longer matches the Casting Inventory.</div>
         <table class="pp-bt-stale-table">${diffs.map(([label, was, now]) =>
@@ -8412,8 +8429,9 @@ function updateStaleFloat() {
             if (e.target.closest('[data-stale-float-show]')) staleAnchor()?.scrollTo();
         });
     }
-    const key = a.source + JSON.stringify(a.diffs);
-    if (staleFloatEl.dataset.key !== key) { staleFloatEl.innerHTML = staleFloatHtml(a.diffs, a.source); staleFloatEl.dataset.key = key; }
+    const key = a.source + (a.fresh ? ':fresh' : '') + JSON.stringify(a.diffs);
+    if (staleFloatEl.dataset.key !== key) { staleFloatEl.innerHTML = staleFloatHtml(a.diffs, a.source, a.fresh); staleFloatEl.dataset.key = key; }
+    staleFloatEl.classList.toggle('pp-bt-fresh', !!a.fresh);
     staleFloatEl.style.top = Math.round(headerBottom() + 12) + 'px';
     staleFloatEl.hidden = false;
 }
