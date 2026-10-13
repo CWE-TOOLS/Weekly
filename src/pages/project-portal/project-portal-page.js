@@ -7781,6 +7781,10 @@ function wireEvents() {
         if (e.target.closest('[data-bt-import]')) {
             handleImportBatchFromTracking(currentBatchCastingId);
         }
+        const useWeekly = e.target.closest('[data-bt-weekly-use]');
+        if (useWeekly) {
+            handleCastingDateChange(currentBatchCastingId, useWeekly.dataset.btWeeklyUse).then(() => renderBatchTicketsContent());
+        }
     });
 
     // Tab-level notes textareas (Castings + Optimizer) live outside #pp-form,
@@ -8184,6 +8188,7 @@ window.addEventListener('message', (e) => {
 });
 
 async function activateBatchTicketsTab() {
+    if (currentProjectNumber) syncCastDatesWithWeekly();   // runs alongside; redraws when the weekly answers
     const needsSave    = document.getElementById('pp-bt-needs-save');
     const needsCL      = document.getElementById('pp-bt-needs-color-log');
     const noCastings   = document.getElementById('pp-bt-no-castings');
@@ -8499,6 +8504,7 @@ function renderBatchTicketBody(casting, ticket, multi = false) {
                 <div class="pp-bt-context-date-group">
                     <label class="pp-bt-context-date-label" for="pp-bt-castdate-${escapeAttr(casting.id)}">Cast Date</label>
                     <input type="date" id="pp-bt-castdate-${escapeAttr(casting.id)}" class="pp-bt-context-date" data-bt-casting-date value="${escapeAttr(casting.casting_date || '')}">
+                    ${weeklyDateHintHtml(casting)}
                 </div>
             </div>
 
@@ -9471,6 +9477,92 @@ async function handleImportBatchFromTracking(castingId) {
     }
 }
 
+// ---------- Cast Date from the weekly board (2026-10-13) ----------
+// The weekly's Cast tasks carry a project number + casting number (never the name), so a casting's
+// cast date can come from there: a BLANK Cast Date is filled with the first Cast day automatically;
+// a date that is already set is never overwritten — the hint next to it offers the weekly's date
+// with one click; no Cast task on the weekly → "casting not yet scheduled".
+let weeklyCastDates = null;      // Map casting_number (trimmed) -> 'YYYY-MM-DD' (first Cast day)
+let weeklyCastDatesFor = null;   // project number the map belongs to
+
+function isoDay(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
+function shortDay(iso) { const d = new Date(iso + 'T00:00:00'); return isNaN(d) ? iso : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); }
+
+async function loadWeeklyCastDates(projectNumber) {
+    const pn = String(projectNumber || '').trim();
+    const map = new Map();
+    if (!pn) return map;
+    try {
+        const all = await fetchAllTasks();
+        for (const t of (all || [])) {
+            if (t.department !== 'Cast') continue;
+            if (String(t.projectNumber || '').trim() !== pn) continue;
+            const cn = String(t.castingNumber || '').trim();
+            if (!cn) continue;
+            const d = parseDate(t.date);
+            if (!d) continue;
+            const iso = isoDay(d);
+            if (!map.has(cn) || iso < map.get(cn)) map.set(cn, iso);
+        }
+    } catch (err) {
+        logger.error('[batch-tickets] weekly cast dates failed:', err);
+    }
+    if (String(currentProjectNumber || '').trim() === pn) { weeklyCastDates = map; weeklyCastDatesFor = pn; }
+    return map;
+}
+
+/** Fill every BLANK Cast Date of the current project from the weekly; returns how many were filled. */
+async function autoFillCastDatesFromWeekly() {
+    const pn = String(currentProjectNumber || '').trim();
+    const map = await loadWeeklyCastDates(pn);
+    let filled = 0;
+    for (const c of currentCastings) {
+        if (c.casting_date) continue;
+        const iso = map.get(String(c.casting_number || '').trim());
+        if (!iso) continue;
+        try {
+            await updateCasting(c.id, { casting_date: iso });
+            c.casting_date = iso;
+            filled++;
+        } catch (err) {
+            logger.error('[batch-tickets] auto cast date from weekly failed', err);
+        }
+    }
+    return filled;
+}
+
+function weeklyDateHintHtml(casting) {
+    if (!weeklyCastDates || weeklyCastDatesFor !== String(currentProjectNumber || '').trim()) {
+        return `<span class="pp-bt-weekly-hint pp-bt-weekly-loading" data-bt-weekly-hint>checking the weekly&hellip;</span>`;
+    }
+    const iso = weeklyCastDates.get(String(casting.casting_number || '').trim());
+    if (!iso) return `<span class="pp-bt-weekly-hint pp-bt-weekly-none" data-bt-weekly-hint title="The weekly board has no Cast task for this casting">casting not yet scheduled</span>`;
+    if (casting.casting_date === iso) return `<span class="pp-bt-weekly-hint pp-bt-weekly-ok" data-bt-weekly-hint title="Matches the weekly board">&#10003; matches the weekly</span>`;
+    return `<span class="pp-bt-weekly-hint pp-bt-weekly-diff" data-bt-weekly-hint title="The weekly board has this casting on ${escapeAttr(shortDay(iso))}">Weekly: ${escapeHtml(shortDay(iso))} <button type="button" class="pp-bt-weekly-use" data-bt-weekly-use="${escapeAttr(iso)}">Use it</button></span>`;
+}
+function renderWeeklyDateHints() {
+    const casting = currentCastings.find(c => c.id === currentBatchCastingId);
+    if (!casting) return;
+    document.querySelectorAll('#pp-bt-content [data-bt-weekly-hint]').forEach(el => { el.outerHTML = weeklyDateHintHtml(casting); });
+}
+
+/** Called when the Batch Tickets tab opens: fill blanks, then refresh what is on screen. */
+function syncCastDatesWithWeekly() {
+    autoFillCastDatesFromWeekly().then(n => {
+        if (currentTab !== 'batch-tickets') return;
+        if (n) {
+            showToast(`Cast date filled from the weekly board for ${n} casting${n === 1 ? '' : 's'}`, 'success');
+            renderBatchTicketsPills();
+            renderBatchTicketsContent();
+            // The embedded special page shows the casting's date too — have it re-pull.
+            const frame = getSpecialBatchingFrame();
+            if (frame && frame.getAttribute('src') && !frame.closest('[hidden]')) frame.contentWindow?.postMessage({ type: 'jsb-activate' }, location.origin);
+        } else {
+            renderWeeklyDateHints();
+        }
+    }).catch(err => logger.error('[batch-tickets] weekly cast date sync failed', err));
+}
+
 async function handleCastingDateChange(castingId, value) {
     try {
         await updateCasting(castingId, { casting_date: value || null });
@@ -9478,6 +9570,7 @@ async function handleCastingDateChange(castingId, value) {
         if (c) c.casting_date = value || null;
         // Refresh both pills (date label) and content if this is the active casting.
         renderBatchTicketsPills();
+        renderWeeklyDateHints();
     } catch (err) {
         logger.error('[batch-tickets] casting_date update failed', err);
         showToast('Failed to update cast date', 'error');
