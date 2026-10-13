@@ -4568,6 +4568,7 @@ body.pp-printing .pp-tab-panel[data-panel="color-log"] { display: none !importan
 .batch-ticket.bt-finalBackUp { border-color: #eab308; }
 .batch-ticket.bt-finalBackUp .bt-mix-box { background: #eab308; border-color: #eab308; }
 
+.bt-title-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .bt-title {
     font-size: 17px;
     font-weight: 900;

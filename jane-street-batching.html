@@ -689,6 +689,12 @@ function importIntoTicket(castingId, ticket) {
 }
 const TYPES_REVERTED_MSG = ' The number or size of batches changed, so manually picked batch types went back to automatic — everything else was kept.';
 
+/** Print stamps: "Oct 13, 2026 2:35 PM". */
+function stampDate(d) {
+    const x = new Date(d);
+    if (isNaN(x)) return '';
+    return x.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' + x.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}
 function formatWhen(iso, short = false) {
     if (!iso) return '';
     const d = new Date(iso);
@@ -798,7 +804,7 @@ function renderSlumpGraphic(targetIn = 5) {
     return `<svg class="bt-slump-svg" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Slump target ${targetIn} inch spread">${targetDisc}${rings}${cross}${labels}</svg>`;
 }
 
-function renderBatchTicketCard({ colorLog, batch, project, castNumber, castDate, ticket }) {
+function renderBatchTicketCard({ colorLog, batch, project, castNumber, castDate, ticket, printedOn = null }) {
     const castMethod = colorLog?.castMethod || '';
     const pigReductionPct = parsePigReduction(ticket.pigReduction);
     const { batchSandLbs, scaleFactor, num, total, type: batchType } = batch;
@@ -896,7 +902,13 @@ function renderBatchTicketCard({ colorLog, batch, project, castNumber, castDate,
 
     return `
     <div class="batch-ticket bt-${batchType}">
-        <div class="bt-title">BATCHING TICKET</div>
+        <div class="bt-title-row">
+            <div class="bt-title">BATCHING TICKET</div>
+            ${printedOn ? `<div class="bt-stamps">
+                <div class="bt-stamp-printed">PRINTED ON ${esc(stampDate(printedOn))}</div>
+                <div class="bt-stamp-batched">${ticket.importedAt ? 'BATCHED ON ' + esc(stampDate(ticket.importedAt)) : 'BATCHED ON: NOT IMPORTED FROM CASTING INVENTORY'}</div>
+            </div>` : ''}
+        </div>
         <div class="bt-type-banner">${TYPE_LABEL[batchType] || ''}</div>
         <div class="bt-header-grid">
             <div class="bt-hrow"><span class="bt-hlabel">PROJECT:</span><span class="bt-hval">${esc(project)}</span></div>
@@ -964,13 +976,13 @@ function renderBatchTicketCard({ colorLog, batch, project, castNumber, castDate,
     </div>`;
 }
 
-function ticketPagesHtml(casting, tickets) {
+function ticketPagesHtml(casting, tickets, printedOn = null) {
     return tickets.map(ticket => {
         const plan = planFor(ticket);
         if (!plan) return '';
         const colorLog = logById(ticket.colorLogId);
         return plan.batches.map(b => `<div class="bt-page bt-${b.type}">${renderBatchTicketCard({
-            colorLog, batch: b, ticket,
+            colorLog, batch: b, ticket, printedOn,
             project: S.project?.project_name || '',
             castNumber: casting.casting_number || '',
             castDate: casting.casting_date || ''
@@ -1449,6 +1461,10 @@ const TICKET_CSS = `
 .bt-page.bt-finalBackUp { border-color: #eab308; }
 .batch-ticket { display: flex; flex-direction: column; flex: 1 1 auto; }
 .bt-title { font-size: 18pt; font-weight: 900; color: #000; margin-bottom: 2pt; letter-spacing: 0.5pt; }
+.bt-title-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12pt; }
+.bt-stamps { text-align: right; flex: 0 0 auto; }
+.bt-stamp-printed { font-size: 18pt; font-weight: 900; color: #dc2626; letter-spacing: 0.5pt; line-height: 1.1; }
+.bt-stamp-batched { font-size: 13pt; font-weight: 800; color: #15803d; letter-spacing: 0.5pt; }
 .bt-type-banner { font-size: 11pt; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5pt; margin-bottom: 6pt; }
 .batch-ticket.bt-face .bt-type-banner { color: #f97316; }
 .batch-ticket.bt-firstBackUp .bt-type-banner { color: #3b82f6; }
@@ -1521,7 +1537,7 @@ function printDocHtml(title, pages) {
 function buildPrintHtml() {
     const casting = S.castings.find(c => c.id === S.activeCastingId);
     if (!casting) return '';
-    const pages = ticketPagesHtml(casting, getTicketList(casting.id));
+    const pages = ticketPagesHtml(casting, getTicketList(casting.id), new Date());
     if (!pages.trim()) return '';
     return printDocHtml(`Batch Tickets (face ${S.sizing.face} lb / back ups ${S.sizing.backup} lb) — ${S.project?.project_name || ''} — Cast ${casting.casting_number || ''}`, pages);
 }
@@ -1529,7 +1545,8 @@ function buildPrintHtml() {
 /** Print document for the picked castings, in casting order, every color on each; '' when nothing to print. */
 function buildPrintAllHtml(ids) {
     const chosen = S.castings.filter(c => ids.includes(c.id));
-    const pages = chosen.map(c => ticketPagesHtml(c, getTicketList(c.id))).join('');
+    const printedOn = new Date();
+    const pages = chosen.map(c => ticketPagesHtml(c, getTicketList(c.id), printedOn)).join('');
     if (!pages.trim()) return '';
     const casts = chosen.map(c => c.casting_number || '?').join(', ');
     return printDocHtml(`Batch Tickets (face ${S.sizing.face} lb / back ups ${S.sizing.backup} lb) — ${S.project?.project_name || ''} — Casts ${casts}`, pages);

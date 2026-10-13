@@ -223,9 +223,12 @@ export function buildBatchPlan({
 }) {
     const { batches, types: autoTypes, faceCuFt } = planBatches({ totalCuFt, faceSqFt, cuFtPer250, castMethod, sizing });
 
+    // batch_assignments may also carry stamp entries ({ meta: ..., importedAt }) — only real
+    // { batchLbs, type } picks count as overrides.
+    const overrides = Array.isArray(manualOverrides) ? manualOverrides.filter(o => o && o.type) : null;
     let types = autoTypes;
-    if (Array.isArray(manualOverrides) && manualOverrides.length === batches.length) {
-        types = manualOverrides.map((o, i) => o?.type || autoTypes[i]);
+    if (overrides && overrides.length === batches.length) {
+        types = overrides.map((o, i) => o?.type || autoTypes[i]);
     }
 
     const result = batches.map((batchSandLbs, idx) => ({

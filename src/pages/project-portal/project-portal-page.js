@@ -8021,6 +8021,22 @@ function getCastingComponentColorIds(castingId) {
 }
 
 // True when a ticket is unsaved and has no user-entered content — safe to drop silently.
+// "Last imported" stamp (2026-10-13): when Import from Tracking is pressed, the time is kept inside
+// batch_assignments as { meta: 'last-import', importedAt } — same trick the Jane page uses — so the
+// printed tickets can say BATCHED ON. Real batch-type picks are the { batchLbs, type } entries.
+const BT_IMPORT_META = 'last-import';
+function btOverrides(t) { return (Array.isArray(t?.batchAssignments) ? t.batchAssignments : []).filter(a => a && a.type); }
+function btImportStamp(t) { return (Array.isArray(t?.batchAssignments) ? t.batchAssignments : []).find(a => a && a.meta === BT_IMPORT_META) || null; }
+function btSetOverrides(t, list) {
+    const stamp = btImportStamp(t);
+    t.batchAssignments = [...(list || []), ...(stamp ? [stamp] : [])];
+}
+function btStampDate(d) {
+    const x = new Date(d);
+    if (isNaN(x)) return '';
+    return x.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' + x.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}
+
 function isPristineBatchTicket(t) {
     return !t.id && t.cuFt === '' && t.faceSqFt === '' && t.batchedBy === '' && t.notes === ''
         && t.cuFtPer250 === '4.28' && t.pigReduction === '50' && !t.pigReduceFirstBackup
@@ -8592,7 +8608,7 @@ function renderBatchPreview(casting, ticket) {
         cuFtPer250: parseFloat(ticket.cuFtPer250) || 4.28,
         castMethod: activeLog?.castMethod || 'sprayUp',
         colorLogSandLbs: sandLbs,
-        manualOverrides: ticket.batchAssignments
+        manualOverrides: btOverrides(ticket)
     });
 
     if (!plan.batches.length) return '';
@@ -8631,7 +8647,7 @@ function buildBatchTotalsEntries(casting) {
             cuFtPer250: parseFloat(t.cuFtPer250) || 4.28,
             castMethod: log?.castMethod || 'sprayUp',
             colorLogSandLbs: sandLbs,
-            manualOverrides: t.batchAssignments
+            manualOverrides: btOverrides(t)
         });
         if (!plan.batches.length) continue;
         entries.push({
@@ -8966,7 +8982,8 @@ function renderBatchTicketCard({
     colorLog, batch, project, sampleName, castMethod, castNumber, castDate,
     colorName = '', batchedBy, notes, pigReductionPct = FINAL_BACKUP_PIG_REDUCTION_PCT, reduceFirstBackup = false,
     omitAggFinalBackup = false, omitFibersFace = false, cowbayFinalBackup = false,
-    targetSlump = 5
+    targetSlump = 5,
+    printedOn = null, batchedOn = null   // print only: PRINTED ON (red) + BATCHED ON (green, last Import from Tracking)
 }) {
     const slumpTarget = clampSlumpTarget(targetSlump);
     const { batchSandLbs, scaleFactor, num, total, type: batchType } = batch;
@@ -9116,7 +9133,13 @@ function renderBatchTicketCard({
 
     return `
     <div class="batch-ticket bt-${batchType}">
-        <div class="bt-title">BATCHING TICKET</div>
+        <div class="bt-title-row">
+            <div class="bt-title">BATCHING TICKET</div>
+            ${printedOn ? `<div class="bt-stamps">
+                <div class="bt-stamp-printed">PRINTED ON ${escapeHtml(btStampDate(printedOn))}</div>
+                <div class="bt-stamp-batched">${batchedOn ? 'BATCHED ON ' + escapeHtml(btStampDate(batchedOn)) : 'BATCHED ON: NOT IMPORTED FROM TRACKING'}</div>
+            </div>` : ''}
+        </div>
         <div class="bt-type-banner">${bannerLabel}</div>
 
         <div class="bt-header-grid">
@@ -9325,7 +9348,7 @@ function handleBatchFieldInput(castingId, field, value) {
         const casting = currentCastings.find(c => c.id === castingId);
         const activeLog = getActiveBatchColorLog(casting, ticket);
         const sandLbs = getColorLogSandLbs(activeLog);
-        if (sandLbs && Array.isArray(ticket.batchAssignments) && ticket.batchAssignments.length) {
+        if (sandLbs && btOverrides(ticket).length) {
             const newPlan = buildBatchPlan({
                 totalCuFt: parseFloat(ticket.cuFt) || 0,
                 faceSqFt: parseFloat(ticket.faceSqFt) || 0,
@@ -9334,8 +9357,8 @@ function handleBatchFieldInput(castingId, field, value) {
                 colorLogSandLbs: sandLbs,
                 manualOverrides: null
             });
-            if (newPlan.batches.length !== ticket.batchAssignments.length) {
-                ticket.batchAssignments = [];
+            if (newPlan.batches.length !== btOverrides(ticket).length) {
+                btSetOverrides(ticket, []);
             }
         }
         rerenderBatchPreview(castingId);
@@ -9361,12 +9384,12 @@ function handleBatchAssignChange(castingId, idx, type) {
         cuFtPer250: parseFloat(ticket.cuFtPer250) || 4.28,
         castMethod: activeLog?.castMethod || 'sprayUp',
         colorLogSandLbs: sandLbs,
-        manualOverrides: ticket.batchAssignments
+        manualOverrides: btOverrides(ticket)
     });
     // Materialize current assignments (auto + any prior overrides), then update one.
     const assignments = plan.batches.map(b => ({ batchLbs: b.batchSandLbs, type: b.type }));
     if (idx >= 0 && idx < assignments.length) assignments[idx].type = type;
-    ticket.batchAssignments = assignments;
+    btSetOverrides(ticket, assignments);
     rerenderBatchPreview(castingId);
     scheduleBatchTicketSave(castingId, ticket);
 }
@@ -9433,8 +9456,8 @@ async function handleImportBatchFromTracking(castingId) {
         return;
     }
 
-    // Plan inputs changed — drop manual batch-type overrides so they can't desync.
-    ticket.batchAssignments = [];
+    // Plan inputs changed — drop manual batch-type overrides so they can't desync — and stamp the import time.
+    ticket.batchAssignments = [{ meta: BT_IMPORT_META, importedAt: new Date().toISOString() }];
     renderBatchTicketsContent();
     scheduleBatchTicketSave(castingId, ticket);
 
@@ -11909,6 +11932,10 @@ body { font-family: 'Segoe UI', Arial, sans-serif; color:#000; font-size:11pt; -
     flex: 1 1 auto;
 }
 .bt-title { font-size: 18pt; font-weight: 900; color: #000; margin-bottom: 2pt; letter-spacing: 0.5pt; }
+.bt-title-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12pt; }
+.bt-stamps { text-align: right; flex: 0 0 auto; }
+.bt-stamp-printed { font-size: 18pt; font-weight: 900; color: #dc2626; letter-spacing: 0.5pt; line-height: 1.1; }
+.bt-stamp-batched { font-size: 13pt; font-weight: 800; color: #15803d; letter-spacing: 0.5pt; }
 .bt-type-banner { font-size: 11pt; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5pt; margin-bottom: 6pt; }
 .batch-ticket.bt-face .bt-type-banner { color: #f97316; }
 .batch-ticket.bt-firstBackUp .bt-type-banner { color: #3b82f6; }
@@ -11985,7 +12012,7 @@ function handlePrintBatchTickets(castingId) {
             cuFtPer250: parseFloat(ticket.cuFtPer250) || 4.28,
             castMethod: activeLog?.castMethod || 'sprayUp',
             colorLogSandLbs: sandLbs,
-            manualOverrides: ticket.batchAssignments
+            manualOverrides: btOverrides(ticket)
         });
         if (!plan.batches.length) continue;
         printable.push({ ticket, activeLog, plan });
@@ -12018,9 +12045,12 @@ function handlePrintBatchTickets(castingId) {
         const omitFibersFace = !!ticket.omitFibersFace;
         const cowbayFinalBackup = !!ticket.cowbayFinalBackup;
 
+        const printedOn = new Date();
+        const batchedOn = btImportStamp(ticket)?.importedAt || null;
         return plan.batches.map(b => `
         <div class="bt-page bt-${b.type}">
             ${renderBatchTicketCard({
+                printedOn, batchedOn,
                 colorLog: activeLog,
                 batch: b,
                 project: projectName,
