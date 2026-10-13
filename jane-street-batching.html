@@ -1256,7 +1256,12 @@ function reportStale() {
     const fresh = !!(casting && el && el.classList.contains('fresh'));
     if (EMBED) {
         const r = el ? el.getBoundingClientRect() : null;
-        window.parent.postMessage({ type: 'jsb-stale', diffs, fresh, top: r ? r.top + window.scrollY : 0, height: r ? r.height : 0 }, location.origin);
+        const ticket = casting ? getActiveTicket(casting.id) : null;
+        const info = casting ? { cast: casting.casting_number || '', castDate: casting.casting_date || '', cuFt: ticket?.cuFt ?? '', faceSqFt: ticket?.faceSqFt ?? '', color: ticket ? (logById(ticket.colorLogId)?.name || '') : '' } : null;
+        const pills = document.querySelector('.pills');
+        const pr = pills ? pills.getBoundingClientRect() : null;
+        const casts = S.castings.map(c => ({ id: c.id, number: c.casting_number || '?', date: c.casting_date || '', active: c.id === S.activeCastingId }));
+        window.parent.postMessage({ type: 'jsb-stale', diffs, fresh, info, casts, pillsTop: pr ? pr.top + window.scrollY : 0, pillsHeight: pr ? pr.height : 0, top: r ? r.top + window.scrollY : 0, height: r ? r.height : 0 }, location.origin);
         return;
     }
     updateStaleFloat();
@@ -1669,6 +1674,10 @@ if (EMBED) {
     window.addEventListener('message', async (e) => {
         if (e.origin !== location.origin || e.source !== window.parent) return;
         if (e.data?.type === 'jsb-import') { handleImport(false); return; }   // the portal's floating warning button
+        if (e.data?.type === 'jsb-cast') {                                       // the portal's floating casting pills
+            if (S.castings.some(c => c.id === e.data.id)) { S.activeCastingId = e.data.id; render(); }
+            return;
+        }
         if (e.data?.type !== 'jsb-activate') return;
         if (pendingSaves.size > 0 || savesInFlight > 0) await flushSaves();
         boot();

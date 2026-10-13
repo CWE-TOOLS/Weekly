@@ -780,7 +780,7 @@ function setActiveTab(tab) {
     }
     if (currentTab === 'tracking' && tab !== 'tracking') lastTrackSelectionAnchor = null;
     currentTab = tab;
-    updateStaleFloat();   // the floating out-of-date warning only belongs to the Batch Tickets tab
+    updateFloats();   // the floating out-of-date warning only belongs to the Batch Tickets tab
     if (tab !== 'castings' && invEdits.size) invEdits.clear();   // leaving the Castings tab accepts every inventory edit
     if (tab !== 'castings') invSelected.clear();
     updateInvFloat();
@@ -8182,8 +8182,9 @@ window.addEventListener('message', (e) => {
         showToast(String(e.data.message), e.data.isError ? 'error' : 'success');
     } else if (e.data?.type === 'jsb-stale') {
         // The special page's own out-of-date warning: where it sits (relative to the frame) and what it says.
-        frameStale = Array.isArray(e.data.diffs) ? { diffs: e.data.diffs, fresh: !!e.data.fresh, top: Number(e.data.top) || 0, height: Number(e.data.height) || 0 } : null;
-        updateStaleFloat();
+        frameStale = Array.isArray(e.data.diffs) ? { diffs: e.data.diffs, fresh: !!e.data.fresh, info: e.data.info || null, top: Number(e.data.top) || 0, height: Number(e.data.height) || 0 } : null;
+        frameCasts = Array.isArray(e.data.casts) ? { casts: e.data.casts, top: Number(e.data.pillsTop) || 0, height: Number(e.data.pillsHeight) || 0 } : null;
+        updateFloats();
     }
 });
 
@@ -8372,6 +8373,78 @@ let frameStale = null;   // what the embedded special page last reported: { diff
 
 function headerBottom() { return document.querySelector('.pp-header')?.getBoundingClientRect().bottom || 0; }
 
+// ---- Quick info (cast, date, color, volume, face area) shown at the top of the floating box, and the
+// floating casting pills under it (2026-10-13). The special page posts both for its frame.
+let frameCasts = null;   // { casts: [{ id, number, date, active }], top, height } relative to the frame
+let castsFloatEl = null;
+
+function longDay(iso) { const d = new Date(String(iso) + 'T00:00:00'); return isNaN(d) ? String(iso) : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); }
+function batchQuickInfo() {
+    const casting = currentCastings.find(c => c.id === currentBatchCastingId);
+    if (!casting) return null;
+    const ticket = getBatchTicketFor(casting.id);
+    const log = getActiveBatchColorLog(casting, ticket);
+    return { cast: casting.casting_number || '', castDate: casting.casting_date || '', cuFt: ticket?.cuFt ?? '', faceSqFt: ticket?.faceSqFt ?? '', color: log?.name || '' };
+}
+function quickInfoHtml(info) {
+    if (!info) return '';
+    const num = (v) => (v === '' || v === null || v === undefined) ? '—' : String(roundSig(parseFloat(v) || 0, 2));
+    const bits = [];
+    if (info.color) bits.push(info.color);
+    bits.push(`${num(info.cuFt)} cu ft`, `${num(info.faceSqFt)} face sq ft`);
+    return `<div class="pp-bt-float-head"><span class="pp-bt-float-cast">CAST ${escapeHtml(String(info.cast))}</span><span class="pp-bt-float-date">${info.castDate ? escapeHtml(longDay(info.castDate)) : 'no cast date'}</span></div>
+        <div class="pp-bt-float-meta">${escapeHtml(bits.join(' · '))}</div>`;
+}
+
+/** The casting pills: where they sit on screen and what they hold, or null. */
+function castsAnchor() {
+    if (currentTab !== 'batch-tickets') return null;
+    const frame = getSpecialBatchingFrame();
+    if (frame && frame.getAttribute('src') && !frame.closest('[hidden]')) {
+        if (!frameCasts || !frameCasts.casts.length) return null;
+        const r = frame.getBoundingClientRect();
+        return { bottom: r.top + frameCasts.top + frameCasts.height, casts: frameCasts.casts, source: 'frame' };
+    }
+    const pills = document.getElementById('pp-bt-pills');
+    if (!pills || !pills.children.length) return null;
+    const casts = [...pills.querySelectorAll('[data-casting-id]')].map(b => ({
+        id: b.dataset.castingId,
+        number: (b.firstChild && b.firstChild.nodeType === 3) ? b.firstChild.textContent.trim() : b.textContent.trim(),
+        date: b.querySelector('.pp-bt-pill-date')?.textContent || '',
+        active: b.classList.contains('pp-bt-pill-active')
+    }));
+    return { bottom: pills.getBoundingClientRect().bottom, casts, source: 'tab' };
+}
+
+/** Floating casting pills, right under the quick info box, once the real pills have scrolled away. */
+function updateCastsFloat() {
+    const a = castsAnchor();
+    const show = !!a && a.bottom < headerBottom() + 4;
+    if (!show) { if (castsFloatEl) castsFloatEl.hidden = true; return; }
+    if (!castsFloatEl) {
+        castsFloatEl = document.createElement('div');
+        castsFloatEl.id = 'pp-bt-casts-float';
+        castsFloatEl.className = 'pp-bt-casts-float';
+        document.body.appendChild(castsFloatEl);
+        castsFloatEl.addEventListener('click', (e) => {
+            const b = e.target.closest('[data-float-cast]');
+            if (!b) return;
+            if (b.dataset.source === 'frame') getSpecialBatchingFrame()?.contentWindow?.postMessage({ type: 'jsb-cast', id: b.dataset.floatCast }, location.origin);
+            else document.querySelector(`#pp-bt-pills [data-casting-id="${CSS.escape(b.dataset.floatCast)}"]`)?.click();
+        });
+    }
+    const key = a.source + JSON.stringify(a.casts);
+    if (castsFloatEl.dataset.key !== key) {
+        castsFloatEl.innerHTML = `<div class="pp-bt-casts-float-title">Castings</div><div class="pp-bt-casts-float-list">${a.casts.map(c =>
+            `<button type="button" class="pp-bt-pill${c.active ? ' pp-bt-pill-active' : ''}" data-float-cast="${escapeAttr(c.id)}" data-source="${a.source}">${escapeHtml(String(c.number))}${c.date ? `<span class="pp-bt-pill-date">${escapeHtml(String(c.date))}</span>` : ''}</button>`).join('')}</div>`;
+        castsFloatEl.dataset.key = key;
+    }
+    const below = (staleFloatEl && !staleFloatEl.hidden) ? staleFloatEl.getBoundingClientRect().bottom + 8 : headerBottom() + 12;
+    castsFloatEl.style.top = Math.round(below) + 'px';
+    castsFloatEl.hidden = false;
+}
+function updateFloats() { updateStaleFloat(); updateCastsFloat(); }
+
 /** Where the inline warning sits on screen (and what it says), or null when none is showing. */
 function staleAnchor() {
     if (currentTab !== 'batch-tickets') return null;
@@ -8381,24 +8454,24 @@ function staleAnchor() {
         if (!frameStale || (!frameStale.diffs.length && !frameStale.fresh)) return null;
         const r = frame.getBoundingClientRect();
         const top = r.top + frameStale.top;
-        return { bottom: top + frameStale.height, diffs: frameStale.diffs, fresh: !!frameStale.fresh, source: 'frame',
+        return { bottom: top + frameStale.height, diffs: frameStale.diffs, fresh: !!frameStale.fresh, info: frameStale.info || null, source: 'frame',
                  scrollTo: () => window.scrollTo({ top: window.scrollY + top - headerBottom() - 12, behavior: 'smooth' }) };
     }
     const el = document.querySelector('#pp-bt-content .pp-bt-stale');
     if (!el) return null;
     let diffs = [];
     try { diffs = JSON.parse(el.dataset.diffs || '[]'); } catch { /* ignore */ }
-    return { bottom: el.getBoundingClientRect().bottom, diffs, fresh: el.hasAttribute('data-fresh'), source: 'tab',
+    return { bottom: el.getBoundingClientRect().bottom, diffs, fresh: el.hasAttribute('data-fresh'), info: batchQuickInfo(), source: 'tab',
              scrollTo: () => window.scrollTo({ top: window.scrollY + el.getBoundingClientRect().top - headerBottom() - 12, behavior: 'smooth' }) };
 }
 
-function staleFloatHtml(diffs, source, fresh = false) {
+function staleFloatHtml(diffs, source, fresh = false, info = null) {
     if (fresh) {
-        return `<div class="pp-bt-stale-float-title">&#10003; MATCHES CURRENT CASTING INVENTORY</div>
+        return `${quickInfoHtml(info)}<div class="pp-bt-stale-float-title">&#10003; MATCHES CURRENT CASTING INVENTORY</div>
         <div class="pp-bt-stale-float-text">This casting's batching is in step with the Casting Inventory.</div>
         <div class="pp-bt-stale-float-actions"><button type="button" class="pp-bt-stale-link" data-stale-float-show>Show me</button></div>`;
     }
-    return `<div class="pp-bt-stale-float-title">&#9888; BATCHING IS OUT OF DATE</div>
+    return `${quickInfoHtml(info)}<div class="pp-bt-stale-float-title">&#9888; BATCHING IS OUT OF DATE</div>
         <div class="pp-bt-stale-float-text">This casting's batching no longer matches the Casting Inventory.</div>
         <table class="pp-bt-stale-table">${diffs.map(([label, was, now]) =>
             `<tr><td>${escapeHtml(String(label))}</td><td>${escapeHtml(String(was))}</td><td>&rarr; <strong>${escapeHtml(String(now))}</strong></td></tr>`).join('')}</table>
@@ -8429,14 +8502,14 @@ function updateStaleFloat() {
             if (e.target.closest('[data-stale-float-show]')) staleAnchor()?.scrollTo();
         });
     }
-    const key = a.source + (a.fresh ? ':fresh' : '') + JSON.stringify(a.diffs);
-    if (staleFloatEl.dataset.key !== key) { staleFloatEl.innerHTML = staleFloatHtml(a.diffs, a.source, a.fresh); staleFloatEl.dataset.key = key; }
+    const key = a.source + (a.fresh ? ':fresh' : '') + JSON.stringify(a.diffs) + JSON.stringify(a.info || null);
+    if (staleFloatEl.dataset.key !== key) { staleFloatEl.innerHTML = staleFloatHtml(a.diffs, a.source, a.fresh, a.info); staleFloatEl.dataset.key = key; }
     staleFloatEl.classList.toggle('pp-bt-fresh', !!a.fresh);
     staleFloatEl.style.top = Math.round(headerBottom() + 12) + 'px';
     staleFloatEl.hidden = false;
 }
-window.addEventListener('scroll', updateStaleFloat, { passive: true });
-window.addEventListener('resize', updateStaleFloat, { passive: true });
+window.addEventListener('scroll', updateFloats, { passive: true });
+window.addEventListener('resize', updateFloats, { passive: true });
 
 function renderBatchTicketsContent() {
     const content = document.getElementById('pp-bt-content');
@@ -8453,7 +8526,7 @@ function renderBatchTicketsContent() {
     const showColorPills = list.length > 1 || canAddColor;
     const colorPills = showColorPills ? renderBatchColorPills(list, ticket) : '';
     content.innerHTML = `<div data-casting-id="${escapeAttr(casting.id)}">${colorPills}${renderBatchTicketBody(casting, ticket, showColorPills)}</div>`;
-    updateStaleFloat();
+    updateFloats();
 }
 
 // Label for a ticket's color pill / static color display.
@@ -9390,7 +9463,7 @@ function handleBatchFieldInput(castingId, field, value) {
             // The out-of-date warning compares these two with the Casting Inventory — keep it current while typing.
             const wrap = document.querySelector('#pp-bt-content [data-bt-stale-wrap]');
             const casting2 = currentCastings.find(c => c.id === castingId);
-            if (wrap && casting2) { wrap.innerHTML = renderBatchStaleBanner(casting2, ticket); updateStaleFloat(); }
+            if (wrap && casting2) { wrap.innerHTML = renderBatchStaleBanner(casting2, ticket); updateFloats(); }
         }
     }
     scheduleBatchTicketSave(castingId, ticket);

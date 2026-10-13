@@ -4274,6 +4274,17 @@ body.pp-printing .pp-tab-panel[data-panel="color-log"] { display: none !importan
 .pp-bt-stale.pp-bt-fresh .pp-bt-stale-float-title { color: #15803d; font-size: 14px; }
 .pp-bt-stale.pp-bt-fresh .pp-bt-stale-link { color: #15803d; }
 .pp-bt-stale-float.pp-bt-fresh { box-shadow: 0 10px 30px rgba(21, 128, 61, 0.3); }
+/* quick info header inside the floating box, and the floating casting pills under it */
+.pp-bt-float-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.pp-bt-float-cast { font-size: 15px; font-weight: 900; letter-spacing: 0.04em; }
+.pp-bt-float-date { font-size: 12px; font-weight: 700; }
+.pp-bt-float-meta { font-size: 12px; font-weight: 600; padding-bottom: 6px; border-bottom: 1px solid rgba(0, 0, 0, 0.1); }
+.pp-bt-casts-float { position: fixed; right: 16px; width: 320px; max-width: calc(100vw - 32px); z-index: 60; background: #fff; border: 2px solid #cbd5e1; border-radius: 8px; padding: 10px 12px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18); }
+.pp-bt-casts-float[hidden] { display: none; }
+.pp-bt-casts-float-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #64748b; margin-bottom: 6px; }
+.pp-bt-casts-float-list { display: flex; flex-wrap: wrap; gap: 6px; max-height: 40vh; overflow: auto; }
+.pp-bt-casts-float .pp-bt-pill { padding: 4px 10px; font-size: 12px; }
+@media print { .pp-bt-casts-float { display: none !important; } }
 /* floating copy — pinned to the right once the inline warning has scrolled away */
 .pp-bt-stale-float { position: fixed; right: 16px; width: 320px; max-width: calc(100vw - 32px); z-index: 60; box-shadow: 0 10px 30px rgba(185, 28, 28, 0.35); animation: pp-bt-stale-in .25s ease-out; }
 .pp-bt-stale-float[hidden] { display: none; }
