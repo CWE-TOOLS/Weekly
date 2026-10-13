@@ -4133,26 +4133,65 @@ async function handleTrackingCrateSelect(componentId, crateNumber) {
         await assignComponentToCrate(componentId, null);
         return;
     }
-
-    // Within a phased project, crate # is unique per phase — look up only
-    // crates in the active phase, and create new ones tagged to it.
-    const phaseScopedCrates = currentPhasesEnabled
-        ? currentCrates.filter(c => c.phase_id === currentPhaseId)
-        : currentCrates;
-    let crate = phaseScopedCrates.find(c => String(c.crate_number || '') === num);
-    if (!crate) {
-        try {
-            crate = await createCrate(currentProjectNumber, {
-                crate_number: num,
-                phase_id: currentPhasesEnabled ? currentPhaseId : null
-            });
-            if (crate) currentCrates.push(crate);
-        } catch (err) {
-            logger.error('[project-portal] createCrate failed:', err);
-            return;
-        }
-    }
+    const crate = await findOrCreateCrateFor(castingOfComponent(componentId), num);
     if (crate) await assignComponentToCrate(componentId, crate.id);
+}
+
+// ---- Crate names (2026-10-13). The database keeps crate numbers unique per PROJECT, so on a phased
+// project the crate the user picks ("1") becomes "<phase>.<cast>.<n>", e.g. "bt.t1.1": phase = the
+// phase name, lower-case, first letters only when it has several words ("By Type" → bt, "P1" → p1);
+// cast = the casting number without spaces ("T1" → t1, "1A Remake" → 1aremake); n = what was picked.
+// Projects without phases keep plain numbers as before.
+function crateCodePart(s) { return String(s ?? '').trim().toLowerCase().replace(/\s+/g, ''); }
+function phaseCode(phase) {
+    const words = String(phase?.phase_name || '').trim().split(/\s+/).filter(Boolean);
+    if (!words.length) return '';
+    return (words.length > 1 ? words.map(w => w[0]).join('') : words[0]).toLowerCase();
+}
+function crateFullNumber(casting, num) {
+    if (!currentPhasesEnabled) return String(num || '').trim();
+    const parts = [];
+    const pc = phaseCode(currentPhases.find(p => p.id === currentPhaseId));
+    if (pc) parts.push(pc);
+    const cc = crateCodePart(casting?.casting_number);
+    if (cc) parts.push(cc);
+    parts.push(crateCodePart(num));
+    return parts.join('.');
+}
+/** The picker shows just the last part ("1") of a crate's full name ("bt.t1.1"). */
+function crateShortNumber(crate) {
+    const full = String(crate?.crate_number || '');
+    const i = full.lastIndexOf('.');
+    return i === -1 ? full : full.slice(i + 1);
+}
+function castingIdOfComponent(componentId) {
+    for (const [castingId, list] of currentCastingComponents) if (list.some(c => c.id === componentId)) return castingId;
+    return null;
+}
+function castingOfComponent(componentId) {
+    for (const [castingId, list] of currentCastingComponents) {
+        if (list.some(c => c.id === componentId)) return currentCastings.find(c => c.id === castingId) || null;
+    }
+    return null;
+}
+/** Find the crate this pick means for this casting (by full name, anywhere in the project), or create it in the active phase. Tells the user when it cannot. */
+async function findOrCreateCrateFor(casting, num) {
+    const full = crateFullNumber(casting, num);
+    let crate = currentCrates.find(c => String(c.crate_number || '') === full);
+    if (crate) return crate;
+    try {
+        crate = await createCrate(currentProjectNumber, {
+            crate_number: full,
+            phase_id: currentPhasesEnabled ? currentPhaseId : null
+        });
+        if (crate) currentCrates.push(crate);
+        return crate || null;
+    } catch (err) {
+        logger.error('[project-portal] createCrate failed:', err);
+        const dup = /duplicate|unique/i.test(String(err?.message || err));
+        showToast(dup ? `Crate "${full}" already exists on this project — pick another number.` : `Could not create crate "${full}": ${err?.message || err}`, 'error');
+        return null;
+    }
 }
 
 async function handleRejectedToggle(componentId, checkboxEl) {
@@ -4572,34 +4611,24 @@ async function applyBulkCrate(value) {
     if (selectedComponentIds.size === 0) return;
     const ids = [...selectedComponentIds];
 
-    let crateId = null;
+    // Crate per casting: ticked panels from different castings get their own crate ("p2.3.1", "p2.4.1").
+    const crateIdByCasting = new Map();
     if (value && value !== '__clear__') {
-        const phaseScopedCrates = currentPhasesEnabled
-            ? currentCrates.filter(c => c.phase_id === currentPhaseId)
-            : currentCrates;
-        let crate = phaseScopedCrates.find(c => String(c.crate_number || '') === value);
-        if (!crate) {
-            try {
-                crate = await createCrate(currentProjectNumber, {
-                    crate_number: value,
-                    phase_id: currentPhasesEnabled ? currentPhaseId : null
-                });
-                if (crate) currentCrates.push(crate);
-            } catch (err) {
-                logger.error('[project-portal] bulk createCrate failed:', err);
-                return;
-            }
+        for (const [castingId, list] of currentCastingComponents) {
+            if (!list.some(c => selectedComponentIds.has(c.id))) continue;
+            const crate = await findOrCreateCrateFor(currentCastings.find(c => c.id === castingId) || null, value);
+            if (!crate) return;   // already told the user
+            crateIdByCasting.set(castingId, crate.id);
         }
-        crateId = crate?.id || null;
     }
 
     // Optimistic local update so the UI snaps immediately.
     const prevById = new Map();
-    for (const list of currentCastingComponents.values()) {
+    for (const [castingId, list] of currentCastingComponents) {
         for (const comp of list) {
             if (selectedComponentIds.has(comp.id)) {
                 prevById.set(comp.id, comp.crate_id || null);
-                comp.crate_id = crateId;
+                comp.crate_id = crateIdByCasting.get(castingId) || null;
             }
         }
     }
@@ -4608,7 +4637,14 @@ async function applyBulkCrate(value) {
     if (currentTab === 'shipping') renderShipping();
 
     try {
-        await setComponentsCrateBulk(ids, crateId);
+        if (!crateIdByCasting.size) {
+            await setComponentsCrateBulk(ids, null);
+        } else {
+            for (const [castingId, crateId] of crateIdByCasting) {
+                const group = ids.filter(id => castingIdOfComponent(id) === castingId);
+                if (group.length) await setComponentsCrateBulk(group, crateId);
+            }
+        }
     } catch (err) {
         logger.error('[project-portal] setComponentsCrateBulk failed:', err);
         // Roll back local state
@@ -4710,7 +4746,8 @@ const CRATE_NUMBER_OPTIONS = Array.from({ length: 20 }, (_, i) => String(i + 1))
 function renderTrackCard(comp, castingId) {
     const lockTitle = 'Synced from Castings inventory — edit there';
     const crate = comp.crate_id ? currentCrates.find(c => c.id === comp.crate_id) : null;
-    const currentNum = crate ? String(crate.crate_number || '') : '';
+    const currentNum = crate ? crateShortNumber(crate) : '';
+    const crateTitle = crate ? `Crate ${crate.crate_number}` : 'Assign this panel to a crate';
     const options = ['<option value="">—</option>']
         .concat(CRATE_NUMBER_OPTIONS.map(n =>
             `<option value="${escapeAttr(n)}"${n === currentNum ? ' selected' : ''}>${escapeHtml(n)}</option>`
@@ -4756,7 +4793,7 @@ function renderTrackCard(comp, castingId) {
                 <input type="text" class="pp-track-input" data-field="width" value="${escapeAttr(comp.width || '')}" readonly title="${escapeAttr(lockTitle)}" />
                 <input type="text" class="pp-track-input" data-field="length" value="${escapeAttr(comp.length || '')}" readonly title="${escapeAttr(lockTitle)}" />
                 <input type="text" class="pp-track-input" data-field="color" value="${escapeAttr(resolveComponentColorName(comp))}" readonly title="${escapeAttr(lockTitle)}" />
-                <select class="pp-track-crate-select${currentNum ? ' pp-track-crate-set' : ''}" data-action="track-crate-select" data-component-id="${escapeAttr(comp.id)}" title="Assign this panel to a crate">${options}</select>
+                <select class="pp-track-crate-select${currentNum ? ' pp-track-crate-set' : ''}" data-action="track-crate-select" data-component-id="${escapeAttr(comp.id)}" title="${escapeAttr(crateTitle)}">${options}</select>
                 <label class="pp-track-rejected-cell" title="${escapeAttr(rejectTitle)}">
                     <input type="checkbox" class="pp-track-rejected" data-action="track-rejected-toggle" data-component-id="${escapeAttr(comp.id)}" ${isRejected ? 'checked' : ''} aria-label="Mark as rejected" />
                 </label>
@@ -9870,7 +9907,10 @@ async function handleEnablePhases() {
 async function handleAddProjectPhase() {
     if (!currentProjectNumber || !currentPhasesEnabled) return;
     try {
-        const newPhase = await createPhase(currentProjectNumber, {});
+        const taken = new Set(currentPhases.map(p => String(p.phase_name || '').trim().toLowerCase()));
+        let n = currentPhases.length + 1;
+        while (taken.has(`phase${n}`)) n += 1;
+        const newPhase = await createPhase(currentProjectNumber, { phase_name: `phase${n}` });
         if (newPhase) {
             currentPhases.push(newPhase);
             renderPhasesSection();
@@ -9882,8 +9922,13 @@ async function handleAddProjectPhase() {
     }
 }
 
+/** Phase names are one word — letters and numbers only (t5, a, 1, cast1 pass; "cast 1", "first cast" fail). */
+function isValidPhaseName(name) { return /^[A-Za-z0-9]+$/.test(String(name || '').trim()); }
+const PHASE_NAME_RULE = 'Phase names must be one word — letters and numbers only, no spaces (e.g. P2, North, cast1).';
+
 function scheduleProjectPhaseRename(phaseId, name) {
     if (!phaseId) return;
+    if (String(name || '').trim() && !isValidPhaseName(name)) { showToast(PHASE_NAME_RULE, 'error'); return; }
     if (phaseRenameSaveTimers.has(phaseId)) clearTimeout(phaseRenameSaveTimers.get(phaseId));
     const handle = setTimeout(async () => {
         phaseRenameSaveTimers.delete(phaseId);
