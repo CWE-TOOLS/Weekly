@@ -4142,11 +4142,11 @@ async function handleTrackingCrateSelect(componentId, crateNumber) {
 // phase name, lower-case, first letters only when it has several words ("By Type" → bt, "P1" → p1);
 // cast = the casting number without spaces ("T1" → t1, "1A Remake" → 1aremake); n = what was picked.
 // Projects without phases keep plain numbers as before.
-function crateCodePart(s) { return String(s ?? '').trim().toLowerCase().replace(/\s+/g, ''); }
+function crateCodePart(s) { return String(s ?? '').trim().toUpperCase().replace(/\s+/g, ''); }   // capitals, per the user
 function phaseCode(phase) {
     const words = String(phase?.phase_name || '').trim().split(/\s+/).filter(Boolean);
     if (!words.length) return '';
-    return (words.length > 1 ? words.map(w => w[0]).join('') : words[0]).toLowerCase();
+    return (words.length > 1 ? words.map(w => w[0]).join('') : words[0]).toUpperCase();
 }
 function crateFullNumber(casting, num) {
     if (!currentPhasesEnabled) return String(num || '').trim();
@@ -4177,7 +4177,7 @@ function castingOfComponent(componentId) {
 /** Find the crate this pick means for this casting (by full name, anywhere in the project), or create it in the active phase. Tells the user when it cannot. */
 async function findOrCreateCrateFor(casting, num) {
     const full = crateFullNumber(casting, num);
-    let crate = currentCrates.find(c => String(c.crate_number || '') === full);
+    let crate = currentCrates.find(c => String(c.crate_number || '').toUpperCase() === full.toUpperCase());   // "p2.1.1" and "P2.1.1" are the same crate
     if (crate) return crate;
     try {
         crate = await createCrate(currentProjectNumber, {
