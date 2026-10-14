@@ -483,7 +483,7 @@ function buildJigs(){
     const hi16 = (p.max16 != null && p.max16 > p.w16) ? p.max16 : p.w16;
     const notes = [];
     if (p.custom) notes.push('custom — ' + customLabel(p.custom));
-    if (others.length) notes.push('same as ' + others.join(', '));
+    if (others.length) notes.push('same as / igual que ' + others.join(', '));
     const note = notes.join(' · ');
     const foot = p.w16 - clr, handle = hi16 + over;
     S.depths.forEach(dp => {
@@ -501,6 +501,10 @@ function buildJigs(){
   return { jigs, over, clr, customs };
 }
 function customLabel(kind){ return kind === 'cnc' ? 'CNC' : 'custom'; }
+/* Printed pages are bilingual (2026-10-14): English first, Spanish in a muted italic (.es). */
+function es(txt){ return `<span class="es">${txt}</span>`; }
+function esBlock(txt){ return `<span class="es es-block">${txt}</span>`; }
+const N_ES = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 /** Label of a foot depth. "Height check jig" depths get a generated label
     carrying the concrete height the jig checks (thickness − foot depth). */
 function depthLabelOf(dp){
@@ -597,12 +601,12 @@ function rowHTML(j){
 function listHeadHTML(over, clr){
   return `<thead><tr>
     <th style="width:5%" class="c">#</th>
-    <th style="width:19%">Jig</th>
-    <th style="width:10%" class="c">Foot depth</th>
-    <th style="width:16%">Foot width<br><span style="font-weight:400;color:#666">(W − ${fmt16(clr)}″)</span></th>
-    <th style="width:16%">Handle width<br><span style="font-weight:400;color:#666">(W + ${fmt16(over)}″)</span></th>
-    <th style="width:12%" class="c">Handle height</th>
-    <th style="width:22%">Notes</th>
+    <th style="width:19%">Jig${es('Plantilla')}</th>
+    <th style="width:10%" class="c">Foot depth${es('Prof. del pie')}</th>
+    <th style="width:16%">Foot width${es('Ancho del pie')}<br><span style="font-weight:400;color:#666">(W − ${fmt16(clr)}″)</span></th>
+    <th style="width:16%">Handle width${es('Ancho del mango')}<br><span style="font-weight:400;color:#666">(W + ${fmt16(over)}″)</span></th>
+    <th style="width:12%" class="c">Handle height${es('Alto del mango')}</th>
+    <th style="width:22%">Notes${es('Notas')}</th>
   </tr></thead>`;
 }
 
@@ -653,13 +657,13 @@ function buildListPages(jigs, opt){
     const pageNo = opt.page0 + pi;
     const body = grp.map(i => rows[i]).join('');
     const range = grp.length ? `${grp[0]+1}–${grp[grp.length-1]+1}` : 'notes';
-    const meta = grp.length ? `Jigs ${range} of ${jigs.length}` : 'Notes';
+    const meta = grp.length ? `Jigs ${range} of ${jigs.length} · Plantillas ${range} de ${jigs.length}` : 'Notes · Notas';
     html += `<section class="page">
       <div class="titlerow"><h1>${opt.title}</h1>
         <div class="meta"><b style="font-size:13px;color:#333">${esc(projTitle())}</b><br>${opt.summary?opt.summary+'<br>':''}${meta}<br>${esc(S.date)}</div></div>
       ${grp.length ? `<table class="list">${opt.listHead}<tbody>${body}</tbody></table>` : ''}
       ${pi === legendPage ? opt.legend : ''}
-      <div class="pfoot"><span>Scrim Jigs · ${esc(projTitle())}</span><span>Page ${pageNo} — Jig List (${range})</span></div>
+      <div class="pfoot"><span>Scrim Jigs / Plantillas de malla · ${esc(projTitle())}</span><span>Page / Página ${pageNo} — Jig List / Lista de plantillas (${range})</span></div>
     </section>`;
   });
   return { html, n: pages.length };
@@ -681,19 +685,19 @@ function cardSVG(j){
     dims += `<line class="de" x1="314" y1="205" x2="340" y2="205"/>
     <line class="dl" x1="334" y1="165" x2="334" y2="205" marker-start="url(#jig-ar)" marker-end="url(#jig-ar)"/>
     <text class="dnum" x="337" y="186" text-anchor="start">${fmt16(h16)}″</text>
-    <text class="dnum" x="337" y="198" text-anchor="start" style="font-size:9px;fill:#666">to face</text>`;
+    <text class="dnum" x="337" y="198" text-anchor="start" style="font-size:9px;fill:#666">to face / a la cara</text>`;
   }
   return `<svg class="cardsvg" viewBox="-30 0 420 250" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" role="img">
     <rect x="75" y="130" width="210" height="75" style="fill:#d6d6d6;stroke:#8a8a8a;stroke-width:.7"/>
     <rect class="wl" x="50" y="130" width="25" height="75"/><rect class="wl" x="285" y="130" width="25" height="75"/>
     <polygon class="pl" points="50,65 310,65 310,130 275,130 275,165 85,165 85,130 50,130"/>
     <line class="scr" x1="75" y1="165" x2="285" y2="165"/>
-    <text class="rlbl" x="180" y="103" text-anchor="middle">HANDLE</text>
-    <text class="rlbl" x="180" y="152" text-anchor="middle">FOOT</text>
-    <text class="il" x="180" y="190" text-anchor="middle" style="font-size:9px;fill:#555">concrete</text>
+    <text class="rlbl" x="180" y="103" text-anchor="middle">HANDLE / MANGO</text>
+    <text class="rlbl" x="180" y="152" text-anchor="middle">FOOT / PIE</text>
+    <text class="il" x="180" y="190" text-anchor="middle" style="font-size:9px;fill:#555">concrete / concreto</text>
     <line class="de" x1="50" y1="61" x2="50" y2="44"/><line class="de" x1="310" y1="61" x2="310" y2="44"/>
     <line class="dl" x1="50" y1="50" x2="310" y2="50" marker-start="url(#jig-ar)" marker-end="url(#jig-ar)"/>
-    <text class="dnum" x="180" y="40" text-anchor="middle">Handle ${j.handle}″</text>
+    <text class="dnum" x="180" y="40" text-anchor="middle">Handle / Mango ${j.handle}″</text>
     <line class="de" x1="46" y1="65" x2="30" y2="65"/><line class="de" x1="46" y1="130" x2="30" y2="130"/>
     <line class="dl" x1="36" y1="65" x2="36" y2="130" marker-start="url(#jig-ar)" marker-end="url(#jig-ar)"/>
     <text class="dnum" x="28" y="101" text-anchor="end">${esc(S.handleH)}″</text>
@@ -703,21 +707,21 @@ function cardSVG(j){
     ${dims}
     <line class="de" x1="85" y1="169" x2="85" y2="228"/><line class="de" x1="275" y1="169" x2="275" y2="228"/>
     <line class="dl" x1="85" y1="224" x2="275" y2="224" marker-start="url(#jig-ar)" marker-end="url(#jig-ar)"/>
-    <text class="dnum" x="180" y="241" text-anchor="middle">Foot ${j.foot}″</text>
+    <text class="dnum" x="180" y="241" text-anchor="middle">Foot / Pie ${j.foot}″</text>
   </svg>`;
 }
 function cardConc(j){
   const T = j.T16;
   if (T == null || T <= 0) return '';
   const h16 = (j.depth16 > 0 && j.depth16 < T) ? T - j.depth16 : null;
-  return ` &nbsp;·&nbsp; <b>Conc</b> ${fmt16(T)}″${h16 != null ? ` · <b>${j.kind === 'check' ? 'Height' : 'Scrim'}</b> ${fmt16(h16)}″ up from face` : ''}`;
+  return ` &nbsp;·&nbsp; <b>Conc</b> ${fmt16(T)}″${h16 != null ? ` · <b>${j.kind === 'check' ? 'Height / Altura' : 'Scrim / Malla'}</b> ${fmt16(h16)}″ up from face / desde la cara` : ''}`;
 }
 function card(j){
   return `<div class="card">
     <div class="card-h"><span class="jno">JIG ${esc(j.label)}</span><span class="jid">${esc(j.depthLabel)}</span></div>
-    ${j.qty ? `<div class="qtybig"><span class="num">${esc(j.qty)}</span><span class="lab">QTY</span></div>` : ''}
+    ${j.qty ? `<div class="qtybig"><span class="num">${esc(j.qty)}</span><span class="lab">QTY · CANT.</span></div>` : ''}
     ${cardSVG(j)}
-    <div class="card-f"><b>Jig ${j.n}</b> &nbsp;·&nbsp; <b>Handle</b> ${j.handle}″ × ${esc(S.handleH)}″ &nbsp;·&nbsp; <b>Foot</b> ${j.foot}″ × ${j.depth}″ &nbsp;·&nbsp; from W ${j.W}″${cardConc(j)}${j.note?` &nbsp;·&nbsp; <span style="color:#b23">${esc(j.note)}</span>`:''}</div>
+    <div class="card-f"><b>Jig / Plantilla ${j.n}</b> &nbsp;·&nbsp; <b>Handle / Mango</b> ${j.handle}″ × ${esc(S.handleH)}″ &nbsp;·&nbsp; <b>Foot / Pie</b> ${j.foot}″ × ${j.depth}″ &nbsp;·&nbsp; from W / de ancho W ${j.W}″${cardConc(j)}${j.note?` &nbsp;·&nbsp; <span style="color:#b23">${esc(j.note)}</span>`:''}</div>
   </div>`;
 }
 function drawingPages(jigs, opt){
@@ -728,9 +732,9 @@ function drawingPages(jigs, opt){
     const pageNo = opt.page0 + i/PER;
     html += `<section class="page">
       <div class="titlerow"><h1>${opt.title}</h1>
-        <div class="meta"><b style="font-size:13px;color:#333">${esc(projTitle())}</b><br>${opt.summary?opt.summary+'<br>':''}Jigs ${a}–${b} of ${T}<br>${esc(S.date)}</div></div>
+        <div class="meta"><b style="font-size:13px;color:#333">${esc(projTitle())}</b><br>${opt.summary?opt.summary+'<br>':''}Jigs ${a}–${b} of ${T} · Plantillas ${a}–${b} de ${T}<br>${esc(S.date)}</div></div>
       <div class="grid">${group.map(card).join('')}</div>
-      <div class="pfoot"><span>Scrim Jigs · ${esc(projTitle())}</span><span>Page ${pageNo} — Drawings ${a}–${b}</span></div>
+      <div class="pfoot"><span>Scrim Jigs / Plantillas de malla · ${esc(projTitle())}</span><span>Page / Página ${pageNo} — Drawings / Dibujos ${a}–${b}</span></div>
     </section>`;
   }
   return html;
@@ -769,21 +773,27 @@ function jigPagesHTML(){
   const summaryBase = currentGroup ? `${esc(currentGroup)} · ${widths} widths · ${jigs.length} jigs`
                                    : `${widths} widths · ${jigs.length} jigs`;
   const customNote = customs.length
-    ? `<b style="color:#b23">Custom jigs — not drawn here:</b> ${customs.map(c =>
+    ? `<b style="color:#b23">Custom jigs / Plantillas a medida — not drawn here / no dibujadas aquí:</b> ${customs.map(c =>
         `${esc(c.label)} — ${customLabel(c.kind)}${c.qty ? ' ×' + esc(c.qty) : ''}`).join('; ')}<br>`
     : '';
+  const clrSide = fmt16(Math.round(clr/2)), overSide = fmt16(Math.round(over/2));
   const legend = `<p class="listnote">${customNote}
       <b>Foot depth</b> = how deep the scrim is pressed; one jig per depth listed.
-      Cut each jig from <b>one piece of plywood</b>: the foot is ${fmt16(Math.round(clr/2))}″ narrower per side so it drops into the form, and the handle overhangs ${fmt16(Math.round(over/2))}″ per side to ride on the form walls.<br>
-      <b style="color:#b23">“same as …”</b> = another panel shares this width — cut the jig once and reuse it.</p>`;
+      Cut each jig from <b>one piece of plywood</b>: the foot is ${clrSide}″ narrower per side so it drops into the form, and the handle overhangs ${overSide}″ per side to ride on the form walls.<br>
+      <b style="color:#b23">“same as …”</b> = another panel shares this width — cut the jig once and reuse it.
+      ${esBlock(`<b>Prof. del pie</b> = qué tan profundo se presiona la malla; una plantilla por cada profundidad listada.
+      Corte cada plantilla de <b>una sola pieza de madera contrachapada</b>: el pie es ${clrSide}″ más angosto por lado para que entre en el molde, y el mango sobresale ${overSide}″ por lado para apoyarse en las paredes del molde.<br>
+      <b style="color:#b23">“igual que …”</b> = otro panel comparte este ancho — corte la plantilla una vez y reutilícela.`)}</p>`;
   const listHead = listHeadHTML(over, clr);
 
   let html = '', page0list = 1;   // no explanatory page — start straight at the jig list
 
-  const title = currentGroup ? `${esc(currentGroup)} — Jig List` : `Jig List — ${jigs.length} Jigs`;
+  const title = currentGroup
+    ? `${esc(currentGroup)} — Jig List${es(`${esc(currentGroup)} — Lista de plantillas`)}`
+    : `Jig List — ${jigs.length} Jigs${es(`Lista de plantillas — ${N_ES(jigs.length, 'plantilla', 'plantillas')}`)}`;
   const L = buildListPages(jigs, { title, summary: currentGroup ? summaryBase : '', legend, page0: page0list, listHead });
   html += L.html;
-  html += drawingPages(jigs, { title: currentGroup ? `${esc(currentGroup)} — Jig Drawings` : 'Individual Jig Drawings',
+  html += drawingPages(jigs, { title: currentGroup ? `${esc(currentGroup)} — Jig Drawings${es(`${esc(currentGroup)} — Dibujos de plantillas`)}` : `Individual Jig Drawings${es('Dibujos de cada plantilla')}`,
                                summary: currentGroup ? summaryBase : '', page0: page0list + L.n });
   return { html, jigs };
 }
@@ -883,12 +893,13 @@ function xsecSVG(sec){
   // concrete slab
   s += `<rect class="conc" x="${x1}" y="${top}" width="${x2-x1}" height="${H}"/>`;
   s += `<text class="il" x="${(x1+x2)/2}" y="${bot+20}" text-anchor="middle">bottom of panel (face) — scrim heights measured from here</text>`;
+  s += `<text class="il" x="${(x1+x2)/2}" y="${bot+34}" text-anchor="middle">fondo del panel (cara) — las alturas de malla se miden desde aquí</text>`;
   // overall thickness dimension (left)
   s += `<line class="de" x1="${x1-4}" y1="${top}" x2="${x1-40}" y2="${top}"/>`;
   s += `<line class="de" x1="${x1-4}" y1="${bot}" x2="${x1-40}" y2="${bot}"/>`;
   s += `<line class="dl" x1="${x1-32}" y1="${top}" x2="${x1-32}" y2="${bot}" marker-start="url(#jig-ar)" marker-end="url(#jig-ar)"/>`;
   s += `<text class="dnum" x="${x1-40}" y="${(top+bot)/2-3}" text-anchor="end">${fmt16(T)}″</text>`;
-  s += `<text class="dnum" x="${x1-40}" y="${(top+bot)/2+13}" text-anchor="end" style="font-size:10px;fill:#666">overall</text>`;
+  s += `<text class="dnum" x="${x1-40}" y="${(top+bot)/2+13}" text-anchor="end" style="font-size:10px;fill:#666">overall / total</text>`;
   // scrim lines + stacked height dimensions (right)
   scr.forEach((o,k)=>{
     const yy = y(o.v), dx = x2 + 36 + k*58;
@@ -930,11 +941,16 @@ function cncNoteHTML(si){
   const cnc = [...new Set(mine.filter(p => p.custom === 'cnc').map(p => (p.label || '').trim() || '?'))];
   if (!cnc.length) return '';
   const sawCut = mine.some(p => p.custom !== 'cnc' && parseInches(p.W) > 0);
-  return `<div class="cncnote"><span class="cnctag">CNC-CUT JIGS</span> `
+  const list = ` <b>${cnc.map(esc).join(', ')}</b>`;
+  return `<div class="cncnote"><span class="cnctag">CNC-CUT JIGS · PLANTILLAS CNC</span> `
     + (sawCut
         ? `The jigs for these parts are <b>cut on the CNC</b> (custom shape) — not on the table saw, and not on the jig list or cut maps:`
         : `<b>All jigs for ${multiSec() ? 'the ' + secTag({ sec: si }) + ' parts' : 'this casting'} are cut on the CNC</b> (custom shape) — there is no table-saw jig list or cut map. Parts:`)
-    + ` <b>${cnc.map(esc).join(', ')}</b></div>`;
+    + list
+    + esBlock(sawCut
+        ? `Las plantillas de estas piezas se <b>cortan en el CNC</b> (forma especial) — no en la sierra de mesa, y no aparecen en la lista de plantillas ni en los mapas de corte:${list}`
+        : `<b>Todas las plantillas de ${multiSec() ? 'las piezas de ' + secTag({ sec: si }) : 'esta colada'} se cortan en el CNC</b> (forma especial) — no hay lista de plantillas ni mapa de corte para la sierra de mesa. Piezas:${list}`)
+    + `</div>`;
 }
 /** Inner HTML of the cross-section print page (goes inside a `.page`). */
 function xsecPrintHTML(si){
@@ -942,24 +958,29 @@ function xsecPrintHTML(si){
   const T = parseInches(sec.thickness);
   const svg = xsecSVG(sec);
   const rows = xsecScrims(sec, T).map(o =>
-    `<tr><td class="c">${o.n}</td><td class="b">${esc(o.name)}</td><td>${fmt16(o.v)}″ from bottom</td><td>${fmt16(T - o.v)}″ from top</td></tr>`).join('');
+    `<tr><td class="c">${o.n}</td><td class="b">${esc(o.name)}</td><td>${fmt16(o.v)}″ from bottom${es(' · desde abajo')}</td><td>${fmt16(T - o.v)}″ from top${es(' · desde arriba')}</td></tr>`).join('');
   const parts = multiSec()
     ? [...new Set(S.panels.filter(p => (p.sec || 0) === si && ((p.label || '').trim())).map(p => p.label.trim()))]
     : [];
   const thk = T != null ? fmt16(T) + '″' : '?';
+  const hasScrim = xsecScrims(sec, T).some(o => o.kind !== 'check'), hasCheck = xsecScrims(sec, T).some(o => o.kind === 'check');
+  const kindEn = hasScrim ? (hasCheck ? 'Scrim & Height Check Layers' : 'Scrim Placement') : 'Height Check Layers';
+  const kindEs = hasScrim ? (hasCheck ? 'Capas de malla y verificación de altura' : 'Posición de la malla') : 'Niveles de verificación de altura';
   return `
-    <div class="titlerow"><h1>Panel Cross-Section${multiSec() ? ' — ' + thk : ''} — ${xsecScrims(sec, T).some(o => o.kind !== 'check') ? (xsecScrims(sec, T).some(o => o.kind === 'check') ? 'Scrim & Height Check Layers' : 'Scrim Placement') : 'Height Check Layers'}</h1>
-      <div class="meta"><b style="font-size:13px;color:#333">${esc(projTitle())}</b><br>${multiSec() ? `Thickness ${si + 1} of ${S.sections.length}<br>` : ''}${esc(S.date)}</div></div>
-    ${parts.length ? `<p class="rules" style="margin:0 0 4px"><b>${thk} parts:</b> ${parts.map(esc).join(', ')}</p>` : ''}
-    <div class="xsec-wrap" style="margin-top:0.35in">${svg || '<p>No section — enter a total concrete thickness.</p>'}</div>
-    ${rows ? `<table class="list" style="margin-top:0.35in"><thead><tr>
-      <th style="width:8%" class="c">#</th><th style="width:24%">Layer</th><th style="width:34%">Height from bottom</th><th style="width:34%">Depth from top</th>
+    <div class="titlerow"><h1>Panel Cross-Section${multiSec() ? ' — ' + thk : ''} — ${kindEn}${es(`Sección transversal del panel${multiSec() ? ' — ' + thk : ''} — ${kindEs}`)}</h1>
+      <div class="meta"><b style="font-size:13px;color:#333">${esc(projTitle())}</b><br>${multiSec() ? `Thickness ${si + 1} of ${S.sections.length} · Espesor ${si + 1} de ${S.sections.length}<br>` : ''}${esc(S.date)}</div></div>
+    ${parts.length ? `<p class="rules" style="margin:0 0 4px"><b>${thk} parts / piezas:</b> ${parts.map(esc).join(', ')}</p>` : ''}
+    <div class="xsec-wrap" style="margin-top:0.15in">${svg || '<p>No section — enter a total concrete thickness.</p>'}</div>
+    ${rows ? `<table class="list" style="margin-top:0.15in"><thead><tr>
+      <th style="width:8%" class="c">#</th><th style="width:24%">Layer${es('Capa')}</th><th style="width:34%">Height from bottom${es('Altura desde abajo')}</th><th style="width:34%">Depth from top${es('Profundidad desde arriba')}</th>
     </tr></thead><tbody>${rows}</tbody></table>` : ''}
     <p class="listnote">Total concrete thickness <b>${thk}</b>.
       Grey = concrete; dashed lines = scrim layers; dotted red lines = height check levels. Heights are measured from the bottom (face) of the panel;
-      “depth from top” matches the jig foot depth pressed from the top of the pour.</p>
+      “depth from top” matches the jig foot depth pressed from the top of the pour.
+      ${esBlock(`Espesor total de concreto <b>${thk}</b>. Gris = concreto; líneas discontinuas = capas de malla; líneas punteadas rojas = niveles de verificación de altura.
+      Las alturas se miden desde el fondo (cara) del panel; la “profundidad desde arriba” es la profundidad del pie de la plantilla presionado desde la parte superior del vaciado.`)}</p>
     ${cncNoteHTML(si)}
-    <div class="pfoot"><span>Scrim Jigs · ${esc(projTitle())}</span><span>Panel Cross-Section${multiSec() ? ` — ${thk} (${si + 1} of ${S.sections.length})` : ''}</span></div>`;
+    <div class="pfoot"><span>Scrim Jigs / Plantillas de malla · ${esc(projTitle())}</span><span>Panel Cross-Section / Sección transversal${multiSec() ? ` — ${thk} (${si + 1} of ${S.sections.length})` : ''}</span></div>`;
 }
 function printXsec(){
   if (!S) return;
@@ -1051,7 +1072,13 @@ const PRINT_DOC_CSS = `
   .cncnote{margin-top:0.3in;border:2.5px solid #b91c1c;border-radius:6px;padding:12px 14px;font-size:15px;line-height:1.55}
   .cnctag{display:inline-block;background:#b91c1c;color:#fff;font-weight:800;letter-spacing:1px;padding:2px 10px;border-radius:3px;margin-right:6px}
   .xsec-wrap{margin:12px auto 2px;text-align:center}
-  .xsec-wrap svg{max-width:100%;height:auto}
+  .xsec-wrap svg{max-width:100%;height:auto;max-height:4.3in}
+  .es{color:#555;font-style:italic;font-weight:400}
+  .es-block{display:block;margin-top:4px}
+  h1 .es{display:block;font-size:14px;margin-top:2px}
+  th .es{display:block;font-size:10px;letter-spacing:0}
+  .cncnote .es-block{margin-top:6px;font-size:13.5px}
+  .listnote .es b,.cncnote .es b{color:#333}
 `;
 
 /**
@@ -1805,13 +1832,14 @@ function cutTitle(kind){
   const job = ((currentProjectNumber ? currentProjectNumber + ' ' : '') + (S.project || '')).trim();
   return `${job} — ${kind}${cast}${currentGroup ? ' — ' + currentGroup : ''}`.toUpperCase();
 }
-function cutPageHead(kind, color, strap, right, strapHl){
-  return `<div class="thead hl-${color}"><h1><span>${esc(cutTitle(kind))}</span></h1>
+function cutPageHead(kind, color, strap, right, strapHl, kindEs, strapEs){
+  const titleEs = kindEs ? cutTitle(kindEs).replace(' — CAST ', ' — COLADA ') : '';
+  return `<div class="thead hl-${color}"><h1><span>${esc(cutTitle(kind))}</span>${titleEs ? `<span class="es-title">${esc(titleEs)}</span>` : ''}</h1>
       <div class="meta">${right || ''}</div></div>
-    <div class="strap">${strapHl ? `<span class="strap-hl">${esc(strap)}</span>` : esc(strap)}</div>`;
+    <div class="strap">${strapHl ? `<span class="strap-hl">${esc(strap)}</span>` : esc(strap)}${strapEs ? es(' · ' + esc(strapEs)) : ''}</div>`;
 }
 function cutFoot(label, pageNo, pageCount){
-  return `<div class="pfoot"><span>Jig blanks · ${esc(projTitle())} · ${esc(S.date)}</span><span>${esc(label)} — page ${pageNo} of ${pageCount}</span></div>`;
+  return `<div class="pfoot"><span>Jig blanks / Piezas en bruto · ${esc(projTitle())} · ${esc(S.date)}</span><span>${esc(label)} — page ${pageNo} of ${pageCount} · página ${pageNo} de ${pageCount}</span></div>`;
 }
 
 function cutMapSVG(plan, m){
@@ -1851,7 +1879,7 @@ function cutMapSVG(plan, m){
   if (rest > 0.05){
     const y0 = MT + usedIn * k;
     s += `<rect class="cspare" x="${ML}" y="${y0}" width="${SLi}" height="${restBand}"/>`;
-    if (rest >= 2.5 && restBand >= 2.4) s += `<text class="ckeep" x="${ML + SLi/2}" y="${y0 + restBand/2 + 0.6}" text-anchor="middle">KEEP — ${fmt16(plan.SL)}″ × ${fmt16(Math.round(rest*16))}″ OFFCUT · BACK TO THE RACK</text>`;
+    if (rest >= 2.5 && restBand >= 2.4) s += `<text class="ckeep" x="${ML + SLi/2}" y="${y0 + restBand/2 + 0.6}" text-anchor="middle">KEEP / GUARDAR — ${fmt16(plan.SL)}″ × ${fmt16(Math.round(rest*16))}″ OFFCUT / RETAZO · BACK TO THE RACK / AL ESTANTE</text>`;
   }
   return s + '</svg>';
 }
@@ -1864,43 +1892,57 @@ function buildCutPages(plan){
   // ---- cover
   const ripSummary = {};
   plan.maps.forEach(m => m.sheet.strips.forEach(s => { ripSummary[s.H] = (ripSummary[s.H] || 0) + m.qty; }));
+  const depthsTxt = S.depths.filter(d => parseInches(d.d) != null).map(d => `<b>${fmt16(parseInches(d.d))}″</b> ${esc(depthLabelOf(d))}`).join(' · ') || '—';
+  const ripsTxt = Object.keys(ripSummary).sort((a,b) => b - a).map(H => `${ripSummary[H]} × ${fmt16(+H)}″`).join(', ');
   pages.push({ label: 'Material Takeoff', html: `
-    ${cutPageHead('MATERIAL TAKEOFF', 'yellow', 'SCRIM / HEIGHT-CHECK JIG BLANKS — TABLE SAW — ONE DOCUMENT PER CAST', `Issued ${esc(S.date)}`, true)}
-    <h2>Sheet Count Summary</h2>
-    <table class="list"><thead><tr><th>Material</th><th>Stock size</th><th>Process</th><th class="c">Consumption</th><th class="c">Physical sheets at the saw</th></tr></thead>
-      <tbody><tr><td class="b">${esc(mat)}</td><td>${esc(stock)}</td><td>Table saw — ${plan.physical} sheet${plan.physical === 1 ? '' : 's'}</td>
+    ${cutPageHead('MATERIAL TAKEOFF', 'yellow', 'SCRIM / HEIGHT-CHECK JIG BLANKS — TABLE SAW — ONE DOCUMENT PER CAST', `Issued / Emitido ${esc(S.date)}`, true,
+                  'DESPIECE DE MATERIAL', 'PIEZAS EN BRUTO PARA PLANTILLAS DE MALLA / VERIFICACIÓN DE ALTURA — SIERRA DE MESA — UN DOCUMENTO POR COLADA')}
+    <h2>Sheet Count Summary${es('Resumen de hojas')}</h2>
+    <table class="list"><thead><tr><th>Material</th><th>Stock size${es('Tamaño de hoja')}</th><th>Process${es('Proceso')}</th><th class="c">Consumption${es('Consumo')}</th><th class="c">Physical sheets at the saw${es('Hojas físicas en la sierra')}</th></tr></thead>
+      <tbody><tr><td class="b">${esc(mat)}</td><td>${esc(stock)}</td><td>Table saw / Sierra de mesa — ${plan.physical} ${plan.physical === 1 ? 'sheet / hoja' : 'sheets / hojas'}</td>
         <td class="c b">${plan.consumption}</td><td class="c b">${plan.physical}</td></tr></tbody></table>
-    <p class="fine">Consumption is rounded up to the nearest 1/4 sheet per map; a map using 80% or more of a sheet counts as a full sheet. Physical sheets are what gets handled at the saw.</p>
-    <h2>Cut Maps</h2>
-    <table class="list"><thead><tr><th class="c">Map</th><th class="c">QTY sheets</th><th class="c">Strips</th><th class="c">Blanks per sheet</th><th>Sheet used</th><th>Full-length offcut to keep</th></tr></thead><tbody>
+    <p class="fine">Consumption is rounded up to the nearest 1/4 sheet per map; a map using 80% or more of a sheet counts as a full sheet. Physical sheets are what gets handled at the saw.
+      ${es('El consumo se redondea hacia arriba al 1/4 de hoja más cercano por mapa; un mapa que usa el 80 % o más de una hoja cuenta como hoja completa. Las hojas físicas son las que se manejan en la sierra.')}</p>
+    <h2>Cut Maps${es('Mapas de corte')}</h2>
+    <table class="list"><thead><tr><th class="c">Map${es('Mapa')}</th><th class="c">QTY sheets${es('Cant. hojas')}</th><th class="c">Strips${es('Tiras')}</th><th class="c">Blanks per sheet${es('Piezas por hoja')}</th><th>Sheet used${es('Hoja usada')}</th><th>Full-length offcut to keep${es('Retazo de largo completo a guardar')}</th></tr></thead><tbody>
       ${plan.maps.map(m => { const rest = plan.SW - Math.min(plan.SW, m.sheet.used);
         return `<tr><td class="c b">${m.no}</td><td class="c">${m.qty}</td><td class="c">${m.sheet.strips.length}</td>
-          <td class="c">${m.sheet.strips.reduce((t,s) => t + s.pieces.length, 0)}</td><td>${Math.round(m.frac*100)}% of the width → counts as ${m.consumption}</td>
+          <td class="c">${m.sheet.strips.reduce((t,s) => t + s.pieces.length, 0)}</td><td>${Math.round(m.frac*100)}% of the width → counts as ${m.consumption}${es(` · ${Math.round(m.frac*100)}% del ancho → cuenta como ${m.consumption}`)}</td>
           <td>${rest >= 40 ? `${fmt16(plan.SL)}″ × ${fmt16(rest)}″` : '—'}</td></tr>`; }).join('')}
     </tbody></table>
-    <h2>Jigs</h2>
-    <p class="body"><b>${plan.pieceCount}</b> blanks for <b>${plan.ok.length}</b> different jigs · foot depths: ${S.depths.filter(d => parseInches(d.d) != null).map(d => `<b>${fmt16(parseInches(d.d))}″</b> ${esc(depthLabelOf(d))}`).join(' · ') || '—'}
-      · handle height <b>${esc(S.handleH)}″</b> · rips: ${Object.keys(ripSummary).sort((a,b) => b - a).map(H => `${ripSummary[H]} × ${fmt16(+H)}″`).join(', ')}</p>
-    <h2>Standing Rules</h2>
+    <h2>Jigs${es('Plantillas')}</h2>
+    <p class="body"><b>${plan.pieceCount}</b> blanks for <b>${plan.ok.length}</b> different jigs · foot depths: ${depthsTxt}
+      · handle height <b>${esc(S.handleH)}″</b> · rips: ${ripsTxt}
+      ${esBlock(`<b>${plan.pieceCount}</b> piezas en bruto para <b>${plan.ok.length}</b> plantillas distintas · profundidades del pie: ${depthsTxt} · alto del mango <b>${esc(S.handleH)}″</b> · cortes al hilo: ${ripsTxt}`)}</p>
+    <h2>Standing Rules${es('Reglas fijas')}</h2>
     <ul class="body">
-      <li>Kerf is <b>1/8″</b> on every cut and is included in the maps.</li>
-      <li><b>Rip the strips first, then crosscut</b> each strip left to right to the lengths printed on the blanks. Strips are filled along the long edge first; a lower blank riding in a taller strip is marked <b>rip to …</b>.</li>
-      <li>Blanks are <b>square-cut rectangles</b>: handle width × (handle height + foot depth). <b>Notch the foot afterwards</b> from the jig drawings — the maps do not show the notch.</li>
-      <li>Jigs with identical cut sizes are made once and shared. The <b>jig list printout</b> is the parts list — it shows every part each jig fits.</li>
+      <li>Kerf is <b>1/8″</b> on every cut and is included in the maps.
+        ${esBlock('El corte (kerf) es de <b>1/8″</b> en cada pasada y ya está incluido en los mapas.')}</li>
+      <li><b>Rip the strips first, then crosscut</b> each strip left to right to the lengths printed on the blanks. Strips are filled along the long edge first; a lower blank riding in a taller strip is marked <b>rip to …</b>.
+        ${esBlock('<b>Primero corte las tiras al hilo y luego haga los cortes transversales</b> de cada tira de izquierda a derecha a los largos impresos en las piezas. Las tiras se llenan primero a lo largo del borde largo; una pieza más baja dentro de una tira más alta se marca <b>rip to … (cortar a …)</b>.')}</li>
+      <li>Blanks are <b>square-cut rectangles</b>: handle width × (handle height + foot depth). <b>Notch the foot afterwards</b> from the jig drawings — the maps do not show the notch.
+        ${esBlock('Las piezas en bruto son <b>rectángulos a escuadra</b>: ancho del mango × (alto del mango + profundidad del pie). <b>Haga la muesca del pie después</b> según los dibujos de las plantillas — los mapas no muestran la muesca.')}</li>
+      <li>Jigs with identical cut sizes are made once and shared. The <b>jig list printout</b> is the parts list — it shows every part each jig fits.
+        ${esBlock('Las plantillas con las mismas medidas de corte se hacen una sola vez y se comparten. La <b>lista de plantillas impresa</b> es la lista de piezas — muestra cada pieza que corresponde a cada plantilla.')}</li>
     </ul>` });
 
   // ---- maps (the jig list printout is the parts list; lengths are printed on the blanks)
   plan.maps.forEach(m => {
-    const head = `MAP ${m.no} OF ${plan.maps.length} — <u>${esc(mat)}</u> — ${esc(stock)} — QTY ${m.qty} SHEET${m.qty === 1 ? '' : 'S'}`;
+    const head = `MAP ${m.no} OF ${plan.maps.length} — <u>${esc(mat)}</u> — ${esc(stock)} — QTY ${m.qty} SHEET${m.qty === 1 ? '' : 'S'}${es(` · MAPA ${m.no} DE ${plan.maps.length} · CANT. ${m.qty} ${m.qty === 1 ? 'HOJA' : 'HOJAS'}`)}`;
     const rips = {}; m.sheet.strips.forEach(s => { rips[s.H] = (rips[s.H] || 0) + 1; });
-    const ripTxt = Object.keys(rips).sort((a,b) => b - a).map(H => `${rips[H]} strip${rips[H] === 1 ? '' : 's'} at ${fmt16(+H)}″`).join(', ');
+    const ripKeys = Object.keys(rips).sort((a,b) => b - a);
+    const ripTxt = ripKeys.map(H => `${rips[H]} strip${rips[H] === 1 ? '' : 's'} at ${fmt16(+H)}″`).join(', ');
+    const ripTxtEs = ripKeys.map(H => `${rips[H]} tira${rips[H] === 1 ? '' : 's'} a ${fmt16(+H)}″`).join(', ');
     const vbW = plan.SL / 16 + CUT_SVG_ML + CUT_SVG_MR;
+    const scale = (vbW / 10).toFixed(1);
     pages.push({ label: `Cut Map ${m.no}`, html: `
-      ${cutPageHead('OPERATOR CUT MAPS', 'blue', 'WHAT TO CUT — SEE THE JIG DRAWINGS FOR THE FOOT NOTCH', `Map ${m.no} of ${plan.maps.length}`)}
+      ${cutPageHead('OPERATOR CUT MAPS', 'blue', 'WHAT TO CUT — SEE THE JIG DRAWINGS FOR THE FOOT NOTCH', `Map ${m.no} of ${plan.maps.length} · Mapa ${m.no} de ${plan.maps.length}`, false,
+                    'MAPAS DE CORTE DEL OPERADOR', 'QUÉ CORTAR — VEA LOS DIBUJOS DE LAS PLANTILLAS PARA LA MUESCA DEL PIE')}
       <div class="maphead">${head}</div>
       ${cutMapSVG(plan, m)}
-      <div class="legend"><span class="sw sw-p"></span> <u>${esc(mat)}</u> jig blank &nbsp;&nbsp; <span class="sw sw-s"></span> Gray = spare / offcut &nbsp;&nbsp; Drawn to scale: 1″ on paper = ${(vbW / 10).toFixed(1)}″ on the sheet</div>
-      <p class="fine"><b>Cut sequence:</b> sheet long edge against the fence. Rip top to bottom as drawn — ${ripTxt} — 1/8″ kerf each rip. Then crosscut each strip left to right to the length printed on each blank. A blank marked <b>rip to …</b> is lower than its strip — rip it down to that height after the crosscut. Cut to the printed numbers, not by scaling this drawing. Notch the foot afterwards from the jig drawings.</p>` });
+      <div class="legend"><span class="sw sw-p"></span> <u>${esc(mat)}</u> jig blank / pieza en bruto &nbsp;&nbsp; <span class="sw sw-s"></span> Gray = spare / offcut${es(' · Gris = sobrante / retazo')} &nbsp;&nbsp; Drawn to scale: 1″ on paper = ${scale}″ on the sheet${es(` · A escala: 1″ en papel = ${scale}″ en la hoja`)}</div>
+      <p class="fine"><b>Cut sequence:</b> sheet long edge against the fence. Rip top to bottom as drawn — ${ripTxt} — 1/8″ kerf each rip. Then crosscut each strip left to right to the length printed on each blank. A blank marked <b>rip to …</b> is lower than its strip — rip it down to that height after the crosscut. Cut to the printed numbers, not by scaling this drawing. Notch the foot afterwards from the jig drawings.
+        ${esBlock(`<b>Secuencia de corte:</b> borde largo de la hoja contra la guía. Corte al hilo de arriba hacia abajo como se muestra — ${ripTxtEs} — 1/8″ de corte en cada pasada. Luego haga los cortes transversales de cada tira de izquierda a derecha al largo impreso en cada pieza. Una pieza marcada <b>rip to … (cortar a …)</b> es más baja que su tira — córtela a esa altura después del corte transversal. Corte a las medidas impresas, no midiendo este dibujo. Haga la muesca del pie después según los dibujos de las plantillas.`)}</p>` });
   });
 
   return pages.map((p, i) => `<section class="page">${p.html}${cutFoot(p.label, i + 1, pages.length)}</section>`).join('');
@@ -2094,17 +2136,17 @@ const CUT_DOC_CSS = `
   .hl-blue{border-color:#60a5fa}.hl-blue h1 span{background:#93c5fd}
   .strap{font-size:12.5px;font-weight:700;letter-spacing:.6px;margin:6px 0 12px;color:#222}
   .strap-hl{background:#bbf7d0;padding:2px 8px;border-radius:2px}   /* light green: tells this cover apart from the main takeoff cover */
-  h2{font-size:13px;text-transform:uppercase;letter-spacing:.8px;margin:16px 0 6px;color:#333}
-  table.list{border-collapse:collapse;width:100%;font-size:12.5px}
-  table.list thead th{background:#eaeaea;border:1px solid #111;padding:6px 8px;text-align:left;font-size:11.5px}
-  table.list tbody td{border:1px solid #bbb;padding:5px 8px;vertical-align:top}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:.8px;margin:9px 0 4px;color:#333}
+  table.list{border-collapse:collapse;width:100%;font-size:12px}
+  table.list thead th{background:#eaeaea;border:1px solid #111;padding:3px 8px;text-align:left;font-size:11px;line-height:1.25}
+  table.list tbody td{border:1px solid #bbb;padding:3px 8px;vertical-align:top}
   table.list .c{text-align:center}
   table.list .b{font-weight:700}
   table.list td.wrap{white-space:normal;line-height:1.7}
   .pc{display:inline-block;border:1px solid #999;border-radius:3px;padding:0 6px;margin:1px 3px 1px 0;background:#f4ead0;white-space:nowrap}
-  .body{font-size:13px;line-height:1.65;margin:4px 0}
+  .body{font-size:12.5px;line-height:1.4;margin:3px 0}
   ul.body{padding-left:20px}
-  .fine{font-size:11.5px;color:#333;line-height:1.55;margin:8px 0 0}
+  .fine{font-size:11px;color:#333;line-height:1.4;margin:5px 0 0}
   .maphead{font-size:15px;font-weight:800;margin:0 0 6px}
   .legend{font-size:14px;font-weight:700;margin-top:6px}
   .sw{display:inline-block;width:22px;height:12px;border:1px solid #111;vertical-align:-1px}
@@ -2119,6 +2161,15 @@ const CUT_DOC_CSS = `
   .ckeep{font-size:1.7px;font-weight:800;fill:#333;letter-spacing:.05px}
   .pfoot{position:absolute;left:0.5in;right:0.5in;bottom:0.25in;border-top:.5px solid #bbb;padding-top:4px;
          font-size:10px;color:#777;display:flex;justify-content:space-between}
+  .es{color:#555;font-style:italic;font-weight:400}
+  .es-block{display:block;margin-top:1px}
+  .thead h1 .es-title{display:block;background:none !important;padding:0;margin-top:3px;font-size:12px;font-weight:600;color:#444;letter-spacing:.2px}
+  h2 .es{text-transform:none;letter-spacing:0;font-size:11px;margin-left:8px}
+  th .es{display:block;font-size:10px}
+  .body .es b,.fine .es b{color:#333}
+  ul.body li{margin-bottom:2px}
+  .strap{margin:4px 0 8px}
+  .cutsvg{max-height:4.75in}
 `;
 
 /* ============================ shell ============================ */
