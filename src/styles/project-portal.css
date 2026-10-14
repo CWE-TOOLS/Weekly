@@ -2736,6 +2736,16 @@ body.pp-inv-dragging, body.pp-inv-dragging * { user-select: none !important; -we
     color: #ffffff;
     border-color: #64748b;
 }
+.pp-track-bulk-btn-unassign {
+    background: transparent;
+    color: #fca5a5;
+    border-color: #7f1d1d;
+}
+.pp-track-bulk-btn-unassign:hover {
+    background: #450a0a;
+    color: #fecaca;
+    border-color: #b91c1c;
+}
 
 /* Truck box on Tracking row — blue when set (crate box is red when set) */
 .pp-track-crate-select.pp-track-truck-set {

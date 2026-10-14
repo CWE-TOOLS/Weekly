@@ -4160,7 +4160,7 @@ async function handleTrackingCrateSelect(componentId, value) {
     if (!componentId) return;
     // If the row is part of a multi-row selection, treat it as a bulk assign for every selected row.
     if (selectedComponentIds.has(componentId) && selectedComponentIds.size > 1) {
-        await applyBulkCrate(value === '' ? { clear: true } : { num: crateNumFromPick(value) });
+        await applyBulkCrate(!crateNumFromPick(value) ? { clear: true } : { num: crateNumFromPick(value) });
         return;
     }
     const num = crateNumFromPick(value);
@@ -4177,6 +4177,7 @@ async function handleTrackingCrateSelect(componentId, value) {
 }
 async function handleTrackingTruckSelect(componentId, value) {
     if (!componentId) return;
+    if (value === '__clear__') { await handleTrackingCrateSelect(componentId, '__clear__'); return; }
     const truck = Number(value || 0);
     if (selectedComponentIds.has(componentId) && selectedComponentIds.size > 1) {
         await applyBulkCrate({ truck });
@@ -4262,8 +4263,8 @@ function truckOptionsHtml(selectedTruck, { bulk = false } = {}) {
     const nums = new Set(TRUCK_NUMBER_OPTIONS);
     for (const c of getCratesForActivePhase()) if (crateTruck(c)) nums.add(crateTruck(c));
     const head = bulk
-        ? ['<option value="">— Set truck —</option>', '<option value="0">No truck</option>']
-        : ['<option value="0"' + (!selectedTruck ? ' selected' : '') + '>—</option>'];
+        ? ['<option value="">— Set truck —</option>', '<option value="0">No truck</option>', '<option value="__clear__">Clear assignment</option>']
+        : ['<option value="0"' + (!selectedTruck ? ' selected' : '') + '>—</option>', '<option value="__clear__">Clear assignment</option>'];
     const opts = [...nums].sort((a, b) => a - b).map(t => `<option value="${t}"${!bulk && t === Number(selectedTruck) ? ' selected' : ''}>Truck ${t}</option>`);
     return head.concat(opts).join('');
 }
@@ -4272,7 +4273,7 @@ function crateOptionsHtml(selectedId, { bulk = false } = {}) {
     const crates = getCratesForActivePhase();
     const head = bulk
         ? ['<option value="">— Set crate —</option>', '<option value="__clear__">Clear assignment</option>']
-        : ['<option value="">—</option>'];
+        : ['<option value="">—</option>', '<option value="__clear__">Clear assignment</option>'];
     const nums = new Set(CRATE_NUMBER_OPTIONS);
     for (const c of crates) nums.add(crateCodePart(crateNum(c)));
     const n = (s) => { const x = parseFloat(s); return Number.isFinite(x) ? x : Infinity; };
@@ -4644,6 +4645,7 @@ function renderTrackingBulkBar() {
             <span class="pp-track-bulk-count">${count} ${count === 1 ? 'panel' : 'panels'} selected</span>
             <select id="pp-track-bulk-truck" class="pp-track-bulk-select" aria-label="Bulk truck assignment" title="Put the ticked panels on this truck (they keep their crate numbers)">${truckOptions}</select>
             <select id="pp-track-bulk-select" class="pp-track-bulk-select" aria-label="Bulk crate assignment" title="Put the ticked panels in this crate number (they keep their trucks)">${options}</select>
+            <button type="button" class="pp-track-bulk-btn pp-track-bulk-btn-unassign" data-action="track-bulk-unassign" title="Take the ticked panels out of their crates (no crate, no truck)">Clear assignment</button>
             <button type="button" class="pp-track-bulk-btn pp-track-bulk-btn-complete" data-action="track-bulk-complete">Mark Complete</button>
             <button type="button" class="pp-track-bulk-btn pp-track-bulk-btn-incomplete" data-action="track-bulk-incomplete">Mark Incomplete</button>
             <button type="button" class="pp-track-bulk-clear" data-action="track-bulk-clear">Clear selection</button>
@@ -7744,7 +7746,7 @@ function wireEvents() {
         if (truckSel && truckSel.value !== '') {
             const value = truckSel.value;
             truckSel.value = '';
-            applyBulkCrate({ truck: Number(value) });
+            applyBulkCrate(value === '__clear__' ? { clear: true } : { truck: Number(value) });
             return;
         }
         const sel = e.target.closest('#pp-track-bulk-select');
@@ -7759,6 +7761,10 @@ function wireEvents() {
         if (e.target.closest('[data-action="track-bulk-clear"]')) {
             selectedComponentIds.clear();
             renderTracking();
+            return;
+        }
+        if (e.target.closest('[data-action="track-bulk-unassign"]')) {
+            applyBulkCrate({ clear: true });
             return;
         }
         if (e.target.closest('[data-action="track-bulk-complete"]')) {
