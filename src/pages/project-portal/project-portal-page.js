@@ -4130,7 +4130,7 @@ async function handleTrackingCrateSelect(componentId, value) {
     }
     const v = (value || '').trim();
     if (!v) { await assignComponentToCrate(componentId, null); return; }
-    const crate = v === '__new__' ? await createNextCrate() : currentCrates.find(c => c.id === v);
+    const crate = await resolveCratePick(v);
     if (crate) await assignComponentToCrate(componentId, crate.id);
     else renderTracking();
 }
@@ -4199,23 +4199,53 @@ async function createCrateOn(truck, num) {
         return null;
     }
 }
-/** "New crate…" from the Tracking tab: the next number on the newest truck (Truck 1 when there is none yet). */
-async function createNextCrate() {
-    const truck = Math.max(1, highestTruck());
-    return createCrateOn(truck, nextCrateNumberOn(truck));
+/** All crates in this phase with this crate number (one per truck at most). */
+function cratesNumbered(num) {
+    const want = crateCodePart(num);
+    return sortCrates(getCratesForActivePhase().filter(c => crateCodePart(crateNum(c)) === want));
 }
-/** Options for the Tracking pickers: this phase's crates by truck, then "New crate…". */
+/**
+ * The Tracking pickers work by crate NUMBER, like they always did: "#2" means crate 2 — the one that
+ * already exists in this phase, or a new crate 2 with no truck yet (the Shipping tab puts it on a truck).
+ * Only when the same number is on two trucks does the picker list each one by id ("2 (Truck 1)").
+ */
+async function resolveCratePick(value) {
+    const v = String(value || '').trim();
+    if (!v.startsWith('#')) return currentCrates.find(c => c.id === v) || null;
+    const num = v.slice(1).trim();
+    if (!num) return null;
+    const have = cratesNumbered(num);
+    if (have.length) return have.find(c => crateTruck(c) === 0) || have[0];
+    return createCrateOn(0, num);
+}
+/** Options for the Tracking pickers: crate numbers 1–20 plus any other number already in use in this phase. */
 function crateOptionsHtml(selectedId, { bulk = false } = {}) {
-    const crates = sortCrates(getCratesForActivePhase());
+    const crates = getCratesForActivePhase();
     const head = bulk
         ? ['<option value="">— Set crate —</option>', '<option value="__clear__">Clear assignment</option>']
         : ['<option value="">—</option>'];
-    const opts = crates.map(c => `<option value="${escapeAttr(c.id)}"${c.id === selectedId ? ' selected' : ''}>${escapeHtml(crateDisplay(c))}</option>`);
+    const nums = new Set(CRATE_NUMBER_OPTIONS);
+    for (const c of crates) nums.add(crateCodePart(crateNum(c)));
+    const n = (s) => { const x = parseFloat(s); return Number.isFinite(x) ? x : Infinity; };
+    const ordered = [...nums].sort((a, b) => (n(a) - n(b)) || a.localeCompare(b));
+    const opts = [];
+    for (const num of ordered) {
+        const have = cratesNumbered(num);
+        if (have.length > 1) {
+            for (const c of have) {
+                const where = crateTruck(c) ? `Truck ${crateTruck(c)}` : 'no truck yet';
+                opts.push(`<option value="${escapeAttr(c.id)}"${c.id === selectedId ? ' selected' : ''}>${escapeHtml(num)} (${where})</option>`);
+            }
+        } else {
+            const sel = have.length === 1 && have[0].id === selectedId;
+            opts.push(`<option value="#${escapeAttr(num)}"${sel ? ' selected' : ''}>${escapeHtml(num)}</option>`);
+        }
+    }
     if (selectedId && !crates.some(c => c.id === selectedId)) {
         const other = currentCrates.find(c => c.id === selectedId);
         if (other) opts.push(`<option value="${escapeAttr(other.id)}" selected>${escapeHtml(crateDisplay(other))} (other phase)</option>`);
     }
-    return head.concat(opts, ['<option value="__new__">New crate…</option>']).join('');
+    return head.concat(opts).join('');
 }
 
 async function handleRejectedToggle(componentId, checkboxEl) {
@@ -4635,7 +4665,7 @@ async function applyBulkCrate(value) {
 
     let crateId = null;
     if (value && value !== '__clear__') {
-        const crate = value === '__new__' ? await createNextCrate() : currentCrates.find(c => c.id === value);
+        const crate = await resolveCratePick(value);
         if (!crate) { renderTracking(); return; }
         crateId = crate.id;
     }
@@ -4697,6 +4727,7 @@ function renderTrackSection(casting) {
                 <span>Length</span>
                 <span>Color</span>
                 <span>Crate #</span>
+                <span>Truck</span>
                 <span>Rejected</span>
                 <span>Remake In</span>
             </div>
@@ -4759,6 +4790,10 @@ function renderTrackCard(comp, castingId) {
     const currentNum = crate ? crateNum(crate) : '';
     const crateTitle = crate ? crateDisplay(crate) : 'Assign this panel to a crate';
     const options = crateOptionsHtml(comp.crate_id || '');
+    // Truck is read-only here — it is set on the Shipping tab.
+    const truckNo = crate ? crateTruck(crate) : 0;
+    const truckLabel = truckNo ? `Truck ${truckNo}` : (crate ? '—' : '');
+    const truckTitle = truckNo ? `${crateDisplay(crate)} (set on the Shipping tab)` : (crate ? 'Not on a truck yet — pick one on the Shipping tab' : 'No crate yet');
     const isSelected = selectedComponentIds.has(comp.id);
     const isProduced = !!comp.produced;
     const isRejected = !!comp.rejected;
@@ -4800,6 +4835,7 @@ function renderTrackCard(comp, castingId) {
                 <input type="text" class="pp-track-input" data-field="length" value="${escapeAttr(comp.length || '')}" readonly title="${escapeAttr(lockTitle)}" />
                 <input type="text" class="pp-track-input" data-field="color" value="${escapeAttr(resolveComponentColorName(comp))}" readonly title="${escapeAttr(lockTitle)}" />
                 <select class="pp-track-crate-select${currentNum ? ' pp-track-crate-set' : ''}" data-action="track-crate-select" data-component-id="${escapeAttr(comp.id)}" title="${escapeAttr(crateTitle)}">${options}</select>
+                <span class="pp-track-truck-cell${truckNo ? ' pp-track-truck-set' : ''}" title="${escapeAttr(truckTitle)}">${escapeHtml(truckLabel)}</span>
                 <label class="pp-track-rejected-cell" title="${escapeAttr(rejectTitle)}">
                     <input type="checkbox" class="pp-track-rejected" data-action="track-rejected-toggle" data-component-id="${escapeAttr(comp.id)}" ${isRejected ? 'checked' : ''} aria-label="Mark as rejected" />
                 </label>
@@ -10081,10 +10117,10 @@ function renderShipping() {
     const visibleCrates = sortCrates(getCratesForActivePhase());
     const toolbar = `<div class="pp-ship-toolbar">
         <button type="button" class="pp-ship-add-btn" data-action="ship-add-truck">+ Add truck</button>
-        <span class="pp-ship-toolbar-hint">Crate numbers start again on every truck. Assign panels to crates on the Tracking tab.</span>
+        <span class="pp-ship-toolbar-hint">Crates made on the Tracking tab land under "Not on a truck yet" — pick a truck on each one here. Crate numbers can repeat from truck to truck.</span>
     </div>`;
     if (visibleCrates.length === 0) {
-        list.innerHTML = toolbar + `<div class="pp-ship-empty">No crates yet. Add a truck here, or pick "New crate…" in the Crate column on the <strong>Tracking</strong> tab.</div>`;
+        list.innerHTML = toolbar + `<div class="pp-ship-empty">No crates yet. Pick a crate number in the Crate column on the <strong>Tracking</strong> tab, or add a truck here.</div>`;
         return;
     }
 
@@ -10110,10 +10146,11 @@ function renderShipping() {
         const actions = t
             ? `<button type="button" class="pp-ship-add-btn" data-action="ship-add-crate" data-truck="${t}">+ Add crate</button>
                <button type="button" class="pp-ship-print-btn" data-action="ship-print-truck" data-truck="${t}" ${panels === 0 ? 'disabled' : ''} title="${panels === 0 ? 'Assign panels first' : 'Print one packing list for the whole truck'}"><span>Truck packing list</span></button>`
-            : `<span class="pp-ship-truck-hint">Give each crate below a truck.</span>`;
+            : `<span class="pp-ship-truck-hint">Use the Truck box on each crate to put it on a truck.</span>
+               <button type="button" class="pp-ship-add-btn" data-action="ship-add-crate" data-truck="0">+ Add crate</button>`;
         return `<section class="pp-ship-truck${t ? '' : ' pp-ship-truck-none'}" data-truck="${t}">
             <div class="pp-ship-truck-header">
-                <h3 class="pp-ship-truck-title">${t ? `Truck ${t}` : 'No truck yet'}</h3>
+                <h3 class="pp-ship-truck-title">${t ? `Truck ${t}` : 'Not on a truck yet'}</h3>
                 <span class="pp-ship-truck-count">${crates.length} ${crates.length === 1 ? 'crate' : 'crates'} · ${panels} ${panels === 1 ? 'panel' : 'panels'}</span>
                 <div class="pp-ship-truck-actions">${actions}</div>
             </div>
