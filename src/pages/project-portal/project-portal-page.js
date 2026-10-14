@@ -4153,7 +4153,10 @@ function crateParts(crate) {
     return { truck: 0, num: i === -1 ? raw : raw.slice(i + 1) };   // legacy "1", or an older "P2.1.1"
 }
 function crateKey(truck, num) {
-    const pc = currentPhasesEnabled ? phaseCode(currentPhases.find(p => p.id === currentPhaseId)) : '';
+    // Phase prefix keeps "Truck 1 · Crate 1" of one phase apart from the next. If the phase list has not
+    // loaded yet, fall back to the start of the phase id so the key still carries the phase.
+    let pc = currentPhasesEnabled ? phaseCode(currentPhases.find(p => p.id === currentPhaseId)) : '';
+    if (currentPhasesEnabled && !pc && currentPhaseId) pc = String(currentPhaseId).slice(0, 8).toUpperCase();
     return (pc ? pc + '.' : '') + 'T' + Number(truck || 0) + '.' + crateCodePart(num);
 }
 function crateNum(crate) { return crateParts(crate).num; }
