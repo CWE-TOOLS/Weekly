@@ -6331,6 +6331,11 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
 .pp-tab-panel[data-panel="jig-list"] .bar button:hover{background:#1e40af}
 .pp-tab-panel[data-panel="jig-list"] .bar button.ghost{background:#e2e8f0;color:#1e293b}
 .pp-tab-panel[data-panel="jig-list"] .bar button.ghost:hover{background:#cbd5e1}
+.pp-tab-panel[data-panel="jig-list"] .bar button.all{background:#0f172a}
+.pp-tab-panel[data-panel="jig-list"] .bar button.all:hover{background:#1e293b}
+.pp-tab-panel[data-panel="jig-list"] .bar button.save{background:#16a34a}
+.pp-tab-panel[data-panel="jig-list"] .bar button.save:hover{background:#15803d}
+.pp-tab-panel[data-panel="jig-list"] .bar .delivstat{color:#15803d;font-weight:600;min-width:0}
 .pp-tab-panel[data-panel="jig-list"] .bar button:disabled{opacity:.45;cursor:default;pointer-events:none}
 
 /* ---------- print-set bar (in-panel, non-fixed) ---------- */

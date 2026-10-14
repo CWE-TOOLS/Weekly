@@ -749,14 +749,21 @@ function renderOutput(){
   if (currentGroup && !groups.includes(currentGroup)) currentGroup = null;
   buildPrintSetBar(groups);
 
-  const { jigs, over, clr, customs } = buildJigs();
   const out = document.getElementById('jig-output');
   if (!out) return;
 
+  const { html, jigs } = jigPagesHTML();
   if (!jigs.length){
     out.innerHTML = `<div class="emptyhint">Add at least one panel with a valid width — and at least one foot depth — to generate jigs.</div>`;
     return;
   }
+  out.innerHTML = html;
+}
+
+/** Jig list + drawing pages for the current print set (currentGroup; null = all groups). */
+function jigPagesHTML(){
+  const { jigs, over, clr, customs } = buildJigs();
+  if (!jigs.length) return { html: '', jigs };
 
   const widths = new Set(jigs.map(j => j.W)).size;
   const summaryBase = currentGroup ? `${esc(currentGroup)} · ${widths} widths · ${jigs.length} jigs`
@@ -778,7 +785,7 @@ function renderOutput(){
   html += L.html;
   html += drawingPages(jigs, { title: currentGroup ? `${esc(currentGroup)} — Jig Drawings` : 'Individual Jig Drawings',
                                summary: currentGroup ? summaryBase : '', page0: page0list + L.n });
-  out.innerHTML = html;
+  return { html, jigs };
 }
 
 /* ===================== print-set bar ==================== */
@@ -1101,6 +1108,7 @@ function printViaIframe(title, bodyHTML, css){
 
 function buildEditor(){
   if (!S) return;
+  renderDeliverableStamp();
   // cross-section designer — one block per thickness
   buildXsecList();
 
@@ -1902,6 +1910,11 @@ function printCutMaps(){
   if (!S) return;
   const plan = buildCutPlan();
   if (!plan.blanks.length){ alert('Add at least one panel width and one foot depth first — there are no jigs to nest.'); return; }
+  if (!cutPlanReady(plan)) return;
+  printViaIframe('Jig Cut Maps — ' + projTitle(), buildCutPages(plan), CUT_DOC_CSS);
+}
+/** True when the cut maps can be drawn; otherwise tells the user what to fix (same messages as Print Cut Maps). */
+function cutPlanReady(plan){
   if (plan.noFoot.length){
     alert('These jigs have no foot left — the foot clearance (' + S.clearance + '″) is as big as the part:\n\n'
       + plan.noFoot.map(b => `Jig ${b.n} — ${b.names.join(', ')} (foot ${fmt16(b.foot16)}″)`).join('\n')
@@ -1912,10 +1925,154 @@ function printCutMaps(){
     alert('These jigs cannot be cut from a ' + plan.c.sheet + ' sheet:\n\n'
       + plan.tooBig.map(b => `Jig ${b.n} — ${b.names.join(', ')} (${fmt16(b.L)}″ long)`).join('\n')
       + '\n\nPick a longer sheet size, then print again.');
-    return;
+    return false;
   }
-  if (plan.c.material === 'other' && !(plan.c.other || '').trim()){ alert('Type the material name first — it prints on every map.'); return; }
-  printViaIframe('Jig Cut Maps — ' + projTitle(), buildCutPages(plan), CUT_DOC_CSS);
+  if (plan.c.material === 'other' && !(plan.c.other || '').trim()){ alert('Type the material name first — it prints on every map.'); return false; }
+  return true;
+}
+
+/* ===================== deliverable: Print All / Save Deliverable (2026-10-14) ==================== */
+/* One document for the casting: jig list + drawings (all groups), the cross-section sheet(s), then the
+   cut maps (material takeoff cover + operator cut maps). Portrait and landscape sheets live in the
+   same file through named pages, and each original stylesheet is scoped to its own wrapper. */
+
+/** Scope a flat stylesheet (no nested at-rules) under `scope`. @page and :last-child rules are dropped —
+ *  the deliverable's base CSS handles page sizes and breaks; document-level rules are shared. */
+function scopeCss(css, scope){
+  return css.replace(/\/\*[\s\S]*?\*\//g, '').replace(/([^{}]+)\{([^{}]*)\}/g, (m, sel, body) => {
+    sel = sel.trim();
+    if (!sel || sel.startsWith('@page') || sel.includes(':last-child')) return '';
+    if (sel === ':root') return `${scope}{${body}}`;
+    if (sel === '*' || sel === 'html,body' || sel === 'body') return '';
+    return sel.split(',').map(s => `${scope} ${s.trim()}`).join(',') + `{${body}}`;
+  });
+}
+const DELIVERABLE_BASE_CSS = `
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{font-family:'Segoe UI',Arial,Helvetica,sans-serif;color:#1a1a1a;background:#fff;
+       -webkit-print-color-adjust:exact;print-color-adjust:exact}
+  @page{margin:0}
+  @page jig-portrait{size:letter portrait;margin:0}
+  @page jig-landscape{size:letter landscape;margin:0}
+  .doc-p .page{page:jig-portrait;page-break-after:always;break-after:page}
+  .doc-l .page{page:jig-landscape;page-break-after:always;break-after:page}
+  .doc-last .page:last-child{page-break-after:auto;break-after:auto}
+  @media screen{
+    body{background:#6b7280;padding:24px 0}
+    .page{margin:0 auto 24px;box-shadow:0 2px 14px rgba(0,0,0,.45)}
+    .deliv-banner{max-width:11in;margin:0 auto 18px;background:#0f172a;color:#fff;font:600 13px/1.5 'Segoe UI',Arial,sans-serif;
+                  padding:10px 16px;border-radius:8px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+    .deliv-banner button{background:#2563eb;color:#fff;border:0;border-radius:6px;padding:6px 14px;font:inherit;cursor:pointer}
+  }
+  @media print{.deliv-banner{display:none}}
+`;
+function deliverableCss(){ return DELIVERABLE_BASE_CSS + scopeCss(PRINT_DOC_CSS, '.doc-p') + scopeCss(CUT_DOC_CSS, '.doc-l'); }
+
+/** The three parts, or null after telling the user what is missing. Jigs cover ALL groups. */
+function deliverableParts(){
+  if (!S) return null;
+  const savedGroup = currentGroup;
+  currentGroup = null;
+  let jig;
+  try { jig = jigPagesHTML(); } finally { currentGroup = savedGroup; }
+  if (!jig.jigs.length){ alert('Add at least one panel with a valid width — and at least one foot depth — before printing or saving the deliverable.'); return null; }
+  const xsec = S.sections.map((sec, si) => `<section class="page">${xsecPrintHTML(si)}</section>`).join('');
+  const plan = buildCutPlan();
+  let cut = '';
+  if (plan.blanks.length){            // a casting with only CNC jigs has no cut maps — that is fine
+    if (!cutPlanReady(plan)) return null;
+    cut = buildCutPages(plan);
+  }
+  return { jigs: jig.html, xsec, cut };
+}
+function deliverableBody(parts){
+  const blocks = [`<div class="doc-p">${parts.jigs}</div>`, `<div class="doc-p">${parts.xsec}</div>`];
+  if (parts.cut) blocks.push(`<div class="doc-l">${parts.cut}</div>`);
+  blocks[blocks.length - 1] = blocks[blocks.length - 1].replace('<div class="', '<div class="doc-last ');
+  return blocks.join('');
+}
+function deliverableTitle(){ return 'Jig List Deliverable — ' + projTitle(); }
+function deliverableFilename(){
+  const c = activeCasting();
+  const cast = c ? String(c.casting_number || '').trim() : '';
+  const job = [currentProjectNumber, currentProjectName].filter(Boolean).join(' ');
+  const safe = s => String(s).replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim();
+  return safe(`${job} - Cast ${cast || '?'} - Jig List ${todayISO()}`) + '.html';   // dated by the save, so older records are never overwritten
+}
+/** The saved file: the printable pages, a screen-only banner with a Print button, and the casting's
+ *  jig-list data as JSON at the end so a material takeoff can be generated from the file later. */
+function deliverableHTML(parts){
+  const title = deliverableTitle();
+  const stamp = new Date();
+  const c = activeCasting();
+  const data = {
+    generator: 'CWE portal — Jig List tab',
+    savedAt: stamp.toISOString(),
+    projectNumber: currentProjectNumber,
+    projectName: currentProjectName,
+    casting: c ? String(c.casting_number || '') : '',
+    castingId: currentCastingId,
+    state: S
+  };
+  const json = JSON.stringify(data).replace(/<\//g, '<\\/');
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title>`
+    + `<meta name="generator" content="CWE portal — Jig List tab"><style>${deliverableCss()}</style></head><body>`
+    + `<div class="deliv-banner"><span>${esc(title)} · saved ${esc(stamp.toLocaleString())}</span><button type="button" onclick="window.print()">Print</button></div>`
+    + MARKER_DEFS + deliverableBody(parts)
+    + `<script type="application/json" id="jig-deliverable-data">${json}</script></body></html>`;
+}
+function printAll(){
+  const parts = deliverableParts();
+  if (!parts) return;
+  printViaIframe('Jig List — ' + projTitle(), deliverableBody(parts), deliverableCss());
+}
+async function saveDeliverable(){
+  const parts = deliverableParts();
+  if (!parts) return;
+  const html = deliverableHTML(parts);
+  const name = deliverableFilename();
+  try {
+    if (window.showSaveFilePicker){
+      // Chrome / Edge: a real Save As dialog; the browser remembers the last folder used for this id.
+      const handle = await window.showSaveFilePicker({
+        id: 'cwe-jig-deliverables', suggestedName: name,
+        types: [{ description: 'Web page (HTML)', accept: { 'text/html': ['.html'] } }]
+      });
+      const w = await handle.createWritable();
+      await w.write(new Blob([html], { type: 'text/html' }));
+      await w.close();
+      noteDeliverableSaved(handle.name || name);
+    } else {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+      noteDeliverableSaved(name);
+    }
+  } catch (err) {
+    if (err && err.name === 'AbortError') return;   // the user closed the dialog
+    logger.error('[jig-list] save deliverable failed:', err);
+    alert('Could not save the deliverable: ' + ((err && err.message) || err));
+  }
+}
+function noteDeliverableSaved(name){
+  if (!S) return;
+  S.deliverable = { savedAt: new Date().toISOString(), name };
+  scheduleSave();
+  renderDeliverableStamp();
+  setSaveStatus('Deliverable saved', true);
+}
+function renderDeliverableStamp(){
+  const el = document.getElementById('jig-deliv-stamp');
+  if (!el) return;
+  const d = S && S.deliverable;
+  if (!d){ el.textContent = ''; el.title = ''; return; }
+  const when = new Date(d.savedAt);
+  el.textContent = 'Deliverable saved ' + (isNaN(when) ? '' : when.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }));
+  el.title = d.name || '';
 }
 
 /* Landscape letter; page titles highlighted per the Material Takeoff Workflow rules
@@ -1977,12 +2134,15 @@ ${MARKER_DEFS}
 <div class="bar" id="jig-topbar">
   <b>Scrim Jig Generator</b>
   <span class="savestat" id="jig-save-status" aria-live="polite"></span>
+  <span class="savestat delivstat" id="jig-deliv-stamp"></span>
   <span class="sp"></span>
   <span class="actions">
     <button type="button" id="jig-btn-copy" class="ghost">Copy to Casting…</button>
     <button type="button" id="jig-btn-print-jigs">Print Jigs</button>
     <button type="button" id="jig-btn-print-cut">Print Cut Maps</button>
     <button type="button" id="jig-btn-print-xsec">Print Cross-Section</button>
+    <button type="button" id="jig-btn-print-all" class="all" title="Jig list, cross-section and cut maps for this casting in one print">Print All</button>
+    <button type="button" id="jig-btn-save-deliv" class="save" title="Save the complete printable document (with the jig-list data inside) as one file for the records and for material takeoff generation">Save Deliverable</button>
   </span>
 </div>
 <div class="vbar" id="jig-vbar" style="display:none"></div>
@@ -2094,6 +2254,8 @@ ${MARKER_DEFS}
   document.getElementById('jig-btn-print-jigs').onclick = printJigs;
   document.getElementById('jig-btn-print-xsec').onclick = printXsec;
   document.getElementById('jig-btn-print-cut').onclick = printCutMaps;
+  document.getElementById('jig-btn-print-all').onclick = printAll;
+  document.getElementById('jig-btn-save-deliv').onclick = saveDeliverable;
 
   // Copy-to-casting modal.
   document.getElementById('jig-btn-copy').onclick = openCopyModal;
