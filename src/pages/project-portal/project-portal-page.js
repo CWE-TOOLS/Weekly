@@ -4736,7 +4736,10 @@ async function applyBulkCrate({ truck = null, num = null, clear = false } = {}) 
             }
         }
     }
-    selectedComponentIds.clear();
+    // Keep the panels ticked until each one has BOTH a truck and a crate number (so the PM can set the
+    // crate, then the truck, or the other way round, without ticking everything twice). Then clear.
+    const done = clear || ids.every(id => { const c = crateOfComponent(componentById(id)); return c && crateTruck(c) > 0; });
+    if (done) selectedComponentIds.clear();
     renderTracking();
     if (currentTab === 'shipping') renderShipping();
     if (!targetByComp.size) return;
