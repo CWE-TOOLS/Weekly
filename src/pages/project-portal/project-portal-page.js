@@ -4118,23 +4118,78 @@ function getComponentCount(crateId) {
     return n;
 }
 
-// Pick-by-number flow: tracking row dropdown chooses a 1–20 crate#. We
-// look up the crate locally; if it doesn't exist yet, we create it on the
-// fly so it shows up on the Shipping tab automatically.
+// Tracking rows have a Truck box (1–20) and a Crate # box (1–20). Together they say where THIS panel
+// goes; changing either box moves only this panel. A crate number with no truck is a crate that has
+// not been put on a truck yet (the Shipping tab can give it one later, or the Truck box here can).
+// Picking a truck before a crate number is remembered for the row until a crate number is picked.
+const pendingTruckByComp = new Map();   // componentId -> truck number chosen before any crate number
+
+function componentById(componentId) {
+    for (const list of currentCastingComponents.values()) { const f = list.find(c => c.id === componentId); if (f) return f; }
+    return null;
+}
+function crateOfComponent(comp) { return comp?.crate_id ? currentCrates.find(c => c.id === comp.crate_id) || null : null; }
+
+/** Move one panel into crate (truck, num) of this phase — made on the fly when it does not exist. */
+async function movePanelTo(componentId, truck, num) {
+    const comp = componentById(componentId);
+    if (!comp) return;
+    const was = comp.crate_id || null;
+    const crate = await createCrateOn(Number(truck || 0), num);
+    if (!crate) { renderTracking(); return; }
+    pendingTruckByComp.delete(componentId);
+    if (crate.id === was) { renderTracking(); return; }
+    await assignComponentToCrate(componentId, crate.id);
+    await tidyVacatedCrate(was);
+}
+/** A crate with no truck that just lost its last panel is clutter on the Shipping tab — drop it quietly. */
+async function tidyVacatedCrate(crateId) {
+    if (!crateId) return;
+    const crate = currentCrates.find(c => c.id === crateId);
+    if (!crate || crateTruck(crate) !== 0 || getComponentCount(crateId) > 0) return;
+    try {
+        await deleteCrate(crateId);
+        currentCrates = currentCrates.filter(c => c.id !== crateId);
+        if (currentTab === 'shipping') renderShipping();
+    } catch (err) {
+        logger.error('[project-portal] tidyVacatedCrate failed:', err);
+    }
+}
+
 async function handleTrackingCrateSelect(componentId, value) {
     if (!componentId) return;
     // If the row is part of a multi-row selection, treat it as a bulk assign for every selected row.
     if (selectedComponentIds.has(componentId) && selectedComponentIds.size > 1) {
-        await applyBulkCrate(value || '');
+        await applyBulkCrate(value === '' ? { clear: true } : { num: crateNumFromPick(value) });
         return;
     }
-    const v = (value || '').trim();
-    if (!v) { await assignComponentToCrate(componentId, null); return; }
-    const comp = [...currentCastingComponents.values()].flat().find(c => c.id === componentId);
-    const own = comp?.crate_id ? currentCrates.find(c => c.id === comp.crate_id) : null;
-    const crate = await resolveCratePick(v, own || null);
-    if (crate) await assignComponentToCrate(componentId, crate.id);
-    else renderTracking();
+    const num = crateNumFromPick(value);
+    if (!num) {
+        const comp = componentById(componentId);
+        const was = comp?.crate_id || null;
+        await assignComponentToCrate(componentId, null);
+        await tidyVacatedCrate(was);
+        return;
+    }
+    const own = crateOfComponent(componentById(componentId));
+    const truck = own ? crateTruck(own) : (pendingTruckByComp.get(componentId) || 0);
+    await movePanelTo(componentId, truck, num);
+}
+async function handleTrackingTruckSelect(componentId, value) {
+    if (!componentId) return;
+    const truck = Number(value || 0);
+    if (selectedComponentIds.has(componentId) && selectedComponentIds.size > 1) {
+        await applyBulkCrate({ truck });
+        return;
+    }
+    const own = crateOfComponent(componentById(componentId));
+    if (own) { await movePanelTo(componentId, truck, crateNum(own)); return; }
+    if (truck) pendingTruckByComp.set(componentId, truck); else pendingTruckByComp.delete(componentId);
+    renderTracking();
+}
+function crateNumFromPick(value) {
+    const v = String(value || '').trim();
+    return v.startsWith('#') ? v.slice(1).trim() : '';
 }
 
 // ---- Trucks + crates (2026-10-14). PMs number crates 1, 2, 3 on each truck and trucks 1, 2 in each
@@ -4201,30 +4256,18 @@ async function createCrateOn(truck, num) {
         return null;
     }
 }
-/** All crates in this phase with this crate number (one per truck at most). */
-function cratesNumbered(num) {
-    const want = crateCodePart(num);
-    return sortCrates(getCratesForActivePhase().filter(c => crateCodePart(crateNum(c)) === want));
+const TRUCK_NUMBER_OPTIONS = Array.from({ length: 20 }, (_, i) => i + 1);
+/** Options for the Truck boxes: 1–20 plus any higher truck already in use in this phase. */
+function truckOptionsHtml(selectedTruck, { bulk = false } = {}) {
+    const nums = new Set(TRUCK_NUMBER_OPTIONS);
+    for (const c of getCratesForActivePhase()) if (crateTruck(c)) nums.add(crateTruck(c));
+    const head = bulk
+        ? ['<option value="">— Set truck —</option>', '<option value="0">No truck</option>']
+        : ['<option value="0"' + (!selectedTruck ? ' selected' : '') + '>—</option>'];
+    const opts = [...nums].sort((a, b) => a - b).map(t => `<option value="${t}"${!bulk && t === Number(selectedTruck) ? ' selected' : ''}>Truck ${t}</option>`);
+    return head.concat(opts).join('');
 }
-/**
- * The Tracking pickers work by crate NUMBER only, like they always did. "#2" means crate 2 of this phase:
- *   - the panel's own crate if it is already a crate 2 (re-picking the same number changes nothing);
- *   - else the crate 2 that is not on a truck yet (the one still being packed);
- *   - else, when every crate 2 is already on a truck, the one on the newest truck;
- *   - else a brand-new crate 2 with no truck — the Shipping tab puts it on a truck.
- * Trucks are never chosen here; they are chosen on the Shipping tab.
- */
-async function resolveCratePick(value, currentCrate = null) {
-    const v = String(value || '').trim();
-    if (!v.startsWith('#')) return currentCrates.find(c => c.id === v) || null;
-    const num = v.slice(1).trim();
-    if (!num) return null;
-    if (currentCrate && crateCodePart(crateNum(currentCrate)) === crateCodePart(num)) return currentCrate;
-    const have = cratesNumbered(num);   // sorted by truck, so the last one is on the newest truck
-    if (have.length) return have.find(c => crateTruck(c) === 0) || have[have.length - 1];
-    return createCrateOn(0, num);
-}
-/** Options for the Tracking pickers: crate numbers 1–20 plus any other number already in use in this phase. Numbers only. */
+/** Options for the Crate # boxes: 1–20 plus any other number already in use in this phase. Numbers only. */
 function crateOptionsHtml(selectedId, { bulk = false } = {}) {
     const crates = getCratesForActivePhase();
     const head = bulk
@@ -4595,10 +4638,12 @@ function renderTrackingBulkBar() {
         return;
     }
     const options = crateOptionsHtml('', { bulk: true });
+    const truckOptions = truckOptionsHtml(0, { bulk: true });
     bar.innerHTML = `
         <div class="pp-track-bulk-inner">
             <span class="pp-track-bulk-count">${count} ${count === 1 ? 'panel' : 'panels'} selected</span>
-            <select id="pp-track-bulk-select" class="pp-track-bulk-select" aria-label="Bulk crate assignment">${options}</select>
+            <select id="pp-track-bulk-truck" class="pp-track-bulk-select" aria-label="Bulk truck assignment" title="Put the ticked panels on this truck (they keep their crate numbers)">${truckOptions}</select>
+            <select id="pp-track-bulk-select" class="pp-track-bulk-select" aria-label="Bulk crate assignment" title="Put the ticked panels in this crate number (they keep their trucks)">${options}</select>
             <button type="button" class="pp-track-bulk-btn pp-track-bulk-btn-complete" data-action="track-bulk-complete">Mark Complete</button>
             <button type="button" class="pp-track-bulk-btn pp-track-bulk-btn-incomplete" data-action="track-bulk-incomplete">Mark Incomplete</button>
             <button type="button" class="pp-track-bulk-clear" data-action="track-bulk-clear">Clear selection</button>
@@ -4654,33 +4699,53 @@ async function applyBulkProduced(produced) {
     }
 }
 
-async function applyBulkCrate(value) {
+/**
+ * Bulk move for the ticked panels. { truck } changes only the truck (each panel keeps its crate number),
+ * { num } changes only the crate number (each panel keeps its truck), { clear: true } unassigns them all.
+ * Panels with no crate number yet just remember the truck until a number is picked.
+ */
+async function applyBulkCrate({ truck = null, num = null, clear = false } = {}) {
     if (selectedComponentIds.size === 0) return;
     const ids = [...selectedComponentIds];
 
-    let crateId = null;
-    if (value && value !== '__clear__') {
-        const crate = await resolveCratePick(value);
-        if (!crate) { renderTracking(); return; }
-        crateId = crate.id;
+    // Work out the target crate for every ticked panel (null = unassign, undefined = leave alone).
+    const targetByComp = new Map();
+    const crateByKey = new Map();
+    for (const id of ids) {
+        const comp = componentById(id);
+        if (!comp) continue;
+        if (clear) { targetByComp.set(id, null); continue; }
+        const own = crateOfComponent(comp);
+        const t = truck !== null ? Number(truck) : (own ? crateTruck(own) : (pendingTruckByComp.get(id) || 0));
+        const n = num !== null ? num : (own ? crateNum(own) : '');
+        if (!n) { if (truck !== null) { if (t) pendingTruckByComp.set(id, t); else pendingTruckByComp.delete(id); } continue; }
+        const key = crateKey(t, n);
+        let crate = crateByKey.get(key);
+        if (!crate) { crate = await createCrateOn(t, n); if (!crate) { renderTracking(); return; } crateByKey.set(key, crate); }
+        pendingTruckByComp.delete(id);
+        if (crate.id !== (own?.id || null)) targetByComp.set(id, crate.id);
     }
 
     // Optimistic local update so the UI snaps immediately.
     const prevById = new Map();
     for (const list of currentCastingComponents.values()) {
         for (const comp of list) {
-            if (selectedComponentIds.has(comp.id)) {
+            if (targetByComp.has(comp.id)) {
                 prevById.set(comp.id, comp.crate_id || null);
-                comp.crate_id = crateId;
+                comp.crate_id = targetByComp.get(comp.id);
             }
         }
     }
     selectedComponentIds.clear();
     renderTracking();
     if (currentTab === 'shipping') renderShipping();
+    if (!targetByComp.size) return;
 
     try {
-        await setComponentsCrateBulk(ids, crateId);
+        const groups = new Map();
+        for (const [id, crateId] of targetByComp) { if (!groups.has(crateId)) groups.set(crateId, []); groups.get(crateId).push(id); }
+        for (const [crateId, group] of groups) await setComponentsCrateBulk(group, crateId);
+        for (const was of new Set(prevById.values())) await tidyVacatedCrate(was);
     } catch (err) {
         logger.error('[project-portal] setComponentsCrateBulk failed:', err);
         for (const list of currentCastingComponents.values()) {
@@ -4785,10 +4850,11 @@ function renderTrackCard(comp, castingId) {
     const currentNum = crate ? crateNum(crate) : '';
     const crateTitle = crate ? crateDisplay(crate) : 'Assign this panel to a crate';
     const options = crateOptionsHtml(comp.crate_id || '');
-    // Truck is read-only here — it is set on the Shipping tab.
-    const truckNo = crate ? crateTruck(crate) : 0;
-    const truckLabel = truckNo ? `Truck ${truckNo}` : (crate ? '—' : '');
-    const truckTitle = truckNo ? `${crateDisplay(crate)} (set on the Shipping tab)` : (crate ? 'Not on a truck yet — pick one on the Shipping tab' : 'No crate yet');
+    const truckNo = crate ? crateTruck(crate) : (pendingTruckByComp.get(comp.id) || 0);
+    const truckTitle = crate
+        ? (truckNo ? crateDisplay(crate) : 'Not on a truck yet — pick a truck here or on the Shipping tab')
+        : (truckNo ? `Truck ${truckNo} — now pick a crate number` : 'Pick the truck this panel ships on');
+    const truckOptions = truckOptionsHtml(truckNo);
     const isSelected = selectedComponentIds.has(comp.id);
     const isProduced = !!comp.produced;
     const isRejected = !!comp.rejected;
@@ -4830,7 +4896,7 @@ function renderTrackCard(comp, castingId) {
                 <input type="text" class="pp-track-input" data-field="length" value="${escapeAttr(comp.length || '')}" readonly title="${escapeAttr(lockTitle)}" />
                 <input type="text" class="pp-track-input" data-field="color" value="${escapeAttr(resolveComponentColorName(comp))}" readonly title="${escapeAttr(lockTitle)}" />
                 <select class="pp-track-crate-select${currentNum ? ' pp-track-crate-set' : ''}" data-action="track-crate-select" data-component-id="${escapeAttr(comp.id)}" title="${escapeAttr(crateTitle)}">${options}</select>
-                <span class="pp-track-truck-cell${truckNo ? ' pp-track-truck-set' : ''}" title="${escapeAttr(truckTitle)}">${escapeHtml(truckLabel)}</span>
+                <select class="pp-track-crate-select pp-track-truck-select${truckNo ? ' pp-track-truck-set' : ''}" data-action="track-truck-select" data-component-id="${escapeAttr(comp.id)}" title="${escapeAttr(truckTitle)}">${truckOptions}</select>
                 <label class="pp-track-rejected-cell" title="${escapeAttr(rejectTitle)}">
                     <input type="checkbox" class="pp-track-rejected" data-action="track-rejected-toggle" data-component-id="${escapeAttr(comp.id)}" ${isRejected ? 'checked' : ''} aria-label="Mark as rejected" />
                 </label>
@@ -7637,6 +7703,12 @@ function wireEvents() {
             if (id) handleTrackingCrateSelect(id, sel.value);
             return;
         }
+        const truckSel = e.target.closest('select[data-action="track-truck-select"]');
+        if (truckSel) {
+            const id = truckSel.dataset.componentId;
+            if (id) handleTrackingTruckSelect(id, truckSel.value);
+            return;
+        }
         const producedCb = e.target.closest('input[data-action="track-produced-toggle"]');
         if (producedCb) {
             const id = producedCb.dataset.componentId;
@@ -7665,12 +7737,19 @@ function wireEvents() {
     // Tracking: bulk-action toolbar
     const bulkBar = document.getElementById('pp-track-bulk-bar');
     bulkBar?.addEventListener('change', (e) => {
+        const truckSel = e.target.closest('#pp-track-bulk-truck');
+        if (truckSel && truckSel.value !== '') {
+            const value = truckSel.value;
+            truckSel.value = '';
+            applyBulkCrate({ truck: Number(value) });
+            return;
+        }
         const sel = e.target.closest('#pp-track-bulk-select');
         if (sel && sel.value) {
             const value = sel.value;
             // Reset the dropdown back to placeholder so the user can re-apply.
             sel.value = '';
-            applyBulkCrate(value);
+            applyBulkCrate(value === '__clear__' ? { clear: true } : { num: crateNumFromPick(value) });
         }
     });
     bulkBar?.addEventListener('click', (e) => {
@@ -10112,10 +10191,10 @@ function renderShipping() {
     const visibleCrates = sortCrates(getCratesForActivePhase());
     const toolbar = `<div class="pp-ship-toolbar">
         <button type="button" class="pp-ship-add-btn" data-action="ship-add-truck">+ Add truck</button>
-        <span class="pp-ship-toolbar-hint">Crates made on the Tracking tab land under "Not on a truck yet" — pick a truck on each one here. Crate numbers can repeat from truck to truck.</span>
+        <span class="pp-ship-toolbar-hint">Trucks and crates are picked per panel on the Tracking tab. Here you can move or renumber a whole crate. Crate numbers can repeat from truck to truck.</span>
     </div>`;
     if (visibleCrates.length === 0) {
-        list.innerHTML = toolbar + `<div class="pp-ship-empty">No crates yet. Pick a crate number in the Crate column on the <strong>Tracking</strong> tab, or add a truck here.</div>`;
+        list.innerHTML = toolbar + `<div class="pp-ship-empty">No crates yet. Pick a truck and crate number on the <strong>Tracking</strong> tab, or add a truck here.</div>`;
         return;
     }
 
@@ -10141,7 +10220,7 @@ function renderShipping() {
         const actions = t
             ? `<button type="button" class="pp-ship-add-btn" data-action="ship-add-crate" data-truck="${t}">+ Add crate</button>
                <button type="button" class="pp-ship-print-btn" data-action="ship-print-truck" data-truck="${t}" ${panels === 0 ? 'disabled' : ''} title="${panels === 0 ? 'Assign panels first' : 'Print one packing list for the whole truck'}"><span>Truck packing list</span></button>`
-            : `<span class="pp-ship-truck-hint">Use the Truck box on each crate to put it on a truck.</span>
+            : `<span class="pp-ship-truck-hint">Crates with no truck yet — use the Truck box on a crate to put it on one.</span>
                <button type="button" class="pp-ship-add-btn" data-action="ship-add-crate" data-truck="0">+ Add crate</button>`;
         return `<section class="pp-ship-truck${t ? '' : ' pp-ship-truck-none'}" data-truck="${t}">
             <div class="pp-ship-truck-header">

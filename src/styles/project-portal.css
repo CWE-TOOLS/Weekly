@@ -2737,29 +2737,16 @@ body.pp-inv-dragging, body.pp-inv-dragging * { user-select: none !important; -we
     border-color: #64748b;
 }
 
-/* Truck column on Tracking row — read-only, comes from the Shipping tab */
-.pp-track-truck-cell {
-    display: block;
-    width: 100%;
-    box-sizing: border-box;
-    padding: 3px 5px;
-    border: 1px solid #cbd5e1;
-    border-radius: 4px;
-    background: #f8fafc;
-    font-size: 11px;
-    line-height: 1.3;
-    color: #94a3b8;
-    text-align: center;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    min-height: 22px;
-}
-.pp-track-truck-cell.pp-track-truck-set {
+/* Truck box on Tracking row — blue when set (crate box is red when set) */
+.pp-track-crate-select.pp-track-truck-set {
     border-color: #93c5fd;
     background: #eff6ff;
     color: #1d4ed8;
     font-weight: 700;
+}
+.pp-track-crate-select.pp-track-truck-set:hover {
+    background: #dbeafe;
+    border-color: #60a5fa;
 }
 
 /* Crate# dropdown on Tracking row */
