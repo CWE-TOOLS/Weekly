@@ -199,6 +199,7 @@ function selectCasting(castingId) {
   renderCastingPills();
   buildEditor();
   renderOutput();
+  updateJigFloats();
   // Persist a seeded-from-copy state right away so the copy survives.
   if (persistSeed) scheduleSave();
 }
@@ -245,6 +246,69 @@ function renderCastingPills() {
     return `<button type="button" class="pp-bt-pill${active}" data-jig-pill data-casting-id="${esc(c.id)}">${esc(c.casting_number || '')}${date}</button>`;
   }).join('');
 }
+
+/* ===================== floating boxes (2026-10-14) ==================== */
+/* Once the casting pills / toolbar scroll up under the portal header, a copy of the casting pills and a
+   box with the print buttons float at the right (like the Batch Tickets tab), so you can switch castings
+   and print without scrolling back to the top. */
+let floatCastsEl = null, floatPrintEl = null;
+function jigPanelVisible(){
+  const root = document.getElementById('jig-list-root');
+  return !!root && !root.closest('[hidden]') && root.offsetParent !== null;
+}
+function jigHeaderBottom(){ return document.querySelector('.pp-header')?.getBoundingClientRect().bottom || 0; }
+function updateJigFloats(){
+  const vis = jigPanelVisible() && !!S;
+  const limit = jigHeaderBottom() + 4;
+  const pills = document.getElementById('jig-casting-pills');
+  const showCasts = vis && pills && pills.style.display !== 'none' && pills.children.length > 0 && pills.getBoundingClientRect().bottom < limit;
+  if (!showCasts){ if (floatCastsEl) floatCastsEl.hidden = true; }
+  else {
+    if (!floatCastsEl){
+      floatCastsEl = document.createElement('div');
+      floatCastsEl.id = 'pp-jig-casts-float';
+      floatCastsEl.className = 'pp-bt-casts-float pp-jig-float';
+      document.body.appendChild(floatCastsEl);
+      floatCastsEl.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-float-cast]');
+        if (b) handleSelectCasting(b.dataset.floatCast);
+      });
+    }
+    const key = currentCastingId + '|' + currentCastings.map(c => c.id + ':' + (c.casting_number || '') + ':' + (c.casting_date || '')).join(',');
+    if (floatCastsEl.dataset.key !== key){
+      floatCastsEl.innerHTML = `<div class="pp-bt-casts-float-title">Castings</div><div class="pp-bt-casts-float-list">${currentCastings.map(c =>
+        `<button type="button" class="pp-bt-pill${c.id === currentCastingId ? ' pp-bt-pill-active' : ''}" data-float-cast="${esc(c.id)}">${esc(c.casting_number || '')}${c.casting_date ? `<span class="pp-bt-pill-date">${esc(c.casting_date)}</span>` : ''}</button>`).join('')}</div>`;
+      floatCastsEl.dataset.key = key;
+    }
+    floatCastsEl.style.top = Math.round(jigHeaderBottom() + 12) + 'px';
+    floatCastsEl.hidden = false;
+  }
+  const bar = document.getElementById('jig-topbar');
+  const showPrint = vis && bar && bar.getBoundingClientRect().bottom < limit;
+  if (!showPrint){ if (floatPrintEl) floatPrintEl.hidden = true; return; }
+  if (!floatPrintEl){
+    floatPrintEl = document.createElement('div');
+    floatPrintEl.id = 'pp-jig-print-float';
+    floatPrintEl.className = 'pp-bt-casts-float pp-jig-float';
+    floatPrintEl.innerHTML = `<div class="pp-bt-casts-float-title">Print</div><div class="pp-jig-float-btns">
+      <button type="button" data-float-print="jigs">Print Jigs</button>
+      <button type="button" data-float-print="cut">Print Cut Maps</button>
+      <button type="button" data-float-print="xsec">Print Cross-Section</button>
+      <button type="button" data-float-print="all" class="all">Print All</button></div>`;
+    document.body.appendChild(floatPrintEl);
+    floatPrintEl.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-float-print]');
+      if (!b) return;
+      ({ jigs: printJigs, cut: printCutMaps, xsec: printXsec, all: printAll })[b.dataset.floatPrint]?.();
+    });
+  }
+  const below = (floatCastsEl && !floatCastsEl.hidden) ? floatCastsEl.getBoundingClientRect().bottom + 8 : jigHeaderBottom() + 12;
+  floatPrintEl.style.top = Math.round(below) + 'px';
+  floatPrintEl.hidden = false;
+}
+window.addEventListener('scroll', updateJigFloats, { passive: true });
+document.addEventListener('scroll', updateJigFloats, { passive: true, capture: true });
+window.addEventListener('resize', updateJigFloats, { passive: true });
 
 function handleSelectCasting(castingId) {
   if (!castingId || castingId === currentCastingId) return;
@@ -759,9 +823,11 @@ function renderOutput(){
   const { html, jigs } = jigPagesHTML();
   if (!jigs.length){
     out.innerHTML = `<div class="emptyhint">Add at least one panel with a valid width — and at least one foot depth — to generate jigs.</div>`;
+    updateJigFloats();
     return;
   }
   out.innerHTML = html;
+  updateJigFloats();
 }
 
 /** Jig list + drawing pages for the current print set (currentGroup; null = all groups). */
