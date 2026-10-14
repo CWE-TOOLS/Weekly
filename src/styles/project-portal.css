@@ -6501,3 +6501,10 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
 .pp-tab-panel[data-panel="jig-list"] .conc{fill:#c9c9c9;stroke:var(--line);stroke-width:1.5}
 .pp-tab-panel[data-panel="jig-list"] .xsec-wrap{margin:12px auto 2px;text-align:center}
 .pp-tab-panel[data-panel="jig-list"] .xsec-wrap svg{max-width:100%;height:auto}
+/* bilingual print text, as the print document styles it (English, Spanish in muted italic under it) */
+.pp-tab-panel[data-panel="jig-list"] .es{color:#555;font-style:italic;font-weight:400}
+.pp-tab-panel[data-panel="jig-list"] .es-block{display:block;margin-top:4px}
+.pp-tab-panel[data-panel="jig-list"] h1 .es{display:block;font-size:14px;margin-top:2px}
+.pp-tab-panel[data-panel="jig-list"] th .es{display:block;font-size:10px;letter-spacing:0}
+.pp-tab-panel[data-panel="jig-list"] .cncnote .es-block{margin-top:6px;font-size:12.5px}
+.pp-tab-panel[data-panel="jig-list"] .listnote .es b,.pp-tab-panel[data-panel="jig-list"] .cncnote .es b{color:#333}
