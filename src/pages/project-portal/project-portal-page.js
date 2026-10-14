@@ -4130,7 +4130,9 @@ async function handleTrackingCrateSelect(componentId, value) {
     }
     const v = (value || '').trim();
     if (!v) { await assignComponentToCrate(componentId, null); return; }
-    const crate = await resolveCratePick(v);
+    const comp = [...currentCastingComponents.values()].flat().find(c => c.id === componentId);
+    const own = comp?.crate_id ? currentCrates.find(c => c.id === comp.crate_id) : null;
+    const crate = await resolveCratePick(v, own || null);
     if (crate) await assignComponentToCrate(componentId, crate.id);
     else renderTracking();
 }
@@ -4205,20 +4207,24 @@ function cratesNumbered(num) {
     return sortCrates(getCratesForActivePhase().filter(c => crateCodePart(crateNum(c)) === want));
 }
 /**
- * The Tracking pickers work by crate NUMBER, like they always did: "#2" means crate 2 — the one that
- * already exists in this phase, or a new crate 2 with no truck yet (the Shipping tab puts it on a truck).
- * Only when the same number is on two trucks does the picker list each one by id ("2 (Truck 1)").
+ * The Tracking pickers work by crate NUMBER only, like they always did. "#2" means crate 2 of this phase:
+ *   - the panel's own crate if it is already a crate 2 (re-picking the same number changes nothing);
+ *   - else the crate 2 that is not on a truck yet (the one still being packed);
+ *   - else, when every crate 2 is already on a truck, the one on the newest truck;
+ *   - else a brand-new crate 2 with no truck — the Shipping tab puts it on a truck.
+ * Trucks are never chosen here; they are chosen on the Shipping tab.
  */
-async function resolveCratePick(value) {
+async function resolveCratePick(value, currentCrate = null) {
     const v = String(value || '').trim();
     if (!v.startsWith('#')) return currentCrates.find(c => c.id === v) || null;
     const num = v.slice(1).trim();
     if (!num) return null;
-    const have = cratesNumbered(num);
-    if (have.length) return have.find(c => crateTruck(c) === 0) || have[0];
+    if (currentCrate && crateCodePart(crateNum(currentCrate)) === crateCodePart(num)) return currentCrate;
+    const have = cratesNumbered(num);   // sorted by truck, so the last one is on the newest truck
+    if (have.length) return have.find(c => crateTruck(c) === 0) || have[have.length - 1];
     return createCrateOn(0, num);
 }
-/** Options for the Tracking pickers: crate numbers 1–20 plus any other number already in use in this phase. */
+/** Options for the Tracking pickers: crate numbers 1–20 plus any other number already in use in this phase. Numbers only. */
 function crateOptionsHtml(selectedId, { bulk = false } = {}) {
     const crates = getCratesForActivePhase();
     const head = bulk
@@ -4228,22 +4234,11 @@ function crateOptionsHtml(selectedId, { bulk = false } = {}) {
     for (const c of crates) nums.add(crateCodePart(crateNum(c)));
     const n = (s) => { const x = parseFloat(s); return Number.isFinite(x) ? x : Infinity; };
     const ordered = [...nums].sort((a, b) => (n(a) - n(b)) || a.localeCompare(b));
-    const opts = [];
-    for (const num of ordered) {
-        const have = cratesNumbered(num);
-        if (have.length > 1) {
-            for (const c of have) {
-                const where = crateTruck(c) ? `Truck ${crateTruck(c)}` : 'no truck yet';
-                opts.push(`<option value="${escapeAttr(c.id)}"${c.id === selectedId ? ' selected' : ''}>${escapeHtml(num)} (${where})</option>`);
-            }
-        } else {
-            const sel = have.length === 1 && have[0].id === selectedId;
-            opts.push(`<option value="#${escapeAttr(num)}"${sel ? ' selected' : ''}>${escapeHtml(num)}</option>`);
-        }
-    }
-    if (selectedId && !crates.some(c => c.id === selectedId)) {
-        const other = currentCrates.find(c => c.id === selectedId);
-        if (other) opts.push(`<option value="${escapeAttr(other.id)}" selected>${escapeHtml(crateDisplay(other))} (other phase)</option>`);
+    const selected = selectedId ? currentCrates.find(c => c.id === selectedId) : null;
+    const selNum = selected && crates.includes(selected) ? crateCodePart(crateNum(selected)) : null;
+    const opts = ordered.map(num => `<option value="#${escapeAttr(num)}"${num === selNum ? ' selected' : ''}>${escapeHtml(num)}</option>`);
+    if (selected && !crates.includes(selected)) {
+        opts.push(`<option value="${escapeAttr(selected.id)}" selected>${escapeHtml(crateDisplay(selected))} (other phase)</option>`);
     }
     return head.concat(opts).join('');
 }
