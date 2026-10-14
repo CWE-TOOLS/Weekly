@@ -4121,67 +4121,68 @@ function getComponentCount(crateId) {
 // Pick-by-number flow: tracking row dropdown chooses a 1–20 crate#. We
 // look up the crate locally; if it doesn't exist yet, we create it on the
 // fly so it shows up on the Shipping tab automatically.
-async function handleTrackingCrateSelect(componentId, crateNumber) {
+async function handleTrackingCrateSelect(componentId, value) {
     if (!componentId) return;
     // If the row is part of a multi-row selection, treat it as a bulk assign for every selected row.
     if (selectedComponentIds.has(componentId) && selectedComponentIds.size > 1) {
-        await applyBulkCrate(crateNumber || '');
+        await applyBulkCrate(value || '');
         return;
     }
-    const num = (crateNumber || '').trim();
-    if (!num) {
-        await assignComponentToCrate(componentId, null);
-        return;
-    }
-    const crate = await findOrCreateCrateFor(castingOfComponent(componentId), num);
+    const v = (value || '').trim();
+    if (!v) { await assignComponentToCrate(componentId, null); return; }
+    const crate = v === '__new__' ? await createNextCrate() : currentCrates.find(c => c.id === v);
     if (crate) await assignComponentToCrate(componentId, crate.id);
+    else renderTracking();
 }
 
-// ---- Crate names (2026-10-13). The database keeps crate numbers unique per PROJECT, so on a phased
-// project the crate the user picks ("1") becomes "<phase>.<cast>.<n>", e.g. "bt.t1.1": phase = the
-// phase name, lower-case, first letters only when it has several words ("By Type" → bt, "P1" → p1);
-// cast = the casting number without spaces ("T1" → t1, "1A Remake" → 1aremake); n = what was picked.
-// Projects without phases keep plain numbers as before.
-function crateCodePart(s) { return String(s ?? '').trim().toUpperCase().replace(/\s+/g, ''); }   // capitals, per the user
+// ---- Trucks + crates (2026-10-14). PMs number crates 1, 2, 3 on each truck and trucks 1, 2 in each
+// phase; the database wants ONE unique name per project, so the stored crate_number is a hidden key:
+//   "<PHASE>.T<truck>.<n>"   (project without phases: "T<truck>.<n>")
+// and a legacy plain "1" is crate 1 with no truck yet. Everything the user sees comes from crateParts().
+function crateCodePart(s) { return String(s ?? '').trim().toUpperCase().replace(/\s+/g, ''); }
 function phaseCode(phase) {
     const words = String(phase?.phase_name || '').trim().split(/\s+/).filter(Boolean);
     if (!words.length) return '';
     return (words.length > 1 ? words.map(w => w[0]).join('') : words[0]).toUpperCase();
 }
-function crateFullNumber(casting, num) {
-    if (!currentPhasesEnabled) return String(num || '').trim();
-    const parts = [];
-    const pc = phaseCode(currentPhases.find(p => p.id === currentPhaseId));
-    if (pc) parts.push(pc);
-    const cc = crateCodePart(casting?.casting_number);
-    if (cc) parts.push(cc);
-    parts.push(crateCodePart(num));
-    return parts.join('.');
+function crateParts(crate) {
+    const raw = String(crate?.crate_number || '').trim();
+    const m = raw.match(/^(?:[^.]+\.)?T(\d+)\.(.+)$/i);
+    if (m) return { truck: Number(m[1]), num: m[2] };
+    const i = raw.lastIndexOf('.');
+    return { truck: 0, num: i === -1 ? raw : raw.slice(i + 1) };   // legacy "1", or an older "P2.1.1"
 }
-/** The picker shows just the last part ("1") of a crate's full name ("bt.t1.1"). */
-function crateShortNumber(crate) {
-    const full = String(crate?.crate_number || '');
-    const i = full.lastIndexOf('.');
-    return i === -1 ? full : full.slice(i + 1);
+function crateKey(truck, num) {
+    const pc = currentPhasesEnabled ? phaseCode(currentPhases.find(p => p.id === currentPhaseId)) : '';
+    return (pc ? pc + '.' : '') + 'T' + Number(truck || 0) + '.' + crateCodePart(num);
 }
-function castingIdOfComponent(componentId) {
-    for (const [castingId, list] of currentCastingComponents) if (list.some(c => c.id === componentId)) return castingId;
-    return null;
+function crateNum(crate) { return crateParts(crate).num; }
+function crateTruck(crate) { return crateParts(crate).truck; }
+function crateDisplay(crate) { const p = crateParts(crate); return (p.truck ? `Truck ${p.truck} · ` : '') + `Crate ${p.num}`; }
+function sortCrates(list) {
+    const n = (s) => { const x = parseFloat(s); return Number.isFinite(x) ? x : Infinity; };
+    return list.slice().sort((a, b) => {
+        const pa = crateParts(a), pb = crateParts(b);
+        return (pa.truck - pb.truck) || (n(pa.num) - n(pb.num)) || String(pa.num).localeCompare(String(pb.num));
+    });
 }
-function castingOfComponent(componentId) {
-    for (const [castingId, list] of currentCastingComponents) {
-        if (list.some(c => c.id === componentId)) return currentCastings.find(c => c.id === castingId) || null;
-    }
-    return null;
+function findCrate(truck, num) {
+    const want = crateCodePart(num);
+    return getCratesForActivePhase().find(c => { const p = crateParts(c); return p.truck === Number(truck || 0) && crateCodePart(p.num) === want; }) || null;
 }
-/** Find the crate this pick means for this casting (by full name, anywhere in the project), or create it in the active phase. Tells the user when it cannot. */
-async function findOrCreateCrateFor(casting, num) {
-    const full = crateFullNumber(casting, num);
-    let crate = currentCrates.find(c => String(c.crate_number || '').toUpperCase() === full.toUpperCase());   // "p2.1.1" and "P2.1.1" are the same crate
-    if (crate) return crate;
+function highestTruck() { return getCratesForActivePhase().reduce((m, c) => Math.max(m, crateTruck(c)), 0); }
+function nextCrateNumberOn(truck) {
+    const used = new Set(getCratesForActivePhase().filter(c => crateTruck(c) === Number(truck)).map(c => crateCodePart(crateNum(c))));
+    let n = 1;
+    while (used.has(String(n))) n += 1;
+    return String(n);
+}
+async function createCrateOn(truck, num) {
+    const existing = findCrate(truck, num);
+    if (existing) return existing;
     try {
-        crate = await createCrate(currentProjectNumber, {
-            crate_number: full,
+        const crate = await createCrate(currentProjectNumber, {
+            crate_number: crateKey(truck, num),
             phase_id: currentPhasesEnabled ? currentPhaseId : null
         });
         if (crate) currentCrates.push(crate);
@@ -4189,9 +4190,29 @@ async function findOrCreateCrateFor(casting, num) {
     } catch (err) {
         logger.error('[project-portal] createCrate failed:', err);
         const dup = /duplicate|unique/i.test(String(err?.message || err));
-        showToast(dup ? `Crate "${full}" already exists on this project — pick another number.` : `Could not create crate "${full}": ${err?.message || err}`, 'error');
+        showToast(dup
+            ? `Crate ${num} on truck ${truck || '—'} clashes with another phase whose name shortens the same way — rename one of the phases.`
+            : `Could not create the crate: ${err?.message || err}`, 'error');
         return null;
     }
+}
+/** "New crate…" from the Tracking tab: the next number on the newest truck (Truck 1 when there is none yet). */
+async function createNextCrate() {
+    const truck = Math.max(1, highestTruck());
+    return createCrateOn(truck, nextCrateNumberOn(truck));
+}
+/** Options for the Tracking pickers: this phase's crates by truck, then "New crate…". */
+function crateOptionsHtml(selectedId, { bulk = false } = {}) {
+    const crates = sortCrates(getCratesForActivePhase());
+    const head = bulk
+        ? ['<option value="">— Set crate —</option>', '<option value="__clear__">Clear assignment</option>']
+        : ['<option value="">—</option>'];
+    const opts = crates.map(c => `<option value="${escapeAttr(c.id)}"${c.id === selectedId ? ' selected' : ''}>${escapeHtml(crateDisplay(c))}</option>`);
+    if (selectedId && !crates.some(c => c.id === selectedId)) {
+        const other = currentCrates.find(c => c.id === selectedId);
+        if (other) opts.push(`<option value="${escapeAttr(other.id)}" selected>${escapeHtml(crateDisplay(other))} (other phase)</option>`);
+    }
+    return head.concat(opts, ['<option value="__new__">New crate…</option>']).join('');
 }
 
 async function handleRejectedToggle(componentId, checkboxEl) {
@@ -4545,9 +4566,7 @@ function renderTrackingBulkBar() {
         bar.hidden = true;
         return;
     }
-    const options = ['<option value="">— Set crate # —</option>', '<option value="__clear__">Clear assignment</option>']
-        .concat(CRATE_NUMBER_OPTIONS.map(n => `<option value="${escapeAttr(n)}">Crate #${escapeHtml(n)}</option>`))
-        .join('');
+    const options = crateOptionsHtml('', { bulk: true });
     bar.innerHTML = `
         <div class="pp-track-bulk-inner">
             <span class="pp-track-bulk-count">${count} ${count === 1 ? 'panel' : 'panels'} selected</span>
@@ -4611,24 +4630,20 @@ async function applyBulkCrate(value) {
     if (selectedComponentIds.size === 0) return;
     const ids = [...selectedComponentIds];
 
-    // Crate per casting: ticked panels from different castings get their own crate ("p2.3.1", "p2.4.1").
-    const crateIdByCasting = new Map();
+    let crateId = null;
     if (value && value !== '__clear__') {
-        for (const [castingId, list] of currentCastingComponents) {
-            if (!list.some(c => selectedComponentIds.has(c.id))) continue;
-            const crate = await findOrCreateCrateFor(currentCastings.find(c => c.id === castingId) || null, value);
-            if (!crate) return;   // already told the user
-            crateIdByCasting.set(castingId, crate.id);
-        }
+        const crate = value === '__new__' ? await createNextCrate() : currentCrates.find(c => c.id === value);
+        if (!crate) { renderTracking(); return; }
+        crateId = crate.id;
     }
 
     // Optimistic local update so the UI snaps immediately.
     const prevById = new Map();
-    for (const [castingId, list] of currentCastingComponents) {
+    for (const list of currentCastingComponents.values()) {
         for (const comp of list) {
             if (selectedComponentIds.has(comp.id)) {
                 prevById.set(comp.id, comp.crate_id || null);
-                comp.crate_id = crateIdByCasting.get(castingId) || null;
+                comp.crate_id = crateId;
             }
         }
     }
@@ -4637,17 +4652,9 @@ async function applyBulkCrate(value) {
     if (currentTab === 'shipping') renderShipping();
 
     try {
-        if (!crateIdByCasting.size) {
-            await setComponentsCrateBulk(ids, null);
-        } else {
-            for (const [castingId, crateId] of crateIdByCasting) {
-                const group = ids.filter(id => castingIdOfComponent(id) === castingId);
-                if (group.length) await setComponentsCrateBulk(group, crateId);
-            }
-        }
+        await setComponentsCrateBulk(ids, crateId);
     } catch (err) {
         logger.error('[project-portal] setComponentsCrateBulk failed:', err);
-        // Roll back local state
         for (const list of currentCastingComponents.values()) {
             for (const comp of list) {
                 if (prevById.has(comp.id)) comp.crate_id = prevById.get(comp.id);
@@ -4746,13 +4753,9 @@ const CRATE_NUMBER_OPTIONS = Array.from({ length: 20 }, (_, i) => String(i + 1))
 function renderTrackCard(comp, castingId) {
     const lockTitle = 'Synced from Castings inventory — edit there';
     const crate = comp.crate_id ? currentCrates.find(c => c.id === comp.crate_id) : null;
-    const currentNum = crate ? crateShortNumber(crate) : '';
-    const crateTitle = crate ? `Crate ${crate.crate_number}` : 'Assign this panel to a crate';
-    const options = ['<option value="">—</option>']
-        .concat(CRATE_NUMBER_OPTIONS.map(n =>
-            `<option value="${escapeAttr(n)}"${n === currentNum ? ' selected' : ''}>${escapeHtml(n)}</option>`
-        ))
-        .join('');
+    const currentNum = crate ? crateNum(crate) : '';
+    const crateTitle = crate ? crateDisplay(crate) : 'Assign this panel to a crate';
+    const options = crateOptionsHtml(comp.crate_id || '');
     const isSelected = selectedComponentIds.has(comp.id);
     const isProduced = !!comp.produced;
     const isRejected = !!comp.rejected;
@@ -7699,6 +7702,24 @@ function wireEvents() {
             }
             return;
         }
+        const addTruck = e.target.closest('button[data-action="ship-add-truck"]');
+        if (addTruck) {
+            const c = await createCrateOn(highestTruck() + 1, '1');
+            if (c) { currentShipExpanded.add(c.id); renderShipping(); }
+            return;
+        }
+        const addCrate = e.target.closest('button[data-action="ship-add-crate"]');
+        if (addCrate) {
+            const t = Number(addCrate.dataset.truck);
+            const c = await createCrateOn(t, nextCrateNumberOn(t));
+            if (c) { currentShipExpanded.add(c.id); renderShipping(); }
+            return;
+        }
+        const printTruck = e.target.closest('button[data-action="ship-print-truck"]');
+        if (printTruck) {
+            handlePrintTruckPackingList(Number(printTruck.dataset.truck));
+            return;
+        }
         const printBtn = e.target.closest('button[data-action="ship-print"]');
         if (printBtn) {
             const id = printBtn.dataset.crateId;
@@ -7716,6 +7737,31 @@ function wireEvents() {
             const componentId = unassignBtn.dataset.componentId;
             if (componentId) await assignComponentToCrate(componentId, null);
         }
+    });
+
+    // Shipping: crate number / truck changes rename the hidden key (checked against the phase's other crates)
+    shipList?.addEventListener('change', async (e) => {
+        const target = e.target;
+        const field = target?.dataset?.field;
+        if (field !== 'crate_num' && field !== 'truck') return;
+        const card = target.closest('.pp-ship-crate[data-crate-id]');
+        const crate = card && currentCrates.find(c => c.id === card.dataset.crateId);
+        if (!crate) return;
+        const parts = crateParts(crate);
+        const truck = field === 'truck' ? Number(target.value || 0) : parts.truck;
+        const num = field === 'crate_num' ? String(target.value || '').trim() : parts.num;
+        if (!num) { showToast('A crate needs a number.', 'error'); renderShipping(); return; }
+        const clash = findCrate(truck, num);
+        if (clash && clash.id !== crate.id) { showToast(`${crateDisplay(clash)} already exists in this phase — pick another number.`, 'error'); renderShipping(); return; }
+        const key = crateKey(truck, num);
+        try {
+            const updated = await updateCrate(crate.id, { crate_number: key });
+            Object.assign(crate, updated || { crate_number: key });
+        } catch (err) {
+            logger.error('[project-portal] crate rename failed:', err);
+            showToast('Could not change the crate: ' + (err?.message || err), 'error');
+        }
+        renderShipping();
     });
 
     // Shipping: global "list as quantities" checkbox — re-renders all crate
@@ -7741,7 +7787,7 @@ function wireEvents() {
         if (!card) return;
         const crateId = card.dataset.crateId;
         const field = target.dataset.field;
-        if (!crateId || !field) return;
+        if (!crateId || !field || field === 'crate_num' || field === 'truck') return;   // those two re-key the crate on change
         scheduleCrateSave(crateId, { [field]: target.value });
         // Reflect crate_number locally so the Tracking picker label updates immediately on next render.
         const crate = currentCrates.find(c => c.id === crateId);
@@ -10029,31 +10075,58 @@ function renderShipping() {
     const list = document.getElementById('pp-ship-list');
     if (!list) return;
 
-    const visibleCrates = getCratesForActivePhase();
+    const visibleCrates = sortCrates(getCratesForActivePhase());
+    const toolbar = `<div class="pp-ship-toolbar">
+        <button type="button" class="pp-ship-add-btn" data-action="ship-add-truck">+ Add truck</button>
+        <span class="pp-ship-toolbar-hint">Crate numbers start again on every truck. Assign panels to crates on the Tracking tab.</span>
+    </div>`;
     if (visibleCrates.length === 0) {
-        list.innerHTML = `<div class="pp-ship-empty">No crates yet. Pick a crate # on the <strong>Tracking</strong> tab to start a packing list.</div>`;
+        list.innerHTML = toolbar + `<div class="pp-ship-empty">No crates yet. Add a truck here, or pick "New crate…" in the Crate column on the <strong>Tracking</strong> tab.</div>`;
         return;
     }
 
-    // Build a map crateId -> ordered components (across all visible castings).
+    // crateId -> ordered components (across all visible castings)
     const visibleCastings = getCastingsForActivePhase();
     const membersByCrate = new Map();
     for (const crate of visibleCrates) membersByCrate.set(crate.id, []);
     for (const casting of visibleCastings) {
-        const comps = getComponentsFor(casting.id);
-        for (const comp of comps) {
-            if (comp.crate_id && membersByCrate.has(comp.crate_id)) {
-                membersByCrate.get(comp.crate_id).push({ comp, casting });
-            }
+        for (const comp of getComponentsFor(casting.id)) {
+            if (comp.crate_id && membersByCrate.has(comp.crate_id)) membersByCrate.get(comp.crate_id).push({ comp, casting });
         }
     }
 
-    list.innerHTML = visibleCrates.map(crate => renderCrateCard(crate, membersByCrate.get(crate.id) || [])).join('');
+    // group by truck; numbered trucks first, "No truck yet" last
+    const trucks = new Map();
+    for (const crate of visibleCrates) { const t = crateTruck(crate); if (!trucks.has(t)) trucks.set(t, []); trucks.get(t).push(crate); }
+    const truckNums = [...trucks.keys()].sort((a, b) => ((a === 0) - (b === 0)) || (a - b));
+    const numbered = truckNums.filter(t => t > 0);
+
+    list.innerHTML = toolbar + truckNums.map(t => {
+        const crates = trucks.get(t);
+        const panels = crates.reduce((n, c) => n + (membersByCrate.get(c.id) || []).length, 0);
+        const actions = t
+            ? `<button type="button" class="pp-ship-add-btn" data-action="ship-add-crate" data-truck="${t}">+ Add crate</button>
+               <button type="button" class="pp-ship-print-btn" data-action="ship-print-truck" data-truck="${t}" ${panels === 0 ? 'disabled' : ''} title="${panels === 0 ? 'Assign panels first' : 'Print one packing list for the whole truck'}"><span>Truck packing list</span></button>`
+            : `<span class="pp-ship-truck-hint">Give each crate below a truck.</span>`;
+        return `<section class="pp-ship-truck${t ? '' : ' pp-ship-truck-none'}" data-truck="${t}">
+            <div class="pp-ship-truck-header">
+                <h3 class="pp-ship-truck-title">${t ? `Truck ${t}` : 'No truck yet'}</h3>
+                <span class="pp-ship-truck-count">${crates.length} ${crates.length === 1 ? 'crate' : 'crates'} · ${panels} ${panels === 1 ? 'panel' : 'panels'}</span>
+                <div class="pp-ship-truck-actions">${actions}</div>
+            </div>
+            ${crates.map(crate => renderCrateCard(crate, membersByCrate.get(crate.id) || [], numbered)).join('')}
+        </section>`;
+    }).join('');
 }
 
-function renderCrateCard(crate, members) {
+function renderCrateCard(crate, members, truckNums = []) {
     const isOpen = currentShipExpanded.has(crate.id);
     const memberCount = members.length;
+    const parts = crateParts(crate);
+    const nextTruck = (truckNums.length ? Math.max(...truckNums) : 0) + 1;
+    const truckOptions = ['<option value="0"' + (parts.truck === 0 ? ' selected' : '') + '>—</option>']
+        .concat(truckNums.map(t => `<option value="${t}"${t === parts.truck ? ' selected' : ''}>Truck ${t}</option>`))
+        .concat([`<option value="${nextTruck}">New truck ${nextTruck}</option>`]).join('');
 
     const memberRows = members.length === 0
         ? `<div class="pp-ship-crate-empty">No panels assigned.</div>`
@@ -10078,7 +10151,8 @@ function renderCrateCard(crate, members) {
                     </svg>
                 </button>
                 <span class="pp-ship-crate-num-label">Crate&nbsp;#</span>
-                <input type="text" class="pp-ship-crate-num" data-field="crate_number" value="${escapeAttr(crate.crate_number || '')}" />
+                <input type="text" class="pp-ship-crate-num" data-field="crate_num" value="${escapeAttr(parts.num)}" title="Crate number on this truck (numbers start again on each truck)" />
+                <label class="pp-ship-crate-truck">Truck <select data-field="truck" title="Which truck this crate rides on">${truckOptions}</select></label>
                 <span class="pp-ship-crate-count">${memberCount} ${memberCount === 1 ? 'panel' : 'panels'}</span>
                 <div class="pp-ship-crate-actions">
                     <button type="button" class="pp-ship-print-btn" data-action="ship-print" data-crate-id="${escapeAttr(crate.id)}" ${memberCount === 0 ? 'disabled' : ''} title="${memberCount === 0 ? 'Assign panels first' : 'Print packing list'}">
@@ -10167,8 +10241,8 @@ async function handleDeleteCrate(crateId) {
     if (!crate) return;
     const memberCount = getComponentCount(crateId);
     const msg = memberCount === 0
-        ? `Delete crate #${crate.crate_number || ''}?`
-        : `Delete crate #${crate.crate_number || ''}? ${memberCount} ${memberCount === 1 ? 'panel' : 'panels'} will be unassigned.`;
+        ? `Delete ${crateDisplay(crate)}?`
+        : `Delete ${crateDisplay(crate)}? ${memberCount} ${memberCount === 1 ? 'panel' : 'panels'} will be unassigned.`;
     if (!window.confirm(msg)) return;
     try {
         await deleteCrate(crateId);
@@ -11787,16 +11861,18 @@ function buildPackingListHtml(crate, members, project) {
         }).join('');
     }
 
-    return `<!doctype html><html><head><meta charset="utf-8"><title>Packing List — Crate ${escapeHtml(crate.crate_number || '')} — ${escapeHtml(proj.project_number || '')}</title><style>${PACKING_PRINT_CSS}</style></head><body>
+    const truckNo = crateTruck(crate);
+    return `<!doctype html><html><head><meta charset="utf-8"><title>Packing List — ${escapeHtml(crateDisplay(crate))} — ${escapeHtml(proj.project_number || '')}</title><style>${PACKING_PRINT_CSS}</style></head><body>
         <div class="pk-header">
             <div class="pk-title">PACKING LIST</div>
-            <div class="pk-crate-num">CRATE #${escapeHtml(crate.crate_number || '—')}</div>
+            <div class="pk-crate-num">${truckNo ? `TRUCK ${truckNo} · ` : ''}CRATE #${escapeHtml(crateNum(crate) || '—')}</div>
         </div>
 
         <div class="pk-meta">
             <div class="pk-meta-row"><span class="pk-label">Project #:</span><span class="pk-value">${escapeHtml(proj.project_number || '')}</span></div>
             <div class="pk-meta-row"><span class="pk-label">Project Name:</span><span class="pk-value">${escapeHtml(proj.project_name || '')}</span></div>
             ${phaseName ? `<div class="pk-meta-row"><span class="pk-label">Phase:</span><span class="pk-value">${escapeHtml(phaseName)}</span></div>` : ''}
+            ${truckNo ? `<div class="pk-meta-row"><span class="pk-label">Truck:</span><span class="pk-value">${truckNo}</span></div>` : ''}
             <div class="pk-meta-row"><span class="pk-label">${escapeHtml(colorHeaderLabel)}</span><span class="pk-value">${escapeHtml(colorHeaderValue || '')}</span></div>
             <div class="pk-meta-row"><span class="pk-label">Panel Count:</span><span class="pk-value">${memberCount}</span></div>
             <div class="pk-meta-row"><span class="pk-label">Weight:</span><span class="pk-value">${escapeHtml(crate.weight || '')}</span></div>
@@ -11841,13 +11917,83 @@ function buildPackingListHtml(crate, members, project) {
             </div>
         </div>
 
-        <div class="pk-footer">Crate ${escapeHtml(crate.crate_number || '')} · Project ${escapeHtml(proj.project_number || '')} · ${memberCount} ${memberCount === 1 ? 'panel' : 'panels'}</div>
+        <div class="pk-footer">${escapeHtml(crateDisplay(crate))} · Project ${escapeHtml(proj.project_number || '')} · ${memberCount} ${memberCount === 1 ? 'panel' : 'panels'}</div>
     </body></html>`;
 }
 
 function formatPackingDate(d) {
     if (!(d instanceof Date) || isNaN(d.getTime())) return '';
     return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
+}
+
+/** Rows for one crate on a packing list (same columns as the crate sheet). */
+function packingRowsHtml(members, qtyMode) {
+    const memberColor = (comp) => resolveComponentColorName(comp);
+    if (!members.length) return `<tr><td colspan="${qtyMode ? 4 : 6}" style="text-align:center;color:#94a3b8;padding:8pt;">No panels assigned to this crate.</td></tr>`;
+    if (qtyMode) {
+        const buckets = new Map();
+        for (const { comp } of members) {
+            const colorName = memberColor(comp);
+            const key = [comp.type || '', comp.width || '', comp.length || '', colorName].join('||');
+            if (!buckets.has(key)) buckets.set(key, { type: comp.type || '', width: comp.width || '', length: comp.length || '', color: colorName, count: 0 });
+            buckets.get(key).count++;
+        }
+        return [...buckets.values()].sort((a, b) => (a.type || '').localeCompare(b.type || '') || (a.length || '').localeCompare(b.length || '') || (a.width || '').localeCompare(b.width || ''))
+            .map((r, i) => `<tr><td class="pk-num">${i + 1}</td><td><strong>${escapeHtml(r.type)}</strong></td><td>${escapeHtml(r.color)}</td><td class="pk-num">${r.count}</td></tr>`).join('');
+    }
+    return members.map(({ comp, casting }, i) => `<tr><td class="pk-num">${i + 1}</td><td><strong>${escapeHtml(comp.panel_id || '')}</strong></td><td>${escapeHtml(casting?.casting_number ? `Cast ${casting.casting_number}` : '')}</td><td>${escapeHtml(comp.type || '')}</td><td>${escapeHtml(memberColor(comp))}</td><td class="pk-checkbox">☐</td></tr>`).join('');
+}
+
+function buildTruckPackingListHtml(truck, crates, membersByCrate, project) {
+    const proj = project || {};
+    const qtyMode = shipQtyModeGlobal;
+    const phaseName = currentPhasesEnabled ? (currentPhases.find(p => p.id === currentPhaseId)?.phase_name || '') : '';
+    const totalPanels = crates.reduce((n, c) => n + (membersByCrate.get(c.id) || []).length, 0);
+    const thead = qtyMode
+        ? `<tr><th style="width:0.4in;">#</th><th>Type</th><th>Color</th><th style="width:0.6in;text-align:center;">Qty</th></tr>`
+        : `<tr><th style="width:0.4in;">#</th><th>Panel ID</th><th>Cast</th><th>Type</th><th>Color</th><th style="width:0.5in;text-align:center;">✓</th></tr>`;
+    const sections = crates.map(crate => {
+        const members = membersByCrate.get(crate.id) || [];
+        const extras = [crate.weight ? `Weight ${crate.weight}` : '', crate.dimensions ? `Dimensions ${crate.dimensions}` : ''].filter(Boolean).join(' · ');
+        return `<div class="pk-section-bar">CRATE #${escapeHtml(crateNum(crate))} — ${members.length} ${members.length === 1 ? 'panel' : 'panels'}${extras ? ' — ' + escapeHtml(extras) : ''}</div>
+            <table class="pk-table"><thead>${thead}</thead><tbody>${packingRowsHtml(members, qtyMode)}</tbody></table>
+            ${crate.notes ? `<div class="pk-notes-box">${escapeHtml(crate.notes)}</div>` : ''}`;
+    }).join('');
+    return `<!doctype html><html><head><meta charset="utf-8"><title>Packing List — Truck ${truck} — ${escapeHtml(proj.project_number || '')}</title><style>${PACKING_PRINT_CSS}</style></head><body>
+        <div class="pk-header">
+            <div class="pk-title">PACKING LIST</div>
+            <div class="pk-crate-num">TRUCK ${truck}</div>
+        </div>
+        <div class="pk-meta">
+            <div class="pk-meta-row"><span class="pk-label">Project #:</span><span class="pk-value">${escapeHtml(proj.project_number || '')}</span></div>
+            <div class="pk-meta-row"><span class="pk-label">Project Name:</span><span class="pk-value">${escapeHtml(proj.project_name || '')}</span></div>
+            ${phaseName ? `<div class="pk-meta-row"><span class="pk-label">Phase:</span><span class="pk-value">${escapeHtml(phaseName)}</span></div>` : ''}
+            <div class="pk-meta-row"><span class="pk-label">Crates:</span><span class="pk-value">${crates.map(c => '#' + crateNum(c)).join(', ')}</span></div>
+            <div class="pk-meta-row"><span class="pk-label">Panel Count:</span><span class="pk-value">${totalPanels}</span></div>
+            <div class="pk-meta-row"><span class="pk-label">Delivery Address:</span><span class="pk-value">${proj.delivery_address ? escapeHtml(proj.delivery_address).replace(/\n/g, '<br>') : ''}</span></div>
+            <div class="pk-meta-row"><span class="pk-label">Date:</span><span class="pk-value">${escapeHtml(formatPackingDate(new Date()))}</span></div>
+        </div>
+        ${sections}
+        <div class="pk-footer">Truck ${truck} · Project ${escapeHtml(proj.project_number || '')} · ${crates.length} ${crates.length === 1 ? 'crate' : 'crates'} · ${totalPanels} ${totalPanels === 1 ? 'panel' : 'panels'}</div>
+    </body></html>`;
+}
+
+async function handlePrintTruckPackingList(truck) {
+    if (!currentProjectNumber) { showToast('Save the project first', 'error'); return; }
+    const crates = sortCrates(getCratesForActivePhase().filter(c => crateTruck(c) === Number(truck)));
+    if (!crates.length) return;
+    if (!currentColorLog) {
+        try { currentColorLog = (await loadColorLogForProject(currentProjectNumber)) || createEmptyColorLog(); }
+        catch (err) { logger.error('[project-portal] color-log load failed for truck packing list:', err); currentColorLog = createEmptyColorLog(); }
+    }
+    const membersByCrate = new Map(crates.map(c => [c.id, []]));
+    for (const casting of currentCastings) {
+        for (const comp of getComponentsFor(casting.id)) if (comp.crate_id && membersByCrate.has(comp.crate_id)) membersByCrate.get(comp.crate_id).push({ comp, casting });
+    }
+    let project = null;
+    try { project = await loadProject(currentProjectNumber); } catch (err) { logger.warn('[project-portal] loadProject for truck packing list failed:', err); }
+    if (!project) project = { project_number: currentProjectNumber };
+    printHtmlInIframe(buildTruckPackingListHtml(truck, crates, membersByCrate, project), 'pp-packing-print-frame', 'truck packing list');
 }
 
 async function handlePrintPackingList(crateId) {

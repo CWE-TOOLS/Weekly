@@ -5458,6 +5458,20 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
     background: #f8fafc;
 }
 
+/* trucks */
+.pp-ship-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.pp-ship-toolbar-hint { font-size: 12px; color: #64748b; }
+.pp-ship-add-btn { background: #fff; border: 1px solid var(--accent-primary, #4f46e5); color: var(--accent-primary, #4f46e5); border-radius: 4px; padding: 5px 10px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.pp-ship-add-btn:hover { background: rgba(79, 70, 229, 0.06); }
+.pp-ship-truck { border: 2px solid #cbd5e1; border-radius: 8px; padding: 10px 12px 6px; margin-bottom: 14px; background: #f8fafc; }
+.pp-ship-truck-none { border-style: dashed; background: #fffbeb; border-color: #fcd34d; }
+.pp-ship-truck-header { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
+.pp-ship-truck-title { font-size: 15px; font-weight: 800; margin: 0; letter-spacing: 0.02em; color: #0f172a; }
+.pp-ship-truck-count { font-size: 12px; color: #64748b; }
+.pp-ship-truck-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.pp-ship-truck-hint { font-size: 12px; color: #92400e; font-weight: 600; }
+.pp-ship-crate-truck { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: #475569; }
+.pp-ship-crate-truck select { font-size: 12px; padding: 3px 6px; border: 1px solid #cbd5e1; border-radius: 4px; background: #fff; }
 .pp-ship-crate {
     border: 1px solid #cbd5e1;
     border-radius: 8px;
