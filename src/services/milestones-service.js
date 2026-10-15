@@ -12,7 +12,7 @@
  * @module services/milestones-service
  */
 
-import { initializeSupabase, getSupabaseClient } from './supabase-service.js';
+import { initializeSupabase, getSupabaseClient, sendRefreshSignal } from './supabase-service.js';
 import { logger } from '../utils/logger.js';
 
 const TABLE = 'casting_milestones';
@@ -109,5 +109,7 @@ export async function saveMilestone(m) {
         throw error;
     }
     migrationPending = false;
+    // Open Releasability Boards refresh themselves on this signal (the weekly ignores it).
+    try { await sendRefreshSignal({ action: 'releasability_status_updated', milestone: m.milestone, castingId: m.castingId }); } catch { /* best effort */ }
     return data || row;
 }
