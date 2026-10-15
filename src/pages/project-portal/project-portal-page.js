@@ -2306,6 +2306,7 @@ async function saveInventoryItem(itemId, castingId) {
         if (cur !== next) changed[k] = fields[k];
     }
     if (Object.keys(changed).length === 0) return;
+    msInventoryChanged(castingId);   // the value changed in the user's hands — linked prints are out of date from now
 
     try {
         const updated = await updateInventoryItem(itemId, changed);
@@ -2314,7 +2315,6 @@ async function saveInventoryItem(itemId, castingId) {
         // Refresh the count label in the header without a full re-render.
         updateCastingInventoryCount(castingId);
         syncTrackingFromInventory();
-        msInventoryChanged(castingId);
     } catch (err) {
         logger.error('[project-portal] updateInventoryItem failed:', err);
         showToast('Save failed: ' + (err.message || err), 'error');
