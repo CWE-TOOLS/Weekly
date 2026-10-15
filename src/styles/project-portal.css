@@ -4306,6 +4306,7 @@ body.pp-printing .pp-tab-panel[data-panel="color-log"] { display: none !importan
 .pp-bt-casts-float-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #64748b; margin-bottom: 6px; }
 .pp-bt-casts-float-list { display: flex; flex-wrap: wrap; gap: 6px; max-height: 40vh; overflow: auto; }
 .pp-bt-casts-float .pp-bt-pill { padding: 4px 10px; font-size: 12px; }
+.pp-bt-casts-float-sub { margin-top: 10px; padding-top: 8px; border-top: 1px solid #e2e8f0; }
 @media print { .pp-bt-casts-float { display: none !important; } }
 /* Jig List tab: floating castings + print buttons (same boxes as batching) */
 .pp-jig-float-btns { display: flex; flex-wrap: wrap; gap: 6px; }

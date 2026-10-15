@@ -8618,7 +8618,14 @@ function castsAnchor() {
         date: b.querySelector('.pp-bt-pill-date')?.textContent || '',
         active: b.classList.contains('pp-bt-pill-active')
     }));
-    return { bottom: pills.getBoundingClientRect().bottom, casts, source: 'tab' };
+    // A casting with more than one color ticket also gets its color pills in the floating box (2026-10-15).
+    const casting = currentCastings.find(c => c.id === currentBatchCastingId);
+    const list = casting ? getBatchTicketList(casting.id) : [];
+    const activeTicket = casting ? getBatchTicketFor(casting.id) : null;
+    const colors = list.length > 1
+        ? list.map(t => ({ key: t.colorLogId || '', label: batchTicketColorLabel(t), active: t === activeTicket }))
+        : [];
+    return { bottom: pills.getBoundingClientRect().bottom, casts, colors, source: 'tab' };
 }
 
 /** Floating casting pills, right under the quick info box, once the real pills have scrolled away. */
@@ -8632,16 +8639,23 @@ function updateCastsFloat() {
         castsFloatEl.className = 'pp-bt-casts-float';
         document.body.appendChild(castsFloatEl);
         castsFloatEl.addEventListener('click', (e) => {
+            const col = e.target.closest('[data-float-color]');
+            if (col) { handleSelectBatchColor(col.dataset.floatColor || ''); return; }
             const b = e.target.closest('[data-float-cast]');
             if (!b) return;
             if (b.dataset.source === 'frame') getSpecialBatchingFrame()?.contentWindow?.postMessage({ type: 'jsb-cast', id: b.dataset.floatCast }, location.origin);
             else document.querySelector(`#pp-bt-pills [data-casting-id="${CSS.escape(b.dataset.floatCast)}"]`)?.click();
         });
     }
-    const key = a.source + JSON.stringify(a.casts);
+    const colors = a.colors || [];
+    const key = a.source + JSON.stringify(a.casts) + JSON.stringify(colors);
     if (castsFloatEl.dataset.key !== key) {
+        const colorRow = colors.length
+            ? `<div class="pp-bt-casts-float-title pp-bt-casts-float-sub">Colors</div><div class="pp-bt-casts-float-list">${colors.map(c =>
+                `<button type="button" class="pp-bt-pill pp-bt-color-pill${c.active ? ' pp-bt-pill-active' : ''}" data-float-color="${escapeAttr(c.key)}">${escapeHtml(String(c.label))}</button>`).join('')}</div>`
+            : '';
         castsFloatEl.innerHTML = `<div class="pp-bt-casts-float-title">Castings</div><div class="pp-bt-casts-float-list">${a.casts.map(c =>
-            `<button type="button" class="pp-bt-pill${c.active ? ' pp-bt-pill-active' : ''}" data-float-cast="${escapeAttr(c.id)}" data-source="${a.source}">${escapeHtml(String(c.number))}${c.date ? `<span class="pp-bt-pill-date">${escapeHtml(String(c.date))}</span>` : ''}</button>`).join('')}</div>`;
+            `<button type="button" class="pp-bt-pill${c.active ? ' pp-bt-pill-active' : ''}" data-float-cast="${escapeAttr(c.id)}" data-source="${a.source}">${escapeHtml(String(c.number))}${c.date ? `<span class="pp-bt-pill-date">${escapeHtml(String(c.date))}</span>` : ''}</button>`).join('')}</div>${colorRow}`;
         castsFloatEl.dataset.key = key;
     }
     const below = (staleFloatEl && !staleFloatEl.hidden) ? staleFloatEl.getBoundingClientRect().bottom + 8 : headerBottom() + 12;
