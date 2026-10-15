@@ -191,6 +191,7 @@ function selectCasting(castingId) {
     stateByCasting.set(castingId, st);
   }
   S = st;
+  if (st && st.inv && st.inv.importedAt) window.__ppMilestones?.markWorking(castingId, 'Jig List', 'Imported from Casting Inventory');
   normalizeSections();
   syncDepthsFromXsec(true);
   // The printed title always mirrors the portal project record (Info tab),
@@ -257,7 +258,7 @@ function jigPanelVisible(){
   const root = document.getElementById('jig-list-root');
   return !!root && !root.closest('[hidden]') && root.offsetParent !== null;
 }
-function jigHeaderBottom(){ return document.querySelector('.pp-header')?.getBoundingClientRect().bottom || 0; }
+function jigHeaderBottom(){ const o = window.__ppMilestones?.topOffset?.(); return typeof o === 'number' ? o : (document.querySelector('.pp-header')?.getBoundingClientRect().bottom || 0); }
 function updateJigFloats(){
   const vis = jigPanelVisible() && !!S;
   const limit = jigHeaderBottom() + 4;
@@ -1682,6 +1683,7 @@ function confirmImport(){
   const { clearance, ...inv } = impDraft;
   S.inv = inv;
   S.inv.importedAt = new Date().toISOString();
+  window.__ppMilestones?.markWorking(currentCastingId, 'Jig List', 'Imported from Casting Inventory');
   if (parseInches(clearance) != null) S.clearance = String(clearance).trim();
   closeImportModal();
   scheduleSave(); buildEditor(); renderOutput();

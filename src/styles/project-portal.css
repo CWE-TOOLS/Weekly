@@ -4322,20 +4322,25 @@ body.pp-printing .pp-tab-panel[data-panel="color-log"] { display: none !importan
 .pp-print-label-row-off { opacity: 0.55; }
 
 /* Releasability Board box (bottom right) — 2026-10-15 */
-.pp-ms-float { position: fixed; right: 16px; bottom: 16px; width: 320px; max-width: calc(100vw - 32px); max-height: 46vh; overflow: auto; z-index: 61; background: #fff; border: 2px solid #cbd5e1; border-radius: 8px; padding: 10px 12px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18); font-size: 12px; }
+/* A bar pinned under the portal header, as wide as the tab (position/size set by updateMsFloat) */
+.pp-ms-float { position: fixed; z-index: 61; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 14px; background: #fff; border: 2px solid #cbd5e1; border-top: none; border-radius: 0 0 8px 8px; padding: 6px 14px; box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12); font-size: 12px; box-sizing: border-box; }
 .pp-ms-float[hidden] { display: none; }
-.pp-ms-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #64748b; margin-bottom: 6px; }
-.pp-ms-cast { font-weight: 800; color: #0f172a; margin: 8px 0 3px; font-size: 12px; }
-.pp-ms-cast:first-child { margin-top: 0; }
-.pp-ms-line { display: flex; align-items: center; gap: 7px; padding: 2px 0; }
+.pp-ms-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #64748b; margin-right: 6px; white-space: nowrap; }
+.pp-ms-body { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; flex: 1 1 auto; }
+.pp-ms-cast { font-weight: 800; color: #0f172a; font-size: 12px; margin-left: 6px; padding-left: 10px; border-left: 2px solid #e2e8f0; }
+.pp-ms-cast:first-child { margin-left: 0; padding-left: 0; border-left: none; }
+.pp-ms-line { display: inline-flex; align-items: center; gap: 6px; padding: 2px 0; }
 .pp-ms-label { font-weight: 600; color: #1e293b; }
-.pp-ms-when { margin-left: auto; color: #94a3b8; font-size: 11px; white-space: nowrap; }
+.pp-ms-when { color: #94a3b8; font-size: 11px; white-space: nowrap; }
 .pp-ms-line-ci .pp-ms-label { font-weight: 500; color: #475569; font-size: 11px; }
+/* Tracking tab: the two dots sit beside each cast's controls */
+.pp-track-ms { display: inline-flex; align-items: center; gap: 10px; margin-left: 10px; font-size: 11px; color: #334155; font-weight: 600; }
+.pp-track-ms-item { display: inline-flex; align-items: center; gap: 5px; }
 .pp-ms-dot { width: 12px; height: 12px; border-radius: 50%; flex: 0 0 auto; border: 1px solid rgba(0,0,0,0.15); }
 .pp-ms-red { background: #EF4444; }
 .pp-ms-orange { background: #F59E0B; }
 .pp-ms-green { background: #22C55E; }
-.pp-ms-tick { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-weight: 600; color: #1e293b; cursor: pointer; }
+.pp-ms-tick { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: #1e293b; cursor: pointer; }
 .pp-ms-tick input { width: 16px; height: 16px; accent-color: #16a34a; }
 .pp-ms-ci { border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 8px; margin-bottom: 6px; border-left-width: 5px; }
 .pp-ms-ci-red { border-left-color: #EF4444; }
@@ -4351,7 +4356,7 @@ body.pp-printing .pp-tab-panel[data-panel="color-log"] { display: none !importan
 .pp-ms-btn-orange:hover { background: #15803d; }
 .pp-ms-btn-unlock { background: #f1f5f9; color: #0f172a; border: 1px solid #cbd5e1; }
 .pp-ms-btn-unlock:hover { background: #e2e8f0; }
-.pp-ms-warn { margin-top: 8px; font-size: 11px; color: #b91c1c; font-weight: 600; }
+.pp-ms-warn { font-size: 11px; color: #b91c1c; font-weight: 600; }
 @media print { .pp-ms-float { display: none !important; } }
 
 /* Print gate: the inventory is not final */

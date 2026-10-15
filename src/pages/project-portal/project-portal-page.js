@@ -127,7 +127,7 @@ import {
 } from '../../services/classroom-tasks-service.js';
 import { renderCastingLayout } from './casting-layout.js?v=20260701-01';
 import { attachLayoutDrag } from './casting-layout-drag.js?v=20260701-01';
-import { activateJigListTab } from './jig-list.js?v=20261014-4';
+import { activateJigListTab } from './jig-list.js?v=20261014-5';
 import { CI_DEPENDENT, MS, CI_STATE, milestonesApply } from '../../config/milestones-config.js';
 import { loadMilestonesForProject, saveMilestone, isMilestonesMigrationPending } from '../../services/milestones-service.js';
 import {
@@ -789,6 +789,7 @@ function setActiveTab(tab) {
     if (currentTab === 'tracking' && tab !== 'tracking') lastTrackSelectionAnchor = null;
     currentTab = tab;
     updateFloats();   // the floating out-of-date warning only belongs to the Batch Tickets tab
+    requestAnimationFrame(updateMsFloat);   // again once the new tab has painted (the Releasability bar sizes to it)
     if (tab !== 'castings' && invEdits.size) invEdits.clear();   // leaving the Castings tab accepts every inventory edit
     if (tab !== 'castings') invSelected.clear();
     updateInvFloat();
@@ -4095,10 +4096,10 @@ async function msSet(castingId, milestone, status, { note = null, locked = false
                   stamped_at: stamp ? new Date().toISOString() : (prev?.stamped_at ?? null) };
     if (!msByCasting.has(castingId)) msByCasting.set(castingId, new Map());
     msByCasting.get(castingId).set(milestone, row);
-    updateMsFloat();
+    updateMsFloat(); refreshInlineMs();
     try {
         const saved = await saveMilestone({ projectNumber: currentProjectNumber, castingId, milestone, status, locked, note, stampedAt: row.stamped_at });
-        if (saved) { msByCasting.get(castingId).set(milestone, saved); updateMsFloat(); }
+        if (saved) { msByCasting.get(castingId).set(milestone, saved); updateMsFloat(); refreshInlineMs(); }
         else if (isMilestonesMigrationPending()) showToast('Not saved: the casting_milestones table does not exist yet — run migration/casting-milestones.sql in Supabase.', 'error');
     } catch (err) {
         logger.error('[milestones] save failed', err);
@@ -4115,6 +4116,23 @@ function stampPrinted(castingIds, milestone) {
     }
 }
 function msFlushPendingStamp() { const p = msPendingStamp; msPendingStamp = null; if (p) stampPrinted(p.ids, p.milestone); }
+/** Work has started on this item (forms laid out, jig list imported…): red becomes orange; green and orange stay. */
+function markWorking(castingId, milestone, note = null) {
+    if (!msOn() || !castingId) return;
+    if (msStatus(castingId, milestone) === MS.RED) msSet(castingId, milestone, MS.ORANGE, { note, stamp: true });
+}
+/** Inline dots (Tracking tab) follow the cache. */
+function refreshInlineMs() {
+    document.querySelectorAll('[data-ms-track]').forEach(el => { el.innerHTML = trackMsInner(el.dataset.msTrack); });
+}
+function trackMsInner(castingId) {
+    const one = (m, label) => { const r = msRow(castingId, m); const when = msWhen(r); const tip = `${label}: ${r?.status || 'red'}${r?.note ? ' — ' + r.note : ''}${when ? ' (since ' + when + ')' : ''}`;
+        return `<span class="pp-track-ms-item" title="${escapeAttr(tip)}">${msDot(r?.status || MS.RED)}<span>${escapeHtml(label)}</span></span>`; };
+    return one('Labels', 'Labels') + one('Final Tracking', 'Tracking');
+}
+function trackMsHtml(castingId) { return msOn() ? `<span class="pp-track-ms" data-ms-track="${escapeAttr(castingId)}">${trackMsInner(castingId)}</span>` : ''; }
+/** Where floating boxes may start: under the portal header, and under the Releasability bar when it is showing. */
+function msTopOffset() { return headerBottom() + ((msFloatEl && !msFloatEl.hidden) ? msFloatEl.offsetHeight + 8 : 0); }
 function msArmStamp(ids, milestone) { msPendingStamp = { ids, milestone }; setTimeout(() => { if (msPendingStamp && msPendingStamp.milestone === milestone) msPendingStamp = null; }, 8000); }
 /** The inventory of this casting changed: everything printed from it is out of date until reprinted. */
 function msInventoryChanged(castingId) {
@@ -4208,7 +4226,7 @@ async function printGate(castingIds, milestone) {
         hold.addEventListener('click', () => { if (armed) done(true); });   // a fresh click, so the print window is allowed to open
     });
 }
-window.__ppMilestones = { printGate, stampPrinted, on: msOn, setJigCasting: (id) => { msJigCastingId = id; updateMsFloat(); } };
+window.__ppMilestones = { printGate, stampPrinted, markWorking, topOffset: msTopOffset, on: msOn, setJigCasting: (id) => { msJigCastingId = id; updateMsFloat(); } };
 
 // ---- The floating "Releasability Board" box (bottom right) — what the current tab drives.
 function msDot(status) { return `<span class="pp-ms-dot pp-ms-${status}"></span>`; }
@@ -4221,6 +4239,14 @@ function msLine(castingId, milestone, label) {
 }
 function msCiLine(castingId) { const s = ciStatus(castingId); return `<div class="pp-ms-line pp-ms-line-ci">${msDot(s)}<span class="pp-ms-label">${escapeHtml(CI_STATE[s].label)}</span></div>`; }
 function msCastHead(castingId) { return `<div class="pp-ms-cast">${escapeHtml(msCastName(castingId))}</div>`; }
+/** One column for many castings: "Shop Folder Cover: ● Cast 1  ● Cast 2 …" */
+function msListChips(castings, milestone) {
+    return `<div class="pp-ms-cast">${escapeHtml(milestone)}</div>` + castings.map(c => {
+        const r = msRow(c.id, milestone), when = msWhen(r);
+        const tip = `${milestone}: ${r?.status || 'red'}${r?.note ? ' — ' + r.note : ''}${when ? ' (since ' + when + ')' : ''}`;
+        return `<span class="pp-ms-line" title="${escapeAttr(tip)}">${msDot(r?.status || MS.RED)}<span class="pp-ms-label">${escapeHtml(msCastName(c.id))}</span></span>`;
+    }).join('');
+}
 function msBatchCastingId() {
     const frame = getSpecialBatchingFrame();
     if (frame && frame.getAttribute('src') && !frame.closest('[hidden]')) return frameCasts?.casts.find(c => c.active)?.id || null;
@@ -4245,18 +4271,20 @@ function updateMsFloat() {
         switch (currentTab) {
             case 'castings': html = ''; break;   // the lock controls sit in each casting card
             case 'batch-tickets': { const id = msBatchCastingId(); if (id) html = msCastHead(id) + msLine(id, 'Batching Sheets') + msCiLine(id); break; }
-            case 'tracking': html = scoped.map(c => msCastHead(c.id) + msLine(c.id, 'Labels') + msLine(c.id, 'Final Tracking')).join(''); break;
+            case 'tracking': html = ''; break;   // shown beside each cast instead
             case 'casting-layout': if (clSelectedCastingId) html = msCastHead(clSelectedCastingId) + msLine(clSelectedCastingId, 'Casting Layout') + msCiLine(clSelectedCastingId); break;
             case 'jig-list': if (msJigCastingId) html = msCastHead(msJigCastingId) + msLine(msJigCastingId, 'Jig List') + msCiLine(msJigCastingId); break;
             case 'optimizer': if (currentOptCastingId) html = msCastHead(currentOptCastingId) + msLine(currentOptCastingId, 'Final Optimizer HRS')
                 + `<label class="pp-ms-tick"><input type="checkbox" data-ms-opt-done="${escapeAttr(currentOptCastingId)}" ${msStatus(currentOptCastingId, 'Final Optimizer HRS') === MS.GREEN ? 'checked' : ''}> Final hours done</label>`; break;
             case 'staging': if (currentStagingCastingId) html = msCastHead(currentStagingCastingId) + msLine(currentStagingCastingId, 'Staging'); break;
-            case 'color-log': html = scoped.map(c => msCastHead(c.id) + msLine(c.id, 'Color Log')).join(''); break;
-            case 'info': html = scoped.map(c => msCastHead(c.id) + msLine(c.id, 'Shop Folder Cover')).join(''); break;
+            case 'color-log': html = msListChips(scoped, 'Color Log'); break;
+            case 'info': html = msListChips(scoped, 'Shop Folder Cover'); break;
             default: html = '';
         }
     }
-    if (!html) { if (msFloatEl) msFloatEl.hidden = true; return; }
+    const panel = document.querySelector(`.pp-tab-panel[data-panel="${CSS.escape(currentTab)}"]`);
+    document.querySelectorAll('.pp-tab-panel[style*="padding-top"]').forEach(p => { if (p !== panel || !html) p.style.paddingTop = ''; });
+    if (!html || !panel) { if (msFloatEl) msFloatEl.hidden = true; return; }
     if (!msFloatEl) {
         msFloatEl = document.createElement('div');
         msFloatEl.id = 'pp-ms-float';
@@ -4280,6 +4308,14 @@ function updateMsFloat() {
         msFloatEl.dataset.key = key;
     }
     msFloatEl.hidden = false;
+    // Pinned under the portal header, as wide as the tab's content; the tab makes room for it.
+    let r = panel.getBoundingClientRect();
+    if (r.width < 50 && panel.parentElement) r = panel.parentElement.getBoundingClientRect();   // tab not painted yet: use the content column
+    msFloatEl.style.top = Math.round(headerBottom()) + 'px';
+    msFloatEl.style.left = Math.round(r.left) + 'px';
+    msFloatEl.style.width = Math.round(r.width) + 'px';
+    const want = (msFloatEl.offsetHeight + 8) + 'px';
+    if (panel.style.paddingTop !== want) panel.style.paddingTop = want;
 }
 
 function isCastingInventoryLocked(casting) {
@@ -4736,6 +4772,7 @@ async function loadLayoutPositionsForSelected() {
         clLayoutPositions = clSelectedCastingId
             ? await loadLayoutPositions(clSelectedCastingId)
             : [];
+        if (Array.isArray(clLayoutPositions) && clLayoutPositions.length) markWorking(clSelectedCastingId, 'Casting Layout', 'Forms laid out');
     } catch (e) {
         logger.error('[project-portal] loadLayoutPositions failed:', e);
         clLayoutPositions = [];
@@ -4783,6 +4820,7 @@ function renderCastingLayoutTab() {
  * for an auto-packed casting snapshots every mold, switching it to manual mode.
  */
 async function commitLayoutPositions(rows) {
+    if (Array.isArray(rows) && rows.length) markWorking(clSelectedCastingId, 'Casting Layout', 'Forms laid out');
     try {
         await snapshotLayout(rows);
         await loadLayoutPositionsForSelected();
@@ -5112,6 +5150,7 @@ function renderTrackSection(casting) {
                 </div>
                 <span class="pp-track-section-count">${count} ${count === 1 ? 'component' : 'components'}</span>
                 ${rejectedBadge}
+                ${trackMsHtml(casting.id)}
             </div>
             ${body}
         </div>
@@ -8958,7 +8997,7 @@ function updateCastsFloat() {
             `<button type="button" class="pp-bt-pill${c.active ? ' pp-bt-pill-active' : ''}" data-float-cast="${escapeAttr(c.id)}" data-source="${a.source}">${escapeHtml(String(c.number))}${c.date ? `<span class="pp-bt-pill-date">${escapeHtml(String(c.date))}</span>` : ''}</button>`).join('')}</div>${colorRow}`;
         castsFloatEl.dataset.key = key;
     }
-    const below = (staleFloatEl && !staleFloatEl.hidden) ? staleFloatEl.getBoundingClientRect().bottom + 8 : headerBottom() + 12;
+    const below = (staleFloatEl && !staleFloatEl.hidden) ? staleFloatEl.getBoundingClientRect().bottom + 8 : msTopOffset() + 12;
     castsFloatEl.style.top = Math.round(below) + 'px';
     castsFloatEl.hidden = false;
 }
@@ -9024,7 +9063,7 @@ function updateStaleFloat() {
     const key = a.source + (a.fresh ? ':fresh' : '') + JSON.stringify(a.diffs) + JSON.stringify(a.info || null);
     if (staleFloatEl.dataset.key !== key) { staleFloatEl.innerHTML = staleFloatHtml(a.diffs, a.source, a.fresh, a.info); staleFloatEl.dataset.key = key; }
     staleFloatEl.classList.toggle('pp-bt-fresh', !!a.fresh);
-    staleFloatEl.style.top = Math.round(headerBottom() + 12) + 'px';
+    staleFloatEl.style.top = Math.round(msTopOffset() + 12) + 'px';
     staleFloatEl.hidden = false;
 }
 window.addEventListener('scroll', updateFloats, { passive: true });
