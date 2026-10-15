@@ -156,7 +156,10 @@ function createHeaderRow() {
     const headerCell = document.createElement('div');
     headerCell.className = 'header-cell tracking-item-header';
     const label = TRACKING_ITEM_LABELS[item] || item;
-    headerCell.textContent = label;
+    const labelEl = document.createElement('span');
+    labelEl.className = 'tracking-item-label';
+    labelEl.textContent = label;
+    headerCell.appendChild(labelEl);
     const auto = AUTO_MILESTONES.includes(item);
     const tag = document.createElement('span');
     tag.className = 'tracking-mode-tag ' + (auto ? 'tracking-mode-auto' : 'tracking-mode-manual');

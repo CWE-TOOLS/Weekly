@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="src/styles/variables.css">
     <link rel="stylesheet" href="src/styles/base.css">
     <link rel="stylesheet" href="src/styles/buttons.css">
-    <link rel="stylesheet" href="src/styles/project-portal.css?v=20261017-9">
+    <link rel="stylesheet" href="src/styles/project-portal.css?v=20261017-10">
 
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 </head>
@@ -1176,6 +1176,25 @@
             </div>
         </div>
 
+        <!-- Pick castings (folder cover / color log prints) -->
+        <div class="pp-modal-backdrop" id="pp-cast-pick-modal" role="dialog" aria-modal="true" aria-labelledby="pp-cast-pick-title" hidden>
+            <div class="pp-modal">
+                <div class="pp-modal-header">
+                    <h2 id="pp-cast-pick-title">Pick castings</h2>
+                    <button type="button" class="pp-modal-close" id="pp-cast-pick-close" aria-label="Close">&times;</button>
+                </div>
+                <div class="pp-modal-body">
+                    <p class="pp-modal-hint" id="pp-cast-pick-hint"></p>
+                    <label class="pp-print-label-all"><input type="checkbox" id="pp-cast-pick-all"> Select all</label>
+                    <div class="pp-print-label-list" id="pp-cast-pick-list"></div>
+                </div>
+                <div class="pp-modal-actions">
+                    <button type="button" class="pp-secondary-btn" id="pp-cast-pick-cancel">Cancel</button>
+                    <button type="button" class="pp-primary-btn" id="pp-cast-pick-submit" disabled>Print</button>
+                </div>
+            </div>
+        </div>
+
         <!-- Print Tracking Modal -->
         <div id="pp-track-print-modal" class="pp-modal-backdrop" hidden>
             <div class="pp-modal" role="dialog" aria-modal="true" aria-labelledby="pp-track-print-modal-title">
@@ -1220,6 +1239,6 @@
         <div id="pp-toast" class="pp-toast" hidden></div>
     </div>
 
-    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20261017-12"></script>
+    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20261017-13"></script>
 </body>
 </html>

@@ -762,10 +762,13 @@ html {
 }
 
 .tracking-item-header {
-  writing-mode: vertical-rl;
-  transform: rotate(180deg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
   white-space: nowrap;
-  padding: 0.75rem 0.5rem;
+  padding: 0.75rem 0.5rem 0.5rem;
   font-weight: 600;
   font-size: 0.8rem;
   color: rgba(0, 0, 0, 0.90);
@@ -779,16 +782,23 @@ html {
 .tracking-item-header:hover {
   filter: brightness(0.95);
 }
-/* AUTO / MANUAL tag under each column name (2026-10-15) */
+/* The column name reads bottom-to-top as before; the AUTO / MANUAL tag sits upright at the foot (2026-10-15) */
+.tracking-item-label {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+}
 .tracking-mode-tag {
   display: inline-block;
-  margin-left: 6px;
+  flex: 0 0 auto;
   padding: 1px 5px;
   border-radius: 3px;
   font-size: 0.58rem;
   font-weight: 800;
   letter-spacing: 0.1em;
-  vertical-align: middle;
+  line-height: 1.3;
 }
 .tracking-mode-auto { background: #0f172a; color: #fff; }
 .tracking-mode-manual { background: rgba(255, 255, 255, 0.75); color: #475569; border: 1px solid rgba(0, 0, 0, 0.15); }

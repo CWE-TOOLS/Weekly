@@ -1397,9 +1397,24 @@ function renderCastingCard(c) {
                     <button class="pp-row-btn pp-row-btn-delete" data-action="delete" type="button" aria-label="Delete casting" title="Delete casting">&times;</button>
                 </div>
             </div>
+            ${msOn() ? ciCardRowHtml(c) : ''}
             ${isOpen ? renderInventoryBody(c, items) : ''}
         </div>
     `;
+}
+
+/** The Casting Inventory state + its next step, under the casting's title block. */
+function ciCardRowHtml(c) {
+    const s = ciStatus(c.id), st = CI_STATE[s], r = msRow(c.id, 'Casting Inventory');
+    const since = msWhen(r);
+    const action = st.next
+        ? `<button type="button" class="pp-ms-btn pp-ms-btn-${s}" data-action="ms-ci-advance">${escapeHtml(st.next)}</button>`
+        : `<button type="button" class="pp-ms-btn pp-ms-btn-unlock" data-action="ms-ci-unlock" title="Unlock to make changes — anything printed from this inventory turns orange on the board once it changes">&#128274; Locked &middot; click to unlock</button>`;
+    return `<div class="pp-cast-card-ms pp-ms-ci-${s}">
+        ${msDot(s)}<span class="pp-cast-card-ms-state">${escapeHtml(st.label)}</span>
+        ${r?.note ? `<span class="pp-cast-card-ms-note">${escapeHtml(r.note)}${since ? ' · ' + escapeHtml(since) : ''}</span>` : ''}
+        <span class="pp-cast-card-ms-action">${action}</span>
+    </div>`;
 }
 
 function renderInventoryBody(casting, items) {
@@ -4228,7 +4243,7 @@ function updateMsFloat() {
     if (show) {
         const scoped = getCastingsForActivePhase();
         switch (currentTab) {
-            case 'castings': html = ciBoxHtml(scoped); break;
+            case 'castings': html = ''; break;   // the lock controls sit in each casting card
             case 'batch-tickets': { const id = msBatchCastingId(); if (id) html = msCastHead(id) + msLine(id, 'Batching Sheets') + msCiLine(id); break; }
             case 'tracking': html = scoped.map(c => msCastHead(c.id) + msLine(c.id, 'Labels') + msLine(c.id, 'Final Tracking')).join(''); break;
             case 'casting-layout': if (clSelectedCastingId) html = msCastHead(clSelectedCastingId) + msLine(clSelectedCastingId, 'Casting Layout') + msCiLine(clSelectedCastingId); break;
@@ -8313,6 +8328,20 @@ function wireEvents() {
 
     // Castings: row actions (delegation)
     const castingsList = document.getElementById('pp-castings-list');
+    // Enter jumps to the same field on the next component row (the blur saves the one you left).
+    castingsList.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' || e.shiftKey || e.ctrlKey || e.altKey) return;
+        const input = e.target.closest('.pp-inv-row input[data-field], .pp-inv-row select[data-field]');
+        if (!input) return;
+        e.preventDefault();
+        const row = input.closest('.pp-inv-row');
+        const field = input.dataset.field;
+        let next = row.nextElementSibling;
+        while (next && !next.classList.contains('pp-inv-row')) next = next.nextElementSibling;
+        const target = next?.querySelector(`[data-field="${CSS.escape(field)}"]`);
+        if (target && !target.disabled) { target.focus(); if (typeof target.select === 'function') target.select(); }
+        else input.blur();
+    });
     castingsList.addEventListener('click', (e) => {
         const btn = e.target.closest('button[data-action]');
         if (!btn) return;
@@ -8322,6 +8351,10 @@ function wireEvents() {
         const action = btn.dataset.action;
         if (action === 'delete') {
             handleDeleteCasting(castingId);
+        } else if (action === 'ms-ci-advance') {
+            ciAdvance(castingId);
+        } else if (action === 'ms-ci-unlock') {
+            ciUnlock(castingId);
         } else if (action === 'toggle-inventory') {
             handleToggleCastInventory(castingId);
         } else if (action === 'add-inventory') {
@@ -11851,16 +11884,34 @@ async function handlePrintShopFolderCover() {
         showToast('Save the project first', 'error');
         return;
     }
-    const coverIds = getCastingsForActivePhase().map(c => c.id);
-    if (!(await printGate(coverIds, 'Shop Folder Cover'))) return;
-    msArmStamp(coverIds, 'Shop Folder Cover');
+    if (!currentCastings.length) { try { currentCastings = await loadCastings(currentProjectNumber); } catch { /* ignore */ } }
+    // One cover per casting: pick which castings get a folder now; the board's "Shop Folder Cover" goes green for them.
+    const scoped = getCastingsForActivePhase();
+    let ids = [];
+    if (scoped.length) {
+        ids = await openCastingPicker({
+            title: 'Print Shop Folder Cover',
+            hint: 'One cover prints per ticked casting. Those castings\' "Shop Folder Cover" turns green on the Releasability Board.',
+            rows: scoped.map(c => ({ id: c.id, label: formatStickerCasting(c.casting_number), sub: (c.description || '').trim(), checked: msStatus(c.id, 'Shop Folder Cover') !== MS.GREEN || !msOn() })),
+            confirmLabel: 'Print covers'
+        });
+        if (!ids) return;
+    }
+    const copies = Math.max(1, ids.length);
     // Ensure the project's color log(s) are loaded for the Approved Color section.
     try { await ensureColorLogsLoaded(); } catch (err) { logger.error('[project-portal] shop folder cover: color log load failed', err); }
     const fields = readCoverFields();
     const phases = TRACKING_PHASES.filter(p => currentTrackingPhases.has(p));
     const colorLogs = Array.isArray(currentColorLogs) ? currentColorLogs : [];
-    const html = buildShopFolderCoverHtml(fields, phases, colorLogs);
+    let html = buildShopFolderCoverHtml(fields, phases, colorLogs);
+    if (copies > 1) {
+        const a = html.indexOf('<body>') + 6, b = html.lastIndexOf('</body>');
+        const inner = html.slice(a, b);
+        html = html.slice(0, a) + Array.from({ length: copies }, (_, i) => `<div style="${i < copies - 1 ? 'page-break-after:always' : ''}">${inner}</div>`).join('') + html.slice(b);
+    }
+    msArmStamp(ids, 'Shop Folder Cover');
     printHtmlInIframe(html, 'pp-shop-folder-print-frame', 'print shop folder cover');
+    showToast(`Printing ${copies} cover${copies === 1 ? '' : 's'}.`);
 }
 
 // ---------- Print PM List (project list view) ----------
@@ -12104,6 +12155,53 @@ async function openPrintLabelModal() {
     if (allCb) allCb.checked = castings.length > 0;
     updatePrintLabelSubmitState();
     modal.hidden = false;
+}
+
+/**
+ * Generic casting picker (2026-10-15): resolves with the ticked casting ids, or null on cancel.
+ * rows: [{ id, label, sub, checked, disabled }]
+ */
+function openCastingPicker({ title = 'Pick castings', hint = '', rows = [], confirmLabel = 'Print' } = {}) {
+    const modal = document.getElementById('pp-cast-pick-modal');
+    const list = document.getElementById('pp-cast-pick-list');
+    const allCb = document.getElementById('pp-cast-pick-all');
+    const submit = document.getElementById('pp-cast-pick-submit');
+    if (!modal || !list) return Promise.resolve(null);
+    document.getElementById('pp-cast-pick-title').textContent = title;
+    document.getElementById('pp-cast-pick-hint').textContent = hint;
+    list.innerHTML = rows.length ? rows.map(r => `<label class="pp-print-label-row${r.disabled ? ' pp-print-label-row-off' : ''}">
+            <input type="checkbox" value="${escapeAttr(r.id)}" ${r.checked && !r.disabled ? 'checked' : ''} ${r.disabled ? 'disabled' : ''}>
+            <span class="pp-pl-cast">${escapeHtml(r.label)}</span>
+            <span class="pp-pl-color${r.sub ? '' : ' pp-pl-color-empty'}">${escapeHtml(r.sub || '')}</span>
+        </label>`).join('') : '<p class="pp-import-remakes-empty">No castings yet — add castings first.</p>';
+    const boxes = () => [...list.querySelectorAll('input[type="checkbox"]:not(:disabled)')];
+    const refresh = () => {
+        const n = boxes().filter(b => b.checked).length;
+        submit.disabled = n === 0;
+        submit.textContent = n ? `${confirmLabel} (${n})` : confirmLabel;
+        if (allCb) { const all = boxes(); allCb.checked = all.length > 0 && all.every(b => b.checked); allCb.disabled = all.length === 0; }
+    };
+    return new Promise(resolve => {
+        const done = (v) => { modal.hidden = true; cleanup(); resolve(v); };
+        const onList = () => refresh();
+        const onAll = () => { boxes().forEach(b => { b.checked = allCb.checked; }); refresh(); };
+        const onSubmit = () => done(boxes().filter(b => b.checked).map(b => b.value));
+        const onCancel = () => done(null);
+        const onBackdrop = (e) => { if (e.target === modal) done(null); };
+        const onKey = (e) => { if (e.key === 'Escape') done(null); };
+        const cleanup = () => {
+            list.removeEventListener('change', onList); allCb?.removeEventListener('change', onAll);
+            submit.removeEventListener('click', onSubmit); modal.removeEventListener('click', onBackdrop); document.removeEventListener('keydown', onKey);
+            document.getElementById('pp-cast-pick-cancel')?.removeEventListener('click', onCancel);
+            document.getElementById('pp-cast-pick-close')?.removeEventListener('click', onCancel);
+        };
+        list.addEventListener('change', onList); allCb?.addEventListener('change', onAll);
+        submit.addEventListener('click', onSubmit); modal.addEventListener('click', onBackdrop); document.addEventListener('keydown', onKey);
+        document.getElementById('pp-cast-pick-cancel')?.addEventListener('click', onCancel);
+        document.getElementById('pp-cast-pick-close')?.addEventListener('click', onCancel);
+        refresh();
+        modal.hidden = false;
+    });
 }
 
 function closePrintLabelModal() {
@@ -13090,27 +13188,57 @@ function buildColorLogPrintHtml(log, projectNumber, projectDisplay) {
 `;
 }
 
-function handlePrintColorLog() {
+/** The color logs a casting uses, from its Casting Inventory rows (in row order, no repeats). */
+function castingColorLogs(castingId) {
+    const out = [];
+    for (const it of getInventoryFor(castingId)) {
+        if (!it.color_log_id || out.some(l => l.id === it.color_log_id)) continue;
+        const log = getColorLogByIdSync(it.color_log_id);
+        if (log) out.push(log);
+    }
+    return out;
+}
+async function handlePrintColorLog() {
     if (!currentColorLog) {
         showToast('No color log to print', 'error');
         return;
     }
-    // Color Log goes green for every casting that uses this log (or has any color, for a project-wide log).
-    const logId = currentColorLog.id;
-    let ids = currentCastings.filter(c => getInventoryFor(c.id).some(it => it.color_log_id === logId)).map(c => c.id);
-    if (!ids.length) ids = currentCastings.filter(c => getInventoryFor(c.id).some(it => it.color_log_id)).map(c => c.id);
-    stampPrinted(ids, 'Color Log');
-    const log = currentColorLog;
+    if (!currentCastings.length && currentProjectNumber) { try { currentCastings = await loadCastings(currentProjectNumber); } catch { /* ignore */ } }
+    if (currentCastingInventoryLoadedFor !== currentProjectNumber) { try { await loadAllInventoryForCurrentProject(); } catch { /* ignore */ } }
     const projectNumber = currentProjectNumber || '';
     const projectName = document.getElementById('pp-f-project_name')?.value || '';
-    const titleParts = [
-        'Color Log',
-        log.name || '',
-        projectName || projectNumber
-    ].filter(Boolean).join(' — ');
+    const scoped = getCastingsForActivePhase();
+    const withLogs = scoped.map(c => ({ c, logs: castingColorLogs(c.id) }));
+    const anyColor = withLogs.some(x => x.logs.length);
 
-    const body = buildColorLogPrintHtml(log, projectNumber, getCurrentProjectDisplay());
-    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(titleParts)}</title><style>${COLOR_LOG_PRINT_CSS}</style></head><body>${body}<script>window.addEventListener('load',()=>{setTimeout(()=>window.print(),200);});<\/script></body></html>`;
+    // Pick the castings: each prints its own color log(s) as read from the Casting Inventory, one copy per casting
+    // and color; the board's "Color Log" turns green for the printed castings.
+    let pages = [], ids = [], copies = 0;
+    if (anyColor) {
+        const picked = await openCastingPicker({
+            title: 'Print Color Log',
+            hint: 'One color log prints per ticked casting (two for a two-color casting), taken from each casting\'s inventory. Those castings\' "Color Log" turns green on the Releasability Board.',
+            rows: withLogs.map(x => ({ id: x.c.id, label: formatStickerCasting(x.c.casting_number), sub: x.logs.length ? x.logs.map(l => l.name || '(unnamed)').join(' + ') : 'no color in the inventory',
+                                        checked: x.logs.length > 0 && (!msOn() || msStatus(x.c.id, 'Color Log') !== MS.GREEN), disabled: !x.logs.length })),
+            confirmLabel: 'Print color logs'
+        });
+        if (!picked) return;
+        for (const x of withLogs) {
+            if (!picked.includes(x.c.id)) continue;
+            for (const log of x.logs) {
+                pages.push(buildColorLogPrintHtml(log, projectNumber, `${getCurrentProjectDisplay()} — Cast ${x.c.casting_number || ''}`));
+                copies += 1;
+            }
+            ids.push(x.c.id);
+        }
+        if (!pages.length) { showToast('Nothing to print — the ticked castings have no color in their inventory.', 'error'); return; }
+    } else {
+        // No casting has a color yet: print the log on screen once, as before (nothing to mark on the board).
+        pages = [buildColorLogPrintHtml(currentColorLog, projectNumber, getCurrentProjectDisplay())];
+        copies = 1;
+    }
+    const titleParts = ['Color Log', anyColor ? `${copies} ${copies === 1 ? 'copy' : 'copies'}` : (currentColorLog.name || ''), projectName || projectNumber].filter(Boolean).join(' — ');
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(titleParts)}</title><style>${COLOR_LOG_PRINT_CSS}</style></head><body>${pages.join('')}<script>window.addEventListener('load',()=>{setTimeout(()=>window.print(),200);});<\/script></body></html>`;
 
     const w = window.open('', '_blank');
     if (!w) {
@@ -13120,6 +13248,8 @@ function handlePrintColorLog() {
     w.document.open();
     w.document.write(html);
     w.document.close();
+    if (ids.length) stampPrinted(ids, 'Color Log');
+    if (anyColor) showToast(`Printing ${copies} color log${copies === 1 ? '' : 's'} for ${ids.length} casting${ids.length === 1 ? '' : 's'}.`);
 }
 
 // ---------- Bootstrap ----------

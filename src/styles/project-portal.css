@@ -4312,6 +4312,15 @@ body.pp-printing .pp-tab-panel[data-panel="color-log"] { display: none !importan
 .pp-cast-card-locked .pp-inv-row-grip { visibility: hidden; }
 .pp-cast-card-locked .pp-inv-input:disabled, .pp-cast-card-locked select:disabled { background: #f8fafc; color: #334155; border-color: #e2e8f0; cursor: not-allowed; }
 
+.pp-cast-card-ms { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 12px 6px 44px; font-size: 12px; border-top: 1px solid #e2e8f0; background: #f8fafc; border-left: 5px solid transparent; }
+.pp-cast-card-ms.pp-ms-ci-red { border-left-color: #EF4444; }
+.pp-cast-card-ms.pp-ms-ci-orange { border-left-color: #F59E0B; }
+.pp-cast-card-ms.pp-ms-ci-green { border-left-color: #22C55E; }
+.pp-cast-card-ms-state { font-weight: 700; color: #0f172a; }
+.pp-cast-card-ms-note { color: #64748b; font-size: 11px; }
+.pp-cast-card-ms-action { margin-left: auto; }
+.pp-print-label-row-off { opacity: 0.55; }
+
 /* Releasability Board box (bottom right) — 2026-10-15 */
 .pp-ms-float { position: fixed; right: 16px; bottom: 16px; width: 320px; max-width: calc(100vw - 32px); max-height: 46vh; overflow: auto; z-index: 61; background: #fff; border: 2px solid #cbd5e1; border-radius: 8px; padding: 10px 12px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18); font-size: 12px; }
 .pp-ms-float[hidden] { display: none; }

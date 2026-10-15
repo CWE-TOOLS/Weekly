@@ -22,7 +22,7 @@ export const AUTO_MILESTONES = [
 
 /** Printouts built from the Casting Inventory: warned/blocked until the inventory is final, and
  *  knocked back to orange whenever the inventory changes after they were printed. */
-export const CI_DEPENDENT = ['Batching Sheets', 'Labels', 'Final Tracking', 'Casting Layout', 'Jig List', 'Shop Folder Cover'];
+export const CI_DEPENDENT = ['Batching Sheets', 'Labels', 'Final Tracking', 'Casting Layout', 'Jig List'];
 
 export const MS = { RED: 'red', ORANGE: 'orange', GREEN: 'green' };
 
