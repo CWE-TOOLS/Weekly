@@ -36,7 +36,33 @@ import {
   STATUS,
   STATUS_DISPLAY
 } from '../../config/releasability-config.js?v=20260807-2';
-import { renderReleasabilityGrid, getUniqueDepartments, setProjectActions, groupProjectsByWeek, getWeekRange } from './releasability-grid.js?v=20260807-2';
+import { renderReleasabilityGrid, getUniqueDepartments, setProjectActions, groupProjectsByWeek, getWeekRange, setMilestoneLookup } from './releasability-grid.js?v=20261015-1';
+import { loadAllMilestones } from '../../services/milestones-service.js';
+
+/** Pull the portal's milestone rows and index them by casting for the grid (AUTO columns). */
+async function refreshMilestoneLookup() {
+  try {
+    const rows = await loadAllMilestones();
+    const map = new Map();
+    for (const r of rows) {
+      const c = r.casting;
+      if (!c) continue;
+      const pn = (c.project_number || '').toString().trim();
+      const cn = (c.casting_number || '').toString().trim().toUpperCase();
+      if (!pn || !cn) continue;
+      const keys = [`${pn}#${cn}`];
+      if (c.phase_id) keys.push(`${pn}#${cn}@${c.phase_id}`);
+      for (const k of keys) {
+        if (!map.has(k)) map.set(k, new Map());
+        map.get(k).set(r.milestone, r);
+      }
+    }
+    setMilestoneLookup(map);
+  } catch (err) {
+    console.error('❌ Milestone load failed (AUTO columns show red):', err);
+    setMilestoneLookup(new Map());
+  }
+}
 import { getMonday, getWeekMonth, getWeekOfMonth } from '../../utils/date-utils.js';
 import { normalizeProjectName } from '../../utils/ui-utils.js';
 import {
@@ -182,7 +208,8 @@ async function loadInitialData(forceRefresh = false) {
   // the weekly view's Google Sheets timeout.
   const [projects, weeks] = await withTimeout(Promise.all([
     loadAllReleasabilityData(forceRefresh),
-    loadManualWeeks()
+    loadManualWeeks(),
+    refreshMilestoneLookup()
   ]), 45000, 'Releasability data load');
 
   // Cache the loaded projects
@@ -1366,6 +1393,12 @@ async function handleProjectDrop(projectId, projectData, targetWeekMonday, targe
  * @param {HTMLElement} cell - The clicked status cell
  */
 async function handleStatusCellClick(cell) {
+  if (cell.dataset.auto === '1') {
+    // AUTO column: the portal sets it (a print, a tick, the inventory lock). Nothing to click here.
+    cell.classList.add('status-auto-nudge');
+    setTimeout(() => cell.classList.remove('status-auto-nudge'), 400);
+    return;
+  }
   const projectId = cell.dataset.projectId;
   const trackingItem = cell.dataset.trackingItem;
   const currentStatus = cell.dataset.status;

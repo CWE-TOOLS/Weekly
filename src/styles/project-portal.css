@@ -4308,6 +4308,57 @@ body.pp-printing .pp-tab-panel[data-panel="color-log"] { display: none !importan
 .pp-bt-casts-float .pp-bt-pill { padding: 4px 10px; font-size: 12px; }
 .pp-bt-casts-float-sub { margin-top: 10px; padding-top: 8px; border-top: 1px solid #e2e8f0; }
 @media print { .pp-bt-casts-float { display: none !important; } }
+.pp-cast-card-locked .pp-inv-row { opacity: 0.92; }
+.pp-cast-card-locked .pp-inv-row-grip { visibility: hidden; }
+.pp-cast-card-locked .pp-inv-input:disabled, .pp-cast-card-locked select:disabled { background: #f8fafc; color: #334155; border-color: #e2e8f0; cursor: not-allowed; }
+
+/* Releasability Board box (bottom right) — 2026-10-15 */
+.pp-ms-float { position: fixed; right: 16px; bottom: 16px; width: 320px; max-width: calc(100vw - 32px); max-height: 46vh; overflow: auto; z-index: 61; background: #fff; border: 2px solid #cbd5e1; border-radius: 8px; padding: 10px 12px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18); font-size: 12px; }
+.pp-ms-float[hidden] { display: none; }
+.pp-ms-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #64748b; margin-bottom: 6px; }
+.pp-ms-cast { font-weight: 800; color: #0f172a; margin: 8px 0 3px; font-size: 12px; }
+.pp-ms-cast:first-child { margin-top: 0; }
+.pp-ms-line { display: flex; align-items: center; gap: 7px; padding: 2px 0; }
+.pp-ms-label { font-weight: 600; color: #1e293b; }
+.pp-ms-when { margin-left: auto; color: #94a3b8; font-size: 11px; white-space: nowrap; }
+.pp-ms-line-ci .pp-ms-label { font-weight: 500; color: #475569; font-size: 11px; }
+.pp-ms-dot { width: 12px; height: 12px; border-radius: 50%; flex: 0 0 auto; border: 1px solid rgba(0,0,0,0.15); }
+.pp-ms-red { background: #EF4444; }
+.pp-ms-orange { background: #F59E0B; }
+.pp-ms-green { background: #22C55E; }
+.pp-ms-tick { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-weight: 600; color: #1e293b; cursor: pointer; }
+.pp-ms-tick input { width: 16px; height: 16px; accent-color: #16a34a; }
+.pp-ms-ci { border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 8px; margin-bottom: 6px; border-left-width: 5px; }
+.pp-ms-ci-red { border-left-color: #EF4444; }
+.pp-ms-ci-orange { border-left-color: #F59E0B; }
+.pp-ms-ci-green { border-left-color: #22C55E; }
+.pp-ms-ci-head { display: flex; align-items: center; gap: 7px; }
+.pp-ms-ci-state { margin-left: auto; font-size: 11px; color: #64748b; font-weight: 600; text-align: right; }
+.pp-ms-ci-actions { margin-top: 5px; }
+.pp-ms-btn { border: none; border-radius: 6px; padding: 5px 10px; font-size: 12px; font-weight: 600; cursor: pointer; color: #fff; }
+.pp-ms-btn-red { background: #F59E0B; }
+.pp-ms-btn-red:hover { background: #d97706; }
+.pp-ms-btn-orange { background: #16a34a; }
+.pp-ms-btn-orange:hover { background: #15803d; }
+.pp-ms-btn-unlock { background: #f1f5f9; color: #0f172a; border: 1px solid #cbd5e1; }
+.pp-ms-btn-unlock:hover { background: #e2e8f0; }
+.pp-ms-warn { margin-top: 8px; font-size: 11px; color: #b91c1c; font-weight: 600; }
+@media print { .pp-ms-float { display: none !important; } }
+
+/* Print gate: the inventory is not final */
+.pp-ms-gate { position: fixed; inset: 0; z-index: 1000; background: rgba(15, 23, 42, 0.55); display: flex; align-items: center; justify-content: center; }
+.pp-ms-gate-box { background: #fff; border: 3px solid #b91c1c; border-radius: 10px; padding: 18px 20px; width: 460px; max-width: calc(100vw - 32px); box-shadow: 0 20px 50px rgba(0,0,0,0.35); }
+.pp-ms-gate-title { font-size: 18px; font-weight: 900; color: #b91c1c; letter-spacing: 0.03em; margin-bottom: 8px; }
+.pp-ms-gate-text { font-size: 13px; color: #1e293b; line-height: 1.5; }
+.pp-ms-gate-actions { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 16px; }
+.pp-ms-gate-cancel { background: #1d4ed8; color: #fff; border: none; border-radius: 6px; padding: 9px 18px; font-size: 14px; font-weight: 700; cursor: pointer; }
+.pp-ms-gate-cancel:hover { background: #1e40af; }
+.pp-ms-gate-hold { position: relative; overflow: hidden; background: #f8fafc; color: #64748b; border: 1px dashed #cbd5e1; border-radius: 6px; padding: 8px 14px; font-size: 12px; font-weight: 600; cursor: pointer; user-select: none; -webkit-user-select: none; touch-action: none; }
+.pp-ms-gate-hold-bar { position: absolute; left: 0; top: 0; bottom: 0; width: 0%; background: rgba(245, 158, 11, 0.35); }
+.pp-ms-gate-hold-label { position: relative; }
+.pp-ms-gate-holding { color: #92400e; border-style: solid; border-color: #f59e0b; }
+.pp-ms-gate-armed { background: #F59E0B; color: #fff; border-color: #d97706; }
+
 /* Jig List tab: floating castings + print buttons (same boxes as batching) */
 .pp-jig-float-btns { display: flex; flex-wrap: wrap; gap: 6px; }
 .pp-jig-float-btns button { background: #1d4ed8; color: #fff; border: none; border-radius: 6px; padding: 6px 10px; font-size: 12px; font-weight: 500; cursor: pointer; }

@@ -1583,11 +1583,36 @@ function buildPrintAllHtml(ids) {
 }
 window.jsbBuildPrintAllHtml = buildPrintAllHtml;
 
-function openPrintWindow(html) {
+/** Print, after the portal has checked the Casting Inventory is final (it warns otherwise), and tell the portal
+ *  afterwards so the Releasability Board's "Batching Sheets" turns green for these castings. */
+function openPrintWindow(html, ids) {
+    if (EMBED && Array.isArray(ids) && ids.length) {
+        requestPortalPrint(ids).then(ok => { if (ok) openPrintWindowNow(html, ids); });
+        return true;
+    }
+    return openPrintWindowNow(html, ids);
+}
+function openPrintWindowNow(html, ids) {
     const w = window.open('', '_blank');
     if (!w) { toast('Pop-up blocked — allow pop-ups for this page to print.', true); return false; }
     w.document.open(); w.document.write(html); w.document.close();
+    if (EMBED && Array.isArray(ids) && ids.length) window.parent.postMessage({ type: 'jsb-printed', ids }, location.origin);
     return true;
+}
+function requestPortalPrint(ids) {
+    return new Promise(resolve => {
+        const token = Math.random().toString(36).slice(2);
+        let settled = false;
+        const finish = (ok) => { if (settled) return; settled = true; window.removeEventListener('message', onMsg); resolve(ok); };
+        const onMsg = (e) => {
+            if (e.origin !== location.origin || e.source !== window.parent || e.data?.token !== token) return;
+            if (e.data.type === 'jsb-print-ok') finish(true);
+            else if (e.data.type === 'jsb-print-no') finish(false);
+        };
+        window.addEventListener('message', onMsg);
+        window.parent.postMessage({ type: 'jsb-print-request', ids, token }, location.origin);
+        setTimeout(() => finish(true), 120000);   // an old portal that never answers: print anyway after a while
+    });
 }
 
 // ---------- Print all casts: pick the castings, print them in one go ----------
@@ -1642,7 +1667,7 @@ picker.addEventListener('click', (e) => {
     if (e.target.closest('[data-pick-print]')) {
         const html = buildPrintAllHtml(pickedIds());
         if (!html) { toast('Pick at least one casting that has tickets.', true); return; }
-        if (openPrintWindow(html)) closePrintPicker();
+        if (openPrintWindow(html, pickedIds())) closePrintPicker();
     }
 });
 document.getElementById('btn-print-all').addEventListener('click', () => {
@@ -1653,7 +1678,7 @@ window.jsbBuildPrintHtml = buildPrintHtml;   // the portal's top-bar Print butto
 document.getElementById('btn-print').addEventListener('click', () => {
     const html = buildPrintHtml();
     if (!html) { toast('Enter Total Cu Ft first — there are no tickets to print for this casting.', true); return; }
-    openPrintWindow(html);
+    openPrintWindow(html, [S.activeCastingId]);
 });
 
 // ---------- Embedded in the portal ----------

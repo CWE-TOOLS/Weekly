@@ -181,6 +181,7 @@ function activeCasting() {
  */
 function selectCasting(castingId) {
   currentCastingId = castingId;
+  window.__ppMilestones?.setJigCasting(castingId);   // the portal's Releasability box follows this tab's casting
   let st = stateByCasting.get(castingId);
   let persistSeed = false;
   if (!st) {
@@ -1048,17 +1049,26 @@ function xsecPrintHTML(si){
     ${cncNoteHTML(si)}
     <div class="pfoot"><span>Scrim Jigs / Plantillas de malla · ${esc(projTitle())}</span><span>Panel Cross-Section / Sección transversal${multiSec() ? ` — ${thk} (${si + 1} of ${S.sections.length})` : ''}</span></div>`;
 }
-function printXsec(){
+/* Releasability (2026-10-15): the portal gates jig printouts on the Casting Inventory being final and
+   stamps the "Jig List" column when something is printed or the deliverable is saved. */
+async function jigGate(){ const g = window.__ppMilestones; return (g && currentCastingId) ? g.printGate([currentCastingId], 'Jig List') : true; }
+function jigStamp(){ if (currentCastingId) window.__ppMilestones?.stampPrinted([currentCastingId], 'Jig List'); }
+
+async function printXsec(){
   if (!S) return;
+  if (!(await jigGate())) return;
   printViaIframe('Panel Cross-Section — ' + projTitle(),
     S.sections.map((sec, si) => `<section class="page">${xsecPrintHTML(si)}</section>`).join(''));
+  jigStamp();
 }
-function printJigs(){
+async function printJigs(){
   if (!S) return;
   const out = document.getElementById('jig-output');
   const pages = out ? out.querySelectorAll('.page') : [];
   if (!pages.length){ alert('Add at least one panel with a valid width to generate jigs.'); return; }
+  if (!(await jigGate())) return;
   printViaIframe('Jig List — ' + projTitle(), [...pages].map(p => p.outerHTML).join(''));
+  jigStamp();
 }
 
 /* ===================== hidden print iframe ==================== */
@@ -2014,12 +2024,14 @@ function buildCutPages(plan){
   return pages.map((p, i) => `<section class="page">${p.html}${cutFoot(p.label, i + 1, pages.length)}</section>`).join('');
 }
 
-function printCutMaps(){
+async function printCutMaps(){
   if (!S) return;
   const plan = buildCutPlan();
   if (!plan.blanks.length){ alert('Add at least one panel width and one foot depth first — there are no jigs to nest.'); return; }
   if (!cutPlanReady(plan)) return;
+  if (!(await jigGate())) return;
   printViaIframe('Jig Cut Maps — ' + projTitle(), buildCutPages(plan), CUT_DOC_CSS);
+  jigStamp();
 }
 /** True when the cut maps can be drawn; otherwise tells the user what to fix (same messages as Print Cut Maps). */
 function cutPlanReady(plan){
@@ -2130,14 +2142,17 @@ function deliverableHTML(parts){
     + MARKER_DEFS + deliverableBody(parts)
     + `<script type="application/json" id="jig-deliverable-data">${json}</script></body></html>`;
 }
-function printAll(){
+async function printAll(){
   const parts = deliverableParts();
   if (!parts) return;
+  if (!(await jigGate())) return;
   printViaIframe('Jig List — ' + projTitle(), deliverableBody(parts), deliverableCss());
+  jigStamp();
 }
 async function saveDeliverable(){
   const parts = deliverableParts();
   if (!parts) return;
+  if (!(await jigGate())) return;
   const html = deliverableHTML(parts);
   const name = deliverableFilename();
   try {
@@ -2151,6 +2166,7 @@ async function saveDeliverable(){
       await w.write(new Blob([html], { type: 'text/html' }));
       await w.close();
       noteDeliverableSaved(handle.name || name);
+      jigStamp();
     } else {
       const a = document.createElement('a');
       a.href = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
@@ -2159,6 +2175,7 @@ async function saveDeliverable(){
       a.click();
       setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
       noteDeliverableSaved(name);
+      jigStamp();
     }
   } catch (err) {
     if (err && err.name === 'AbortError') return;   // the user closed the dialog

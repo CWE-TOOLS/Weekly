@@ -779,6 +779,22 @@ html {
 .tracking-item-header:hover {
   filter: brightness(0.95);
 }
+/* AUTO / MANUAL tag under each column name (2026-10-15) */
+.tracking-mode-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  vertical-align: middle;
+}
+.tracking-mode-auto { background: #0f172a; color: #fff; }
+.tracking-mode-manual { background: rgba(255, 255, 255, 0.75); color: #475569; border: 1px solid rgba(0, 0, 0, 0.15); }
+.status-cell.status-auto { cursor: default; box-shadow: inset 0 0 0 2px rgba(15, 23, 42, 0.18); }
+.status-cell.status-auto-nudge { animation: status-auto-nudge 0.4s ease-out; }
+@keyframes status-auto-nudge { 0% { transform: scale(1); } 40% { transform: scale(0.92); } 100% { transform: scale(1); } }
 
 /* Individual tracking item header colors */
 .tracking-item-header[data-tracking-index="0"] { background-color: var(--tracking-0-color); }   /* Classroom #1 */

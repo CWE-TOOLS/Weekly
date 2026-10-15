@@ -127,7 +127,9 @@ import {
 } from '../../services/classroom-tasks-service.js';
 import { renderCastingLayout } from './casting-layout.js?v=20260701-01';
 import { attachLayoutDrag } from './casting-layout-drag.js?v=20260701-01';
-import { activateJigListTab } from './jig-list.js?v=20261014-3';
+import { activateJigListTab } from './jig-list.js?v=20261014-4';
+import { CI_DEPENDENT, MS, CI_STATE, milestonesApply } from '../../config/milestones-config.js';
+import { loadMilestonesForProject, saveMilestone, isMilestonesMigrationPending } from '../../services/milestones-service.js';
 import {
     loadLayoutPositions,
     snapshotLayout,
@@ -460,6 +462,12 @@ const STG_DEPARTMENT_SEQUENCE = ['Mill', 'Form Out', 'Cast', 'Demold', 'Finish',
 let currentStagingCastingId = null;          // active casting column in the Staging tab
 let currentStagingDescriptions = new Map();  // `${castingNumber}|${dept}|${day}` -> {description, castingSide}
 let currentStagingScaffold = new Map();      // castingNumber -> Array<{ department, days:number }>
+
+// ---- Releasability milestones (2026-10-15): the board's AUTO columns, driven from here ----
+let msByCasting = new Map();          // castingId -> Map(milestone -> row)
+let msPendingStamp = null;            // { ids, milestone } set by a print handler, consumed when the print fires
+let msJigCastingId = null;            // the Jig List tab's active casting (the module tells us)
+let msFloatEl = null;
 let stagingGridSaveTimers = new Map();       // `${castingNumber}|${dept}|${day}` -> debounce handle
 let copiedStaging = null;                    // { fromCastNum, scaffold:[{department,days}], descById:{`${dept}|${day}`:desc} } from a copy action
 
@@ -1188,6 +1196,7 @@ async function loadAndRenderCastings() {
         // Summary readouts start collapsed on every project.
         castSumExpanded = new Set();
     }
+    await loadMilestones();
     renderCastings();
 }
 
@@ -1336,9 +1345,17 @@ function renderCastings() {
     list.hidden = false;
     empty.hidden = true;
     list.innerHTML = visible.map(c => renderCastingCard(c)).join('');
+    // Final & locked inventories (engineering done) are read-only until unlocked in the Releasability box.
+    list.querySelectorAll('.pp-cast-card').forEach(card => {
+        if (!ciLockedById(card.dataset.castingId)) return;
+        card.classList.add('pp-cast-card-locked');
+        card.querySelectorAll('.pp-inv-row input, .pp-inv-row select, .pp-inv-add, .pp-inv-import-remakes, [data-action="paste-components"], [data-action="cut-selected"], .pp-inv-row-cut, .pp-inv-row-delete, .pp-inv-row-select, .pp-inv-select-all')
+            .forEach(el => { el.disabled = true; });
+    });
 
     ensureCastingsSortable();
     ensureInventorySortables();
+    updateMsFloat();
 }
 
 function renderCastingCard(c) {
@@ -2134,6 +2151,7 @@ async function handleImportRemakesConfirm() {
         }
         renderCastings();
         await syncTrackingFromInventory();
+        msInventoryChanged(targetCastingId);
         showToast(`Imported ${okCount} remake${okCount === 1 ? '' : 's'}${failCount ? ` (${failCount} failed)` : ''}.`, failCount ? 'warning' : 'success');
     } else {
         showToast('Could not import remakes — check connection.', 'error');
@@ -2234,6 +2252,7 @@ async function handleAddInventoryItem(castingId) {
         const last = card?.querySelector('.pp-inv-row:last-of-type input[data-field="type"]');
         last?.focus();
         syncTrackingFromInventory();
+        msInventoryChanged(castingId);
     } catch (err) {
         logger.error('[project-portal] add inventory failed:', err);
         showToast('Add component failed: ' + (err.message || err), 'error');
@@ -2295,6 +2314,7 @@ async function saveInventoryItem(itemId, castingId) {
         // Refresh the count label in the header without a full re-render.
         updateCastingInventoryCount(castingId);
         syncTrackingFromInventory();
+        msInventoryChanged(castingId);
     } catch (err) {
         logger.error('[project-portal] updateInventoryItem failed:', err);
         showToast('Save failed: ' + (err.message || err), 'error');
@@ -2356,6 +2376,7 @@ async function handleDeleteInventoryItem(castingId, itemId) {
         setInventoryFor(castingId, list);
         renderCastings();
         syncTrackingFromInventory();
+        msInventoryChanged(castingId);
     } catch (err) {
         logger.error('[project-portal] deleteInventoryItem failed:', err);
         showToast('Delete failed: ' + (err.message || err), 'error');
@@ -2408,6 +2429,7 @@ function ensureInventorySortables() {
                 try {
                     await setInventoryOrder(list.map(c => c.id));
                     syncTrackingFromInventory();
+                    msInventoryChanged(castingId);
                 } catch (err) {
                     logger.error('[project-portal] setInventoryOrder failed:', err);
                     showToast('Reorder save failed: ' + (err.message || err), 'error');
@@ -2753,6 +2775,7 @@ async function loadStagingDescriptions() {
     }
 
     buildStgScaffold();
+    deriveStagingMilestones();
 }
 
 // Local per-casting day numbering — mirrors sheets-service computeDayNumbers (group by
@@ -2822,6 +2845,7 @@ function renderStaging() {
     renderStgPills();
     renderStgColumns();
     document.querySelectorAll('#pp-stg-columns textarea[data-action="grid-desc"]').forEach(autoGrowTextarea);
+    updateMsFloat();
 }
 
 function getVisibleStagingCastings() {
@@ -3071,6 +3095,10 @@ async function handlePasteStaging(targetCastNum) {
 function scheduleStagingGridSave(castNum, dept, day, text) {
     if (!castNum || !dept || !day) return;
     const key = `${castNum}|${dept}|${day}`;
+    // Keep the local map current so the Staging milestone (red / orange / green) follows the typing.
+    const cur = currentStagingDescriptions.get(key) || {};
+    currentStagingDescriptions.set(key, { description: text == null ? '' : String(text), castingSide: cur.castingSide || null });
+    scheduleStagingDerive();
     const prev = stagingGridSaveTimers.get(key);
     if (prev) clearTimeout(prev);
     const t = setTimeout(() => handleSaveStagingDescription(castNum, dept, day, text), 500);
@@ -3416,6 +3444,7 @@ function renderOptimizer() {
     // (collapsed) cards have display:none so scrollHeight reads 0 — those
     // are sized on toggle-open instead.
     document.querySelectorAll('.pp-opt-card-expanded textarea[data-action="description"]').forEach(autoGrowTextarea);
+    updateMsFloat();
 }
 
 function getVisibleCastings() {
@@ -3877,6 +3906,7 @@ async function cutInventoryItems(castingId, items, label) {
         for (const id of gone) invSelected.delete(id);
         renderCastings();
         syncTrackingFromInventory();
+        msInventoryChanged(castingId);
         showToast(`Cut ${label} from Cast ${casting?.casting_number || ''} — use Paste on the casting it belongs to.`);
     } catch (err) {
         logger.error('[project-portal] cut components failed:', err);
@@ -3937,6 +3967,7 @@ async function handlePasteComponents(targetCastingId) {
         const n = inserted.filter(Boolean).length;
         showToast(`Pasted ${n} component${n === 1 ? '' : 's'} into Cast ${target?.casting_number || ''}.`);
         syncTrackingFromInventory();
+        msInventoryChanged(targetCastingId);
     } catch (err) {
         logger.error('[project-portal] paste components failed:', err);
         showToast('Paste failed: ' + (err.message || err), 'error');
@@ -4022,8 +4053,223 @@ function compareCastingNumber(a, b) {
 // a lower casting_number become inventory-read-only. Tracking operations
 // (reject / produced / crate toggles) stay fully live so the user can keep
 // marking production progress on locked castings.
+/* ===================== Releasability milestones (2026-10-15) =====================
+   The board's AUTO columns live in casting_milestones (one row per casting per column):
+   red / orange / green. Prints stamp them green (orange when the inventory was not final),
+   the Casting Inventory lock drives its own column, Color Log and Staging are derived. */
+function msOn() { return milestonesApply(currentProjectNumber); }
+function msRow(castingId, m) { return msByCasting.get(castingId)?.get(m) || null; }
+function msStatus(castingId, m) { return msRow(castingId, m)?.status || MS.RED; }
+function ciStatus(castingId) { return msStatus(castingId, 'Casting Inventory'); }
+function ciFinal(castingId) { return ciStatus(castingId) === MS.GREEN; }
+function ciLockedById(castingId) { const r = castingId ? msRow(castingId, 'Casting Inventory') : null; return !!(msOn() && r && r.status === MS.GREEN && r.locked); }
+function msCastName(id) { return 'Cast ' + (currentCastings.find(c => c.id === id)?.casting_number || '?'); }
+
+async function loadMilestones() {
+    msByCasting = new Map();
+    if (!currentProjectNumber || !msOn()) { updateMsFloat(); return; }
+    try { msByCasting = await loadMilestonesForProject(currentProjectNumber); }
+    catch (err) { logger.error('[milestones] load failed', err); }
+    deriveColorLogMilestones();
+    updateMsFloat();
+}
+async function msSet(castingId, milestone, status, { note = null, locked = false, stamp = false } = {}) {
+    if (!msOn() || !castingId) return null;
+    const prev = msRow(castingId, milestone);
+    const row = { project_number: currentProjectNumber, casting_id: castingId, milestone, status, locked, note,
+                  stamped_at: stamp ? new Date().toISOString() : (prev?.stamped_at ?? null) };
+    if (!msByCasting.has(castingId)) msByCasting.set(castingId, new Map());
+    msByCasting.get(castingId).set(milestone, row);
+    updateMsFloat();
+    try {
+        const saved = await saveMilestone({ projectNumber: currentProjectNumber, castingId, milestone, status, locked, note, stampedAt: row.stamped_at });
+        if (saved) { msByCasting.get(castingId).set(milestone, saved); updateMsFloat(); }
+        else if (isMilestonesMigrationPending()) showToast('Not saved: the casting_milestones table does not exist yet — run migration/casting-milestones.sql in Supabase.', 'error');
+    } catch (err) {
+        logger.error('[milestones] save failed', err);
+        showToast('Could not save the milestone: ' + (err?.message || err), 'error');
+    }
+    return row;
+}
+/** Something was printed (or saved) for these castings: green, or orange when the inventory was not final. */
+function stampPrinted(castingIds, milestone) {
+    if (!msOn()) return;
+    for (const id of (castingIds || []).filter(Boolean)) {
+        const final = !CI_DEPENDENT.includes(milestone) || ciFinal(id);
+        msSet(id, milestone, final ? MS.GREEN : MS.ORANGE, { note: final ? null : 'Printed before Casting Inventory was final', stamp: true });
+    }
+}
+function msFlushPendingStamp() { const p = msPendingStamp; msPendingStamp = null; if (p) stampPrinted(p.ids, p.milestone); }
+function msArmStamp(ids, milestone) { msPendingStamp = { ids, milestone }; setTimeout(() => { if (msPendingStamp && msPendingStamp.milestone === milestone) msPendingStamp = null; }, 8000); }
+/** The inventory of this casting changed: everything printed from it is out of date until reprinted. */
+function msInventoryChanged(castingId) {
+    if (!msOn() || !castingId) return;
+    for (const m of CI_DEPENDENT) {
+        const r = msRow(castingId, m);
+        if (r && r.status === MS.GREEN) msSet(castingId, m, MS.ORANGE, { note: 'Casting Inventory changed after this was printed — print it again' });
+    }
+    deriveColorLogMilestones();
+}
+/** Color Log: red = no color on the casting, orange = color entered, green = color log printed since. */
+function deriveColorLogMilestones() {
+    if (!msOn()) return;
+    for (const c of currentCastings) {
+        const r = msRow(c.id, 'Color Log');
+        if (r && r.status === MS.GREEN) continue;
+        const hasColor = getInventoryFor(c.id).some(it => it.color_log_id);
+        const want = hasColor ? MS.ORANGE : MS.RED;
+        if ((r?.status || MS.RED) !== want) msSet(c.id, 'Color Log', want, { note: hasColor ? 'Color entered — print the color log' : null });
+    }
+}
+/** Staging: red = nothing filled, orange = some, green = every staging field of the casting filled. */
+function deriveStagingMilestones() {
+    if (!msOn() || !currentStagingScaffold.size) return;
+    for (const c of currentCastings) {
+        const castNum = String(c.casting_number || '');
+        const depts = currentStagingScaffold.get(castNum) || [];
+        let total = 0, filled = 0;
+        for (const d of depts) for (let day = 1; day <= d.days; day++) {
+            total++;
+            if ((currentStagingDescriptions.get(`${castNum}|${d.department}|${day}`)?.description || '').trim()) filled++;
+        }
+        const want = total && filled === total ? MS.GREEN : (filled ? MS.ORANGE : MS.RED);
+        if (msStatus(c.id, 'Staging') !== want) msSet(c.id, 'Staging', want, { note: total ? `${filled} of ${total} staging fields filled` : null, stamp: want === MS.GREEN });
+    }
+}
+let msStagingDeriveTimer = null;
+function scheduleStagingDerive() { clearTimeout(msStagingDeriveTimer); msStagingDeriveTimer = setTimeout(deriveStagingMilestones, 700); }
+
+// ---- Casting Inventory lock: red (PM entering) -> orange (ready for engineering) -> green + locked (engineering done)
+async function ciAdvance(castingId) {
+    const s = ciStatus(castingId);
+    if (s === MS.RED) await msSet(castingId, 'Casting Inventory', MS.ORANGE, { note: 'Ready for engineering', stamp: true });
+    else if (s === MS.ORANGE) await msSet(castingId, 'Casting Inventory', MS.GREEN, { locked: true, note: 'Engineering done — final', stamp: true });
+    invEdits.clear();
+    renderCastings();
+}
+async function ciUnlock(castingId) {
+    await msSet(castingId, 'Casting Inventory', MS.ORANGE, { locked: false, note: 'Unlocked for changes — lock it again when done', stamp: true });
+    renderCastings();
+}
+
+// ---- Print gate: inventory-based printouts warn (and wait) while the inventory is not final.
+async function printGate(castingIds, milestone) {
+    if (!msOn() || !CI_DEPENDENT.includes(milestone)) return true;
+    const notFinal = (castingIds || []).filter(id => id && !ciFinal(id));
+    if (!notFinal.length) return true;
+    const names = notFinal.map(id => currentCastings.find(c => c.id === id)?.casting_number || '?');
+    return new Promise(resolve => {
+        document.getElementById('pp-ms-gate')?.remove();
+        const el = document.createElement('div');
+        el.id = 'pp-ms-gate';
+        el.className = 'pp-ms-gate';
+        el.innerHTML = `<div class="pp-ms-gate-box" role="dialog" aria-modal="true">
+            <div class="pp-ms-gate-title">&#9888; Casting Inventory is not final</div>
+            <div class="pp-ms-gate-text"><b>${escapeHtml(milestone)}</b> for cast${names.length === 1 ? '' : 's'} <b>${escapeHtml(names.join(', '))}</b> would be printed from an inventory engineering has not locked yet.
+                Finish the inventory first (Castings tab &rarr; "Engineering done"), then print.</div>
+            <div class="pp-ms-gate-actions">
+                <button type="button" class="pp-ms-gate-cancel" data-ms-gate-cancel>Cancel</button>
+                <button type="button" class="pp-ms-gate-hold" data-ms-gate-hold title="Special cases only: hold for 10 seconds, then click to print anyway — the board shows it orange"><span class="pp-ms-gate-hold-bar"></span><span class="pp-ms-gate-hold-label">Hold 10 s to print anyway</span></button>
+            </div></div>`;
+        document.body.appendChild(el);
+        let armed = false, t0 = 0, raf = 0, timer = 0;
+        const hold = el.querySelector('[data-ms-gate-hold]');
+        const bar = el.querySelector('.pp-ms-gate-hold-bar');
+        const label = el.querySelector('.pp-ms-gate-hold-label');
+        const done = (ok) => { clearTimeout(timer); cancelAnimationFrame(raf); el.remove(); document.removeEventListener('keydown', onKey); resolve(ok); };
+        const onKey = (e) => { if (e.key === 'Escape') done(false); };
+        document.addEventListener('keydown', onKey);
+        el.querySelector('[data-ms-gate-cancel]').addEventListener('click', () => done(false));
+        el.addEventListener('click', (e) => { if (e.target === el) done(false); });
+        const reset = () => { if (armed) return; clearTimeout(timer); cancelAnimationFrame(raf); bar.style.width = '0%'; label.textContent = 'Hold 10 s to print anyway'; hold.classList.remove('pp-ms-gate-holding'); };
+        const tick = () => { const p = Math.min(1, (Date.now() - t0) / 10000); bar.style.width = (p * 100).toFixed(1) + '%'; label.textContent = `Keep holding… ${Math.ceil(10 - p * 10)} s`; raf = requestAnimationFrame(tick); };
+        hold.addEventListener('pointerdown', (e) => {
+            if (armed) return;
+            e.preventDefault();
+            t0 = Date.now(); hold.classList.add('pp-ms-gate-holding'); tick();
+            timer = setTimeout(() => { cancelAnimationFrame(raf); armed = true; bar.style.width = '100%'; hold.classList.add('pp-ms-gate-armed'); label.textContent = 'Click to print anyway'; }, 10000);
+        });
+        for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) hold.addEventListener(ev, reset);
+        hold.addEventListener('click', () => { if (armed) done(true); });   // a fresh click, so the print window is allowed to open
+    });
+}
+window.__ppMilestones = { printGate, stampPrinted, on: msOn, setJigCasting: (id) => { msJigCastingId = id; updateMsFloat(); } };
+
+// ---- The floating "Releasability Board" box (bottom right) — what the current tab drives.
+function msDot(status) { return `<span class="pp-ms-dot pp-ms-${status}"></span>`; }
+function msWhen(r) { return r?.stamped_at ? new Date(r.stamped_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : ''; }
+function msLine(castingId, milestone, label) {
+    const r = msRow(castingId, milestone);
+    const s = r?.status || MS.RED, when = msWhen(r);
+    const tip = (r?.note ? r.note + '. ' : '') + (when ? 'Since ' + when : 'Not done yet');
+    return `<div class="pp-ms-line" title="${escapeAttr(tip)}">${msDot(s)}<span class="pp-ms-label">${escapeHtml(label || milestone)}</span>${when ? `<span class="pp-ms-when">${escapeHtml(when)}</span>` : ''}</div>`;
+}
+function msCiLine(castingId) { const s = ciStatus(castingId); return `<div class="pp-ms-line pp-ms-line-ci">${msDot(s)}<span class="pp-ms-label">${escapeHtml(CI_STATE[s].label)}</span></div>`; }
+function msCastHead(castingId) { return `<div class="pp-ms-cast">${escapeHtml(msCastName(castingId))}</div>`; }
+function msBatchCastingId() {
+    const frame = getSpecialBatchingFrame();
+    if (frame && frame.getAttribute('src') && !frame.closest('[hidden]')) return frameCasts?.casts.find(c => c.active)?.id || null;
+    return currentBatchCastingId;
+}
+function ciBoxHtml(castings) {
+    return castings.map(c => {
+        const s = ciStatus(c.id), st = CI_STATE[s], r = msRow(c.id, 'Casting Inventory');
+        const action = st.next
+            ? `<button type="button" class="pp-ms-btn pp-ms-btn-${s}" data-ms-ci-advance="${escapeAttr(c.id)}">${escapeHtml(st.next)}</button>`
+            : `<button type="button" class="pp-ms-btn pp-ms-btn-unlock" data-ms-ci-unlock="${escapeAttr(c.id)}" title="Unlock to make changes — anything printed from this inventory turns orange on the board once it changes">&#128274; Locked &middot; click to unlock</button>`;
+        return `<div class="pp-ms-ci pp-ms-ci-${s}" title="${escapeAttr((r?.note || '') + (msWhen(r) ? ' · ' + msWhen(r) : ''))}">
+            <div class="pp-ms-ci-head">${msDot(s)}<b>${escapeHtml(msCastName(c.id))}</b><span class="pp-ms-ci-state">${escapeHtml(st.label.replace('Casting Inventory — ', ''))}</span></div>
+            <div class="pp-ms-ci-actions">${action}</div></div>`;
+    }).join('');
+}
+function updateMsFloat() {
+    const show = msOn() && !!currentProjectNumber && currentCastings.length > 0;
+    let html = '';
+    if (show) {
+        const scoped = getCastingsForActivePhase();
+        switch (currentTab) {
+            case 'castings': html = ciBoxHtml(scoped); break;
+            case 'batch-tickets': { const id = msBatchCastingId(); if (id) html = msCastHead(id) + msLine(id, 'Batching Sheets') + msCiLine(id); break; }
+            case 'tracking': html = scoped.map(c => msCastHead(c.id) + msLine(c.id, 'Labels') + msLine(c.id, 'Final Tracking')).join(''); break;
+            case 'casting-layout': if (clSelectedCastingId) html = msCastHead(clSelectedCastingId) + msLine(clSelectedCastingId, 'Casting Layout') + msCiLine(clSelectedCastingId); break;
+            case 'jig-list': if (msJigCastingId) html = msCastHead(msJigCastingId) + msLine(msJigCastingId, 'Jig List') + msCiLine(msJigCastingId); break;
+            case 'optimizer': if (currentOptCastingId) html = msCastHead(currentOptCastingId) + msLine(currentOptCastingId, 'Final Optimizer HRS')
+                + `<label class="pp-ms-tick"><input type="checkbox" data-ms-opt-done="${escapeAttr(currentOptCastingId)}" ${msStatus(currentOptCastingId, 'Final Optimizer HRS') === MS.GREEN ? 'checked' : ''}> Final hours done</label>`; break;
+            case 'staging': if (currentStagingCastingId) html = msCastHead(currentStagingCastingId) + msLine(currentStagingCastingId, 'Staging'); break;
+            case 'color-log': html = scoped.map(c => msCastHead(c.id) + msLine(c.id, 'Color Log')).join(''); break;
+            case 'info': html = scoped.map(c => msCastHead(c.id) + msLine(c.id, 'Shop Folder Cover')).join(''); break;
+            default: html = '';
+        }
+    }
+    if (!html) { if (msFloatEl) msFloatEl.hidden = true; return; }
+    if (!msFloatEl) {
+        msFloatEl = document.createElement('div');
+        msFloatEl.id = 'pp-ms-float';
+        msFloatEl.className = 'pp-ms-float';
+        document.body.appendChild(msFloatEl);
+        msFloatEl.addEventListener('click', (e) => {
+            const adv = e.target.closest('[data-ms-ci-advance]');
+            if (adv) { ciAdvance(adv.dataset.msCiAdvance); return; }
+            const unl = e.target.closest('[data-ms-ci-unlock]');
+            if (unl) { ciUnlock(unl.dataset.msCiUnlock); }
+        });
+        msFloatEl.addEventListener('change', (e) => {
+            const cb = e.target.closest('[data-ms-opt-done]');
+            if (cb) msSet(cb.dataset.msOptDone, 'Final Optimizer HRS', cb.checked ? MS.GREEN : MS.RED, { note: cb.checked ? 'Final hours confirmed' : null, stamp: true });
+        });
+    }
+    const pending = isMilestonesMigrationPending() ? '<div class="pp-ms-warn">Not saving yet — run migration/casting-milestones.sql in Supabase</div>' : '';
+    const key = currentTab + '|' + html + pending;
+    if (msFloatEl.dataset.key !== key) {
+        msFloatEl.innerHTML = `<div class="pp-ms-title">Releasability Board</div><div class="pp-ms-body">${html}</div>${pending}`;
+        msFloatEl.dataset.key = key;
+    }
+    msFloatEl.hidden = false;
+}
+
 function isCastingInventoryLocked(casting) {
     if (!casting) return false;
+    if (ciLockedById(casting.id)) return true;   // engineering lock (Releasability box)
     // Find the highest sort_order among castings that have any tracking state.
     // Use sort_order (database-canonical drag-order) NOT casting_number — that's
     // a user-editable display string and names like "1A Remake" parse to int 1
@@ -4048,6 +4294,10 @@ function isCastingInventoryLocked(casting) {
 // a generic lock.
 function showCastingLockedToast(casting) {
     const num = casting?.casting_number || '?';
+    if (ciLockedById(casting?.id)) {
+        showToast(`Casting ${num} inventory is final and locked — unlock it in the Releasability box at the right to change it.`, 'error');
+        return;
+    }
     showToast(`Casting ${num} is locked: a later casting has rejected/produced/crated panels.`, 'error');
 }
 
@@ -4478,6 +4728,7 @@ async function loadLayoutPositionsForSelected() {
 }
 
 function renderCastingLayoutTab() {
+    updateMsFloat();
     const card = document.getElementById('pp-clay-card');
     const errorEl = document.getElementById('pp-clay-error');
     if (!card) return;
@@ -4541,9 +4792,14 @@ async function resetCastingLayout() {
     renderCastingLayoutTab();
 }
 
-function printCastingLayout() {
+async function printCastingLayout() {
+    if (!document.querySelector('#pp-clay-card svg')) { alert('No layout to print yet.'); return; }
+    if (!(await printGate([clSelectedCastingId], 'Casting Layout'))) return;
+    if (printCastingLayoutNow() !== false) stampPrinted([clSelectedCastingId], 'Casting Layout');
+}
+function printCastingLayoutNow() {
     const svgEl = document.querySelector('#pp-clay-card svg');
-    if (!svgEl) { alert('No layout to print yet.'); return; }
+    if (!svgEl) { alert('No layout to print yet.'); return false; }
     // Print on 11x17 (tabloid) portrait so the layout scales up and stays
     // readable. Crop the printed SVG to the actual drawn content — the on-screen
     // SVG has a fixed 750x1000 page with empty margins around narrow layouts, so
@@ -8366,6 +8622,11 @@ function renderSpecialBatching() {
 /** Top-bar "Print Batch Tickets" for a special project: print from the embedded page. */
 function printSpecialBatching() {
     if (!getSpecialBatching(currentProjectNumber)) return false;
+    const id = msBatchCastingId();
+    printGate(id ? [id] : [], 'Batching Sheets').then(ok => { if (ok && printSpecialBatchingNow() === 'printed') stampPrinted(id ? [id] : [], 'Batching Sheets'); });
+    return true;
+}
+function printSpecialBatchingNow() {
     const build = getSpecialBatchingFrame()?.contentWindow?.jsbBuildPrintHtml;
     if (typeof build !== 'function') { showToast('The batching page is still loading — try again in a moment', 'error'); return true; }
     const html = build();
@@ -8375,7 +8636,7 @@ function printSpecialBatching() {
     w.document.open();
     w.document.write(html);
     w.document.close();
-    return true;
+    return 'printed';
 }
 
 window.addEventListener('message', (e) => {
@@ -8385,6 +8646,12 @@ window.addEventListener('message', (e) => {
         frame.style.height = Math.ceil(Number(e.data.height)) + 'px';
     } else if (e.data?.type === 'jsb-toast' && e.data.message) {
         showToast(String(e.data.message), e.data.isError ? 'error' : 'success');
+    } else if (e.data?.type === 'jsb-print-request') {
+        // The special page wants to print: run the inventory gate here, then tell it yes / no.
+        const ids = Array.isArray(e.data.ids) ? e.data.ids : [];
+        printGate(ids, 'Batching Sheets').then(ok => frame.contentWindow?.postMessage({ type: ok ? 'jsb-print-ok' : 'jsb-print-no', token: e.data.token }, location.origin));
+    } else if (e.data?.type === 'jsb-printed') {
+        stampPrinted(Array.isArray(e.data.ids) ? e.data.ids : [], 'Batching Sheets');
     } else if (e.data?.type === 'jsb-stale') {
         // The special page's own out-of-date warning: where it sits (relative to the frame) and what it says.
         frameStale = Array.isArray(e.data.diffs) ? { diffs: e.data.diffs, fresh: !!e.data.fresh, info: e.data.info || null, top: Number(e.data.top) || 0, height: Number(e.data.height) || 0 } : null;
@@ -8662,7 +8929,7 @@ function updateCastsFloat() {
     castsFloatEl.style.top = Math.round(below) + 'px';
     castsFloatEl.hidden = false;
 }
-function updateFloats() { updateStaleFloat(); updateCastsFloat(); }
+function updateFloats() { updateStaleFloat(); updateCastsFloat(); updateMsFloat(); }
 
 /** Where the inline warning sits on screen (and what it says), or null when none is showing. */
 function staleAnchor() {
@@ -10757,7 +11024,13 @@ function buildTrackPrintHtml(casting, components, projectNumber, projectName) {
     return `<!doctype html><html><head><meta charset="utf-8"><title>Tracking — ${escapeHtml(projectNumber)} — ${escapeHtml(castLabel)}</title><style>${TRACK_PRINT_CSS}</style></head><body>${sheet}</body></html>`;
 }
 
-function handlePrintTracking(castingId) {
+async function handlePrintTracking(castingId) {
+    if (!castingId) return;
+    if (!(await printGate([castingId], 'Final Tracking'))) return;
+    msArmStamp([castingId], 'Final Tracking');
+    handlePrintTrackingNow(castingId);
+}
+function handlePrintTrackingNow(castingId) {
     if (!castingId) return;
     const casting = currentCastings.find(c => c.id === castingId);
     if (!casting) {
@@ -10799,6 +11072,7 @@ function handlePrintTracking(castingId) {
             // onafterprint fires whether the user printed or cancelled.
             win.addEventListener('afterprint', cleanup);
             win.focus();
+            msFlushPendingStamp();
             win.print();
         } catch (err) {
             logger.error('[project-portal] print tracking failed:', err);
@@ -11030,6 +11304,12 @@ function buildStickerPrintHtml(casting, components, projectName) {
 
 async function handlePrintStickers(castingId) {
     if (!castingId) return;
+    if (!(await printGate([castingId], 'Labels'))) return;
+    msArmStamp([castingId], 'Labels');
+    return handlePrintStickersNow(castingId);
+}
+async function handlePrintStickersNow(castingId) {
+    if (!castingId) return;
     const casting = currentCastings.find(c => c.id === castingId);
     if (!casting) {
         showToast('Casting not found', 'error');
@@ -11077,6 +11357,7 @@ async function handlePrintStickers(castingId) {
             const win = iframe.contentWindow;
             win.addEventListener('afterprint', cleanup);
             win.focus();
+            msFlushPendingStamp();
             win.print();
         } catch (err) {
             logger.error('[project-portal] print stickers failed:', err);
@@ -11367,6 +11648,7 @@ function handlePrintCoverPage() {
             const win = iframe.contentWindow;
             win.addEventListener('afterprint', cleanup);
             win.focus();
+            msFlushPendingStamp();
             win.print();
         } catch (err) {
             logger.error('[project-portal] print cover failed:', err);
@@ -11543,6 +11825,7 @@ function printHtmlInIframe(html, frameId, errLabel = 'print') {
             const win = iframe.contentWindow;
             win.addEventListener('afterprint', cleanup);
             win.focus();
+            msFlushPendingStamp();
             win.print();
         } catch (err) {
             logger.error(`[project-portal] ${errLabel} failed:`, err);
@@ -11568,6 +11851,9 @@ async function handlePrintShopFolderCover() {
         showToast('Save the project first', 'error');
         return;
     }
+    const coverIds = getCastingsForActivePhase().map(c => c.id);
+    if (!(await printGate(coverIds, 'Shop Folder Cover'))) return;
+    msArmStamp(coverIds, 'Shop Folder Cover');
     // Ensure the project's color log(s) are loaded for the Approved Color section.
     try { await ensureColorLogsLoaded(); } catch (err) { logger.error('[project-portal] shop folder cover: color log load failed', err); }
     const fields = readCoverFields();
@@ -11695,6 +11981,7 @@ function handlePrintList() {
             const win = iframe.contentWindow;
             win.addEventListener('afterprint', cleanup);
             win.focus();
+            msFlushPendingStamp();
             win.print();
         } catch (err) {
             logger.error('[project-portal] print list failed:', err);
@@ -11835,11 +12122,13 @@ function updatePrintLabelSubmitState() {
     if (allCb) allCb.checked = boxes.length > 0 && checked.length === boxes.length;
 }
 
-function handlePrintLabelConfirm() {
+async function handlePrintLabelConfirm() {
     const list = document.getElementById('pp-print-label-list');
     if (!list) return;
     const ids = Array.from(list.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.value);
     if (ids.length === 0) return;
+    if (!(await printGate(ids, 'Labels'))) return;
+    msArmStamp(ids, 'Labels');
     const castings = ids
         .map(id => (currentCastings || []).find(c => c.id === id))
         .filter(Boolean);
@@ -11870,6 +12159,7 @@ function handlePrintLabelConfirm() {
             const win = iframe.contentWindow;
             win.addEventListener('afterprint', cleanup);
             win.focus();
+            msFlushPendingStamp();
             win.print();
         } catch (err) {
             logger.error('[project-portal] print folder labels failed:', err);
@@ -12192,6 +12482,7 @@ async function handlePrintPackingList(crateId) {
             const win = iframe.contentWindow;
             win.addEventListener('afterprint', cleanup);
             win.focus();
+            msFlushPendingStamp();
             win.print();
         } catch (err) {
             logger.error('[project-portal] print packing list failed:', err);
@@ -12385,6 +12676,7 @@ function handlePrintOptimizer(castingIds) {
             const win = iframe.contentWindow;
             win.addEventListener('afterprint', cleanup);
             win.focus();
+            msFlushPendingStamp();
             win.print();
         } catch (err) {
             logger.error('[project-portal] print optimizer failed:', err);
@@ -12507,9 +12799,14 @@ body { font-family: 'Segoe UI', Arial, sans-serif; color:#000; font-size:11pt; -
 .bt-time-colon { font-size: 15pt; font-weight: 800; }
 `;
 
-function handlePrintBatchTickets(castingId) {
+async function handlePrintBatchTickets(castingId) {
+    if (!currentCastings.find(c => c.id === castingId)) return;
+    if (!(await printGate([castingId], 'Batching Sheets'))) return;
+    if (handlePrintBatchTicketsNow(castingId) !== false) stampPrinted([castingId], 'Batching Sheets');
+}
+function handlePrintBatchTicketsNow(castingId) {
     const casting = currentCastings.find(c => c.id === castingId);
-    if (!casting) return;
+    if (!casting) return false;
     const list = getBatchTicketList(castingId);
 
     // Print every color ticket that yields batches; each plan restarts numbering.
@@ -12539,7 +12836,7 @@ function handlePrintBatchTickets(castingId) {
         } else {
             showToast('Enter Total Cu Ft to generate tickets', 'error');
         }
-        return;
+        return false;
     }
 
     const projectName = document.getElementById('pp-f-project_name')?.value || '';
@@ -12798,6 +13095,11 @@ function handlePrintColorLog() {
         showToast('No color log to print', 'error');
         return;
     }
+    // Color Log goes green for every casting that uses this log (or has any color, for a project-wide log).
+    const logId = currentColorLog.id;
+    let ids = currentCastings.filter(c => getInventoryFor(c.id).some(it => it.color_log_id === logId)).map(c => c.id);
+    if (!ids.length) ids = currentCastings.filter(c => getInventoryFor(c.id).some(it => it.color_log_id)).map(c => c.id);
+    stampPrinted(ids, 'Color Log');
     const log = currentColorLog;
     const projectNumber = currentProjectNumber || '';
     const projectName = document.getElementById('pp-f-project_name')?.value || '';

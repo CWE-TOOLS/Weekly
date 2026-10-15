@@ -10,6 +10,21 @@
 import { getMonday, getWeekMonth, getWeekOfMonth } from '../../utils/date-utils.js';
 import { TRACKING_ITEMS, TRACKING_ITEM_LABELS, STATUS, STATUS_DISPLAY } from '../../config/releasability-config.js?v=20260807-2';
 import { isWeekCollapsed } from './releasability-state.js';
+import { AUTO_MILESTONES, MS_TO_BOARD, milestonesApply } from '../../config/milestones-config.js';
+
+// Portal-driven milestones (2026-10-15): "<project#>#<CAST#>" and "<project#>#<CAST#>@<phaseId>" -> Map(milestone -> row)
+let milestoneLookup = new Map();
+export function setMilestoneLookup(map) { milestoneLookup = map || new Map(); }
+function milestoneRowFor(project, item) {
+  const p = (project.projectNumber || '').toString().trim();
+  const c = (project.castingNumber || '').toString().trim().toUpperCase();
+  if (!p || !c) return null;
+  const ph = (project.phaseId || '').toString().trim();
+  const m = (ph && milestoneLookup.get(`${p}#${c}@${ph}`)) || milestoneLookup.get(`${p}#${c}`);
+  return m ? (m.get(item) || null) : null;
+}
+/** True when this row's AUTO columns are driven by the portal (new rules apply to its project). */
+function isAutoRow(project) { return milestonesApply(project.projectNumber); }
 
 // Callbacks for project actions (set by releasability-page.js to avoid circular dependency)
 let projectActions = {
@@ -142,7 +157,12 @@ function createHeaderRow() {
     headerCell.className = 'header-cell tracking-item-header';
     const label = TRACKING_ITEM_LABELS[item] || item;
     headerCell.textContent = label;
-    headerCell.title = label; // Tooltip with full name
+    const auto = AUTO_MILESTONES.includes(item);
+    const tag = document.createElement('span');
+    tag.className = 'tracking-mode-tag ' + (auto ? 'tracking-mode-auto' : 'tracking-mode-manual');
+    tag.textContent = auto ? 'AUTO' : 'MANUAL';
+    headerCell.appendChild(tag);
+    headerCell.title = label + (auto ? ' — AUTO: set by the portal (prints, ticks, the inventory lock)' : ' — MANUAL: click the cell'); // Tooltip with full name
     headerCell.dataset.trackingIndex = index; // Add index for individual targeting
     cells.push(headerCell);
   });
@@ -542,16 +562,32 @@ function createProjectControls(project) {
  * @returns {HTMLElement} Status cell element
  */
 function createStatusCell(project, trackingItem) {
-  const status = project.trackingStatus[trackingItem] || STATUS.INCOMPLETE;
+  // AUTO columns on new-rules projects come from the portal's casting_milestones rows, never from clicks.
+  const auto = AUTO_MILESTONES.includes(trackingItem) && isAutoRow(project);
+  const msRow = auto ? milestoneRowFor(project, trackingItem) : null;
+  const status = auto
+    ? (MS_TO_BOARD[msRow?.status] || STATUS.INCOMPLETE)
+    : (project.trackingStatus[trackingItem] || STATUS.INCOMPLETE);
   const statusConfig = STATUS_DISPLAY[status];
 
   const cell = document.createElement('div');
   // Convert underscore to hyphen for CSS class (in_progress -> in-progress)
   const cssStatus = status.replace(/_/g, '-');
-  cell.className = `status-cell status-${cssStatus}`;
+  cell.className = `status-cell status-${cssStatus}${auto ? ' status-auto' : ''}`;
   cell.dataset.projectId = project.id;
   cell.dataset.trackingItem = trackingItem;
   cell.dataset.status = status;
+  if (auto) {
+    cell.dataset.auto = '1';
+    const when = msRow?.stamped_at ? new Date(msRow.stamped_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : '';
+    cell.title = `${project.project} - ${TRACKING_ITEM_LABELS[trackingItem] || trackingItem}: ${statusConfig.label} (AUTO — set by the portal)`
+      + (msRow?.note ? `\n${msRow.note}` : '') + (when ? `\nSince ${when}` : '');
+    const icon = document.createElement('span');
+    icon.className = 'status-icon';
+    icon.textContent = statusConfig.icon;
+    cell.appendChild(icon);
+    return cell;
+  }
 
   // Status icon
   const icon = document.createElement('span');
