@@ -10,19 +10,22 @@
 
 export const MANUAL_MILESTONES = [
     'Classroom #1', 'Classroom #2', 'Classroom #3',
-    'Shop Folder Built', 'Approved SDs', 'Sample Approval',
     'Rebar/Drilling Layout', 'Mitti QC Template', 'Inflow Sales Ticket',
     '3D Drawings/Parts List', 'Toolpath Program', 'Green Sticker'
 ];
 
 export const AUTO_MILESTONES = [
     'Color Log', 'Casting Inventory', 'Labels', 'Final Tracking',
-    'Batching Sheets', 'Casting Layout', 'Shop Folder Cover', 'Jig List', 'Staging'
+    'Batching Sheets', 'Casting Layout', 'Shop Folder Built', 'Shop Folder Cover', 'Jig List', 'Staging'
 ];
+
+/** The portal's "Releasability Approvals" tab: one row per casting, these columns. Items that are AUTO show
+ *  read-only there (Shop Folder Built = Print Cover pressed); the rest are P. MANUAL cells. */
+export const APPROVALS_TAB_ITEMS = ['Shop Folder Built', 'Approved SDs', 'Sample Approval'];
 
 /** P. MANUAL: a person ticks it, but it can be ticked in the portal (a board-style cell on the tab) as well as on
  *  the board. Both write the same casting_milestones row, so they never disagree. */
-export const PORTAL_MANUAL_MILESTONES = ['Final Optimizer HRS'];
+export const PORTAL_MANUAL_MILESTONES = ['Final Optimizer HRS', 'Approved SDs', 'Sample Approval'];
 
 /** Printouts built from the Casting Inventory: warned/blocked until the inventory is final, and
  *  knocked back to orange whenever the inventory changes after they were printed. */

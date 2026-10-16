@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="src/styles/variables.css">
     <link rel="stylesheet" href="src/styles/base.css">
     <link rel="stylesheet" href="src/styles/buttons.css">
-    <link rel="stylesheet" href="src/styles/project-portal.css?v=20261017-13">
+    <link rel="stylesheet" href="src/styles/project-portal.css?v=20261017-14">
 
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 </head>
@@ -198,6 +198,13 @@
                             <polyline points="12 6 12 12 16 14"/>
                         </svg>
                         <span>Optimizer Hours</span>
+                    </button>
+                    <button class="pp-tab-btn" data-tab="approvals" type="button">
+                        <svg class="pp-tab-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="4" width="18" height="16" rx="2"/>
+                            <polyline points="7 12 10.5 15.5 17 9"/>
+                        </svg>
+                        <span>Releasability Approvals</span>
                     </button>
                     <button class="pp-tab-btn" data-tab="staging" type="button">
                         <svg class="pp-tab-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -847,6 +854,17 @@
                     </div>
 
                     <!-- Tab: Staging (pre-author task descriptions per casting) -->
+                    <div class="pp-tab-panel" data-panel="approvals" hidden>
+                        <div class="pp-opt-wrap">
+                            <div class="pp-opt-header">
+                                <h2 class="pp-opt-title">Releasability Approvals</h2>
+                                <p class="pp-muted pp-opt-sub">The PM sign-offs from the Releasability Board, per casting. Click a cell to flip it; the board follows. Shop Folder Built fills in by itself when the cover is printed (Project Info &rarr; Print Cover).</p>
+                            </div>
+                            <div id="pp-appr-needs-save" class="pp-castings-hint" hidden>Save the project first.</div>
+                            <div id="pp-appr-no-castings" class="pp-castings-hint" hidden>No castings yet &mdash; add castings first.</div>
+                            <div id="pp-appr-table" class="pp-appr-table"></div>
+                        </div>
+                    </div>
                     <div class="pp-tab-panel" data-panel="staging" hidden>
                         <div class="pp-opt-wrap">
                             <div class="pp-opt-header">
@@ -1239,6 +1257,6 @@
         <div id="pp-toast" class="pp-toast" hidden></div>
     </div>
 
-    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20261017-24"></script>
+    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20261017-25"></script>
 </body>
 </html>

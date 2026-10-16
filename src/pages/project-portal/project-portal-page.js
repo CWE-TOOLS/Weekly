@@ -128,7 +128,7 @@ import {
 import { renderCastingLayout } from './casting-layout.js?v=20260701-01';
 import { attachLayoutDrag } from './casting-layout-drag.js?v=20260701-01';
 import { activateJigListTab } from './jig-list.js?v=20261014-5';
-import { CI_DEPENDENT, MS, CI_STATE, milestonesApply } from '../../config/milestones-config.js';
+import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, APPROVALS_TAB_ITEMS } from '../../config/milestones-config.js';
 import { loadMilestonesForProject, saveMilestone, isMilestonesMigrationPending, loadLayoutConditions, LAYOUT_CONDITION_PREFIX } from '../../services/milestones-service.js';
 import {
     loadLayoutPositions,
@@ -529,7 +529,7 @@ function getViewFromUrl() {
 }
 
 const VALID_TABS = new Set([
-    'info', 'job-memos', 'castings', 'optimizer', 'tracking',
+    'info', 'job-memos', 'castings', 'optimizer', 'tracking', 'approvals',
     'casting-layout', 'jig-list', 'shipping', 'color-log', 'batch-tickets', 'cr-notes',
     'actual-labor'
 ]);
@@ -691,6 +691,7 @@ async function showFormView(projectNumber, draftOverrides = null) {
     if (currentTab === 'job-memos')    activateJobMemosTab();
     if (currentTab === 'optimizer')    activateOptimizerTab();
     if (currentTab === 'staging')      activateStagingTab();
+    if (currentTab === 'approvals')    activateApprovalsTab();
     if (currentTab === 'tracking')     activateTrackingTab();
     if (currentTab === 'casting-layout') activateCastingLayoutTab();
     if (currentTab === 'jig-list')     activateJigListTabWithCtx();
@@ -814,7 +815,7 @@ function setActiveTab(tab) {
     if (printBtn) {
         // Tracking + Shipping have per-row print buttons — hide the global one.
         // Job Memos has no print pipeline yet; Casting Layout and Jig List have their own buttons.
-        if (tab === 'tracking' || tab === 'shipping' || tab === 'job-memos' || tab === 'casting-layout' || tab === 'jig-list' || tab === 'actual-labor' || tab === 'staging') {
+        if (tab === 'tracking' || tab === 'shipping' || tab === 'job-memos' || tab === 'casting-layout' || tab === 'jig-list' || tab === 'actual-labor' || tab === 'staging' || tab === 'approvals') {
             printBtn.hidden = true;
         } else {
             printBtn.hidden = false;
@@ -2716,6 +2717,55 @@ async function activateOptimizerTab() {
 
 // ---------- Staging (pre-author task descriptions per casting, by department × day) ----------
 
+/* ===================== Releasability Approvals tab (2026-10-16) ===================== */
+async function activateApprovalsTab() {
+    const needsSave = document.getElementById('pp-appr-needs-save');
+    const noCastings = document.getElementById('pp-appr-no-castings');
+    const table = document.getElementById('pp-appr-table');
+    if (!table) return;
+    if (!currentProjectNumber) { needsSave.hidden = false; noCastings.hidden = true; table.innerHTML = ''; return; }
+    needsSave.hidden = true;
+    if (currentCastings.length === 0) { try { currentCastings = await loadCastings(currentProjectNumber); } catch (e) { /* ignore */ } }
+    if (!msByCasting.size && currentProjectNumber) await loadMilestones();
+    renderApprovals();
+}
+function apprCellHtml(castingId, milestone) {
+    const auto = AUTO_MILESTONES.includes(milestone);
+    const r = msRow(castingId, milestone);
+    const s = r?.status || MS.RED;
+    const when = msWhen(r);
+    const tip = `${milestone}: ${s === MS.GREEN ? 'done' : s === MS.ORANGE ? 'in progress' : 'not done'}`
+        + (r?.note ? ` — ${r.note}` : '') + (when ? ` (since ${when})` : '')
+        + (auto ? ' · set by the portal' : ' · click to flip; the Releasability Board follows');
+    const icon = s === MS.GREEN ? '&#10003;' : s === MS.ORANGE ? '/' : '&minus;';
+    return `<button type="button" class="pp-opt-ms pp-appr-cell pp-opt-ms-${s}${auto ? ' pp-appr-cell-auto' : ''}" data-casting-id="${escapeAttr(castingId)}" data-milestone="${escapeAttr(milestone)}" ${auto ? 'disabled' : ''} title="${escapeAttr(tip)}"><span class="pp-opt-ms-box">${icon}</span></button>`;
+}
+function renderApprovals() {
+    const table = document.getElementById('pp-appr-table');
+    const noCastings = document.getElementById('pp-appr-no-castings');
+    if (!table) return;
+    const scoped = getCastingsForActivePhase();
+    if (!scoped.length) { noCastings.hidden = false; table.innerHTML = ''; return; }
+    noCastings.hidden = true;
+    if (!msOn()) { table.innerHTML = '<div class="pp-castings-hint">This job is before the cut-off — its approvals are clicked on the Releasability Board.</div>'; return; }
+    const head = APPROVALS_TAB_ITEMS.map(m => {
+        const auto = AUTO_MILESTONES.includes(m);
+        const allGreen = scoped.every(c => msStatus(c.id, m) === MS.GREEN);
+        return `<th><span class="pp-appr-col-name">${escapeHtml(m)}</span><span class="pp-appr-col-tag ${auto ? 'pp-appr-tag-auto' : 'pp-appr-tag-pman'}">${auto ? 'AUTO' : 'P. MANUAL'}</span>
+            ${auto ? '' : `<button type="button" class="pp-appr-all" data-action="appr-all" data-milestone="${escapeAttr(m)}" data-to="${allGreen ? 'red' : 'green'}" title="${allGreen ? 'Clear every casting' : 'Mark every casting done'}">${allGreen ? 'clear all' : 'all done'}</button>`}</th>`;
+    }).join('');
+    const rows = scoped.map(c => `<tr><th class="pp-appr-cast">Cast ${escapeHtml(c.casting_number || '')}${c.description ? `<span class="pp-appr-desc">${escapeHtml(c.description)}</span>` : ''}</th>
+        ${APPROVALS_TAB_ITEMS.map(m => `<td>${apprCellHtml(c.id, m)}</td>`).join('')}</tr>`).join('');
+    table.innerHTML = `<table class="pp-appr"><thead><tr><th class="pp-appr-corner"></th>${head}</tr></thead><tbody>${rows}</tbody></table>`;
+}
+async function toggleApproval(castingId, milestone, force = null) {
+    if (!castingId || !milestone || AUTO_MILESTONES.includes(milestone)) return;
+    const green = msStatus(castingId, milestone) === MS.GREEN;
+    const to = force || (green ? MS.RED : MS.GREEN);
+    if ((to === MS.GREEN) === green) return;
+    await msSet(castingId, milestone, to, { note: to === MS.GREEN ? 'Confirmed in the portal' : null, stamp: true });
+}
+
 async function activateStagingTab() {
     const needsSave = document.getElementById('pp-stg-needs-save');
     const noCastings = document.getElementById('pp-stg-no-castings');
@@ -4145,6 +4195,7 @@ function markWorking(castingId, milestone, note = null) {
 /** Inline dots (Tracking tab) follow the cache. */
 function refreshInlineMs() {
     document.querySelectorAll('[data-ms-track]').forEach(el => { el.innerHTML = trackMsInner(el.dataset.msTrack); });
+    document.querySelectorAll('.pp-appr-cell[data-casting-id]').forEach(el => { el.outerHTML = apprCellHtml(el.dataset.castingId, el.dataset.milestone); });
 }
 function trackMsInner(castingId) {
     const one = (m, label) => { const r = msRow(castingId, m); const when = msWhen(r); const tip = `${label}: ${r?.status || 'red'}${r?.note ? ' — ' + r.note : ''}${when ? ' (since ' + when + ')' : ''}`;
@@ -4344,6 +4395,7 @@ function updateMsFloat() {
             case 'castings': html = ''; break;   // the lock controls sit in each casting card
             case 'batch-tickets': { const id = msBatchCastingId(); if (id) html = msCastHead(id) + msLine(id, 'Batching Sheets') + msCiLine(id); break; }
             case 'tracking': html = ''; break;   // shown beside each cast instead
+            case 'approvals': html = ''; break;  // the grid is the status
             case 'casting-layout': if (clSelectedCastingId) html = msCastHead(clSelectedCastingId) + msLine(clSelectedCastingId, 'Casting Layout') + msCiLine(clSelectedCastingId) + layoutConditionHtml(clSelectedCastingId); break;
             case 'jig-list': if (msJigCastingId) html = msCastHead(msJigCastingId) + msLine(msJigCastingId, 'Jig List') + msCiLine(msJigCastingId); break;
             case 'optimizer': if (currentOptCastingId) html = msCastHead(currentOptCastingId) + msLine(currentOptCastingId, 'Final Optimizer HRS'); break;
@@ -7645,6 +7697,8 @@ function wireEvents() {
                 activateOptimizerTab();
             } else if (tab === 'staging') {
                 activateStagingTab();
+            } else if (tab === 'approvals') {
+                activateApprovalsTab();
             } else if (tab === 'tracking') {
                 activateTrackingTab();
             } else if (tab === 'casting-layout') {
@@ -7880,6 +7934,19 @@ function wireEvents() {
     });
 
     // Add Task buttons live inside each column now — handled via delegation in pp-opt-columns below.
+
+    // Releasability Approvals grid
+    document.getElementById('pp-appr-table')?.addEventListener('click', async (e) => {
+        const all = e.target.closest('button[data-action="appr-all"]');
+        if (all) {
+            const to = all.dataset.to === 'green' ? MS.GREEN : MS.RED;
+            for (const c of getCastingsForActivePhase()) await toggleApproval(c.id, all.dataset.milestone, to);
+            renderApprovals();
+            return;
+        }
+        const cell = e.target.closest('button.pp-appr-cell:not([disabled])');
+        if (cell) { await toggleApproval(cell.dataset.castingId, cell.dataset.milestone); renderApprovals(); }
+    });
 
     // Optimizer: column container (event delegation across all visible columns)
     const optColumns = document.getElementById('pp-opt-columns');
@@ -11820,7 +11887,9 @@ function handlePrintCoverPage() {
     }
     // Step 1 of the shop folder: the cover. "Shop Folder Cover" goes orange for the castings in view
     // (green comes with step 2, Print Shop Folder Cover). Never downgrades a green.
-    for (const c of getCastingsForActivePhase()) markWorking(c.id, 'Shop Folder Cover', 'Cover printed — shop folder cover still to print');
+    const coverCastings = getCastingsForActivePhase().map(c => c.id);
+    for (const id of coverCastings) markWorking(id, 'Shop Folder Cover', 'Cover printed — shop folder cover still to print');
+    msArmStamp(coverCastings, 'Shop Folder Built');   // a printed cover goes on a physical folder: Shop Folder Built
     const fields = readCoverFields();
     const html = buildCoverPrintHtml(fields);
 
