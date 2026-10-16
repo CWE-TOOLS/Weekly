@@ -4899,9 +4899,54 @@ async function resetCastingLayout() {
 }
 
 async function printCastingLayout() {
+    // A casting under a special layout condition has no layout to print — offer the notice for the job folder instead.
+    const cond = layoutConditionOf(clSelectedCastingId);
+    if (cond) {
+        if (window.confirm(`This casting has no form layout — special condition: "${cond}".
+
+Print a SPECIAL CONDITION NOTICE for the job folder instead?`)) printLayoutConditionNotice(clSelectedCastingId, cond);
+        return;
+    }
     if (!document.querySelector('#pp-clay-card svg')) { alert('No layout to print yet.'); return; }
     if (!(await printGate([clSelectedCastingId], 'Casting Layout'))) return;
     if (printCastingLayoutNow() !== false) stampPrinted([clSelectedCastingId], 'Casting Layout');
+}
+/** One sheet for the job folder: this casting's layout step was handled by a special condition, not forgotten. */
+function printLayoutConditionNotice(castingId, cond) {
+    const casting = currentCastings.find(c => c.id === castingId);
+    const projectName = (document.getElementById('pp-f-project_name')?.value || '').trim();
+    const job = [currentProjectNumber, projectName].filter(Boolean).join(' ');
+    const cast = casting?.casting_number || '';
+    const today = new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Casting Layout — Special Condition — ${escapeHtml(job)} — Cast ${escapeHtml(cast)}</title><style>
+      @page { size: letter portrait; margin: 0.6in; }
+      body { font-family: 'Segoe UI', Arial, sans-serif; color: #000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .t { font-size: 26pt; font-weight: 800; letter-spacing: .02em; margin: 0; }
+      .t span { background: #86efac; padding: 2px 10px; border-radius: 3px; }
+      .sub { margin: 10pt 0 0; font-size: 12pt; font-weight: 700; letter-spacing: .06em; }
+      .rule { border: 0; border-top: 4px solid #22c55e; margin: 14pt 0 24pt; }
+      .meta { font-size: 14pt; line-height: 1.8; }
+      .meta b { display: inline-block; min-width: 1.6in; color: #333; }
+      .cond { margin: 30pt 0; padding: 22pt 24pt; border: 4px solid #000; border-radius: 10px; text-align: center; }
+      .cond .lab { font-size: 12pt; font-weight: 700; letter-spacing: .14em; color: #444; }
+      .cond .name { font-size: 34pt; font-weight: 900; margin-top: 8pt; }
+      .note { font-size: 13pt; line-height: 1.6; }
+      .foot { position: fixed; bottom: 0.4in; left: 0.6in; right: 0.6in; font-size: 10pt; color: #666; border-top: 1px solid #bbb; padding-top: 6pt; display: flex; justify-content: space-between; }
+    </style></head><body>
+      <h1 class="t"><span>CASTING LAYOUT</span> &mdash; SPECIAL CONDITION</h1>
+      <div class="sub">NO FORM LAYOUT IS ISSUED FOR THIS CASTING &mdash; SEE THE CONDITION BELOW</div>
+      <hr class="rule">
+      <div class="meta"><div><b>Job</b> ${escapeHtml(job)}</div><div><b>Casting</b> ${escapeHtml(cast)}${casting?.description ? ' &mdash; ' + escapeHtml(casting.description) : ''}</div><div><b>Issued</b> ${escapeHtml(today)}</div></div>
+      <div class="cond"><div class="lab">SPECIAL LAYOUT CONDITION</div><div class="name">${escapeHtml(cond)}</div></div>
+      <p class="note">The casting layout step for this casting is complete under the condition above. The forms are handled as the condition describes and are not arranged on the shop-floor tables, so there is no form layout drawing to issue. This notice goes in the job folder so the layout step is not mistaken for forgotten.</p>
+      <div class="foot"><span>Casting Layout &middot; ${escapeHtml(job)}</span><span>Cast ${escapeHtml(cast)} &middot; special condition notice</span></div>
+    </body></html>`;
+    const w = window.open('', '_blank');
+    if (!w) { showToast('Pop-up blocked — allow pop-ups for printing', 'error'); return; }
+    w.document.open();
+    w.document.write(html.replace('</body>', '<script>window.addEventListener("load",()=>{setTimeout(()=>window.print(),200);});</script></body>'));
+    w.document.close();
+    msSet(castingId, 'Casting Layout', MS.GREEN, { note: LAYOUT_CONDITION_PREFIX + cond, stamp: true });
 }
 function printCastingLayoutNow() {
     const svgEl = document.querySelector('#pp-clay-card svg');
