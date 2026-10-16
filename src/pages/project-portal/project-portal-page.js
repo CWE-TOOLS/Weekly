@@ -4920,7 +4920,7 @@ function printLayoutConditionNotice(castingId, cond) {
     const today = new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>Casting Layout — Special Condition — ${escapeHtml(job)} — Cast ${escapeHtml(cast)}</title><style>
       @page { size: letter portrait; margin: 0.6in; }
-      body { font-family: 'Segoe UI', Arial, sans-serif; color: #000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      body { font-family: 'Segoe UI', Arial, sans-serif; color: #000; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       .t { font-size: 26pt; font-weight: 800; letter-spacing: .02em; margin: 0; }
       .t span { background: #86efac; padding: 2px 10px; border-radius: 3px; }
       .sub { margin: 10pt 0 0; font-size: 12pt; font-weight: 700; letter-spacing: .06em; }
