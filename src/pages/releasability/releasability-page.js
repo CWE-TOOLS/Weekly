@@ -36,8 +36,8 @@ import {
   STATUS,
   STATUS_DISPLAY
 } from '../../config/releasability-config.js?v=20260807-2';
-import { renderReleasabilityGrid, getUniqueDepartments, setProjectActions, groupProjectsByWeek, getWeekRange, setMilestoneLookup } from './releasability-grid.js?v=20261015-2';
-import { loadAllMilestones } from '../../services/milestones-service.js';
+import { renderReleasabilityGrid, getUniqueDepartments, setProjectActions, groupProjectsByWeek, getWeekRange, setMilestoneLookup } from './releasability-grid.js?v=20261016-1';
+import { loadAllMilestones, saveMilestone } from '../../services/milestones-service.js';
 
 /** Pull the portal's milestone rows and index them by casting for the grid (AUTO columns). */
 async function refreshMilestoneLookup() {
@@ -1392,7 +1392,32 @@ async function handleProjectDrop(projectId, projectData, targetWeekMonday, targe
  * Handle status cell click - cycle through statuses
  * @param {HTMLElement} cell - The clicked status cell
  */
+/** P. MANUAL cell: toggle red <-> green and write the portal's milestone row (the portal tab shows the same). */
+async function handlePortalManualClick(cell) {
+  const project = getAllProjects().find(p => p.id === cell.dataset.projectId);
+  const castingId = project && project.castingId;
+  if (!castingId) {
+    showError('The portal has no casting for this row yet, so it can only be ticked once the casting exists in the portal.');
+    return;
+  }
+  const next = cell.dataset.status === STATUS.COMPLETE ? STATUS.INCOMPLETE : STATUS.COMPLETE;
+  updateCellVisual(cell, next);
+  try {
+    await saveMilestone({
+      projectNumber: project.projectNumber, castingId, milestone: cell.dataset.trackingItem,
+      status: next === STATUS.COMPLETE ? 'green' : 'red',
+      note: next === STATUS.COMPLETE ? 'Confirmed on the Releasability Board' : null,
+      stampedAt: new Date().toISOString()
+    });
+    await refreshMilestoneLookup();
+  } catch (error) {
+    console.error('❌ Failed to save portal-manual status:', error);
+    showError('Failed to save status change. Please try again.');
+  }
+}
+
 async function handleStatusCellClick(cell) {
+  if (cell.dataset.pmanual === '1') { await handlePortalManualClick(cell); return; }
   if (cell.dataset.auto === '1') {
     // AUTO column: the portal sets it (a print, a tick, the inventory lock). Nothing to click here.
     cell.classList.add('status-auto-nudge');

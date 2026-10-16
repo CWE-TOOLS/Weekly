@@ -16,9 +16,13 @@ export const MANUAL_MILESTONES = [
 ];
 
 export const AUTO_MILESTONES = [
-    'Color Log', 'Final Optimizer HRS', 'Casting Inventory', 'Labels', 'Final Tracking',
+    'Color Log', 'Casting Inventory', 'Labels', 'Final Tracking',
     'Batching Sheets', 'Casting Layout', 'Shop Folder Cover', 'Jig List', 'Staging'
 ];
+
+/** P. MANUAL: a person ticks it, but it can be ticked in the portal (a board-style cell on the tab) as well as on
+ *  the board. Both write the same casting_milestones row, so they never disagree. */
+export const PORTAL_MANUAL_MILESTONES = ['Final Optimizer HRS'];
 
 /** Printouts built from the Casting Inventory: warned/blocked until the inventory is final, and
  *  knocked back to orange whenever the inventory changes after they were printed. */

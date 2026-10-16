@@ -4320,6 +4320,15 @@ body.pp-printing .pp-tab-panel[data-panel="color-log"] { display: none !importan
 .pp-cast-card-ms-note { color: #64748b; font-size: 11px; }
 .pp-cast-card-ms-action { margin-left: auto; }
 .pp-print-label-row-off { opacity: 0.55; }
+/* Optimizer: Final Optimizer HRS cell, same look as a Releasability Board cell */
+.pp-opt-ms { display: inline-flex; align-items: center; gap: 7px; background: none; border: none; padding: 0; margin-left: 10px; cursor: pointer; font: inherit; }
+.pp-opt-ms-box { width: 30px; height: 30px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 16px; line-height: 1;
+    border-top: 1px solid rgba(255, 255, 255, 0.4); border-bottom: 1px solid rgba(0, 0, 0, 0.15); box-shadow: 0 2px 3px rgba(0, 0, 0, 0.18); transition: filter .15s, transform .15s; }
+.pp-opt-ms-red .pp-opt-ms-box { background: #EF5350; }
+.pp-opt-ms-green .pp-opt-ms-box { background: #66BB6A; }
+.pp-opt-ms:hover .pp-opt-ms-box { filter: brightness(1.08); transform: translateY(-1px); box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.18), 0 3px 8px rgba(0, 0, 0, 0.15); }
+.pp-opt-ms-label { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #475569; }
+.pp-opt-col-total .pp-opt-ms { margin-left: auto; }
 
 /* Releasability Board box (bottom right) — 2026-10-15 */
 /* A bar pinned under the portal header, as wide as the tab (position/size set by updateMsFloat) */

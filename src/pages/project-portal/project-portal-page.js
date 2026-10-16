@@ -3500,6 +3500,22 @@ function renderOptPills() {
     `;
 }
 
+/** The Final Optimizer HRS cell on a casting column — looks and works like the board's cell (red − / green ✓). */
+function optMsCellHtml(castingId) {
+    if (!msOn()) return '';
+    const green = msStatus(castingId, 'Final Optimizer HRS') === MS.GREEN;
+    const tip = green ? 'Final Optimizer HRS: done (also green on the Releasability Board) — click to undo'
+                      : 'Final Optimizer HRS: not final yet — click when the hours are final; the Releasability Board follows';
+    return `<button type="button" class="pp-opt-ms ${green ? 'pp-opt-ms-green' : 'pp-opt-ms-red'}" data-action="toggle-final-hours" data-casting-id="${escapeAttr(castingId)}" title="${escapeAttr(tip)}">
+        <span class="pp-opt-ms-box">${green ? '&#10003;' : '&minus;'}</span><span class="pp-opt-ms-label">Final hrs</span></button>`;
+}
+async function toggleFinalHours(castingId) {
+    if (!castingId) return;
+    const green = msStatus(castingId, 'Final Optimizer HRS') === MS.GREEN;
+    await msSet(castingId, 'Final Optimizer HRS', green ? MS.RED : MS.GREEN, { note: green ? null : 'Final hours confirmed', stamp: true });
+    document.querySelectorAll(`.pp-opt-ms[data-casting-id="${CSS.escape(castingId)}"]`).forEach(el => { el.outerHTML = optMsCellHtml(castingId); });
+}
+
 function renderOptColumns() {
     const wrap = document.getElementById('pp-opt-columns');
     if (!wrap) return;
@@ -3590,6 +3606,7 @@ function renderOptColumn(casting) {
                         </svg>
                     </button>
                 </div>
+                ${optMsCellHtml(casting.id)}
             </div>
             <div class="pp-opt-cards" data-casting-id="${escapeAttr(casting.id)}">
                 ${cardsHtml}
@@ -3598,6 +3615,7 @@ function renderOptColumn(casting) {
             <div class="pp-opt-col-total">
                 <span class="pp-opt-col-total-label">Total</span>
                 <span class="pp-opt-col-total-value"><strong data-col-total="${escapeAttr(casting.id)}">0</strong> hrs</span>
+                ${optMsCellHtml(casting.id)}
             </div>
         </div>
     `;
@@ -4325,8 +4343,7 @@ function updateMsFloat() {
             case 'tracking': html = ''; break;   // shown beside each cast instead
             case 'casting-layout': if (clSelectedCastingId) html = msCastHead(clSelectedCastingId) + msLine(clSelectedCastingId, 'Casting Layout') + msCiLine(clSelectedCastingId) + layoutConditionHtml(clSelectedCastingId); break;
             case 'jig-list': if (msJigCastingId) html = msCastHead(msJigCastingId) + msLine(msJigCastingId, 'Jig List') + msCiLine(msJigCastingId); break;
-            case 'optimizer': if (currentOptCastingId) html = msCastHead(currentOptCastingId) + msLine(currentOptCastingId, 'Final Optimizer HRS')
-                + `<label class="pp-ms-tick"><input type="checkbox" data-ms-opt-done="${escapeAttr(currentOptCastingId)}" ${msStatus(currentOptCastingId, 'Final Optimizer HRS') === MS.GREEN ? 'checked' : ''}> Final hours done</label>`; break;
+            case 'optimizer': if (currentOptCastingId) html = msCastHead(currentOptCastingId) + msLine(currentOptCastingId, 'Final Optimizer HRS'); break;
             case 'staging': if (currentStagingCastingId) html = msCastHead(currentStagingCastingId) + msLine(currentStagingCastingId, 'Staging'); break;
             case 'color-log': html = msListChips(scoped, 'Color Log'); break;
             case 'info': html = msListChips(scoped, 'Shop Folder Cover'); break;
@@ -7863,6 +7880,8 @@ function wireEvents() {
     const optColumns = document.getElementById('pp-opt-columns');
 
     optColumns.addEventListener('click', (e) => {
+        const msBtn = e.target.closest('button[data-action="toggle-final-hours"]');
+        if (msBtn) { toggleFinalHours(msBtn.dataset.castingId); return; }
         // Copy hours
         const copyBtn = e.target.closest('button[data-action="copy-hours"]');
         if (copyBtn) {

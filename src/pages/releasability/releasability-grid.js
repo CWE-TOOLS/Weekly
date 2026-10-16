@@ -10,7 +10,7 @@
 import { getMonday, getWeekMonth, getWeekOfMonth } from '../../utils/date-utils.js';
 import { TRACKING_ITEMS, TRACKING_ITEM_LABELS, STATUS, STATUS_DISPLAY } from '../../config/releasability-config.js?v=20260807-2';
 import { isWeekCollapsed } from './releasability-state.js';
-import { AUTO_MILESTONES, MS_TO_BOARD, milestonesApply } from '../../config/milestones-config.js';
+import { AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, MS_TO_BOARD, milestonesApply } from '../../config/milestones-config.js';
 
 // Portal-driven milestones (2026-10-15): "<project#>#<CAST#>" and "<project#>#<CAST#>@<phaseId>" -> Map(milestone -> row)
 let milestoneLookup = new Map();
@@ -161,11 +161,14 @@ function createHeaderRow() {
     labelEl.textContent = label;
     headerCell.appendChild(labelEl);
     const auto = AUTO_MILESTONES.includes(item);
+    const pman = PORTAL_MANUAL_MILESTONES.includes(item);
     const tag = document.createElement('span');
-    tag.className = 'tracking-mode-tag ' + (auto ? 'tracking-mode-auto' : 'tracking-mode-manual');
-    tag.textContent = auto ? 'AUTO' : 'MANUAL';
+    tag.className = 'tracking-mode-tag ' + (auto ? 'tracking-mode-auto' : pman ? 'tracking-mode-pmanual' : 'tracking-mode-manual');
+    tag.textContent = auto ? 'AUTO' : pman ? 'P. MANUAL' : 'MANUAL';
     headerCell.appendChild(tag);
-    headerCell.title = label + (auto ? ' — AUTO: set by the portal (prints, ticks, the inventory lock)' : ' — MANUAL: click the cell'); // Tooltip with full name
+    headerCell.title = label + (auto ? ' — AUTO: set by the portal (prints, ticks, the inventory lock)'
+        : pman ? ' — P. MANUAL: tick it here or on the portal tab, both stay in step'
+        : ' — MANUAL: click the cell'); // Tooltip with full name
     headerCell.dataset.trackingIndex = index; // Add index for individual targeting
     cells.push(headerCell);
   });
@@ -567,8 +570,9 @@ function createProjectControls(project) {
 function createStatusCell(project, trackingItem) {
   // AUTO columns on new-rules projects come from the portal's casting_milestones rows, never from clicks.
   const auto = AUTO_MILESTONES.includes(trackingItem) && isAutoRow(project);
-  const msRow = auto ? milestoneRowFor(project, trackingItem) : null;
-  const status = auto
+  const pman = PORTAL_MANUAL_MILESTONES.includes(trackingItem) && isAutoRow(project);
+  const msRow = (auto || pman) ? milestoneRowFor(project, trackingItem) : null;
+  const status = (auto || pman)
     ? (MS_TO_BOARD[msRow?.status] || STATUS.INCOMPLETE)
     : (project.trackingStatus[trackingItem] || STATUS.INCOMPLETE);
   const statusConfig = STATUS_DISPLAY[status];
@@ -576,10 +580,22 @@ function createStatusCell(project, trackingItem) {
   const cell = document.createElement('div');
   // Convert underscore to hyphen for CSS class (in_progress -> in-progress)
   const cssStatus = status.replace(/_/g, '-');
-  cell.className = `status-cell status-${cssStatus}${auto ? ' status-auto' : ''}`;
+  cell.className = `status-cell status-${cssStatus}${auto ? ' status-auto' : ''}${pman ? ' status-pmanual' : ''}`;
   cell.dataset.projectId = project.id;
   cell.dataset.trackingItem = trackingItem;
   cell.dataset.status = status;
+  if (pman) {
+    // Portal-manual: clickable here (red <-> green) and on the portal tab; both write the portal's row.
+    cell.dataset.pmanual = '1';
+    const when = msRow?.stamped_at ? new Date(msRow.stamped_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : '';
+    cell.title = `${project.project} - ${TRACKING_ITEM_LABELS[trackingItem] || trackingItem}: ${statusConfig.label} (P. MANUAL — click here or tick it on the portal)`
+      + (msRow?.note ? `\n${msRow.note}` : '') + (when ? `\nSince ${when}` : '');
+    const icon = document.createElement('span');
+    icon.className = 'status-icon';
+    icon.textContent = statusConfig.icon;
+    cell.appendChild(icon);
+    return cell;
+  }
   if (auto) {
     cell.dataset.auto = '1';
     const when = msRow?.stamped_at ? new Date(msRow.stamped_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : '';

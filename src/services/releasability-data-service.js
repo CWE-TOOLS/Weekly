@@ -94,6 +94,16 @@ function generateCastingKey(projectNumber, castingNumber, phaseId = null) {
  * @param {Object} project - A board project object
  * @returns {string|null} The casting key, or null when both numbers aren't present
  */
+/** The portal's casting id (project_castings.id) for a board row, or null when the portal has no such casting. */
+function resolvePortalCastingId(phaseData, projectNumber, castingNumber, phaseId) {
+  const key = generateCastingKey(projectNumber, castingNumber);
+  if (!key || !phaseData || !phaseData.castingsByPC) return null;
+  const list = phaseData.castingsByPC.get(key) || [];
+  if (!list.length) return null;
+  const hit = phaseId ? list.find(c => c.phase_id === phaseId) : (list.find(c => !c.phase_id) || list[0]);
+  return hit ? (hit.id || null) : null;
+}
+
 export function getCastingKey(project) {
   return generateCastingKey(
     project && project.projectNumber,
@@ -122,7 +132,7 @@ async function loadPortalPhaseData() {
   const client = getSupabaseClient();
 
   const [castsRes, phasesRes] = await Promise.all([
-    client.from('project_castings').select('project_number, casting_number, phase_id, casting_date'),
+    client.from('project_castings').select('id, project_number, casting_number, phase_id, casting_date'),
     client.from('project_phases').select('id, project_number, phase_name, sort_order')
   ]);
   if (castsRes.error) throw castsRes.error;
@@ -1113,6 +1123,7 @@ export async function loadAllReleasabilityData(forceRefresh = false) {
         displayName: portalName || project.project,
         projectNumber: project.projectNumber || null,
         castingNumber: project.castingNumber || null,
+        castingId: resolvePortalCastingId(phaseData, project.projectNumber, project.castingNumber, phaseId),
         phaseId,
         phaseName: phase ? phase.phaseName : null,
         weekMonday: project.weekMonday,

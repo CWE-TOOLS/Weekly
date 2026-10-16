@@ -802,6 +802,8 @@ html {
 }
 .tracking-mode-auto { background: #0f172a; color: #fff; }
 .tracking-mode-manual { background: rgba(255, 255, 255, 0.75); color: #475569; border: 1px solid rgba(0, 0, 0, 0.15); }
+.tracking-mode-pmanual { background: #1d4ed8; color: #fff; }
+.status-cell.status-pmanual { box-shadow: inset 0 0 0 2px rgba(29, 78, 216, 0.25); }
 .status-cell.status-auto { cursor: default; box-shadow: inset 0 0 0 2px rgba(15, 23, 42, 0.18); }
 .status-cell.status-auto-nudge { animation: status-auto-nudge 0.4s ease-out; }
 @keyframes status-auto-nudge { 0% { transform: scale(1); } 40% { transform: scale(0.92); } 100% { transform: scale(1); } }
