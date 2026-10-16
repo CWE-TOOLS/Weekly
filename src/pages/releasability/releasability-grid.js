@@ -10,7 +10,7 @@
 import { getMonday, getWeekMonth, getWeekOfMonth } from '../../utils/date-utils.js';
 import { TRACKING_ITEMS, TRACKING_ITEM_LABELS, STATUS, STATUS_DISPLAY } from '../../config/releasability-config.js?v=20260807-2';
 import { isWeekCollapsed } from './releasability-state.js';
-import { AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, MS_TO_BOARD, milestonesApply } from '../../config/milestones-config.js';
+import { AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, BOARD_TAG_OVERRIDE, MS_TO_BOARD, milestonesApply } from '../../config/milestones-config.js';
 
 // Portal-driven milestones (2026-10-15): "<project#>#<CAST#>" and "<project#>#<CAST#>@<phaseId>" -> Map(milestone -> row)
 let milestoneLookup = new Map();
@@ -163,8 +163,9 @@ function createHeaderRow() {
     const auto = AUTO_MILESTONES.includes(item);
     const pman = PORTAL_MANUAL_MILESTONES.includes(item);
     const tag = document.createElement('span');
-    tag.className = 'tracking-mode-tag ' + (auto ? 'tracking-mode-auto' : pman ? 'tracking-mode-pmanual' : 'tracking-mode-manual');
-    tag.textContent = auto ? 'AUTO' : pman ? 'P. MANUAL' : 'MANUAL';
+    const tagText = BOARD_TAG_OVERRIDE[item] || (auto ? 'AUTO' : pman ? 'P. MANUAL' : 'MANUAL');
+    tag.className = 'tracking-mode-tag ' + (tagText === 'AUTO' ? 'tracking-mode-auto' : tagText === 'P. MANUAL' ? 'tracking-mode-pmanual' : 'tracking-mode-manual');
+    tag.textContent = tagText;
     headerCell.appendChild(tag);
     headerCell.title = label + (auto ? ' — AUTO: set by the portal (prints, ticks, the inventory lock)'
         : pman ? ' — P. MANUAL: tick it here or on the portal tab, both stay in step'

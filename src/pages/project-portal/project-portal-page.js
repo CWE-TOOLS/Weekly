@@ -794,6 +794,7 @@ function setActiveTab(tab) {
     currentTab = tab;
     updateFloats();   // the floating out-of-date warning only belongs to the Batch Tickets tab
     requestAnimationFrame(updateMsFloat);   // again once the new tab has painted (the Releasability bar sizes to it)
+    if (tab === 'cr-notes') renderClassroomMs();
     if (tab !== 'castings' && invEdits.size) invEdits.clear();   // leaving the Castings tab accepts every inventory edit
     if (tab !== 'castings') invSelected.clear();
     updateInvFloat();
@@ -4159,6 +4160,7 @@ async function loadMilestones() {
     catch (err) { logger.error('[milestones] load failed', err); }
     deriveColorLogMilestones();
     updateMsFloat();
+    renderClassroomMs();
 }
 async function msSet(castingId, milestone, status, { note = null, locked = false, stamp = false } = {}) {
     if (!msOn() || !castingId) return null;
@@ -4193,8 +4195,35 @@ function markWorking(castingId, milestone, note = null) {
     if (msStatus(castingId, milestone) === MS.RED) msSet(castingId, milestone, MS.ORANGE, { note, stamp: true });
 }
 /** Inline dots (Tracking tab) follow the cache. */
+/* Class Rooms tab: one board cell per classroom for the whole job (every casting in the phase).
+   green = every casting done, orange = some, red = none. Click flips all of them. */
+function classroomMsHtml(n) {
+    const m = `Classroom #${n}`;
+    const scoped = getCastingsForActivePhase();
+    if (!msOn() || !scoped.length) return '';
+    const greens = scoped.filter(c => msStatus(c.id, m) === MS.GREEN).length;
+    const s = greens === scoped.length ? MS.GREEN : greens ? MS.ORANGE : MS.RED;
+    const tip = s === MS.GREEN ? `${m}: done for every casting — click to clear` : s === MS.ORANGE ? `${m}: done for ${greens} of ${scoped.length} castings — click to mark all done` : `${m}: not done — click when the classroom has been held (the Releasability Board follows)`;
+    const icon = s === MS.GREEN ? '&#10003;' : s === MS.ORANGE ? '/' : '&minus;';
+    return `<button type="button" class="pp-opt-ms pp-opt-ms-${s}" data-action="toggle-classroom" data-classroom="${n}" title="${escapeAttr(tip)}"><span class="pp-opt-ms-box">${icon}</span><span class="pp-opt-ms-label">Board</span></button>`;
+}
+function renderClassroomMs() {
+    document.querySelectorAll('[data-cr-ms]').forEach(el => { el.innerHTML = classroomMsHtml(el.dataset.crMs); });
+}
+async function toggleClassroom(n) {
+    const m = `Classroom #${n}`;
+    const scoped = getCastingsForActivePhase();
+    if (!scoped.length) return;
+    const allGreen = scoped.every(c => msStatus(c.id, m) === MS.GREEN);
+    for (const c of scoped) {
+        if (allGreen) await msSet(c.id, m, MS.RED, { note: null, stamp: true });
+        else if (msStatus(c.id, m) !== MS.GREEN) await msSet(c.id, m, MS.GREEN, { note: `Classroom ${n} held`, stamp: true });
+    }
+    renderClassroomMs();
+}
 function refreshInlineMs() {
     document.querySelectorAll('[data-ms-track]').forEach(el => { el.innerHTML = trackMsInner(el.dataset.msTrack); });
+    renderClassroomMs();
     document.querySelectorAll('.pp-appr-cell[data-casting-id]').forEach(el => { el.outerHTML = apprCellHtml(el.dataset.castingId, el.dataset.milestone); });
 }
 function trackMsInner(castingId) {
@@ -7560,6 +7589,11 @@ function wireEvents() {
             scheduleProjectInfoSave();
         });
 
+        // Classroom board cells
+        crNotesPanel.addEventListener('click', (e) => {
+            const b = e.target.closest('button[data-action="toggle-classroom"]');
+            if (b) toggleClassroom(b.dataset.classroom);
+        });
         // Classroom sub-tabs (1 / 2 / 3) — switch the visible classroom panel.
         crNotesPanel.querySelectorAll('.pp-cr-subtab').forEach(btn => {
             btn.addEventListener('click', () => {

@@ -4347,6 +4347,8 @@ body.pp-printing .pp-tab-panel[data-panel="color-log"] { display: none !importan
 .pp-appr-desc { display: block; font-weight: 400; color: #64748b; font-size: 11px; }
 .pp-appr tbody tr:last-child th, .pp-appr tbody tr:last-child td { border-bottom: none; }
 .pp-appr-cell { margin-left: 0; }
+.pp-cr-ms { display: inline-flex; align-items: center; margin: 0 14px 0 -6px; }
+.pp-cr-ms .pp-opt-ms { margin-left: 0; }
 .pp-appr-cell-auto { cursor: default; }
 .pp-appr-cell-auto:hover .pp-opt-ms-box { filter: none; transform: none; box-shadow: 0 2px 3px rgba(0, 0, 0, 0.18); }
 

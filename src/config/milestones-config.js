@@ -25,7 +25,11 @@ export const APPROVALS_TAB_ITEMS = ['Approved SDs', 'Sample Approval'];
 
 /** P. MANUAL: a person ticks it, but it can be ticked in the portal (a board-style cell on the tab) as well as on
  *  the board. Both write the same casting_milestones row, so they never disagree. */
-export const PORTAL_MANUAL_MILESTONES = ['Final Optimizer HRS', 'Approved SDs', 'Sample Approval'];
+export const PORTAL_MANUAL_MILESTONES = ['Final Optimizer HRS', 'Approved SDs', 'Sample Approval', 'Classroom #1', 'Classroom #2', 'Classroom #3'];
+
+/** Board header tag to show instead of the kind's default (the Classrooms stay labelled MANUAL on the board
+ *  although they can also be ticked on the portal's Class Rooms tab). */
+export const BOARD_TAG_OVERRIDE = { 'Classroom #1': 'MANUAL', 'Classroom #2': 'MANUAL', 'Classroom #3': 'MANUAL' };
 
 /** Printouts built from the Casting Inventory: warned/blocked until the inventory is final, and
  *  knocked back to orange whenever the inventory changes after they were printed. */

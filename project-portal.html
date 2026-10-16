@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="src/styles/variables.css">
     <link rel="stylesheet" href="src/styles/base.css">
     <link rel="stylesheet" href="src/styles/buttons.css">
-    <link rel="stylesheet" href="src/styles/project-portal.css?v=20261017-14">
+    <link rel="stylesheet" href="src/styles/project-portal.css?v=20261017-15">
 
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 </head>
@@ -240,7 +240,7 @@
                             <line x1="7" y1="9" x2="13" y2="9"/>
                             <line x1="7" y1="13" x2="11" y2="13"/>
                         </svg>
-                        <span>CR Notes</span>
+                        <span>Class Rooms</span>
                     </button>
                     <button class="pp-tab-btn" data-tab="actual-labor" type="button">
                         <svg class="pp-tab-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -898,8 +898,8 @@
                     <div class="pp-tab-panel" data-panel="cr-notes" hidden>
                         <div class="pp-cr-wrap">
                             <div class="pp-cr-header">
-                                <h2 class="pp-cr-title">Classroom Notes</h2>
-                                <p class="pp-muted pp-cr-sub">Switch between classrooms to capture per-classroom notes. General Notes are shared across all three.</p>
+                                <h2 class="pp-cr-title">Class Rooms</h2>
+                                <p class="pp-muted pp-cr-sub">Switch between classrooms to capture per-classroom notes. General Notes are shared across all three. The cell beside each classroom is its Releasability Board check for this job &mdash; click it here or on the board.</p>
                             </div>
 
                             <!-- Classroom sub-tabs -->
@@ -908,14 +908,17 @@
                                     <span class="pp-cr-badge">1</span>
                                     <span>Classroom 1</span>
                                 </button>
+                                <span class="pp-cr-ms" data-cr-ms="1"></span>
                                 <button type="button" class="pp-cr-subtab" data-classroom="2" role="tab" aria-selected="false">
                                     <span class="pp-cr-badge">2</span>
                                     <span>Classroom 2</span>
                                 </button>
+                                <span class="pp-cr-ms" data-cr-ms="2"></span>
                                 <button type="button" class="pp-cr-subtab" data-classroom="3" role="tab" aria-selected="false">
                                     <span class="pp-cr-badge">3</span>
                                     <span>Classroom 3</span>
                                 </button>
+                                <span class="pp-cr-ms" data-cr-ms="3"></span>
                             </div>
 
                             <!-- One classroom panel visible at a time -->
@@ -1257,6 +1260,6 @@
         <div id="pp-toast" class="pp-toast" hidden></div>
     </div>
 
-    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20261017-26"></script>
+    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20261017-27"></script>
 </body>
 </html>
