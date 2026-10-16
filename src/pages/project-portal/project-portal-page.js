@@ -4195,17 +4195,26 @@ function markWorking(castingId, milestone, note = null) {
     if (msStatus(castingId, milestone) === MS.RED) msSet(castingId, milestone, MS.ORANGE, { note, stamp: true });
 }
 /** Inline dots (Tracking tab) follow the cache. */
-/* Class Rooms tab: one board cell per classroom for the whole job (every casting in the phase).
-   green = every casting done, orange = some, red = none. Click flips all of them. */
+/* Class Rooms tab: one board cell per classroom for the whole JOB. Clicking it marks the classroom held for every
+   casting in the phase (rows noted "Classroom n held"); clicking again clears them all. A per-casting change made on
+   the board afterwards (e.g. cast 6 set red because it needs its own classroom) is an exception the board keeps —
+   it does not move this cell. */
+function classroomHeldNote(n) { return `Classroom ${n} held`; }
+function classroomHeld(n) {
+    const m = `Classroom #${n}`;
+    return getCastingsForActivePhase().some(c => { const r = msRow(c.id, m); return r && r.status === MS.GREEN && r.note === classroomHeldNote(n); });
+}
 function classroomMsHtml(n) {
     const m = `Classroom #${n}`;
     const scoped = getCastingsForActivePhase();
     if (!msOn() || !scoped.length) return '';
-    const greens = scoped.filter(c => msStatus(c.id, m) === MS.GREEN).length;
-    const s = greens === scoped.length ? MS.GREEN : greens ? MS.ORANGE : MS.RED;
-    const tip = s === MS.GREEN ? `${m}: done for every casting — click to clear` : s === MS.ORANGE ? `${m}: done for ${greens} of ${scoped.length} castings — click to mark all done` : `${m}: not done — click when the classroom has been held (the Releasability Board follows)`;
-    const icon = s === MS.GREEN ? '&#10003;' : s === MS.ORANGE ? '/' : '&minus;';
-    return `<button type="button" class="pp-opt-ms pp-opt-ms-${s}" data-action="toggle-classroom" data-classroom="${n}" title="${escapeAttr(tip)}"><span class="pp-opt-ms-box">${icon}</span><span class="pp-opt-ms-label">Board</span></button>`;
+    const held = classroomHeld(n);
+    const exceptions = held ? scoped.filter(c => msStatus(c.id, m) !== MS.GREEN).length : 0;
+    const s = held ? MS.GREEN : MS.RED;
+    const tip = held
+        ? `${m}: held for this job${exceptions ? ` (${exceptions} casting${exceptions === 1 ? '' : 's'} set differently on the Releasability Board)` : ''} — click to clear it for every casting`
+        : `${m}: not held yet — click when the classroom has been held; every casting goes green on the Releasability Board`;
+    return `<button type="button" class="pp-opt-ms pp-opt-ms-${s}" data-action="toggle-classroom" data-classroom="${n}" title="${escapeAttr(tip)}"><span class="pp-opt-ms-box">${held ? '&#10003;' : '&minus;'}</span><span class="pp-opt-ms-label">Board</span></button>`;
 }
 function renderClassroomMs() {
     document.querySelectorAll('[data-cr-ms]').forEach(el => { el.innerHTML = classroomMsHtml(el.dataset.crMs); });
@@ -4214,10 +4223,10 @@ async function toggleClassroom(n) {
     const m = `Classroom #${n}`;
     const scoped = getCastingsForActivePhase();
     if (!scoped.length) return;
-    const allGreen = scoped.every(c => msStatus(c.id, m) === MS.GREEN);
+    const held = classroomHeld(n);
     for (const c of scoped) {
-        if (allGreen) await msSet(c.id, m, MS.RED, { note: null, stamp: true });
-        else if (msStatus(c.id, m) !== MS.GREEN) await msSet(c.id, m, MS.GREEN, { note: `Classroom ${n} held`, stamp: true });
+        if (held) { if (msStatus(c.id, m) !== MS.RED) await msSet(c.id, m, MS.RED, { note: null, stamp: true }); }
+        else await msSet(c.id, m, MS.GREEN, { note: classroomHeldNote(n), stamp: true });
     }
     renderClassroomMs();
 }
