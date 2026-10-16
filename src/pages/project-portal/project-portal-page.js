@@ -10619,7 +10619,14 @@ function handlePhaseSwitch(phaseId) {
         // Re-activate with the newly scoped castings; the module keeps the
         // selected casting when it's still in scope.
         activateJigListTabWithCtx();
+    } else if (currentTab === 'approvals') {
+        renderApprovals();
+    } else if (currentTab === 'cr-notes') {
+        renderClassroomMs();
     }
+    // The Releasability bar lists the castings of the phase in view — rebuild it for the new phase.
+    if (msFloatEl) msFloatEl.dataset.key = '';
+    updateMsFloat();
 }
 
 function renderPhasesSection() {
