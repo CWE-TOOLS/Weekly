@@ -127,7 +127,7 @@ import {
 } from '../../services/classroom-tasks-service.js';
 import { renderCastingLayout } from './casting-layout.js?v=20260701-01';
 import { attachLayoutDrag } from './casting-layout-drag.js?v=20260701-01';
-import { activateJigListTab } from './jig-list.js?v=20261014-5';
+import { activateJigListTab } from './jig-list.js?v=20261014-6';
 import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, APPROVALS_TAB_ITEMS } from '../../config/milestones-config.js';
 import { loadMilestonesForProject, saveMilestone, isMilestonesMigrationPending, loadLayoutConditions, LAYOUT_CONDITION_PREFIX } from '../../services/milestones-service.js';
 import {
@@ -4152,6 +4152,8 @@ function ciStatus(castingId) { return msStatus(castingId, 'Casting Inventory'); 
 function ciFinal(castingId) { return ciStatus(castingId) === MS.GREEN; }
 function ciLockedById(castingId) { const r = castingId ? msRow(castingId, 'Casting Inventory') : null; return !!(msOn() && r && r.status === MS.GREEN && r.locked); }
 function msCastName(id) { return 'Cast ' + (currentCastings.find(c => c.id === id)?.casting_number || '?'); }
+/** True once this job has any portal record at all — from then on it is on the new format (derived states included). */
+function msProjectTouched() { for (const m of msByCasting.values()) if (m && m.size) return true; return false; }
 
 async function loadMilestones() {
     msByCasting = new Map();
@@ -4170,9 +4172,11 @@ async function msSet(castingId, milestone, status, { note = null, locked = false
     if (!msByCasting.has(castingId)) msByCasting.set(castingId, new Map());
     msByCasting.get(castingId).set(milestone, row);
     updateMsFloat(); refreshInlineMs();
+    const firstTouch = !prev && [...msByCasting.values()].reduce((n, m) => n + m.size, 0) === 1;
     try {
         const saved = await saveMilestone({ projectNumber: currentProjectNumber, castingId, milestone, status, locked, note, stampedAt: row.stamped_at });
         if (saved) { msByCasting.get(castingId).set(milestone, saved); updateMsFloat(); refreshInlineMs(); }
+        if (firstTouch) { deriveColorLogMilestones(); deriveStagingMilestones(); }
         else if (isMilestonesMigrationPending()) showToast('Not saved: the casting_milestones table does not exist yet — run migration/casting-milestones.sql in Supabase.', 'error');
     } catch (err) {
         logger.error('[milestones] save failed', err);
@@ -4190,8 +4194,9 @@ function stampPrinted(castingIds, milestone) {
 }
 function msFlushPendingStamp() { const p = msPendingStamp; msPendingStamp = null; if (p) stampPrinted(p.ids, p.milestone); }
 /** Work has started on this item (forms laid out, jig list imported…): red becomes orange; green and orange stay. */
-function markWorking(castingId, milestone, note = null) {
+function markWorking(castingId, milestone, note = null, onlyIfTouched = false) {
     if (!msOn() || !castingId) return;
+    if (onlyIfTouched && !msProjectTouched()) return;   // looking at an old job is not touching it
     if (msStatus(castingId, milestone) === MS.RED) msSet(castingId, milestone, MS.ORANGE, { note, stamp: true });
 }
 /** Inline dots (Tracking tab) follow the cache. */
@@ -4263,7 +4268,7 @@ function msInventoryChanged(castingId) {
 }
 /** Color Log: red = no color on the casting, orange = color entered, green = color log printed since. */
 function deriveColorLogMilestones() {
-    if (!msOn()) return;
+    if (!msOn() || !msProjectTouched()) return;
     for (const c of currentCastings) {
         const r = msRow(c.id, 'Color Log');
         if (r && r.status === MS.GREEN) continue;
@@ -4274,7 +4279,7 @@ function deriveColorLogMilestones() {
 }
 /** Staging: red = nothing filled, orange = some, green = every staging field of the casting filled. */
 function deriveStagingMilestones() {
-    if (!msOn() || !currentStagingScaffold.size) return;
+    if (!msOn() || !currentStagingScaffold.size || !msProjectTouched()) return;
     for (const c of currentCastings) {
         const castNum = String(c.casting_number || '');
         const depts = currentStagingScaffold.get(castNum) || [];
@@ -4935,7 +4940,7 @@ async function loadLayoutPositionsForSelected() {
         clLayoutPositions = clSelectedCastingId
             ? await loadLayoutPositions(clSelectedCastingId)
             : [];
-        if (Array.isArray(clLayoutPositions) && clLayoutPositions.length) markWorking(clSelectedCastingId, 'Casting Layout', 'Forms laid out');
+        if (Array.isArray(clLayoutPositions) && clLayoutPositions.length) markWorking(clSelectedCastingId, 'Casting Layout', 'Forms laid out', true);
     } catch (e) {
         logger.error('[project-portal] loadLayoutPositions failed:', e);
         clLayoutPositions = [];

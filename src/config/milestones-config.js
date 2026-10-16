@@ -41,10 +41,11 @@ export const MS = { RED: 'red', ORANGE: 'orange', GREEN: 'green' };
 export const MS_TO_BOARD = { red: 'incomplete', orange: 'in_progress', green: 'complete' };
 
 /**
- * Cut-off: the new rules apply only to projects at/after this. Both null = every project
- * (the test copy). Set ONE of them before publishing so older jobs keep their hand-set board.
- *   project: the first project number that gets the new rules (compared as text, e.g. '0900')
- *   date:    'YYYY-MM-DD' — projects created on/after this date get the new rules
+ * Release rule (2026-10-16, "touched follows the new format"): there is NO cut-off. A board cell with a
+ * portal record behind it is driven by the portal; a cell without one keeps the hand-set colour it has
+ * today and is clicked the old way. The derived states (Color Log, Staging, jig-list imported, forms laid
+ * out) only start writing once the job has its first real record, so merely opening an old job changes
+ * nothing on the board. MILESTONES_FROM is kept as an emergency switch only (both null = on everywhere).
  */
 export const MILESTONES_FROM = { project: null, date: null };
 

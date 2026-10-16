@@ -191,7 +191,7 @@ function selectCasting(castingId) {
     stateByCasting.set(castingId, st);
   }
   S = st;
-  if (st && st.inv && st.inv.importedAt) window.__ppMilestones?.markWorking(castingId, 'Jig List', 'Imported from Casting Inventory');
+  if (st && st.inv && st.inv.importedAt) window.__ppMilestones?.markWorking(castingId, 'Jig List', 'Imported from Casting Inventory', true);
   normalizeSections();
   syncDepthsFromXsec(true);
   // The printed title always mirrors the portal project record (Info tab),

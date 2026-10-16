@@ -570,11 +570,16 @@ function createProjectControls(project) {
  */
 function createStatusCell(project, trackingItem) {
   // AUTO columns on new-rules projects come from the portal's casting_milestones rows, never from clicks.
-  const auto = AUTO_MILESTONES.includes(trackingItem) && isAutoRow(project);
+  // "Touched follows the new format": a cell with a portal record is the portal's; without one it is the
+  // old hand-set cell (same colour as before the release, clicked the old way). A P. MANUAL cell is always
+  // clickable — its first click creates the record.
+  const msRow0 = (AUTO_MILESTONES.includes(trackingItem) || PORTAL_MANUAL_MILESTONES.includes(trackingItem)) && isAutoRow(project)
+    ? milestoneRowFor(project, trackingItem) : null;
+  const auto = AUTO_MILESTONES.includes(trackingItem) && isAutoRow(project) && !!msRow0;
   const pman = PORTAL_MANUAL_MILESTONES.includes(trackingItem) && isAutoRow(project);
-  const msRow = (auto || pman) ? milestoneRowFor(project, trackingItem) : null;
-  const status = (auto || pman)
-    ? (MS_TO_BOARD[msRow?.status] || STATUS.INCOMPLETE)
+  const msRow = msRow0;
+  const status = msRow
+    ? (MS_TO_BOARD[msRow.status] || STATUS.INCOMPLETE)
     : (project.trackingStatus[trackingItem] || STATUS.INCOMPLETE);
   const statusConfig = STATUS_DISPLAY[status];
 
