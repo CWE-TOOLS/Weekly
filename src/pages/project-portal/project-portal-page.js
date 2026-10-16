@@ -11813,6 +11813,9 @@ function handlePrintCoverPage() {
         showToast('Save the project first', 'error');
         return;
     }
+    // Step 1 of the shop folder: the cover. "Shop Folder Cover" goes orange for the castings in view
+    // (green comes with step 2, Print Shop Folder Cover). Never downgrades a green.
+    for (const c of getCastingsForActivePhase()) markWorking(c.id, 'Shop Folder Cover', 'Cover printed — shop folder cover still to print');
     const fields = readCoverFields();
     const html = buildCoverPrintHtml(fields);
 
