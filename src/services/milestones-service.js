@@ -79,6 +79,34 @@ export async function loadAllMilestones() {
     return data || [];
 }
 
+/** Prefix used in the note of a "Casting Layout" row that was marked green by a special condition. */
+export const LAYOUT_CONDITION_PREFIX = 'Special condition: ';
+
+/**
+ * Every special layout condition ever used, on any job — the names after the prefix, A→Z.
+ * (They live in the notes of "Casting Layout" rows, so a condition is "saved" by being used once.)
+ */
+export async function loadLayoutConditions() {
+    const client = await getClient();
+    if (!client) return [];
+    const { data, error } = await client
+        .from(TABLE)
+        .select('note')
+        .eq('milestone', 'Casting Layout')
+        .like('note', LAYOUT_CONDITION_PREFIX + '%');
+    if (error) {
+        if (isMissingTable(error)) { notePending(); return []; }
+        logger.error('[milestones] loadLayoutConditions failed:', error);
+        return [];
+    }
+    const names = new Set();
+    for (const r of data || []) {
+        const n = String(r.note || '').slice(LAYOUT_CONDITION_PREFIX.length).trim();
+        if (n) names.add(n);
+    }
+    return [...names].sort((a, b) => a.localeCompare(b));
+}
+
 /**
  * Insert-or-update one milestone row (keyed on casting_id + milestone).
  * @param {{projectNumber:string, castingId:string, milestone:string, status:string, locked?:boolean, note?:string|null, stampedAt?:string|null}} m

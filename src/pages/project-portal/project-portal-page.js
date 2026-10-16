@@ -129,7 +129,7 @@ import { renderCastingLayout } from './casting-layout.js?v=20260701-01';
 import { attachLayoutDrag } from './casting-layout-drag.js?v=20260701-01';
 import { activateJigListTab } from './jig-list.js?v=20261014-5';
 import { CI_DEPENDENT, MS, CI_STATE, milestonesApply } from '../../config/milestones-config.js';
-import { loadMilestonesForProject, saveMilestone, isMilestonesMigrationPending } from '../../services/milestones-service.js';
+import { loadMilestonesForProject, saveMilestone, isMilestonesMigrationPending, loadLayoutConditions, LAYOUT_CONDITION_PREFIX } from '../../services/milestones-service.js';
 import {
     loadLayoutPositions,
     snapshotLayout,
@@ -468,6 +468,7 @@ let msByCasting = new Map();          // castingId -> Map(milestone -> row)
 let msPendingStamp = null;            // { ids, milestone } set by a print handler, consumed when the print fires
 let msJigCastingId = null;            // the Jig List tab's active casting (the module tells us)
 let msFloatEl = null;
+let msLayoutConditions = null;        // special layout conditions used anywhere (null = not loaded yet)
 let stagingGridSaveTimers = new Map();       // `${castingNumber}|${dept}|${day}` -> debounce handle
 let copiedStaging = null;                    // { fromCastNum, scaffold:[{department,days}], descById:{`${dept}|${day}`:desc} } from a copy action
 
@@ -4145,7 +4146,9 @@ function msInventoryChanged(castingId) {
     if (!msOn() || !castingId) return;
     for (const m of CI_DEPENDENT) {
         const r = msRow(castingId, m);
-        if (r && r.status === MS.GREEN) msSet(castingId, m, MS.ORANGE, { note: 'Casting Inventory changed after this was printed — print it again' });
+        if (r && r.status === MS.GREEN && !String(r.note || '').startsWith(LAYOUT_CONDITION_PREFIX)) {
+            msSet(castingId, m, MS.ORANGE, { note: 'Casting Inventory changed after this was printed — print it again' });
+        }
     }
     deriveColorLogMilestones();
 }
@@ -4245,6 +4248,48 @@ function msLine(castingId, milestone, label) {
 }
 function msCiLine(castingId) { const s = ciStatus(castingId); return `<div class="pp-ms-line pp-ms-line-ci">${msDot(s)}<span class="pp-ms-label">${escapeHtml(CI_STATE[s].label)}</span></div>`; }
 function msCastHead(castingId) { return `<div class="pp-ms-cast">${escapeHtml(msCastName(castingId))}</div>`; }
+
+// ---- Special layout conditions (2026-10-16): a casting that is never laid out (e.g. Jane Street — forms cast and
+// stacked on vertical curing racks) goes green by picking a named condition. Names are shared across every job.
+function layoutConditionOf(castingId) {
+    const note = String(msRow(castingId, 'Casting Layout')?.note || '');
+    return note.startsWith(LAYOUT_CONDITION_PREFIX) ? note.slice(LAYOUT_CONDITION_PREFIX.length) : '';
+}
+function layoutConditionHtml(castingId) {
+    if (msLayoutConditions === null) {
+        msLayoutConditions = [];
+        loadLayoutConditions().then(list => { msLayoutConditions = list; updateMsFloat(); }).catch(() => {});
+    }
+    const cur = layoutConditionOf(castingId);
+    const names = msLayoutConditions.includes(cur) || !cur ? msLayoutConditions : [cur, ...msLayoutConditions];
+    return `<label class="pp-ms-tick pp-ms-cond" title="A casting that is never laid out (vertical curing racks, etc.) goes green by naming the special condition. The list is shared by every job.">Special condition
+        <select data-ms-layout-cond="${escapeAttr(castingId)}" class="pp-ms-cond-select">
+            <option value=""${cur ? '' : ' selected'}>— none —</option>
+            ${names.map(n => `<option value="${escapeAttr(n)}"${n === cur ? ' selected' : ''}>${escapeHtml(n)}</option>`).join('')}
+            <option value="__add__">Add a condition…</option>
+        </select></label>`;
+}
+async function handleLayoutConditionPick(castingId, value) {
+    if (!castingId) return;
+    let name = value;
+    if (value === '__add__') {
+        name = (window.prompt('Name the special layout condition (e.g. "vertical curing racks"). It will be offered on every job from now on.') || '').trim();
+        if (!name) { updateMsFloat(); return; }
+    }
+    if (!name) {
+        // back to the normal rule: orange when forms are laid out, red otherwise
+        const laid = castingId === clSelectedCastingId && Array.isArray(clLayoutPositions) && clLayoutPositions.length > 0;
+        await msSet(castingId, 'Casting Layout', laid ? MS.ORANGE : MS.RED, { note: laid ? 'Forms laid out' : null, stamp: laid });
+        msFloatEl && (msFloatEl.dataset.key = '');
+        updateMsFloat();
+        return;
+    }
+    if (!msLayoutConditions.includes(name)) msLayoutConditions = [...msLayoutConditions, name].sort((a, b) => a.localeCompare(b));
+    await msSet(castingId, 'Casting Layout', MS.GREEN, { note: LAYOUT_CONDITION_PREFIX + name, stamp: true });
+    msFloatEl && (msFloatEl.dataset.key = '');
+    updateMsFloat();
+    showToast(`Cast ${currentCastings.find(c => c.id === castingId)?.casting_number || ''}: Casting Layout green — special condition "${name}".`);
+}
 /** One column for many castings: "Shop Folder Cover: ● Cast 1  ● Cast 2 …" */
 function msListChips(castings, milestone) {
     return `<div class="pp-ms-cast">${escapeHtml(milestone)}</div>` + castings.map(c => {
@@ -4278,7 +4323,7 @@ function updateMsFloat() {
             case 'castings': html = ''; break;   // the lock controls sit in each casting card
             case 'batch-tickets': { const id = msBatchCastingId(); if (id) html = msCastHead(id) + msLine(id, 'Batching Sheets') + msCiLine(id); break; }
             case 'tracking': html = ''; break;   // shown beside each cast instead
-            case 'casting-layout': if (clSelectedCastingId) html = msCastHead(clSelectedCastingId) + msLine(clSelectedCastingId, 'Casting Layout') + msCiLine(clSelectedCastingId); break;
+            case 'casting-layout': if (clSelectedCastingId) html = msCastHead(clSelectedCastingId) + msLine(clSelectedCastingId, 'Casting Layout') + msCiLine(clSelectedCastingId) + layoutConditionHtml(clSelectedCastingId); break;
             case 'jig-list': if (msJigCastingId) html = msCastHead(msJigCastingId) + msLine(msJigCastingId, 'Jig List') + msCiLine(msJigCastingId); break;
             case 'optimizer': if (currentOptCastingId) html = msCastHead(currentOptCastingId) + msLine(currentOptCastingId, 'Final Optimizer HRS')
                 + `<label class="pp-ms-tick"><input type="checkbox" data-ms-opt-done="${escapeAttr(currentOptCastingId)}" ${msStatus(currentOptCastingId, 'Final Optimizer HRS') === MS.GREEN ? 'checked' : ''}> Final hours done</label>`; break;
@@ -4304,7 +4349,9 @@ function updateMsFloat() {
         });
         msFloatEl.addEventListener('change', (e) => {
             const cb = e.target.closest('[data-ms-opt-done]');
-            if (cb) msSet(cb.dataset.msOptDone, 'Final Optimizer HRS', cb.checked ? MS.GREEN : MS.RED, { note: cb.checked ? 'Final hours confirmed' : null, stamp: true });
+            if (cb) { msSet(cb.dataset.msOptDone, 'Final Optimizer HRS', cb.checked ? MS.GREEN : MS.RED, { note: cb.checked ? 'Final hours confirmed' : null, stamp: true }); return; }
+            const sel = e.target.closest('[data-ms-layout-cond]');
+            if (sel) handleLayoutConditionPick(sel.dataset.msLayoutCond, sel.value);
         });
     }
     const pending = isMilestonesMigrationPending() ? '<div class="pp-ms-warn">Not saving yet — run migration/casting-milestones.sql in Supabase</div>' : '';
