@@ -19,9 +19,9 @@ export const AUTO_MILESTONES = [
     'Batching Sheets', 'Casting Layout', 'Shop Folder Built', 'Shop Folder Cover', 'Jig List', 'Staging'
 ];
 
-/** The portal's "Releasability Approvals" tab: one row per casting, these columns. Items that are AUTO show
- *  read-only there (Shop Folder Built = Print Cover pressed); the rest are P. MANUAL cells. */
-export const APPROVALS_TAB_ITEMS = ['Shop Folder Built', 'Approved SDs', 'Sample Approval'];
+/** The portal's "Releasability Approvals" tab: one row per casting, these P. MANUAL columns.
+ *  (Shop Folder Built is not here — Print Cover on Project Info sets it.) */
+export const APPROVALS_TAB_ITEMS = ['Approved SDs', 'Sample Approval'];
 
 /** P. MANUAL: a person ticks it, but it can be ticked in the portal (a board-style cell on the tab) as well as on
  *  the board. Both write the same casting_milestones row, so they never disagree. */
