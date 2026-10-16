@@ -35,10 +35,10 @@ export const BOARD_TAG_OVERRIDE = { 'Classroom #1': 'MANUAL', 'Classroom #2': 'M
  *  knocked back to orange whenever the inventory changes after they were printed. */
 export const CI_DEPENDENT = ['Batching Sheets', 'Labels', 'Final Tracking', 'Casting Layout', 'Jig List'];
 
-export const MS = { RED: 'red', ORANGE: 'orange', GREEN: 'green' };
+export const MS = { RED: 'red', ORANGE: 'orange', GREEN: 'green', NA: 'na' };
 
-/** Board status for a milestone colour. */
-export const MS_TO_BOARD = { red: 'incomplete', orange: 'in_progress', green: 'complete' };
+/** Board status for a milestone colour (na = the board's grey N/A; needs migration/casting-milestones-na.sql). */
+export const MS_TO_BOARD = { red: 'incomplete', orange: 'in_progress', green: 'complete', na: 'not_applicable' };
 
 /**
  * Release rule (2026-10-16, "touched follows the new format"): there is NO cut-off. A board cell with a

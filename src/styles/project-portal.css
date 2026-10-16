@@ -4371,6 +4371,8 @@ body.pp-printing .pp-tab-panel[data-panel="color-log"] { display: none !importan
 .pp-ms-red { background: #EF4444; }
 .pp-ms-orange { background: #F59E0B; }
 .pp-ms-green { background: #22C55E; }
+.pp-ms-na { background: #E8E7E4; border-color: #9ca3af; }
+.pp-opt-ms-na .pp-opt-ms-box { background: #E8E7E4; color: #6b7280; }
 .pp-ms-tick { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: #1e293b; cursor: pointer; }
 .pp-ms-tick input { width: 16px; height: 16px; accent-color: #16a34a; }
 .pp-ms-cond { margin-left: 8px; padding-left: 10px; border-left: 2px solid #e2e8f0; }

@@ -4352,7 +4352,41 @@ async function printGate(castingIds, milestone) {
 window.__ppMilestones = { printGate, stampPrinted, markWorking, topOffset: msTopOffset, on: msOn, setJigCasting: (id) => { msJigCastingId = id; updateMsFloat(); } };
 
 // ---- The floating "Releasability Board" box (bottom right) — what the current tab drives.
-function msDot(status) { return `<span class="pp-ms-dot pp-ms-${status}"></span>`; }
+function msDot(status) { return `<span class="pp-ms-dot pp-ms-${status}"${status === MS.NA ? ' title="N/A"' : ''}></span>`; }
+
+// ---- Jig List conditions (2026-10-16): "No jigs" = N/A on the board; "No scrim" = recorded on the casting.
+const JIG_COND_NOJIGS = 'No jigs', JIG_COND_NOSCRIM = 'No scrim';
+function jigConditionOf(castingId) {
+    const r = msRow(castingId, 'Jig List');
+    if (!r) return '';
+    if (r.status === MS.NA) return 'nojigs';
+    if (String(r.note || '') === JIG_COND_NOSCRIM) return 'noscrim';
+    return '';
+}
+function jigConditionHtml(castingId) {
+    const cur = jigConditionOf(castingId);
+    return `<label class="pp-ms-tick pp-ms-cond" title="No jigs: this casting needs no jigs at all — the board shows N/A. No scrim: the casting has no scrim layers (height-check jigs only); recorded here, the column still turns green when the jig list is printed.">Jigs
+        <select data-ms-jig-cond="${escapeAttr(castingId)}" class="pp-ms-cond-select">
+            <option value=""${cur ? '' : ' selected'}>— normal —</option>
+            <option value="nojigs"${cur === 'nojigs' ? ' selected' : ''}>No jigs (N/A on the board)</option>
+            <option value="noscrim"${cur === 'noscrim' ? ' selected' : ''}>No scrim</option>
+        </select></label>`;
+}
+async function handleJigConditionPick(castingId, value) {
+    if (!castingId) return;
+    const r = msRow(castingId, 'Jig List');
+    if (value === 'nojigs') {
+        await msSet(castingId, 'Jig List', MS.NA, { note: JIG_COND_NOJIGS, stamp: true });
+    } else if (value === 'noscrim') {
+        const keep = r && r.status !== MS.NA ? r.status : MS.RED;
+        await msSet(castingId, 'Jig List', keep, { note: JIG_COND_NOSCRIM, stamp: true });
+    } else {
+        const keep = r && r.status !== MS.NA ? r.status : MS.RED;
+        await msSet(castingId, 'Jig List', keep, { note: null, stamp: keep !== MS.RED });
+    }
+    msFloatEl && (msFloatEl.dataset.key = '');
+    updateMsFloat();
+}
 function msWhen(r) { return r?.stamped_at ? new Date(r.stamped_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : ''; }
 function msLine(castingId, milestone, label) {
     const r = msRow(castingId, milestone);
@@ -4440,7 +4474,7 @@ function updateMsFloat() {
             case 'tracking': html = ''; break;   // shown beside each cast instead
             case 'approvals': html = ''; break;  // the grid is the status
             case 'casting-layout': if (clSelectedCastingId) html = msCastHead(clSelectedCastingId) + msLine(clSelectedCastingId, 'Casting Layout') + msCiLine(clSelectedCastingId) + layoutConditionHtml(clSelectedCastingId); break;
-            case 'jig-list': if (msJigCastingId) html = msCastHead(msJigCastingId) + msLine(msJigCastingId, 'Jig List') + msCiLine(msJigCastingId); break;
+            case 'jig-list': if (msJigCastingId) html = msCastHead(msJigCastingId) + msLine(msJigCastingId, 'Jig List') + msCiLine(msJigCastingId) + jigConditionHtml(msJigCastingId); break;
             case 'optimizer': if (currentOptCastingId) html = msCastHead(currentOptCastingId) + msLine(currentOptCastingId, 'Final Optimizer HRS'); break;
             case 'staging': if (currentStagingCastingId) html = msCastHead(currentStagingCastingId) + msLine(currentStagingCastingId, 'Staging'); break;
             case 'color-log': html = msListChips(scoped, 'Color Log'); break;
@@ -4466,7 +4500,9 @@ function updateMsFloat() {
             const cb = e.target.closest('[data-ms-opt-done]');
             if (cb) { msSet(cb.dataset.msOptDone, 'Final Optimizer HRS', cb.checked ? MS.GREEN : MS.RED, { note: cb.checked ? 'Final hours confirmed' : null, stamp: true }); return; }
             const sel = e.target.closest('[data-ms-layout-cond]');
-            if (sel) handleLayoutConditionPick(sel.dataset.msLayoutCond, sel.value);
+            if (sel) { handleLayoutConditionPick(sel.dataset.msLayoutCond, sel.value); return; }
+            const jc = e.target.closest('[data-ms-jig-cond]');
+            if (jc) handleJigConditionPick(jc.dataset.msJigCond, jc.value);
         });
     }
     const pending = isMilestonesMigrationPending() ? '<div class="pp-ms-warn">Not saving yet — run migration/casting-milestones.sql in Supabase</div>' : '';
