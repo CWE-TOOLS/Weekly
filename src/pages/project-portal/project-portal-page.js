@@ -552,6 +552,7 @@ async function showListView() {
     currentProjectNumber = null;
     document.getElementById('pp-list-view').hidden = false;
     document.getElementById('pp-form-view').hidden = true;
+    updateMsFloat();
     const memosView = document.getElementById('pp-memos-view');
     if (memosView) memosView.hidden = true;
     const scViewLV = document.getElementById('pp-standards-view');
@@ -577,6 +578,7 @@ async function showFormView(projectNumber, draftOverrides = null) {
     currentProjectNumber = projectNumber || null;
     document.getElementById('pp-list-view').hidden = true;
     document.getElementById('pp-form-view').hidden = false;
+    requestAnimationFrame(updateMsFloat);
     const memosView = document.getElementById('pp-memos-view');
     if (memosView) memosView.hidden = true;
     setProjectInUrl(projectNumber);
@@ -4333,7 +4335,8 @@ function ciBoxHtml(castings) {
     }).join('');
 }
 function updateMsFloat() {
-    const show = msOn() && !!currentProjectNumber && currentCastings.length > 0;
+    const formView = document.getElementById('pp-form-view');
+    const show = msOn() && !!currentProjectNumber && currentCastings.length > 0 && !!formView && !formView.hidden;
     let html = '';
     if (show) {
         const scoped = getCastingsForActivePhase();
@@ -6019,6 +6022,7 @@ async function showStandardColorsView() {
 
     document.getElementById('pp-list-view').hidden = true;
     document.getElementById('pp-form-view').hidden = true;
+    updateMsFloat();
     const memosView = document.getElementById('pp-memos-view');
     if (memosView) memosView.hidden = true;
     const scView = document.getElementById('pp-standards-view');
@@ -7175,6 +7179,7 @@ async function showRecentMemosView() {
 
     document.getElementById('pp-list-view').hidden = true;
     document.getElementById('pp-form-view').hidden = true;
+    updateMsFloat();
     const memosView = document.getElementById('pp-memos-view');
     if (memosView) memosView.hidden = false;
     const scViewRM = document.getElementById('pp-standards-view');
