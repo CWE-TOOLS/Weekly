@@ -4132,7 +4132,13 @@ function trackMsInner(castingId) {
 }
 function trackMsHtml(castingId) { return msOn() ? `<span class="pp-track-ms" data-ms-track="${escapeAttr(castingId)}">${trackMsInner(castingId)}</span>` : ''; }
 /** Where floating boxes may start: under the portal header, and under the Releasability bar when it is showing. */
-function msTopOffset() { return headerBottom() + ((msFloatEl && !msFloatEl.hidden) ? msFloatEl.offsetHeight + 8 : 0); }
+function msTopOffset() { return (msFloatEl && !msFloatEl.hidden) ? msFloatEl.getBoundingClientRect().bottom + 8 : msBarTop(); }
+/** The bar sits under the project row ("Back to list · 0860 · Print…") while that row is on screen, else under the header. */
+function msBarTop() {
+    const controls = document.querySelector('#pp-form-view .pp-form-controls');
+    const cb = controls && !controls.closest('[hidden]') ? controls.getBoundingClientRect().bottom : 0;
+    return Math.max(headerBottom(), cb);
+}
 function msArmStamp(ids, milestone) { msPendingStamp = { ids, milestone }; setTimeout(() => { if (msPendingStamp && msPendingStamp.milestone === milestone) msPendingStamp = null; }, 8000); }
 /** The inventory of this casting changed: everything printed from it is out of date until reprinted. */
 function msInventoryChanged(castingId) {
@@ -4311,7 +4317,7 @@ function updateMsFloat() {
     // Pinned under the portal header, as wide as the tab's content; the tab makes room for it.
     let r = panel.getBoundingClientRect();
     if (r.width < 50 && panel.parentElement) r = panel.parentElement.getBoundingClientRect();   // tab not painted yet: use the content column
-    msFloatEl.style.top = Math.round(headerBottom()) + 'px';
+    msFloatEl.style.top = Math.round(msBarTop()) + 'px';
     msFloatEl.style.left = Math.round(r.left) + 'px';
     msFloatEl.style.width = Math.round(r.width) + 'px';
     const want = (msFloatEl.offsetHeight + 8) + 'px';
