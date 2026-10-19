@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="src/styles/variables.css">
     <link rel="stylesheet" href="src/styles/base.css">
     <link rel="stylesheet" href="src/styles/buttons.css">
-    <link rel="stylesheet" href="src/styles/scheduler.css?v=20261019-3">
+    <link rel="stylesheet" href="src/styles/scheduler.css?v=20261019-4">
 </head>
 <body>
 <div id="sc-app">
@@ -28,6 +28,8 @@
                 <select id="sc-weeks"><option value="2">2</option><option value="4" selected>4</option><option value="6">6</option><option value="8">8</option></select>
             </label>
             <label class="sc-ctl"><input type="checkbox" id="sc-show-weekends"> Show weekends</label>
+            <button type="button" class="btn-secondary" id="sc-undo" disabled title="Nothing to undo">&#8630; Undo</button>
+            <button type="button" class="btn-secondary" id="sc-redo" disabled title="Nothing to redo">&#8631; Redo</button>
             <button type="button" class="btn-secondary" id="sc-settings-btn">Settings</button>
             <button type="button" class="btn-secondary" id="sc-print" title="Print the grid">Print</button>
         </div>
@@ -78,6 +80,6 @@
 
     <div id="sc-toast" class="sc-toast" hidden></div>
 </div>
-<script type="module" src="src/pages/scheduler/scheduler-page.js?v=20261019-3"></script>
+<script type="module" src="src/pages/scheduler/scheduler-page.js?v=20261019-4"></script>
 </body>
 </html>

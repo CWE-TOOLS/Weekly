@@ -209,10 +209,12 @@ async function scheduleCasting(castingId, anchorIso, { replace = false } = {}) {
     const plan = planCasting(c, anchorIso);
     if (!plan.length) { toast('This casting has no Optimizer Hours with hours > 0.', 'error'); return; }
     setBusy(true);
+    const __h = await histBegin('schedule ' + castingLabel(c), [castingId]);
     try {
         if (replace) await deleteCastingSchedule(castingId, false);
         await insertScheduleRows(plan);
         S.pinned.add(castingId);
+        await histEnd(__h);
         await loadRows();
         render();
         const first = plan.reduce((a, r) => r.date < a ? r.date : a, plan[0].date);
@@ -229,12 +231,14 @@ async function shiftCasting(castingId, n) {
     const rows = rowsOfCasting(castingId);
     if (!rows.length || !n) return;
     setBusy(true);
+    const __h = await histBegin('shift ' + castingLabel(S.castingById.get(castingId) || {}), [castingId]);
     try {
         for (const r of rows) {
             let d = r.date;
             for (let i = 0; i < Math.abs(n); i++) d = nextWorking(d, Math.sign(n));
             await updateScheduleRow(r.id, { date: d });
         }
+        await histEnd(__h);
         await loadRows();
         render();
         toast(`Moved ${rows.length} day${rows.length === 1 ? '' : 's'} by ${n > 0 ? '+' : ''}${n} working day${Math.abs(n) === 1 ? '' : 's'}`);
@@ -460,6 +464,7 @@ async function saveEditor() {
     if (!editorCtx) return;
     const ed = $('sc-editor');
     setBusy(true);
+    const __h = await histBegin('edit cell', [editorCtx.cid]);
     try {
         for (const line of ed.querySelectorAll('.sc-ed-row')) {
             const row = S.rows.find(r => r.id === line.dataset.id);
@@ -473,6 +478,7 @@ async function saveEditor() {
                 else await updateScheduleRow(row.id, { hours });
             }
         }
+        await histEnd(__h);
         await loadRows();
         render();
         closeEditor();
@@ -488,9 +494,11 @@ async function addEditorEntry() {
     const c = S.castingById.get(editorCtx.cid);
     const weekend = isWeekend(editorCtx.date);
     setBusy(true);
+    const __h = await histBegin('add task', [editorCtx.cid]);
     try {
         await insertScheduleRows([{ project_number: c.project_number, casting_id: c.id, phase_id: null, date: editorCtx.date, department: editorCtx.dept, task, hours, weekend_ok: weekend, note: 'Typed by hand' }]);
         S.pinned.add(c.id);
+        await histEnd(__h);
         await loadRows();
         render();
         const td = document.querySelector(`td.sc-cell[data-cid="${c.id}"][data-date="${editorCtx.date}"][data-dept="${editorCtx.dept}"]`);
@@ -503,12 +511,14 @@ async function allowWeekendHere() {
     if (!editorCtx) return;
     const rows = S.rows.filter(r => r.casting_id === editorCtx.cid && r.date === editorCtx.date && r.department === editorCtx.dept);
     setBusy(true);
+    const __h = await histBegin('allow weekend', [editorCtx.cid]);
     try {
         for (const r of rows) await updateScheduleRow(r.id, { weekend_ok: true });
         if (!rows.length) {
             // nothing here yet: remember the allowance by reopening in "allowed" mode via a placeholder-free path
             editorCtx.allowWeekend = true;
         }
+        await histEnd(__h);
         await loadRows();
         render();
         const td = document.querySelector(`td.sc-cell[data-cid="${editorCtx.cid}"][data-date="${editorCtx.date}"][data-dept="${editorCtx.dept}"]`);
@@ -532,8 +542,10 @@ async function moveEditorEntries() {
     if (isWeekend(to) && !window.confirm(`${shortDay(to)} is a weekend. Allow it for these entries?`)) return;
     const rows = S.rows.filter(r => r.casting_id === editorCtx.cid && r.date === editorCtx.date && r.department === editorCtx.dept);
     setBusy(true);
+    const __h = await histBegin('move day', [editorCtx.cid]);
     try {
         for (const r of rows) await updateScheduleRow(r.id, { date: to, weekend_ok: isWeekend(to) ? true : r.weekend_ok });
+        await histEnd(__h);
         await loadRows();
         render();
         closeEditor();
@@ -551,9 +563,11 @@ async function deleteEditorEntry(id) {
         if (!window.confirm(`Remove this day? Its ${fmtH(row.hours)} h move to the phase's last other day so the Optimizer Hours total stays locked.`)) return;
     }
     setBusy(true);
+    const __h = await histBegin('remove day', [editorCtx.cid]);
     try {
         if (row.phase_id) { const err = await changePhaseDayHours(row, 0); if (err) { toast(err, 'error'); return; } }
         else await deleteScheduleRow(id);
+        await histEnd(__h);
         await loadRows();
         render();
         const td = document.querySelector(`td.sc-cell[data-cid="${editorCtx.cid}"][data-date="${editorCtx.date}"][data-dept="${editorCtx.dept}"]`);
@@ -621,6 +635,55 @@ async function saveSettings() {
 }
 
 // ---------------------------------------------------------------------------
+// undo / redo — each action snapshots the touched castings' rows before and after
+// ---------------------------------------------------------------------------
+const HIST = { stack: [], idx: -1 };
+async function histBegin(label, castingIds) {
+    const ids = [...new Set((castingIds || []).filter(Boolean))];
+    if (!ids.length) return null;
+    return { label, ids, before: await loadScheduleForCastings(ids) };
+}
+async function histEnd(h) {
+    if (!h) return;
+    h.after = await loadScheduleForCastings(h.ids);
+    HIST.stack.splice(HIST.idx + 1);
+    HIST.stack.push(h);
+    if (HIST.stack.length > 50) HIST.stack.shift();
+    HIST.idx = HIST.stack.length - 1;
+    updateHistButtons();
+}
+async function restoreRows(ids, rows) {
+    for (const id of ids) await deleteCastingSchedule(id, true);
+    const clean = rows.map(({ id, created_at, updated_at, ...rest }) => rest);
+    if (clean.length) await insertScheduleRows(clean);
+    for (const id of ids) if (rows.some(r => r.casting_id === id)) S.pinned.add(id);
+}
+async function undo() {
+    if (HIST.idx < 0 || S.busy) return;
+    const h = HIST.stack[HIST.idx];
+    setBusy(true);
+    try { await restoreRows(h.ids, h.before); HIST.idx--; updateHistButtons(); closeEditor(); await loadRows(); render(); toast(`Undone: ${h.label}`, 'info'); }
+    catch (err) { toast('Undo failed: ' + (err.message || err), 'error'); }
+    finally { setBusy(false); }
+}
+async function redo() {
+    if (HIST.idx >= HIST.stack.length - 1 || S.busy) return;
+    const h = HIST.stack[HIST.idx + 1];
+    setBusy(true);
+    try { await restoreRows(h.ids, h.after); HIST.idx++; updateHistButtons(); closeEditor(); await loadRows(); render(); toast(`Redone: ${h.label}`, 'info'); }
+    catch (err) { toast('Redo failed: ' + (err.message || err), 'error'); }
+    finally { setBusy(false); }
+}
+function updateHistButtons() {
+    const u = $('sc-undo'), r = $('sc-redo');
+    if (!u || !r) return;
+    u.disabled = HIST.idx < 0;
+    r.disabled = HIST.idx >= HIST.stack.length - 1;
+    u.title = HIST.idx >= 0 ? `Undo: ${HIST.stack[HIST.idx].label} (Ctrl+Z)` : 'Nothing to undo';
+    r.title = HIST.idx < HIST.stack.length - 1 ? `Redo: ${HIST.stack[HIST.idx + 1].label} (Ctrl+Y)` : 'Nothing to redo';
+}
+
+// ---------------------------------------------------------------------------
 // misc UI
 // ---------------------------------------------------------------------------
 let toastTimer = null;
@@ -642,6 +705,15 @@ function wire() {
     $('sc-show-weekends').addEventListener('change', (e) => { S.settings.showWeekends = !!e.target.checked; try { localStorage.setItem('sc-weekends', S.settings.showWeekends ? '1' : '0'); } catch (_) { /* ignore */ } render(); });
     $('sc-search').addEventListener('input', (e) => { S.search = e.target.value; render(); });
     $('sc-settings-btn').addEventListener('click', openSettings);
+    $('sc-undo').addEventListener('click', undo);
+    $('sc-redo').addEventListener('click', redo);
+    document.addEventListener('keydown', (e) => {
+        if (!(e.ctrlKey || e.metaKey)) return;
+        const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '');
+        if (typing) return;
+        if (e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+        else if (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey)) { e.preventDefault(); redo(); }
+    });
     $('sc-settings-save').addEventListener('click', saveSettings);
     $('sc-settings').addEventListener('click', (e) => { if (e.target.closest('[data-close]') || e.target === $('sc-settings')) $('sc-settings').hidden = true; });
     $('sc-print').addEventListener('click', () => window.print());
@@ -689,7 +761,7 @@ function wire() {
             const c = S.castingById.get(editorCtx.cid);
             if (!window.confirm(`Remove every scheduled day of ${castingLabel(c)} (${projectLabel(c.project_number)})?`)) return;
             setBusy(true);
-            try { await deleteCastingSchedule(c.id, true); S.pinned.delete(c.id); await loadRows(); render(); closeEditor(); toast('Removed from the schedule.'); }
+            try { const __h = await histBegin('remove ' + castingLabel(c), [c.id]); await deleteCastingSchedule(c.id, true); await histEnd(__h); S.pinned.delete(c.id); await loadRows(); render(); closeEditor(); toast('Removed from the schedule.'); }
             catch (err) { toast('Remove failed: ' + (err.message || err), 'error'); }
             finally { setBusy(false); }
         }
@@ -742,6 +814,6 @@ async function init() {
 }
 
 // debugging hooks (read-only use from the console)
-window.__scheduler = { S, planCasting, lockReport, mappedPhases, nextWorking };
+window.__scheduler = { S, planCasting, lockReport, mappedPhases, nextWorking, undo, redo, HIST };
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();

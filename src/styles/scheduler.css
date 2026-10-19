@@ -11,6 +11,7 @@
 .sc-ctl select, #sc-search { padding: 5px 8px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; }
 #sc-search { width: 200px; }
 .sc-top-right .btn-secondary, .sc-top-right .btn-primary { padding: 5px 10px; font-size: 13px; }
+.sc-top-right button:disabled { opacity: .45; cursor: default; }
 
 .sc-banner { margin: 10px 16px 0; padding: 10px 14px; border-radius: 8px; font-weight: 600; }
 .sc-banner-warn { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
