@@ -5653,13 +5653,13 @@ function slug(s) {
 }
 
 let toastTimer = null;
-function showToast(msg, kind = 'success') {
+function showToast(msg, kind = 'success', ms = 2500) {
     const el = document.getElementById('pp-toast');
     el.textContent = msg;
     el.className = `pp-toast pp-toast-${kind}`;
     el.hidden = false;
     if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => { el.hidden = true; }, 2500);
+    toastTimer = setTimeout(() => { el.hidden = true; }, ms);
 }
 
 // ---------- Live multi-user refresh (2026-10-19) ----------
@@ -5784,7 +5784,7 @@ async function runLiveReload() {
             if (wanted.has(currentTab)) await liveReloadTab(currentTab);
         }
         const label = wanted.has('*') ? 'this job' : (LIVE_TAB_LABELS[currentTab] || 'this tab');
-        showToast(`Someone else updated ${label} — reloaded`, 'info');
+        showToast(`Someone else updated ${label} — reloaded`, 'info', 4500);   // bigger + longer (see .pp-toast-info)
     } catch (err) {
         logger.warn('[live] reload failed', err);
     } finally {
