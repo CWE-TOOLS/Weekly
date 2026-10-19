@@ -595,7 +595,7 @@ function createStatusCell(project, trackingItem) {
     cell.dataset.pmanual = '1';
     const when = msRow?.stamped_at ? new Date(msRow.stamped_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : '';
     cell.title = `${project.project} - ${TRACKING_ITEM_LABELS[trackingItem] || trackingItem}: ${statusConfig.label} (P. MANUAL — click here or tick it on the portal)`
-      + (msRow?.note ? `\n${msRow.note}` : '') + (when ? `\nSince ${when}` : '');
+      + (msRow?.note ? `\n${String(msRow.note).replace(/\s*\[inv:[0-9a-z-]+\]$/, '')}` : '') + (when ? `\nSince ${when}` : '');
     const icon = document.createElement('span');
     icon.className = 'status-icon';
     icon.textContent = statusConfig.icon;
@@ -606,7 +606,7 @@ function createStatusCell(project, trackingItem) {
     cell.dataset.auto = '1';
     const when = msRow?.stamped_at ? new Date(msRow.stamped_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : '';
     cell.title = `${project.project} - ${TRACKING_ITEM_LABELS[trackingItem] || trackingItem}: ${statusConfig.label} (AUTO — set by the portal)`
-      + (msRow?.note ? `\n${msRow.note}` : '') + (when ? `\nSince ${when}` : '');
+      + (msRow?.note ? `\n${String(msRow.note).replace(/\s*\[inv:[0-9a-z-]+\]$/, '')}` : '') + (when ? `\nSince ${when}` : '');
     const icon = document.createElement('span');
     icon.className = 'status-icon';
     icon.textContent = statusConfig.icon;

@@ -1421,7 +1421,7 @@ function ciCardRowHtml(c) {
         : `<button type="button" class="pp-ms-btn pp-ms-btn-unlock" data-action="ms-ci-unlock" title="Unlock to make changes — anything printed from this inventory turns orange on the board once it changes">&#128274; Locked &middot; click to unlock</button>`;
     return `<div class="pp-cast-card-ms pp-ms-ci-${s}">
         ${msDot(s)}<span class="pp-cast-card-ms-state">${escapeHtml(st.label)}</span>
-        ${r?.note ? `<span class="pp-cast-card-ms-note">${escapeHtml(r.note)}${since ? ' · ' + escapeHtml(since) : ''}</span>` : ''}
+        ${msNote(r) ? `<span class="pp-cast-card-ms-note">${escapeHtml(msNote(r))}${since ? ' · ' + escapeHtml(since) : ''}</span>` : ''}
         <span class="pp-cast-card-ms-action">${action}</span>
     </div>`;
 }
@@ -2330,12 +2330,12 @@ async function saveInventoryItem(itemId, castingId) {
         if (cur !== next) changed[k] = fields[k];
     }
     if (Object.keys(changed).length === 0) return;
-    msInventoryChanged(castingId);   // the value changed in the user's hands — linked prints are out of date from now
+    Object.assign(item, changed);          // the value changed in the user's hands
+    msInventoryChanged(castingId);         // linked prints go orange — or back to green when the inventory is back as printed
 
     try {
         const updated = await updateInventoryItem(itemId, changed);
         if (updated) Object.assign(item, updated);
-        else Object.assign(item, changed);
         // Refresh the count label in the header without a full re-render.
         updateCastingInventoryCount(castingId);
         syncTrackingFromInventory();
@@ -2739,7 +2739,7 @@ function apprCellHtml(castingId, milestone) {
     const s = r?.status || MS.RED;
     const when = msWhen(r);
     const tip = `${milestone}: ${s === MS.GREEN ? 'done' : s === MS.ORANGE ? 'in progress' : 'not done'}`
-        + (r?.note ? ` — ${r.note}` : '') + (when ? ` (since ${when})` : '')
+        + (msNote(r) ? ` — ${msNote(r)}` : '') + (when ? ` (since ${when})` : '')
         + (auto ? ' · set by the portal' : ' · click to flip; the Releasability Board follows');
     const icon = s === MS.GREEN ? '&#10003;' : s === MS.ORANGE ? '/' : '&minus;';
     return `<button type="button" class="pp-opt-ms pp-appr-cell pp-opt-ms-${s}${auto ? ' pp-appr-cell-auto' : ''}" data-casting-id="${escapeAttr(castingId)}" data-milestone="${escapeAttr(milestone)}" ${auto ? 'disabled' : ''} title="${escapeAttr(tip)}"><span class="pp-opt-ms-box">${icon}</span></button>`;
@@ -4244,7 +4244,7 @@ function refreshInlineMs() {
     document.querySelectorAll('.pp-appr-cell[data-casting-id]').forEach(el => { el.outerHTML = apprCellHtml(el.dataset.castingId, el.dataset.milestone); });
 }
 function trackMsInner(castingId) {
-    const one = (m, label) => { const r = msRow(castingId, m); const when = msWhen(r); const tip = `${label}: ${r?.status || 'red'}${r?.note ? ' — ' + r.note : ''}${when ? ' (since ' + when + ')' : ''}`;
+    const one = (m, label) => { const r = msRow(castingId, m); const when = msWhen(r); const tip = `${label}: ${r?.status || 'red'}${msNote(r) ? ' — ' + msNote(r) : ''}${when ? ' (since ' + when + ')' : ''}`;
         return `<span class="pp-track-ms-item" title="${escapeAttr(tip)}">${msDot(r?.status || MS.RED)}<span>${escapeHtml(label)}</span></span>`; };
     return one('Labels', 'Labels') + one('Final Tracking', 'Tracking');
 }
@@ -4259,12 +4259,37 @@ function msBarTop() {
 }
 function msArmStamp(ids, milestone) { msPendingStamp = { ids, milestone }; setTimeout(() => { if (msPendingStamp && msPendingStamp.milestone === milestone) msPendingStamp = null; }, 8000); }
 /** The inventory of this casting changed: everything printed from it is out of date until reprinted. */
+// ---- Inventory fingerprint (2026-10-19): the lock remembers what the inventory looked like when it was locked
+// (a short hash kept at the end of the Casting Inventory milestone's note). An edit that leaves the inventory
+// exactly as printed is not a change: linked prints that went orange because of our own edits go back to green.
+const INV_MARK_RE = /\s*\[inv:([0-9a-z-]+)\]$/;
+const INV_CHANGED_NOTE = 'Casting Inventory changed after this was printed — print it again';
+/** A milestone note without the hidden inventory marker. */
+function msNote(r) { return String(r?.note || '').replace(INV_MARK_RE, ''); }
+function invFingerprint(castingId) {
+    const skip = new Set(['id', 'casting_id', 'created_at', 'updated_at']);
+    const rows = getInventoryFor(castingId).map(it => Object.keys(it).filter(k => !skip.has(k)).sort()
+        .map(k => k + '=' + (it[k] === null || it[k] === undefined ? '' : String(it[k]))).join('|'));
+    rows.sort();
+    const s = rows.join('\n');
+    let h = 5381;
+    for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+    return h.toString(36) + '-' + rows.length;
+}
+function invBaseline(castingId) { const m = String(msRow(castingId, 'Casting Inventory')?.note || '').match(INV_MARK_RE); return m ? m[1] : null; }
+function withInvMark(note, hash) { return `${note || ''} [inv:${hash}]`; }
+
 function msInventoryChanged(castingId) {
     if (!msOn() || !castingId) return;
+    const base = invBaseline(castingId);
+    const backAsPrinted = !!base && invFingerprint(castingId) === base;
     for (const m of CI_DEPENDENT) {
         const r = msRow(castingId, m);
-        if (r && r.status === MS.GREEN && !String(r.note || '').startsWith(LAYOUT_CONDITION_PREFIX)) {
-            msSet(castingId, m, MS.ORANGE, { note: 'Casting Inventory changed after this was printed — print it again' });
+        if (!r) continue;
+        if (backAsPrinted) {
+            if (r.status === MS.ORANGE && r.note === INV_CHANGED_NOTE) msSet(castingId, m, MS.GREEN, { note: null });   // printed state restored; the print stamp stays
+        } else if (r.status === MS.GREEN && !String(r.note || '').startsWith(LAYOUT_CONDITION_PREFIX)) {
+            msSet(castingId, m, MS.ORANGE, { note: INV_CHANGED_NOTE });
         }
     }
     deriveColorLogMilestones();
@@ -4302,12 +4327,13 @@ function scheduleStagingDerive() { clearTimeout(msStagingDeriveTimer); msStaging
 async function ciAdvance(castingId) {
     const s = ciStatus(castingId);
     if (s === MS.RED) await msSet(castingId, 'Casting Inventory', MS.ORANGE, { note: 'Ready for engineering', stamp: true });
-    else if (s === MS.ORANGE) await msSet(castingId, 'Casting Inventory', MS.GREEN, { locked: true, note: 'Engineering done — final', stamp: true });
+    else if (s === MS.ORANGE) await msSet(castingId, 'Casting Inventory', MS.GREEN, { locked: true, note: withInvMark('Engineering done — final', invFingerprint(castingId)), stamp: true });
     invEdits.clear();
     renderCastings();
 }
 async function ciUnlock(castingId) {
-    await msSet(castingId, 'Casting Inventory', MS.ORANGE, { locked: false, note: 'Unlocked for changes — lock it again when done', stamp: true });
+    // Keep the locked inventory's fingerprint (older locks have none: the inventory as it is now becomes the baseline).
+    await msSet(castingId, 'Casting Inventory', MS.ORANGE, { locked: false, note: withInvMark('Unlocked for changes — lock it again when done', invBaseline(castingId) || invFingerprint(castingId)), stamp: true });
     renderCastings();
 }
 
@@ -4445,7 +4471,7 @@ async function handleLayoutConditionPick(castingId, value) {
 function msListChips(castings, milestone) {
     return `<div class="pp-ms-cast">${escapeHtml(milestone)}</div>` + castings.map(c => {
         const r = msRow(c.id, milestone), when = msWhen(r);
-        const tip = `${milestone}: ${r?.status || 'red'}${r?.note ? ' — ' + r.note : ''}${when ? ' (since ' + when + ')' : ''}`;
+        const tip = `${milestone}: ${r?.status || 'red'}${msNote(r) ? ' — ' + msNote(r) : ''}${when ? ' (since ' + when + ')' : ''}`;
         return `<span class="pp-ms-line" title="${escapeAttr(tip)}">${msDot(r?.status || MS.RED)}<span class="pp-ms-label">${escapeHtml(msCastName(c.id))}</span></span>`;
     }).join('');
 }
@@ -4460,7 +4486,7 @@ function ciBoxHtml(castings) {
         const action = st.next
             ? `<button type="button" class="pp-ms-btn pp-ms-btn-${s}" data-ms-ci-advance="${escapeAttr(c.id)}">${escapeHtml(st.next)}</button>`
             : `<button type="button" class="pp-ms-btn pp-ms-btn-unlock" data-ms-ci-unlock="${escapeAttr(c.id)}" title="Unlock to make changes — anything printed from this inventory turns orange on the board once it changes">&#128274; Locked &middot; click to unlock</button>`;
-        return `<div class="pp-ms-ci pp-ms-ci-${s}" title="${escapeAttr((r?.note || '') + (msWhen(r) ? ' · ' + msWhen(r) : ''))}">
+        return `<div class="pp-ms-ci pp-ms-ci-${s}" title="${escapeAttr(msNote(r) + (msWhen(r) ? ' · ' + msWhen(r) : ''))}">
             <div class="pp-ms-ci-head">${msDot(s)}<b>${escapeHtml(msCastName(c.id))}</b><span class="pp-ms-ci-state">${escapeHtml(st.label.replace('Casting Inventory — ', ''))}</span></div>
             <div class="pp-ms-ci-actions">${action}</div></div>`;
     }).join('');
