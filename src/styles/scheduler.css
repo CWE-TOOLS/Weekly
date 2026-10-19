@@ -143,6 +143,11 @@ table.sc-grid { border-collapse: separate; border-spacing: 0; table-layout: fixe
 .sc-panel-body h3 { font-size: 13px; margin: 10px 0 4px; }
 .sc-panel-body textarea { width: 100%; box-sizing: border-box; font-family: inherit; font-size: 13px; padding: 6px; border: 1px solid #d1d5db; border-radius: 6px; }
 .sc-panel-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid #e5e7eb; }
+.sc-panel-sm { width: 460px; }
+.sc-choice { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid #e5e7eb; border-radius: 8px; margin: 8px 0; font-size: 13px; cursor: pointer; }
+.sc-choice:has(input:checked) { border-color: #2563eb; background: #eff6ff; }
+.sc-choice input[type=date] { padding: 4px 6px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; }
+#sc-cast-note { min-height: 18px; margin-top: 4px; }
 .sc-dayhours { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px 12px; }
 .sc-dayhours label { display: flex; justify-content: space-between; align-items: center; gap: 6px; font-size: 13px; }
 .sc-dayhours input { width: 60px; padding: 4px 6px; border: 1px solid #d1d5db; border-radius: 6px; }

@@ -230,6 +230,13 @@ async function scheduleCasting(castingId, anchorIso, { replace = false } = {}) {
 async function shiftCasting(castingId, n) {
     const rows = rowsOfCasting(castingId);
     if (!rows.length || !n) return;
+    // one casting per day: where would this casting's Cast day(s) land?
+    const moved = rows.filter(r => r.department === 'Cast').map(r => { let d = r.date; for (let i = 0; i < Math.abs(n); i++) d = nextWorking(d, Math.sign(n)); return d; });
+    if (moved.length) {
+        const taken = await takenCastDays(castingId);
+        const clash = moved.find(d => taken.has(d));
+        if (clash) { toast(`Can't shift: ${shortDay(clash)} already has ${whoCasts(taken.get(clash))}. Castings are one per day.`, 'error'); return; }
+    }
     setBusy(true);
     const __h = await histBegin('shift ' + castingLabel(S.castingById.get(castingId) || {}), [castingId]);
     try {
@@ -544,6 +551,10 @@ async function moveEditorEntries() {
     if (isHoliday(to)) { toast(`${shortDay(to)} is a holiday — nothing can be scheduled there.`, 'error'); return; }
     if (isWeekend(to) && !window.confirm(`${shortDay(to)} is a weekend. Allow it for these entries?`)) return;
     const rows = S.rows.filter(r => r.casting_id === editorCtx.cid && r.date === editorCtx.date && r.department === editorCtx.dept);
+    if (editorCtx.dept === 'Cast') {
+        const other = (await loadScheduleRange(to, to)).find(r => r.department === 'Cast' && r.casting_id !== editorCtx.cid);
+        if (other) { toast(`${shortDay(to)} already has ${whoCasts(other.casting_id)}. Castings are one per day.`, 'error'); return; }
+    }
     setBusy(true);
     const __h = await histBegin('move day', [editorCtx.cid]);
     try {
@@ -609,6 +620,88 @@ function askAnchor(c) {
     if (v === null) return null;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(v.trim())) { toast('Enter the date as YYYY-MM-DD.', 'error'); return null; }
     return v.trim();
+}
+
+// ---------------------------------------------------------------------------
+// cast day choice — one casting per day
+// ---------------------------------------------------------------------------
+/** date -> casting_id of every Cast day on the grid (any job), excluding one casting. */
+async function takenCastDays(excludeCastingId) {
+    const rows = await loadScheduleRange(addDays(todayIso(), -60), addDays(todayIso(), 365));
+    const map = new Map();
+    for (const r of rows) if (r.department === 'Cast' && r.casting_id !== excludeCastingId) map.set(r.date, r.casting_id);
+    return map;
+}
+function whoCasts(castingId) {
+    const c = S.castingById.get(castingId);
+    return c ? `${projectLabel(c.project_number)} ${castingLabel(c)}` : 'another casting';
+}
+function castDatesOfPlan(plan) { return plan.filter(r => r.department === 'Cast').map(r => r.date); }
+/** First working day on/after `from` where this casting's Cast day(s) collide with nobody. */
+function nextAvailableCastDay(c, taken, from) {
+    let d = workingOrNext(from);
+    for (let i = 0; i < 400; i++) {
+        const dates = castDatesOfPlan(planCasting(c, d));
+        if (!dates.length || !dates.some(x => taken.has(x))) return d;
+        d = nextWorking(d, 1);
+    }
+    return d;
+}
+let schedCtx = null;   // { cid, replace, taken, next }
+async function openScheduleDialog(castingId, { replace = false } = {}) {
+    const c = S.castingById.get(castingId);
+    if (!c) return;
+    setBusy(true);
+    let taken;
+    try { taken = await takenCastDays(castingId); } catch (err) { toast('Could not read the grid: ' + (err.message || err), 'error'); setBusy(false); return; }
+    finally { setBusy(false); }
+    const next = nextAvailableCastDay(c, taken, todayIso());
+    schedCtx = { cid: castingId, replace, taken, next };
+    const own = c.casting_date || '';
+    const ownNote = own
+        ? (taken.has(own) ? `${esc(shortDay(own))} on the Castings tab — but ${esc(whoCasts(taken.get(own)))} already casts that day`
+                          : `${esc(shortDay(own))} on the Castings tab`)
+        : 'none on the Castings tab';
+    const box = $('sc-sched');
+    box.innerHTML = `<div class="sc-panel sc-panel-sm" role="dialog" aria-modal="true">
+        <div class="sc-panel-head"><h2>${replace ? 'Regenerate' : 'Schedule'} ${esc(castingLabel(c))} — ${esc(projectLabel(c.project_number))}</h2><button type="button" class="sc-x" data-close>&times;</button></div>
+        <div class="sc-panel-body">
+            <p class="sc-hint">Would you like to schedule on the next available cast day, or choose a cast day? Castings are one per day. Cast date on the job: ${ownNote}.</p>
+            <label class="sc-choice"><input type="radio" name="sc-cast-mode" value="next" checked> <strong>Next available cast day:</strong> ${esc(shortDay(next))}</label>
+            <label class="sc-choice"><input type="radio" name="sc-cast-mode" value="pick"> <strong>Choose a cast day:</strong> <input type="date" id="sc-cast-pick" value="${esc(own && !taken.has(own) ? own : next)}"></label>
+            <div id="sc-cast-note" class="sc-hint"></div>
+        </div>
+        <div class="sc-panel-foot"><button type="button" class="btn-secondary" data-close>Cancel</button><button type="button" class="btn-primary" id="sc-cast-go">${replace ? 'Regenerate' : 'Schedule'}</button></div>
+    </div>`;
+    box.hidden = false;
+    const pick = $('sc-cast-pick');
+    const note = $('sc-cast-note');
+    const check = () => {
+        const mode = box.querySelector('input[name="sc-cast-mode"]:checked')?.value;
+        const d = mode === 'next' ? next : pick.value;
+        if (!d) { note.textContent = ''; return; }
+        if (isHoliday(d)) note.textContent = `${shortDay(d)} is a holiday — nothing is scheduled on holidays.`;
+        else if (taken.has(d)) note.textContent = `${shortDay(d)} already has ${whoCasts(taken.get(d))}. Castings are one per day — pick another day.`;
+        else if (isWeekend(d)) note.textContent = `${shortDay(d)} is a weekend — the Cast day will be moved to the next working day unless you allow the weekend on the grid afterwards.`;
+        else note.textContent = `Cast on ${shortDay(d)}; earlier phases run back from it, later ones forward.`;
+    };
+    pick.addEventListener('input', () => { box.querySelector('input[name="sc-cast-mode"][value="pick"]').checked = true; check(); });
+    box.querySelectorAll('input[name="sc-cast-mode"]').forEach(r => r.addEventListener('change', check));
+    check();
+}
+async function confirmScheduleDialog() {
+    if (!schedCtx) return;
+    const box = $('sc-sched');
+    const mode = box.querySelector('input[name="sc-cast-mode"]:checked')?.value;
+    const d = mode === 'next' ? schedCtx.next : $('sc-cast-pick').value;
+    if (!d) { toast('Pick a cast day first.', 'error'); return; }
+    if (isHoliday(d)) { toast(`${shortDay(d)} is a holiday.`, 'error'); return; }
+    const c = S.castingById.get(schedCtx.cid);
+    const clash = castDatesOfPlan(planCasting(c, d)).find(x => schedCtx.taken.has(x));
+    if (clash) { toast(`${shortDay(clash)} already has ${whoCasts(schedCtx.taken.get(clash))}. Castings are one per day.`, 'error'); return; }
+    const ctx = schedCtx;
+    box.hidden = true; schedCtx = null;
+    await scheduleCasting(ctx.cid, d, { replace: ctx.replace });
 }
 
 // ---------------------------------------------------------------------------
@@ -708,6 +801,10 @@ function wire() {
     $('sc-show-weekends').addEventListener('change', (e) => { S.settings.showWeekends = !!e.target.checked; try { localStorage.setItem('sc-weekends', S.settings.showWeekends ? '1' : '0'); } catch (_) { /* ignore */ } render(); });
     $('sc-search').addEventListener('input', (e) => { S.search = e.target.value; render(); });
     $('sc-settings-btn').addEventListener('click', openSettings);
+    $('sc-sched').addEventListener('click', (e) => {
+        if (e.target.closest('[data-close]') || e.target === $('sc-sched')) { $('sc-sched').hidden = true; schedCtx = null; return; }
+        if (e.target.id === 'sc-cast-go' && !S.busy) confirmScheduleDialog();
+    });
     $('sc-undo').addEventListener('click', undo);
     $('sc-redo').addEventListener('click', redo);
     document.addEventListener('keydown', (e) => {
@@ -726,9 +823,7 @@ function wire() {
         if (!btn || S.busy) return;
         const c = S.castingById.get(btn.dataset.schedule);
         if (!c) return;
-        const anchor = c.casting_date || askAnchor(c);
-        if (!anchor) return;
-        await scheduleCasting(c.id, anchor);
+        await openScheduleDialog(c.id, { replace: false });
     });
 
     $('sc-grid-wrap').addEventListener('click', (e) => {
@@ -753,10 +848,8 @@ function wire() {
             const c = S.castingById.get(editorCtx.cid);
             const has = rowsOfCasting(c.id).length > 0;
             if (has && !window.confirm('Replace this casting\'s generated days with a fresh spread from the Optimizer Hours tab? Days you typed by hand stay.')) return;
-            const anchor = c.casting_date || askAnchor(c);
-            if (!anchor) return;
             closeEditor();
-            await scheduleCasting(c.id, anchor, { replace: has });
+            await openScheduleDialog(c.id, { replace: has });
             return;
         }
         if (t.id === 'sc-m-shift-btn') { const n = Math.trunc(Number($('sc-m-shift').value) || 0); const cid = editorCtx.cid; closeEditor(); await shiftCasting(cid, n); return; }
@@ -769,7 +862,7 @@ function wire() {
             finally { setBusy(false); }
         }
     });
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeEditor(); $('sc-settings').hidden = true; } });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeEditor(); $('sc-settings').hidden = true; $('sc-sched').hidden = true; schedCtx = null; } });
     document.addEventListener('mousedown', (e) => {
         const ed = $('sc-editor');
         if (ed.hidden) return;
