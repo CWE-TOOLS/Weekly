@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plant Scheduler - Weekly Schedule</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='0.9em' font-size='90'%3E🗓️%3C/text%3E%3C/svg%3E">
+    <link rel="stylesheet" href="src/styles/variables.css">
+    <link rel="stylesheet" href="src/styles/base.css">
+    <link rel="stylesheet" href="src/styles/buttons.css">
+    <link rel="stylesheet" href="src/styles/scheduler.css?v=20261019-1">
+</head>
+<body>
+<div id="sc-app">
+    <header class="sc-top">
+        <div class="sc-top-left">
+            <a href="index.html" class="sc-nav">&larr; Weekly Schedule</a>
+            <a href="project-portal.html" class="sc-nav">Project Portal</a>
+            <a href="releasability.html" class="sc-nav">Releasability Board</a>
+            <h1 class="sc-title">Plant Scheduler <span class="sc-badge">PREVIEW — not linked to the weekly yet</span></h1>
+        </div>
+        <div class="sc-top-right">
+            <input type="search" id="sc-search" placeholder="Search job # or name…" autocomplete="off">
+            <button type="button" class="btn-secondary" id="sc-prev" title="Previous week">&lsaquo;</button>
+            <button type="button" class="btn-secondary" id="sc-today">Today</button>
+            <button type="button" class="btn-secondary" id="sc-next" title="Next week">&rsaquo;</button>
+            <label class="sc-ctl">Weeks
+                <select id="sc-weeks"><option value="2">2</option><option value="4" selected>4</option><option value="6">6</option><option value="8">8</option></select>
+            </label>
+            <label class="sc-ctl"><input type="checkbox" id="sc-show-weekends"> Show weekends</label>
+            <button type="button" class="btn-secondary" id="sc-settings-btn">Settings</button>
+            <button type="button" class="btn-secondary" id="sc-print" title="Print the grid">Print</button>
+        </div>
+    </header>
+
+    <div id="sc-banner" class="sc-banner" hidden></div>
+
+    <div class="sc-body">
+        <aside class="sc-side">
+            <div class="sc-side-head">
+                <strong>Not yet scheduled</strong>
+                <span class="sc-hint">Castings with Optimizer Hours and no days on the grid. Schedule = spread the Optimizer Hours tasks from the cast date.</span>
+            </div>
+            <div id="sc-unscheduled" class="sc-unscheduled"></div>
+            <div class="sc-side-head">
+                <strong>How the spread works</strong>
+                <span class="sc-hint">Each phase on the Optimizer Hours tab becomes one task. Days per phase = hours ÷ the department's hours-per-day (Settings). Hours are split evenly, so the grid always totals exactly the Optimizer Hours. The Cast phase lands on the cast date; earlier phases run back from it, later ones forward. Weekends are skipped unless you allow one; holidays are never used.</span>
+            </div>
+        </aside>
+        <main class="sc-main">
+            <div id="sc-grid-wrap" class="sc-grid-wrap">
+                <div class="sc-loading">Loading…</div>
+            </div>
+        </main>
+    </div>
+
+    <!-- cell editor -->
+    <div id="sc-editor" class="sc-editor" hidden></div>
+
+    <!-- settings panel -->
+    <div id="sc-settings" class="sc-panel-backdrop" hidden>
+        <div class="sc-panel" role="dialog" aria-modal="true" aria-labelledby="sc-settings-title">
+            <div class="sc-panel-head"><h2 id="sc-settings-title">Scheduler settings</h2><button type="button" class="sc-x" data-close>&times;</button></div>
+            <div class="sc-panel-body">
+                <h3>Hours per department-day</h3>
+                <p class="sc-hint">Used only to decide how many days a phase spreads over (phase hours ÷ this = days). Shared by everyone.</p>
+                <div id="sc-dayhours" class="sc-dayhours"></div>
+                <h3>Holidays (never scheduled)</h3>
+                <p class="sc-hint">One date per line, YYYY-MM-DD.</p>
+                <textarea id="sc-holidays" rows="8"></textarea>
+            </div>
+            <div class="sc-panel-foot">
+                <button type="button" class="btn-secondary" data-close>Cancel</button>
+                <button type="button" class="btn-primary" id="sc-settings-save">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="sc-toast" class="sc-toast" hidden></div>
+</div>
+<script type="module" src="src/pages/scheduler/scheduler-page.js?v=20261019-1"></script>
+</body>
+</html>
