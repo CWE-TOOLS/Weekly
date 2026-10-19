@@ -32,6 +32,7 @@ const S = {
     castings: [],                 // project_castings rows of those projects
     castingById: new Map(),
     phasesByCasting: new Map(),   // castingId -> casting_phases rows (sorted)
+    withInventory: new Set(),     // castings that have Casting Inventory rows (the gate for "Not yet scheduled")
     rows: [],                     // plant_schedule rows in the window (+ pinned castings)
     from: '',                     // Monday the window starts on (ISO)
     search: '',
