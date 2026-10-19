@@ -107,6 +107,13 @@ async function loadBase() {
         const part = await loadAllCastingPhasesForProject(ids.slice(i, i + 60));
         for (const [k, v] of part) S.phasesByCasting.set(k, v);
     }
+    // Only castings with a Casting Inventory are offered for scheduling (user rule 2026-10-19).
+    S.withInventory = new Set();
+    for (let i = 0; i < ids.length; i += 60) {
+        const { data, error } = await client.from('casting_inventory').select('casting_id').in('casting_id', ids.slice(i, i + 60));
+        if (error) throw error;
+        for (const r of data || []) S.withInventory.add(r.casting_id);
+    }
 }
 
 async function loadRows() {
@@ -351,7 +358,7 @@ function renderUnscheduled() {
     const q = S.search.trim().toLowerCase();
     const list = S.castings.filter(c => {
         if (scheduled.has(c.id)) return false;
-        if (!mappedPhases(c.id).length) return false;
+        if (!S.withInventory.has(c.id)) return false;   // no Casting Inventory yet -> not offered
         if (q) { const p = S.projectByNumber.get(c.project_number); if (!(c.project_number.toLowerCase().includes(q) || (p && (p.project_name || '').toLowerCase().includes(q)))) return false; }
         return true;
     });
@@ -361,11 +368,14 @@ function renderUnscheduled() {
     list.sort((a, b) => rank(a) - rank(b)
         || (rank(a) === 0 ? a.casting_date.localeCompare(b.casting_date) : rank(a) === 2 ? b.casting_date.localeCompare(a.casting_date) : 0)
         || a.project_number.localeCompare(b.project_number));
-    if (!list.length) { box.innerHTML = '<div class="sc-uns-empty">Everything with Optimizer Hours is on the grid.</div>'; return; }
+    if (!list.length) { box.innerHTML = '<div class="sc-uns-empty">Every casting with a Casting Inventory is on the grid.</div>'; return; }
     box.innerHTML = list.slice(0, 80).map(c => {
         const p = S.projectByNumber.get(c.project_number);
         const hrs = mappedPhases(c.id).reduce((n, m) => n + (Number(m.phase.hours) || 0), 0);
-        return `<div class="sc-uns"><div class="sc-uns-name"><strong>${esc(c.project_number)}</strong> ${esc(castingLabel(c))}<small>${esc(p?.project_name || '')} · ${fmtH(hrs)} h${c.casting_date ? ' · cast ' + esc(shortDay(c.casting_date)) : ' · no cast date'}</small></div><button type="button" class="btn-primary" data-schedule="${c.id}">Schedule</button></div>`;
+        const btn = hrs > 0
+            ? `<button type="button" class="btn-primary" data-schedule="${c.id}">Schedule</button>`
+            : '<span class="sc-uns-nohrs" title="Enter the hours on the Optimizer Hours tab first">no Optimizer Hours yet</span>';
+        return `<div class="sc-uns"><div class="sc-uns-name"><strong>${esc(c.project_number)}</strong> ${esc(castingLabel(c))}<small>${esc(p?.project_name || '')} · ${hrs > 0 ? fmtH(hrs) + ' h' : 'Optimizer Hours empty'}${c.casting_date ? ' · cast ' + esc(shortDay(c.casting_date)) : ' · no cast date'}</small></div>${btn}</div>`;
     }).join('') + (list.length > 80 ? `<div class="sc-uns-empty">…and ${list.length - 80} more (search to narrow)</div>` : '');
 }
 
@@ -695,7 +705,7 @@ function wire() {
         const batch = (Array.isArray(payloads) && payloads.length ? payloads : [last]).filter(p => isPortalChange(p) && !isOwnSignal(p));
         const tables = new Set(batch.map(p => signalInfo(p).table));
         if (!tables.size) return;
-        if (tables.has('casting_phases') || tables.has('project_castings') || tables.has('projects')) {
+        if (tables.has('casting_phases') || tables.has('project_castings') || tables.has('projects') || tables.has('casting_inventory')) {
             try { await loadBase(); } catch (err) { logger.warn('[scheduler] reload base failed', err); }
         }
         if (tables.has('plant_schedule') || tables.has('plant_schedule_settings') || tables.has('casting_phases') || tables.has('project_castings')) {
