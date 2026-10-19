@@ -35,22 +35,26 @@
 .sc-loading { padding: 40px; color: #6b7280; text-align: center; }
 
 table.sc-grid { border-collapse: separate; border-spacing: 0; table-layout: fixed; }
-.sc-grid th, .sc-grid td { border-right: 1px solid #e5e7eb; border-bottom: 1px solid #e5e7eb; padding: 0; height: 30px; font-size: 11px; white-space: nowrap; box-sizing: border-box; }
+.sc-grid th, .sc-grid td { border-right: 1px solid #9ca3af; border-bottom: 1px solid #9ca3af; padding: 0; height: 30px; font-size: 11px; white-space: nowrap; box-sizing: border-box; }
 .sc-grid thead th { position: sticky; background: #fff; z-index: 3; font-weight: 600; text-align: center; }
 .sc-grid thead tr:nth-child(1) th { top: 0; height: 24px; background: #eef2ff; color: #3730a3; }
 .sc-grid thead tr:nth-child(2) th { top: 24px; height: 24px; }
 .sc-grid thead tr:nth-child(3) th { top: 48px; height: 22px; font-size: 10px; color: #6b7280; font-weight: 500; }
-.sc-grid th.sc-week { border-left: 2px solid #c7d2fe; text-align: left; padding-left: 6px; }
+.sc-grid th.sc-week { border-left: 3px solid #1f2937; text-align: left; padding-left: 6px; }
 .sc-grid th.sc-week .sc-rev { color: #065f46; font-weight: 700; margin-left: 8px; }
-.sc-grid th.sc-day { border-left: 2px solid #d1d5db; }
-.sc-grid .sc-dept-first, .sc-grid td.sc-dept-first { border-left: 2px solid #d1d5db; }
-.sc-grid th.sc-label, .sc-grid td.sc-label { position: sticky; left: 0; z-index: 2; background: #fff; width: 190px; min-width: 190px; max-width: 190px; text-align: left; padding: 0 8px; overflow: hidden; text-overflow: ellipsis; border-right: 2px solid #9ca3af; }
+.sc-grid th.sc-day { border-left: 3px solid #1f2937; }
+.sc-grid .sc-dept-first, .sc-grid td.sc-dept-first { border-left: 3px solid #1f2937; }
+.sc-grid th.sc-label, .sc-grid td.sc-label { position: sticky; left: 0; z-index: 2; background: #fff; width: 190px; min-width: 190px; max-width: 190px; text-align: left; padding: 0 8px; overflow: hidden; text-overflow: ellipsis; border-right: 3px solid #1f2937; }
 .sc-grid thead th.sc-label { z-index: 4; }
 .sc-grid td.sc-label { cursor: pointer; }
 .sc-grid td.sc-label:hover { background: #f3f4f6; }
 .sc-grid tr.sc-project td { background: #f3f4f6; font-weight: 700; color: #1f2937; height: 24px; }
 .sc-grid tr.sc-project td.sc-label { background: #f3f4f6; }
-.sc-grid td.sc-cell { width: 34px; min-width: 34px; max-width: 34px; text-align: center; vertical-align: middle; cursor: pointer; line-height: 1.05; }
+.sc-grid td.sc-cell { width: 36px; min-width: 36px; max-width: 36px; text-align: center; vertical-align: middle; cursor: pointer; line-height: 1.05; height: 20px; }
+.sc-grid tr.sc-cast-top td.sc-cell { border-bottom: 1px dotted #c4c8d0; }   /* light line between the task row and its hours row */
+.sc-grid tr.sc-cast-bottom td { border-bottom: 2px solid #6b7280; }        /* heavier line between castings */
+.sc-grid tr.sc-cast-top td.sc-label { vertical-align: middle; border-bottom: 2px solid #6b7280; }
+.sc-grid tr.sc-project td { border-bottom: 2px solid #6b7280; border-top: 2px solid #6b7280; }
 .sc-grid td.sc-cell:hover { background: #eff6ff; }
 .sc-grid td.sc-cell.sc-unmapped { box-shadow: inset 0 0 0 2px #f97316; }
 .sc-grid td.sc-cell.sc-wkok { box-shadow: inset 0 0 0 2px #a855f7; }
@@ -72,7 +76,8 @@ table.sc-grid { border-collapse: separate; border-spacing: 0; table-layout: fixe
 .sc-grid thead th.sc-dept[data-dept="Ship"]  { background: var(--c-Ship); }
 .sc-grid thead th.sc-dept.sc-weekend, .sc-grid thead th.sc-dept.sc-holiday { opacity: .55; }
 /* a filled cell: light tint of its column's colour, dark readable text, a solid colour bar on top */
-.sc-grid td.sc-cell.sc-has { --c: #999; background: color-mix(in srgb, var(--c) 14%, white); color: #000; box-shadow: inset 0 4px 0 0 var(--c); }
+.sc-grid td.sc-cell.sc-has { --c: #999; background: color-mix(in srgb, var(--c) 14%, white); color: #000; }
+.sc-grid tr.sc-cast-top td.sc-cell.sc-has { box-shadow: inset 0 4px 0 0 var(--c); }   /* colour bar on the task row only */
 .sc-grid td.sc-cell.sc-has .sc-task { color: #000; font-weight: 800; font-size: 10px; letter-spacing: .1px; }
 .sc-grid td.sc-cell.sc-has .sc-h { color: #000; font-weight: 800; font-size: 12px; }
 .sc-grid td.sc-cell.sc-has[data-dept="CNC"]   { --c: var(--c-CNC); }
@@ -86,10 +91,10 @@ table.sc-grid { border-collapse: separate; border-spacing: 0; table-layout: fixe
 .sc-grid td.sc-cell.sc-has[data-dept="Spec"]  { --c: var(--c-Spec); }
 .sc-grid td.sc-cell.sc-has[data-dept="Ship"]  { --c: var(--c-Ship); }
 .sc-grid td.sc-cell.sc-has:hover { background: color-mix(in srgb, var(--c) 26%, white); }
-.sc-grid td.sc-cell.sc-unmapped { box-shadow: inset 0 4px 0 0 var(--c), inset 0 0 0 3px #f97316; }
-.sc-grid td.sc-cell.sc-wkok { box-shadow: inset 0 4px 0 0 var(--c), inset 0 0 0 3px #a855f7; }
-.sc-task { display: block; font-size: 9px; font-weight: 700; letter-spacing: .2px; color: #7c2d12; text-transform: lowercase; overflow: hidden; text-overflow: ellipsis; }
-.sc-h { display: block; font-size: 11px; font-weight: 600; color: #111827; }
+.sc-grid td.sc-cell.sc-unmapped { box-shadow: inset 0 0 0 3px #f97316 !important; }
+.sc-grid td.sc-cell.sc-wkok { box-shadow: inset 0 0 0 3px #a855f7 !important; }
+.sc-task { display: block; font-size: 10px; font-weight: 800; letter-spacing: .1px; color: #000; text-transform: lowercase; overflow: hidden; text-overflow: ellipsis; padding-top: 3px; }
+.sc-h { display: block; font-size: 12px; font-weight: 800; color: #000; }
 .sc-grid .sc-weekend { background: #f3f4f6; color: #9ca3af; }
 .sc-grid td.sc-cell.sc-weekend:hover { background: #e5e7eb; }
 .sc-grid .sc-holiday { background: repeating-linear-gradient(45deg, #fee2e2, #fee2e2 4px, #fecaca 4px, #fecaca 8px); color: #991b1b; }

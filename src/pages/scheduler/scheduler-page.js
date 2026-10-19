@@ -332,22 +332,25 @@ function renderGrid() {
         const has = rowsOfCasting(c.id).length > 0;
         const bad = has && !lockOk(report);
         const tip = report.map(r => `${r.phase.phase_name}: ${fmtH(r.scheduled)} / ${fmtH(r.optimizer)} h`).join('\n') || 'No Optimizer Hours';
-        h += `<tr><td class="sc-label" data-cid="${c.id}" title="${esc(tip)}\n\nClick for options"><span class="sc-castnum">${esc(castingLabel(c))}</span><span class="sc-castdate">${c.casting_date ? 'cast ' + esc(shortDay(c.casting_date)) : 'no cast date'}</span>${bad ? '<span class="sc-lock" title="Scheduled hours differ from the Optimizer Hours tab"></span>' : ''}</td>`;
+        // two rows per casting, like the sheet: the task word on top, the hours underneath
+        let taskTds = '', hourTds = '';
         for (const d of days) {
             DEPT_KEYS.forEach((dept, i) => {
                 const rows = cellMap.get(`${c.id}|${d}|${dept}`) || [];
                 const cls = ['sc-cell', i === 0 ? 'sc-dept-first' : '', rows.length ? 'sc-has' : '', isWeekend(d) ? 'sc-weekend' : '', isHoliday(d) ? 'sc-holiday' : '', d === today ? 'sc-today' : '',
                     rows.some(r => /Unmapped/.test(r.note || '')) ? 'sc-unmapped' : '', rows.some(r => r.weekend_ok) ? 'sc-wkok' : ''].filter(Boolean).join(' ');
-                let inner = '';
+                let task = '', hrs = '';
                 if (rows.length) {
-                    const task = [...new Set(rows.map(r => r.task))].join('+');
-                    const hrs = rows.reduce((n, r) => n + (Number(r.hours) || 0), 0);
-                    inner = `<span class="sc-task">${esc(task.toLowerCase())}</span><span class="sc-h">${fmtH(hrs)}</span>`;
+                    task = [...new Set(rows.map(r => r.task))].join('+').toLowerCase();
+                    hrs = fmtH(rows.reduce((n, r) => n + (Number(r.hours) || 0), 0));
                 }
-                h += `<td class="${cls}" data-cid="${c.id}" data-date="${d}" data-dept="${dept}">${inner}</td>`;
+                const attrs = `data-cid="${c.id}" data-date="${d}" data-dept="${dept}"`;
+                taskTds += `<td class="${cls} sc-trow" ${attrs}><span class="sc-task">${esc(task)}</span></td>`;
+                hourTds += `<td class="${cls} sc-hrow" ${attrs}><span class="sc-h">${hrs}</span></td>`;
             });
         }
-        h += '</tr>';
+        h += `<tr class="sc-cast-top"><td class="sc-label" rowspan="2" data-cid="${c.id}" title="${esc(tip)}\n\nClick for options"><span class="sc-castnum">${esc(castingLabel(c))}</span><span class="sc-castdate">${c.casting_date ? 'cast ' + esc(shortDay(c.casting_date)) : 'no cast date'}</span>${bad ? '<span class="sc-lock" title="Scheduled hours differ from the Optimizer Hours tab"></span>' : ''}</td>${taskTds}</tr>`;
+        h += `<tr class="sc-cast-bottom">${hourTds}</tr>`;
     }
     h += '</tbody><tfoot><tr><td class="sc-label">Hours needed</td>';
     for (const d of days) DEPT_KEYS.forEach((dept, i) => {
