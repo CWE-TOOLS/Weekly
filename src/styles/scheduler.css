@@ -57,8 +57,8 @@ table.sc-grid { border-collapse: separate; border-spacing: 0; table-layout: fixe
 .sc-grid td.sc-cell.sc-mismatch { box-shadow: inset 0 0 0 2px #dc2626; }
 /* column colours — the original Optimizer's; CNC is new (grey-blue) */
 .sc-grid { --c-CNC: #607D8B; --c-Parts: #4FC3F7; --c-FO: #0000FF; --c-Cast: #FF0000; --c-DM: #FFD966; --c-F: #9900FF; --c-Seal: #6B7280; --c-Crate: #7B3F00; --c-Spec: #FF4FA3; --c-Ship: #0B8043; }
-.sc-grid thead th.sc-dept { color: #fff; font-weight: 700; font-size: 11px; text-shadow: 0 0 2px rgba(0,0,0,.35); }
-.sc-grid thead th.sc-dept[data-dept="Parts"], .sc-grid thead th.sc-dept[data-dept="Crate"], .sc-grid thead th.sc-dept[data-dept="DM"] { text-shadow: none; }
+.sc-grid thead th.sc-dept { color: #fff; font-weight: 800; font-size: 11px; }
+.sc-grid thead th.sc-dept[data-dept="Spec"], .sc-grid thead th.sc-dept[data-dept="Parts"], .sc-grid thead th.sc-dept[data-dept="DM"] { color: #111; }
 .sc-grid thead th.sc-dept[data-dept="CNC"]   { background: var(--c-CNC); }
 .sc-grid thead th.sc-dept[data-dept="Parts"] { background: var(--c-Parts); color: #111; }
 .sc-grid thead th.sc-dept[data-dept="DM"]    { color: #111; }
@@ -72,9 +72,9 @@ table.sc-grid { border-collapse: separate; border-spacing: 0; table-layout: fixe
 .sc-grid thead th.sc-dept[data-dept="Ship"]  { background: var(--c-Ship); }
 .sc-grid thead th.sc-dept.sc-weekend, .sc-grid thead th.sc-dept.sc-holiday { opacity: .55; }
 /* a filled cell: light tint of its column's colour, dark readable text, a solid colour bar on top */
-.sc-grid td.sc-cell.sc-has { --c: #999; background: color-mix(in srgb, var(--c) 18%, white); color: #111827; box-shadow: inset 0 4px 0 0 var(--c); }
-.sc-grid td.sc-cell.sc-has .sc-task { color: color-mix(in srgb, var(--c) 70%, black); font-size: 10px; }
-.sc-grid td.sc-cell.sc-has .sc-h { color: #111827; font-size: 12px; }
+.sc-grid td.sc-cell.sc-has { --c: #999; background: color-mix(in srgb, var(--c) 14%, white); color: #000; box-shadow: inset 0 4px 0 0 var(--c); }
+.sc-grid td.sc-cell.sc-has .sc-task { color: #000; font-weight: 800; font-size: 10px; letter-spacing: .1px; }
+.sc-grid td.sc-cell.sc-has .sc-h { color: #000; font-weight: 800; font-size: 12px; }
 .sc-grid td.sc-cell.sc-has[data-dept="CNC"]   { --c: var(--c-CNC); }
 .sc-grid td.sc-cell.sc-has[data-dept="Parts"] { --c: var(--c-Parts); }
 .sc-grid td.sc-cell.sc-has[data-dept="FO"]    { --c: var(--c-FO); }
@@ -85,7 +85,7 @@ table.sc-grid { border-collapse: separate; border-spacing: 0; table-layout: fixe
 .sc-grid td.sc-cell.sc-has[data-dept="Crate"] { --c: var(--c-Crate); }
 .sc-grid td.sc-cell.sc-has[data-dept="Spec"]  { --c: var(--c-Spec); }
 .sc-grid td.sc-cell.sc-has[data-dept="Ship"]  { --c: var(--c-Ship); }
-.sc-grid td.sc-cell.sc-has:hover { background: color-mix(in srgb, var(--c) 30%, white); }
+.sc-grid td.sc-cell.sc-has:hover { background: color-mix(in srgb, var(--c) 26%, white); }
 .sc-grid td.sc-cell.sc-unmapped { box-shadow: inset 0 4px 0 0 var(--c), inset 0 0 0 3px #f97316; }
 .sc-grid td.sc-cell.sc-wkok { box-shadow: inset 0 4px 0 0 var(--c), inset 0 0 0 3px #a855f7; }
 .sc-task { display: block; font-size: 9px; font-weight: 700; letter-spacing: .2px; color: #7c2d12; text-transform: lowercase; overflow: hidden; text-overflow: ellipsis; }
