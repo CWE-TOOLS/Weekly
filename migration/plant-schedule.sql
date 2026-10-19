@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS plant_schedule (
     casting_id     uuid NOT NULL REFERENCES project_castings(id) ON DELETE CASCADE,
     phase_id       uuid REFERENCES casting_phases(id) ON DELETE CASCADE,   -- null = typed by hand
     date           date NOT NULL,
-    department     text NOT NULL,          -- Mill | FO | Cast | DM | F | Seal | Crate | Spec | Ship
+    department     text NOT NULL,          -- CNC | Parts | FO | Cast | DM | F | Seal | Crate | Spec | Ship
     task           text NOT NULL,          -- CNC, PARTS, FO, CAST, DM, G/F, GOF, ACID, WASH, TU, SEAL, AZEK, STRIP, BUILD, RACK, DRY, DRILL, PAN, SHIP …
     hours          numeric NOT NULL DEFAULT 0,
     weekend_ok     boolean NOT NULL DEFAULT false,   -- a person allowed this weekend day

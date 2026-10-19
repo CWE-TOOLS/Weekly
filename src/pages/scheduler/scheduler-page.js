@@ -1,7 +1,7 @@
 /**
  * Plant Scheduler page (2026-10-19) — PREVIEW.
  *
- * Replaces the Google-Sheet "Optimizer" grid: castings × days × 9 department columns, two lines
+ * Replaces the Google-Sheet "Optimizer" grid: castings × days × 10 department columns, two lines
  * per cell (task + hours). Hours come from the portal's Optimizer Hours tab (casting_phases) and
  * are spread over working days; the grid is locked to those hours (a phase always totals exactly
  * what the Optimizer Hours tab says). Weekends need an explicit allow per day; holidays are never
@@ -122,6 +122,8 @@ async function loadRows() {
     const extraIds = [...S.pinned];
     const extra = extraIds.length ? await loadScheduleForCastings(extraIds) : [];
     S.rows = inWindow.concat(extra.filter(r => !seen.has(r.id)));
+    // rows saved before the Mill column was split into CNC + Parts (2026-10-19)
+    for (const r of S.rows) if (r.department === 'Mill') r.department = r.task === 'PARTS' ? 'Parts' : 'CNC';
 }
 
 // per-casting helpers
