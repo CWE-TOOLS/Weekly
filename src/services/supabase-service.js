@@ -26,7 +26,13 @@ const tasksTable = SUPABASE.TASKS_TABLE;
  * { action: 'portal_changed:<table>', table, project, castingId, clientId } so the other
  * open portals can reload the tab that shows that table. A page ignores its own signals.
  */
-export const CLIENT_ID = Math.random().toString(36).slice(2) + Date.now().toString(36);
+export const CLIENT_ID = (() => {
+    // A page embedded in the portal (the Jane Street batching frame) shares its parent's id, so its
+    // saves do not come back to the parent as "someone else".
+    try { if (window.parent && window.parent !== window && window.parent.__portalClientId) return window.parent.__portalClientId; } catch (_) { /* cross-origin */ }
+    return Math.random().toString(36).slice(2) + Date.now().toString(36);
+})();
+try { window.__portalClientId = CLIENT_ID; } catch (_) { /* ignore */ }
 const WRITE_METHODS = ['insert', 'update', 'upsert', 'delete'];
 const SILENT_TABLES = new Set(['sheets_cache', 'sheets_cache_status']);
 export const PORTAL_CHANGED = 'portal_changed:';
