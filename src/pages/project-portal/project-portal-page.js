@@ -7896,6 +7896,15 @@ function wireEvents() {
             closeTrackPrintModal();
         }
     });
+    // Esc on the Tracking tab = the bulk bar's "Clear selection" (2026-10-19, PM request).
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape' || currentTab !== 'tracking' || !selectedComponentIds.size) return;
+        if (document.querySelector('.pp-modal-backdrop:not([hidden])')) return;   // a dialog owns Esc
+        const ae = document.activeElement;
+        if (ae && ae.matches('input, textarea, select')) ae.blur();   // leave the field first; the selection clears too
+        selectedComponentIds.clear();
+        renderTracking();
+    });
     document.getElementById('pp-track-print-modal-list').addEventListener('click', (e) => {
         const btn = e.target.closest('button[data-casting-id]');
         if (!btn) return;
