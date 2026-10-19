@@ -316,7 +316,7 @@ function renderGrid() {
         h += `<th class="${cls}" colspan="${DEPT_KEYS.length}" title="${isHoliday(d) ? 'Holiday — never scheduled' : isWeekend(d) ? 'Weekend — needs an allow' : ''}">${esc(shortDay(d))}</th>`;
     }
     h += '</tr><tr>';
-    for (const d of days) DEPARTMENTS.forEach((dep, i) => { h += `<th class="${i === 0 ? 'sc-dept-first' : ''} ${isWeekend(d) ? 'sc-weekend' : ''} ${isHoliday(d) ? 'sc-holiday' : ''}">${dep.label}</th>`; });
+    for (const d of days) DEPARTMENTS.forEach((dep, i) => { h += `<th class="sc-dept ${i === 0 ? 'sc-dept-first' : ''} ${isWeekend(d) ? 'sc-weekend' : ''} ${isHoliday(d) ? 'sc-holiday' : ''}" data-dept="${dep.key}">${dep.label}</th>`; });
     h += '</tr></thead><tbody>';
 
     if (!castings.length) {
