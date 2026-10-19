@@ -56,7 +56,7 @@ table.sc-grid { border-collapse: separate; border-spacing: 0; table-layout: fixe
 .sc-grid td.sc-cell.sc-wkok { box-shadow: inset 0 0 0 2px #a855f7; }
 .sc-grid td.sc-cell.sc-mismatch { box-shadow: inset 0 0 0 2px #dc2626; }
 /* column colours — the original Optimizer's; CNC is new (grey-blue) */
-.sc-grid { --c-CNC: #607D8B; --c-Parts: #4FC3F7; --c-FO: #9900FF; --c-Cast: #FF0000; --c-DM: #FFD966; --c-F: #FF00FF; --c-Seal: #006100; --c-Crate: #00FFFF; --c-Spec: #0000FF; --c-Ship: #FF0000; }
+.sc-grid { --c-CNC: #607D8B; --c-Parts: #4FC3F7; --c-FO: #0000FF; --c-Cast: #FF0000; --c-DM: #FFD966; --c-F: #9900FF; --c-Seal: #6B7280; --c-Crate: #7B3F00; --c-Spec: #FF4FA3; --c-Ship: #0B8043; }
 .sc-grid thead th.sc-dept { color: #fff; font-weight: 700; font-size: 11px; text-shadow: 0 0 2px rgba(0,0,0,.35); }
 .sc-grid thead th.sc-dept[data-dept="Parts"], .sc-grid thead th.sc-dept[data-dept="Crate"], .sc-grid thead th.sc-dept[data-dept="DM"] { text-shadow: none; }
 .sc-grid thead th.sc-dept[data-dept="CNC"]   { background: var(--c-CNC); }
@@ -67,7 +67,7 @@ table.sc-grid { border-collapse: separate; border-spacing: 0; table-layout: fixe
 .sc-grid thead th.sc-dept[data-dept="DM"]    { background: var(--c-DM); }
 .sc-grid thead th.sc-dept[data-dept="F"]     { background: var(--c-F); }
 .sc-grid thead th.sc-dept[data-dept="Seal"]  { background: var(--c-Seal); }
-.sc-grid thead th.sc-dept[data-dept="Crate"] { background: var(--c-Crate); color: #111; }
+.sc-grid thead th.sc-dept[data-dept="Crate"] { background: var(--c-Crate); }
 .sc-grid thead th.sc-dept[data-dept="Spec"]  { background: var(--c-Spec); }
 .sc-grid thead th.sc-dept[data-dept="Ship"]  { background: var(--c-Ship); }
 .sc-grid thead th.sc-dept.sc-weekend, .sc-grid thead th.sc-dept.sc-holiday { opacity: .55; }
