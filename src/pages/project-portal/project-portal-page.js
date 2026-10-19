@@ -554,7 +554,7 @@ async function showListView() {
     window.__portalProject = null;
     document.getElementById('pp-list-view').hidden = false;
     document.getElementById('pp-form-view').hidden = true;
-    updateMsFloat();
+    updateFloats();   // hides the batching floats (castings box, out-of-date warning) and the Releasability bar
     const memosView = document.getElementById('pp-memos-view');
     if (memosView) memosView.hidden = true;
     const scViewLV = document.getElementById('pp-standards-view');
@@ -9387,6 +9387,7 @@ function quickInfoHtml(info) {
 
 /** The casting pills: where they sit on screen and what they hold, or null. */
 function castsAnchor() {
+    if (formViewHidden()) return null;   // Back to list: the castings box must go with the form
     if (currentTab !== 'batch-tickets') return null;
     const frame = getSpecialBatchingFrame();
     if (frame && frame.getAttribute('src') && !frame.closest('[hidden]')) {
@@ -9449,8 +9450,9 @@ function updateCastsFloat() {
 function updateFloats() { updateStaleFloat(); updateCastsFloat(); updateMsFloat(); }
 
 /** Where the inline warning sits on screen (and what it says), or null when none is showing. */
+function formViewHidden() { const fv = document.getElementById('pp-form-view'); return !fv || fv.hidden; }
 function staleAnchor() {
-    if (currentTab !== 'batch-tickets') return null;
+    if (currentTab !== 'batch-tickets' || formViewHidden()) return null;   // nothing to float over on the project list
     const frame = getSpecialBatchingFrame();
     if (frame && frame.getAttribute('src') && !frame.closest('[hidden]')) {
         // Special page in its frame: it reported its own warning's position (relative to the frame).
