@@ -690,6 +690,7 @@ body { overflow: visible; }
     z-index: 100;
 }
 .pp-toast.pp-toast-error { background: #b91c1c; }
+.pp-toast.pp-toast-info { background: #1d4ed8; }
 
 /* ---------- Castings panel ---------- */
 .pp-castings-wrap {

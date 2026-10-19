@@ -135,6 +135,7 @@ import {
     snapshotLayout,
     clearLayoutPositions
 } from '../../services/casting-layout-service.js';
+import { registerRefreshHandler, isPortalChange, isOwnSignal, signalInfo } from '../../services/supabase-service.js';
 
 const STATUS_SORT_ORDER = {
     'kicked off': 0,
@@ -550,6 +551,7 @@ async function showListView() {
     // Flush all pending job-memo saves.
     await flushAllJobMemoSaves();
     currentProjectNumber = null;
+    window.__portalProject = null;
     document.getElementById('pp-list-view').hidden = false;
     document.getElementById('pp-form-view').hidden = true;
     updateMsFloat();
@@ -576,6 +578,7 @@ async function showListView() {
 
 async function showFormView(projectNumber, draftOverrides = null) {
     currentProjectNumber = projectNumber || null;
+    window.__portalProject = currentProjectNumber;
     document.getElementById('pp-list-view').hidden = true;
     document.getElementById('pp-form-view').hidden = false;
     requestAnimationFrame(updateMsFloat);
@@ -5657,6 +5660,175 @@ function showToast(msg, kind = 'success') {
     el.hidden = false;
     if (toastTimer) clearTimeout(toastTimer);
     toastTimer = setTimeout(() => { el.hidden = true; }, 2500);
+}
+
+// ---------- Live multi-user refresh (2026-10-19) ----------
+// Another portal saved something: reload the tab that shows it, unless this user is in the
+// middle of typing there (then wait for the field to blur). Own saves never arrive here.
+const LIVE_TABLE_TABS = {
+    projects: ['info'],
+    project_phases: ['*'],
+    project_castings: ['*'],
+    casting_inventory: ['castings', 'batch-tickets', 'jig-list', 'casting-layout', 'tracking', 'color-log'],
+    casting_components: ['tracking', 'shipping', 'castings', 'casting-layout'],
+    project_crates: ['tracking', 'shipping'],
+    batch_tickets: ['batch-tickets', 'color-log'],
+    color_logs: ['color-log', 'batch-tickets', 'castings'],
+    casting_phases: ['optimizer', 'actual-labor'],
+    actual_hours: ['actual-labor'],
+    task_descriptions: ['staging'],
+    jig_lists: ['jig-list'],
+    casting_layout_positions: ['casting-layout'],
+    job_memos: ['job-memos'],
+    project_classroom_tasks: ['cr-notes'],
+    casting_milestones: ['approvals', 'cr-notes']
+};
+const LIVE_TAB_LABELS = {
+    info: 'Project Info', castings: 'Castings', optimizer: 'Optimizer Hours', staging: 'Staging', approvals: 'Releasability Approvals',
+    tracking: 'Tracking', shipping: 'Shipping', 'casting-layout': 'Casting Layout', 'jig-list': 'Jig List', 'color-log': 'Color Log',
+    'batch-tickets': 'Batch Tickets', 'job-memos': 'Job Memos', 'cr-notes': 'Class Rooms', 'actual-labor': 'Actual Labor'
+};
+const liveReloadPending = new Set();   // tabs waiting for the user to stop typing
+let liveReloadTimer = null;
+let liveReloadRunning = false;
+
+async function handleLiveRefresh(last, payloads) {
+    const batch = (Array.isArray(payloads) && payloads.length ? payloads : [last]).filter(p => !isOwnSignal(p));
+    if (!batch.length) return;
+    const tables = new Set();
+    let milestones = false;
+    for (const p of batch) {
+        const info = signalInfo(p);
+        if (info.action === 'releasability_status_updated') { milestones = true; continue; }
+        if (!isPortalChange(p)) continue;
+        // Another job's save: skip when we can tell. Signals without a project are taken as ours.
+        if (currentProjectNumber && info.project && String(info.project) !== String(currentProjectNumber)) continue;
+        if (currentProjectNumber && !info.project && info.castingId && currentCastings.length && !currentCastings.some(c => c.id === info.castingId)) continue;
+        tables.add(info.table);
+        if (info.table === 'casting_milestones') milestones = true;
+    }
+    if (!tables.size && !milestones) return;
+
+    // List view: only the project list can change.
+    if (!currentProjectNumber) {
+        if (tables.has('projects') || tables.has('project_phases') || tables.has('project_castings')) {
+            try { await refreshList(); } catch (e) { logger.warn('[live] refreshList failed', e); }
+        }
+        return;
+    }
+
+    const tabs = new Set();
+    for (const t of tables) for (const tab of (LIVE_TABLE_TABS[t] || [])) tabs.add(tab);
+    if (milestones) tabs.add('ms');
+
+    // Caches that would otherwise serve stale data when the tab is next opened.
+    if (tabs.has('*') || tabs.has('batch-tickets')) batchTicketsLoadedFor = null;
+    if (tabs.has('*') || tabs.has('color-log')) colorLogLoadedFor = null;
+    if (tabs.has('*') || tabs.has('job-memos')) jobMemosLoadedFor = null;
+    if (tabs.has('*') || tabs.has('tracking') || tabs.has('shipping')) cratesLoadedFor = null;
+    if (tabs.has('*') || tabs.has('castings')) currentCastingInventoryLoadedFor = null;
+    if (tabs.has('*')) phasesLoadedFor = null;
+
+    const wanted = new Set();
+    if (tabs.has('*')) { wanted.add('*'); }
+    else {
+        if (tabs.has(currentTab)) wanted.add(currentTab);
+        if (tabs.has('ms')) wanted.add('ms');
+        // Castings data feeds most tabs: refresh the shared state even when another tab is open.
+        if (tabs.has('castings') && currentTab !== 'castings') wanted.add('castings-data');
+    }
+    if (!wanted.size) return;
+    for (const w of wanted) liveReloadPending.add(w);
+    scheduleLiveReload();
+}
+
+function liveUserBusy() {
+    const form = document.getElementById('pp-form-view');
+    if (!form || form.hidden) return false;
+    const ae = document.activeElement;
+    if (ae && form.contains(ae) && (ae.matches('input, textarea, select, [contenteditable="true"]'))) return true;
+    if (invEdits.size) return true;                                           // inventory edits not yet accepted
+    if (document.querySelector('.pp-modal-backdrop:not([hidden])')) return true;   // a dialog is open
+    return false;
+}
+
+function scheduleLiveReload(delay = 0) {
+    if (liveReloadTimer) clearTimeout(liveReloadTimer);
+    liveReloadTimer = setTimeout(runLiveReload, delay);
+}
+function armLiveReloadRetry() { scheduleLiveReload(1500); }   // after a blur: let the debounced save land first
+
+async function runLiveReload() {
+    liveReloadTimer = null;
+    if (!liveReloadPending.size || liveReloadRunning) return;
+    if (!currentProjectNumber) { liveReloadPending.clear(); return; }
+    if (liveUserBusy()) { scheduleLiveReload(5000); return; }   // typing — try again; focusout also retries
+    const wanted = new Set(liveReloadPending);
+    liveReloadPending.clear();
+    liveReloadRunning = true;
+    try {
+        if (wanted.has('*')) {
+            await liveReloadProjectAndPhases();
+            await loadAndRenderCastings();
+            if (currentTab !== 'castings') await liveReloadTab(currentTab);
+        } else {
+            if (wanted.has('castings-data')) await loadAndRenderCastings();
+            if (wanted.has('ms')) {
+                await loadMilestones();
+                updateMsFloat(); refreshInlineMs();
+                if (currentTab === 'castings' && !wanted.has('castings')) renderCastings();
+                if (currentTab === 'approvals') renderApprovals();
+                if (currentTab === 'cr-notes') renderClassroomMs();
+                if (currentTab === 'optimizer') renderOptimizer();
+            }
+            if (wanted.has(currentTab)) await liveReloadTab(currentTab);
+        }
+        const label = wanted.has('*') ? 'this job' : (LIVE_TAB_LABELS[currentTab] || 'this tab');
+        showToast(`Someone else updated ${label} — reloaded`, 'info');
+    } catch (err) {
+        logger.warn('[live] reload failed', err);
+    } finally {
+        liveReloadRunning = false;
+        if (liveReloadPending.size) scheduleLiveReload(500);
+    }
+}
+
+async function liveReloadProjectAndPhases() {
+    let project = null;
+    try { project = await loadProject(currentProjectNumber); } catch (e) { /* keep what we have */ }
+    if (!project) return;
+    populateForm(project);
+    currentPhasesEnabled = !!project.phases_enabled;
+    currentMultiColorEnabled = !!project.multi_color_enabled;
+    shipQtyModeGlobal = !!project.ship_qty_mode;
+    if (currentPhasesEnabled) {
+        try { currentPhases = await loadPhasesForProject(project.project_number); phasesLoadedFor = project.project_number; }
+        catch (e) { currentPhases = []; }
+    } else { currentPhases = []; phasesLoadedFor = null; }
+    ensureValidCurrentPhase();
+    renderPhasesSection();
+    renderPhaseSwitcher();
+    updateFormContext(project);
+}
+
+async function liveReloadTab(tab) {
+    switch (tab) {
+        case 'info':           await liveReloadProjectAndPhases(); break;
+        case 'castings':       await loadAndRenderCastings(); break;
+        case 'optimizer':      await activateOptimizerTab(); break;
+        case 'staging':        await activateStagingTab(); break;
+        case 'approvals':      await activateApprovalsTab(); break;
+        case 'tracking':       await activateTrackingTab(); break;
+        case 'shipping':       await activateShippingTab(); break;
+        case 'casting-layout': await activateCastingLayoutTab(); break;
+        case 'jig-list':       await activateJigListTabWithCtx(); break;
+        case 'color-log':      await activateColorLogTab(); break;
+        case 'batch-tickets':  await activateBatchTicketsTab(); break;
+        case 'job-memos':      await activateJobMemosTab(); break;
+        case 'actual-labor':   await activateActualLaborTab(); break;
+        case 'cr-notes':       await loadAndRenderClassroomTasks(); break;
+        default: break;
+    }
 }
 
 // ---------- Color Log (UI only — no DB yet) ----------
@@ -13580,6 +13752,8 @@ async function handlePrintColorLog() {
 
 async function init() {
     wireEvents();
+    registerRefreshHandler(handleLiveRefresh);
+    document.addEventListener('focusout', () => { if (liveReloadPending.size) armLiveReloadRetry(); });
     const urlProject = getProjectFromUrl();
     const urlTab     = getTabFromUrl();
     const urlView    = getViewFromUrl();

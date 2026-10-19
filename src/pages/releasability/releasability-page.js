@@ -83,7 +83,7 @@ import {
   setupCacheSubscription,
   removeCacheSubscription
 } from '../../services/sheets-cache-service.js';
-import { registerRefreshHandler } from '../../services/supabase-service.js';
+import { registerRefreshHandler, isPortalChange, signalInfo } from '../../services/supabase-service.js';
 import { initFreshnessLabel, markDataUpdated, startVisiblePolling } from '../../utils/auto-refresh.js';
 import { debug } from '../../utils/debug.js';
 
@@ -267,7 +267,14 @@ async function handleCacheUpdate(payload) {
  * Handle refresh signal from another client
  * This is called when another client updates releasability data (status changes, etc.)
  */
-async function handleSilentRefresh(payload) {
+const BOARD_TABLES = new Set(['releasability_tracking', 'releasability_manual_weeks', 'project_castings', 'project_phases', 'casting_milestones', 'projects']);
+async function handleSilentRefresh(payload, payloads = null) {
+  // Portal saves announce themselves per table; the board only cares about a few of them.
+  const batch = Array.isArray(payloads) && payloads.length ? payloads : [payload];
+  if (batch.every(p => isPortalChange(p) && !BOARD_TABLES.has(signalInfo(p).table))) {
+    debug.log('⏭️ Portal change on a non-board table — ignoring');
+    return;
+  }
   debug.log('📡 Refresh signal received from another client, syncing data...', payload);
 
   // Skip if a manual refresh is already in progress

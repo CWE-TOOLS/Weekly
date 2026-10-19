@@ -20,6 +20,79 @@ let initializationPromise = null; // Guard against concurrent initialization
 let customRefreshHandler = null; // Custom refresh handler for different pages
 const tasksTable = SUPABASE.TASKS_TABLE;
 
+/**
+ * Live multi-user refresh (2026-10-19). Every page load gets an id; every successful
+ * insert/update/upsert/delete made through the shared client broadcasts
+ * { action: 'portal_changed:<table>', table, project, castingId, clientId } so the other
+ * open portals can reload the tab that shows that table. A page ignores its own signals.
+ */
+export const CLIENT_ID = Math.random().toString(36).slice(2) + Date.now().toString(36);
+const WRITE_METHODS = ['insert', 'update', 'upsert', 'delete'];
+const SILENT_TABLES = new Set(['sheets_cache', 'sheets_cache_status']);
+export const PORTAL_CHANGED = 'portal_changed:';
+
+function pickField(payload, field) {
+    const first = Array.isArray(payload) ? payload[0] : payload;
+    const v = first && typeof first === 'object' ? first[field] : undefined;
+    return v === undefined || v === null ? null : String(v);
+}
+
+function installWriteAnnouncer(client) {
+    if (!client || client.__writeAnnouncer) return;
+    client.__writeAnnouncer = true;
+    const origFrom = client.from.bind(client);
+    client.from = (table) => {
+        const qb = origFrom(table);
+        if (SILENT_TABLES.has(table)) return qb;
+        for (const m of WRITE_METHODS) {
+            if (typeof qb[m] !== 'function') continue;
+            const orig = qb[m].bind(qb);
+            qb[m] = (...args) => {
+                const fb = orig(...args);
+                const info = {
+                    table,
+                    project: m === 'delete' ? null : (pickField(args[0], 'project_number') || pickField(args[0], 'project_id')),
+                    castingId: m === 'delete' ? null : pickField(args[0], 'casting_id')
+                };
+                // Filters carry the project / casting for update + delete.
+                if (typeof fb.eq === 'function') {
+                    const origEq = fb.eq.bind(fb);
+                    fb.eq = (col, val) => {
+                        if (col === 'project_number' && val != null) info.project = String(val);
+                        if (col === 'casting_id' && val != null) info.castingId = String(val);
+                        return origEq(col, val);
+                    };
+                }
+                if (typeof fb.in === 'function') {
+                    const origIn = fb.in.bind(fb);
+                    fb.in = (col, vals) => {
+                        if (col === 'casting_id' && Array.isArray(vals) && vals.length && !info.castingId) info.castingId = String(vals[0]);
+                        return origIn(col, vals);
+                    };
+                }
+                const origThen = fb.then.bind(fb);
+                fb.then = (onOk, onErr) => origThen((res) => {
+                    if (res && !res.error) announceWrite(info);
+                    return onOk ? onOk(res) : res;
+                }, onErr);
+                return fb;
+            };
+        }
+        return qb;
+    };
+}
+
+function announceWrite(info) {
+    const project = info.project || (typeof window !== 'undefined' && window.__portalProject) || null;
+    sendRefreshSignal({ action: PORTAL_CHANGED + info.table, table: info.table, project, castingId: info.castingId || null, clientId: CLIENT_ID })
+        .catch(() => { /* best effort */ });
+}
+
+/** Signal metadata helpers shared by the receiving pages. */
+export function signalInfo(payload) { return (payload && payload.payload && payload.payload.info) || {}; }
+export function isPortalChange(payload) { return String(signalInfo(payload).action || '').startsWith(PORTAL_CHANGED); }
+export function isOwnSignal(payload) { return signalInfo(payload).clientId === CLIENT_ID; }
+
 // Realtime reconnect state — the refresh-signal websocket can silently die
 // after sleep/network drops; reconnect with exponential backoff so cross-client
 // updates keep flowing without a manual page reload.
@@ -82,6 +155,7 @@ export async function initializeSupabase() {
             }
 
             supabaseClient = window.supabase.createClient(SUPABASE.URL, SUPABASE.ANON_KEY);
+            installWriteAnnouncer(supabaseClient);
 
             // Subscribe to refresh signals
             setupRefreshSubscription();
@@ -167,6 +241,7 @@ let refreshReloadInFlight = false;
  * @param {Object} payload - Refresh signal payload
  */
 function handleRefreshSignal(payload) {
+    if (isPortalChange(payload) && isOwnSignal(payload)) return;   // our own save — nothing to reload
     pendingRefreshPayloads.push(payload);
     if (!refreshWindowTimer) {
         refreshWindowTimer = setTimeout(processPendingRefreshSignals, REFRESH_COALESCE_MS);
@@ -207,14 +282,18 @@ async function runRefresh(payloads) {
 
     // Use custom handler if registered (e.g., releasability board)
     if (customRefreshHandler) {
-        await customRefreshHandler(payloads[payloads.length - 1]);
+        await customRefreshHandler(payloads[payloads.length - 1], payloads);
         return;
     }
 
     // Fallback to weekly schedule page handler
-    // Skip only when every signal in the batch is a releasability-only action
+    // Skip only when every signal in the batch is a releasability-only action or a portal
+    // table the weekly does not read (its own tables keep triggering a reload).
+    const WEEKLY_TABLES = new Set([tasksTable, 'task_descriptions']);
     const isReleasabilityAction = (payload) => {
-        const action = payload && payload.payload && payload.payload.info && payload.payload.info.action;
+        const info = signalInfo(payload);
+        const action = info.action;
+        if (isPortalChange(payload)) return !WEEKLY_TABLES.has(info.table);
         return action === 'releasability_status_updated' ||
                action === 'releasability_project_deleted';
     };
