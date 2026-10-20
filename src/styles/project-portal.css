@@ -6644,3 +6644,7 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
 .pp-track-section-counts { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
 .pp-track-section-counts .pp-track-section-count { margin-left: 0; }
 .pp-track-section-remakes { font-size: 11px; color: #9a3412; background: #ffedd5; border: 1px solid #fdba74; padding: 1px 8px; border-radius: 999px; font-weight: 700; white-space: nowrap; }
+/* Batch Tickets: the inventory is being updated — wait for "Casting Inventory ready" (2026-10-20) */
+.pp-bt-updating { background: #fffbeb; border: 3px solid #f59e0b; border-radius: 8px; padding: 12px 14px; color: #78350f; display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.pp-bt-updating-title { font-size: 18px; font-weight: 900; letter-spacing: 0.04em; color: #b45309; }
+.pp-bt-updating-text { font-size: 13px; font-weight: 600; }

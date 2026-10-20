@@ -108,7 +108,7 @@ import {
     roundSig,
     FROM_LBS
 } from '../../utils/batch-calc.js';
-import { getSpecialBatching } from '../../config/special-batching.js';
+import { getSpecialBatching } from '../../config/special-batching.js?v=20261020-3';
 import { fetchAllTasks } from '../../services/data-service.js';
 import { loadActualHoursForProject } from '../../services/actual-hours-service.js';
 import { parseDate } from '../../utils/date-utils.js';
@@ -4314,7 +4314,18 @@ function invFingerprint(castingId, milestone) {
     return invHash(rows.join('\n')) + '-' + rows.length;
 }
 /** All per-print fingerprints as one marker body: b=…;l=…;t=…;c=…;j=… */
-function invMarks(castingId) { return CI_DEPENDENT.map(m => INV_MARK_KEYS[m] + '=' + invFingerprint(castingId, m)).join(';'); }
+function invMarks(castingId) { return CI_DEPENDENT.map(m => INV_MARK_KEYS[m] + '=' + invFingerprint(castingId, m)).join(';') + ';bc=' + invColourFingerprint(castingId); }
+/** The colour logs the inventory uses (rows with pieces), order ignored — stored as bc=… so a colour change is always a reprint. */
+function invColourFingerprint(castingId) {
+    const ids = [...new Set(getInventoryFor(castingId).filter(r => ((Number(r.quantity) || 0) + (Number(r.extras) || 0)) > 0).map(r => String(r.color_log_id || '')))].sort();
+    return invHash(ids.join('|')) + '-' + ids.length;
+}
+/** The colour fingerprint stored at the last "ready" ('' when that lock predates it). */
+function invBaselineColour(castingId) {
+    const m = String(msRow(castingId, 'Casting Inventory')?.note || '').match(INV_MARK_RE);
+    const part = m ? m[1].split(';').find(p => p.startsWith('bc=')) : null;
+    return part ? part.slice(3) : '';
+}
 /** Baselines stored at lock time: milestone -> hash (empty when the lock predates per-print marks). */
 function invBaselines(castingId) {
     const m = String(msRow(castingId, 'Casting Inventory')?.note || '').match(INV_MARK_RE);
@@ -4396,9 +4407,60 @@ async function ciPmReady(castingId) {
 }
 async function ciAdvance(castingId) {
     if (ciStatus(castingId) !== MS.ORANGE) return;   // nothing entered yet, or already ready
+    const reprint = await ciBatchReprintCheck(castingId);   // against the as-printed marks, before the new ones replace them
     await msSet(castingId, 'Casting Inventory', MS.GREEN, { locked: true, note: withInvMark(CI_READY_NOTE, invMarks(castingId)), stamp: true });
     invEdits.clear();
+    ciBatchReprintReport(castingId, reprint);
     renderCastings();
+}
+/** Batch tickets printed from this inventory went orange because of the edits: do their numbers really change?
+ *  null = nothing to say (not printed, or orange for another reason); 'same' = the tickets come out the same and the
+ *  colours are as printed; 'changed' = print them again. Special batching pages (Jane Street) are not compared yet. */
+async function ciBatchReprintCheck(castingId) {
+    const r = msRow(castingId, 'Batching Sheets');
+    if (!r || r.status !== MS.ORANGE || r.note !== INV_CHANGED_NOTE) return null;
+    const bcBase = invBaselineColour(castingId);
+    if (!bcBase || bcBase !== invColourFingerprint(castingId)) return 'changed';   // colour changed, or an older lock with no colour record
+    if (getSpecialBatching(currentProjectNumber)) return specialReprintCheck(castingId);   // the Jane Street page compares its own tickets
+    try { await ensureBatchTicketsLoaded(); } catch { return 'changed'; }
+    return btReprintCheck(castingId) === 'same' ? 'same' : 'changed';
+}
+/** Special batching page (Jane Street): the embedded page compares its own tickets with the inventory as it is now.
+ *  The frame is loaded when the tab was never opened; no answer within 15 s counts as "changed". */
+let specialReprintSeq = 0;
+const specialReprintWaiting = new Map();   // token -> resolve
+function specialReprintCheck(castingId) {
+    const frame = getSpecialBatchingFrame();
+    if (!frame) return Promise.resolve('changed');
+    if (!frame.getAttribute('src')) renderSpecialBatching();
+    const token = 'rc' + (++specialReprintSeq);
+    return new Promise(resolve => {
+        const timer = setTimeout(() => { specialReprintWaiting.delete(token); resolve('changed'); }, 15000);
+        specialReprintWaiting.set(token, (v) => { clearTimeout(timer); specialReprintWaiting.delete(token); resolve(v === 'same' ? 'same' : 'changed'); });
+        const send = () => frame.contentWindow?.postMessage({ type: 'jsb-reprint-check', castingId, token }, location.origin);
+        send();
+        frame.addEventListener('load', send, { once: true });   // a page still loading has no listener yet: ask again once it is there
+    });
+}
+/** Special page: the "inventory is being updated" banner sits above the frame (the page itself knows nothing of milestones). */
+function updateSpecialUpdatingBanner() {
+    const wrap = document.getElementById('pp-bt-special');
+    if (!wrap) return;
+    let el = document.getElementById('pp-bt-special-updating');
+    if (!el) { el = document.createElement('div'); el.id = 'pp-bt-special-updating'; wrap.insertBefore(el, wrap.firstChild); }
+    const id = msBatchCastingId();
+    const casting = id ? currentCastings.find(c => c.id === id) : null;
+    el.innerHTML = casting ? renderBatchUpdatingBanner(casting) : '';
+}
+function ciBatchReprintReport(castingId, verdict) {
+    if (!verdict) return;
+    const name = msCastName(castingId);
+    if (verdict === 'same') {
+        msSet(castingId, 'Batching Sheets', MS.GREEN, { note: null });   // the print stamp stays: the printed tickets are still right
+        showToast(`${name}: the batch tickets come out the same — no need to print them again.`, 'success', 10000);
+    } else {
+        showToast(`${name}: the batch tickets change — print them again (Batching Sheets stays orange on the board until you do).`, 'warning', 10000);
+    }
 }
 async function ciUnlock(castingId) {
     // Keep the ready inventory's fingerprint (older locks have none: the inventory as it is now becomes the baseline).
@@ -4460,6 +4522,8 @@ async function printGate(castingIds, milestone) {
     });
 }
 window.__ppMilestones = { printGate, stampPrinted, markWorking, topOffset: msTopOffset, on: msOn, setJigCasting: (id) => { msJigCastingId = id; updateMsFloat(); } };
+// Read-only hooks for checking the batch-ticket comparison from the console (nothing here saves).
+window.__ppBatchCheck = { reprint: btReprintCheck, signature: btPlanSignature, banner: renderBatchStaleBanner, tickets: getBatchTicketList, inventory: getInventoryFor, castings: () => currentCastings, load: ensureBatchTicketsLoaded };
 
 // ---- The floating "Releasability Board" box (bottom right) — what the current tab drives.
 function msDot(status) { return `<span class="pp-ms-dot pp-ms-${status}"${status === MS.NA ? ' title="N/A"' : ''}></span>`; }
@@ -9264,6 +9328,7 @@ function renderSpecialBatching() {
     }
     const popout = document.getElementById('pp-bt-special-popout');
     if (popout) popout.href = special.href + '?project=' + encodeURIComponent(currentProjectNumber);
+    updateSpecialUpdatingBanner();
     return true;
 }
 
@@ -9300,11 +9365,14 @@ window.addEventListener('message', (e) => {
         printGate(ids, 'Batching Sheets').then(ok => frame.contentWindow?.postMessage({ type: ok ? 'jsb-print-ok' : 'jsb-print-no', token: e.data.token }, location.origin));
     } else if (e.data?.type === 'jsb-printed') {
         stampPrinted(Array.isArray(e.data.ids) ? e.data.ids : [], 'Batching Sheets');
+    } else if (e.data?.type === 'jsb-reprint-verdict') {
+        specialReprintWaiting.get(e.data.token)?.(e.data.verdict);
     } else if (e.data?.type === 'jsb-stale') {
         // The special page's own out-of-date warning: where it sits (relative to the frame) and what it says.
         frameStale = Array.isArray(e.data.diffs) ? { diffs: e.data.diffs, fresh: !!e.data.fresh, info: e.data.info || null, top: Number(e.data.top) || 0, height: Number(e.data.height) || 0 } : null;
         frameCasts = Array.isArray(e.data.casts) ? { casts: e.data.casts, top: Number(e.data.pillsTop) || 0, height: Number(e.data.pillsHeight) || 0 } : null;
         updateFloats();
+        updateSpecialUpdatingBanner();
     }
 });
 
@@ -9463,6 +9531,12 @@ function renderBatchStaleBanner(casting, ticket) {
     const diffs = [];
     if (differs(ticket.cuFt, t.cuFt, t.cuFtComplete)) diffs.push(['Total Cu Ft', ticket.cuFt, t.cuFt]);
     if (differs(ticket.faceSqFt, t.ff, t.ffComplete)) diffs.push(['Face Sq Ft', ticket.faceSqFt, t.ff]);
+    if (diffs.length && t.cuFtComplete && t.ffComplete && btTicketSameAsInventory(casting, ticket, t)) {
+        return `<div class="pp-bt-stale pp-bt-fresh" role="status" data-fresh="1">
+            <div class="pp-bt-stale-title">&#10003; TICKETS STILL RIGHT &mdash; THE BATCHES DO NOT CHANGE</div>
+            <div class="pp-bt-stale-text">The Casting Inventory totals moved (${escapeHtml(diffs.map(([label, was, now]) => `${label} ${was} → ${now}`).join(' · '))}) but these tickets come out the same. No reprint needed. <button type="button" class="pp-bt-stale-link" data-bt-import>Import the new totals anyway</button></div>
+        </div>`;
+    }
     if (!diffs.length) {
         // Nothing differs: say so in green (same spot, same floating copy) — but only when something was compared.
         const typed = (v) => v !== null && v !== undefined && String(v).trim() !== '';
@@ -9484,6 +9558,64 @@ function renderBatchStaleBanner(casting, ticket) {
         </table>
         <button type="button" class="pp-bt-stale-btn" data-bt-import>Import from Tracking now</button>
         <div class="pp-bt-stale-note">Importing replaces Total Cu Ft and Face Sq Ft only (hand-picked batch types go back to automatic). Everything else on the ticket stays.</div>
+    </div>`;
+}
+
+// ---- Do the tickets change? (2026-10-20) The printed batches depend on Total Cu Ft / Face Sq Ft through the batch
+// plan; comparing the plan the ticket was made from with the plan the inventory gives now tells whether a reprint is
+// needed, even when the totals moved a little.
+function btPlanSignature(casting, ticket, cuFt, faceSqFt) {
+    const totalCuFt = parseFloat(cuFt);
+    if (!totalCuFt || totalCuFt <= 0) return 'none';
+    const activeLog = getActiveBatchColorLog(casting, ticket);
+    const sandLbs = getColorLogSandLbs(activeLog);
+    if (!sandLbs) return 'none';
+    const plan = buildBatchPlan({
+        totalCuFt,
+        faceSqFt: parseFloat(faceSqFt) || 0,
+        cuFtPer250: parseFloat(ticket.cuFtPer250) || 4.28,
+        castMethod: activeLog?.castMethod || 'sprayUp',
+        colorLogSandLbs: sandLbs,
+        manualOverrides: btOverrides(ticket)
+    });
+    return JSON.stringify([Math.round((plan.faceCuFt || 0) * 1000) / 1000, plan.batches.map(b => [b.batchSandLbs, b.type, Math.round(b.cuFt * 1000) / 1000])]);
+}
+/** One ticket: would it print the same batches from the inventory as it is now? */
+function btTicketSameAsInventory(casting, ticket, totals) {
+    const was = btPlanSignature(casting, ticket, ticket.cuFt, ticket.faceSqFt);
+    return was !== 'none' && was === btPlanSignature(casting, ticket, totals.cuFt, totals.ff);
+}
+/** Every batched ticket of the casting: 'same', 'changed', or 'none' (nothing batched / inventory cannot be totalled). */
+function btReprintCheck(castingId) {
+    const casting = currentCastings.find(c => c.id === castingId);
+    if (!casting) return 'none';
+    let seen = false;
+    for (const ticket of getBatchTicketList(castingId)) {
+        if (ticket.cuFt === null || ticket.cuFt === undefined || String(ticket.cuFt).trim() === '') continue;
+        const t = batchInventoryTotals(castingId, ticket);
+        if (!t) return 'changed';   // this ticket's colour has no inventory rows any more
+        if (!t.cuFtComplete || !t.ffComplete) return 'none';
+        seen = true;
+        if (!btTicketSameAsInventory(casting, ticket, t)) return 'changed';
+    }
+    return seen ? 'same' : 'none';
+}
+async function ensureBatchTicketsLoaded() {
+    if (batchTicketsLoadedFor === currentProjectNumber) return;
+    const map = await loadBatchTicketsForCastings(currentCastings.map(c => c.id));
+    batchTickets.clear();
+    currentBatchColorSel.clear();
+    for (const c of currentCastings) batchTickets.set(c.id, map.get(c.id) || []);
+    batchTicketsLoadedFor = currentProjectNumber;
+}
+/** While the inventory is being changed (or was never marked ready) and tickets were printed from it: wait. */
+function renderBatchUpdatingBanner(casting) {
+    if (!msOn() || ciFinal(casting.id) || !msRow(casting.id, 'Batching Sheets')) return '';
+    const note = msNote(msRow(casting.id, 'Casting Inventory'));
+    const changing = note.startsWith('Unlocked for changes') || note.startsWith(CI_PM_NOTE) || note.startsWith(CI_ENTERING_NOTE);
+    return `<div class="pp-bt-updating" role="status">
+        <div class="pp-bt-updating-title">&#9888; CASTING INVENTORY ${changing ? 'IS BEING UPDATED' : 'IS NOT READY YET'}</div>
+        <div class="pp-bt-updating-text">Wait until engineering marks it ready (Castings tab). The portal then says whether these tickets need to be printed again.</div>
     </div>`;
 }
 
@@ -9735,7 +9867,7 @@ function renderBatchTicketBody(casting, ticket, multi = false) {
                 </div>
             </div>
 
-            <div data-bt-stale-wrap>${renderBatchStaleBanner(casting, ticket)}</div>
+            <div data-bt-stale-wrap>${renderBatchUpdatingBanner(casting)}${renderBatchStaleBanner(casting, ticket)}</div>
             <div class="pp-bt-card">
                 <div class="pp-bt-card-head">
                     <h3 class="pp-bt-card-title">Batch Plan</h3>
@@ -10599,7 +10731,7 @@ function handleBatchFieldInput(castingId, field, value) {
             // The out-of-date warning compares these two with the Casting Inventory — keep it current while typing.
             const wrap = document.querySelector('#pp-bt-content [data-bt-stale-wrap]');
             const casting2 = currentCastings.find(c => c.id === castingId);
-            if (wrap && casting2) { wrap.innerHTML = renderBatchStaleBanner(casting2, ticket); updateFloats(); }
+            if (wrap && casting2) { wrap.innerHTML = renderBatchUpdatingBanner(casting2) + renderBatchStaleBanner(casting2, ticket); updateFloats(); }
         }
     }
     scheduleBatchTicketSave(castingId, ticket);
