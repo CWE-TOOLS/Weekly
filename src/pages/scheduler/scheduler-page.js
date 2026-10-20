@@ -19,7 +19,7 @@ import {
 } from '../../services/schedule-service.js?v=20261020-1';
 import {
     DEPARTMENTS, DEPT_KEYS, TASKS, tasksForDept, taskForPhase, SETTINGS_DEFAULTS, REVENUE_PER_HOUR, SCHEDULABLE_STATUSES, TEAM_DAY_LIMITS
-} from '../../config/scheduler-config.js?v=20261020-4';
+} from '../../config/scheduler-config.js?v=20261020-5';
 import { logger } from '../../utils/logger.js';
 
 // ---------------------------------------------------------------------------

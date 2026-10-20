@@ -37,8 +37,8 @@ export const DEPT_KEYS = DEPARTMENTS.map(d => d.key);
 /**
  * Task code -> the teams that may do it (first = default). The user's list (2026-10-20), nothing else is allowed:
  *   CNC = CNC · Parts = PARTS, PARTS/FO · FO = FO · Cast = CAST · DM = DM · F = G/F, GOF, WASH, ACID, TU
- *   Seal = SEAL, TU, PAINT · Crate = BUILD, LOAD, RACK · Spec = AZEK, STRIP, TU, RACK, DRY/RACK, DRILL, LOAD, BUILD
- *   Ship = SHIP (not in the list; kept as the Ship team's only task)
+ *   Seal = SEAL, TU, PAINT · Crate = BUILD, LOAD, RACK · Spec = AZEK, STRIP, TU, RACK, DRY/RACK, DRILL, LOAD, BUILD, CLEAN RUBBER, PAN
+ *   Ship = SHIP (confirmed 2026-10-20)
  */
 export const TASKS = {
     CNC:        ['CNC'],
@@ -61,6 +61,8 @@ export const TASKS = {
     STRIP:      ['Spec'],
     'DRY/RACK': ['Spec'],
     DRILL:      ['Spec'],
+    'CLEAN RUBBER': ['Spec'],
+    PAN:        ['Spec'],
     SHIP:       ['Ship']
 };
 export const TASK_CODES = Object.keys(TASKS);
@@ -95,6 +97,8 @@ const PHASE_RULES = [
     [/build/i, 'BUILD'],
     [/rack/i, 'RACK'],
     [/drill/i, 'DRILL'],
+    [/clean|rubber/i, 'CLEAN RUBBER'],
+    [/\bpan\b/i, 'PAN'],
     [/ship/i, 'SHIP'],
     [/load/i, 'LOAD']
 ];
