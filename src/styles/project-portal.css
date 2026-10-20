@@ -6617,19 +6617,19 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
 .pp-tab-panel[data-panel="jig-list"] .cncnote .es-block{margin-top:6px;font-size:12.5px}
 .pp-tab-panel[data-panel="jig-list"] .listnote .es b,.pp-tab-panel[data-panel="jig-list"] .cncnote .es b{color:#333}
 
-/* Casting Inventory (2026-10-20): PM fields (blue) vs engineering fields (purple); remake rows; the two "ready" buttons */
+/* Casting Inventory (2026-10-20): PM fields (blue) vs engineering fields (amber); remake rows; the two "ready" buttons */
 .pp-inv-input.pp-inv-pm { border-color: #3b82f6; background: #eff6ff; }
-.pp-inv-input.pp-inv-eng { border-color: #8b5cf6; background: #f5f3ff; }
+.pp-inv-input.pp-inv-eng { border-color: #f59e0b; background: #fffbeb; }
 .pp-inv-input.pp-inv-pm:hover, .pp-inv-input.pp-inv-eng:hover { background: #ffffff; }
 .pp-inv-header-fields .pp-inv-h-pm { color: #1d4ed8; }
-.pp-inv-header-fields .pp-inv-h-eng { color: #6d28d9; }
+.pp-inv-header-fields .pp-inv-h-eng { color: #b45309; }
 .pp-inv-legend { display: flex; gap: 16px; justify-content: flex-end; padding: 0 4px 5px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
 .pp-inv-legend span { display: inline-flex; align-items: center; gap: 5px; cursor: help; }
 .pp-inv-legend span::before { content: ''; width: 12px; height: 12px; border-radius: 3px; border: 1.5px solid; }
 .pp-inv-legend-pm { color: #1d4ed8; }
 .pp-inv-legend-pm::before { border-color: #3b82f6; background: #eff6ff; }
-.pp-inv-legend-eng { color: #6d28d9; }
-.pp-inv-legend-eng::before { border-color: #8b5cf6; background: #f5f3ff; }
+.pp-inv-legend-eng { color: #b45309; }
+.pp-inv-legend-eng::before { border-color: #f59e0b; background: #fffbeb; }
 .pp-inv-row.pp-inv-row-remake { border: 2px solid #dc2626; }
 .pp-inv-row.pp-inv-row-remake .pp-inv-remake-cell { color: #b91c1c; font-weight: 700; border-color: #fca5a5; background: #fef2f2; }
 .pp-cast-card-ms-action { display: inline-flex; gap: 12px; align-items: center; flex-wrap: wrap; }
