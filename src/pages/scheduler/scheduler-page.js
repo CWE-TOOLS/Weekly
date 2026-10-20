@@ -417,16 +417,15 @@ function renderGrid() {
     let h = '<table class="sc-grid"><thead><tr><th class="sc-label" rowspan="3">Job · Casting</th>';
     const weeks = [];
     for (const d of days) { const wk = mondayOf(d); if (!weeks.length || weeks[weeks.length - 1].wk !== wk) weeks.push({ wk, days: [] }); weeks[weeks.length - 1].days.push(d); }
-    // "Week 1", "Week 2" … centred over the Wednesday; the week's revenue sits at the right end
+    // "Week 1", "Week 2" … centred over the Wednesday (revenue lives in the Revenue view only)
     const nD = DEPT_KEYS.length;
     weeks.forEach((w, wi) => {
         let mid = w.days.findIndex(d => dow(d) === 3);
         if (mid < 0) mid = Math.floor((w.days.length - 1) / 2);
         const before = mid, after = w.days.length - mid - 1;
-        const revTxt = `<span class="sc-rev" title="Week ${wi + 1}: scheduled hours × $${REVENUE_PER_HOUR}">${money((weekHours.get(w.wk) || 0) * REVENUE_PER_HOUR)}</span>`;
         if (before) h += `<th class="sc-week sc-week-start" colspan="${before * nD}"></th>`;
         h += `<th class="sc-week sc-week-mid${before ? '' : ' sc-week-start'}" colspan="${nD}" title="Week of ${esc(shortDay(w.wk))}">Week ${wi + 1}</th>`;
-        if (after) h += `<th class="sc-week sc-week-end" colspan="${after * nD}">${revTxt}</th>`;
+        if (after) h += `<th class="sc-week sc-week-end" colspan="${after * nD}"></th>`;
     });
     h += '</tr><tr>';
     for (const d of days) {
