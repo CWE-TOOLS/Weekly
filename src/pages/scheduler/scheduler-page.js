@@ -18,7 +18,7 @@ import {
     deleteCastingSchedule, loadScheduleSettings, saveScheduleSetting, isScheduleMigrationPending
 } from '../../services/schedule-service.js';
 import {
-    DEPARTMENTS, DEPT_KEYS, TASKS, tasksForDept, taskForPhase, SETTINGS_DEFAULTS, REVENUE_PER_HOUR, SCHEDULABLE_STATUSES
+    DEPARTMENTS, DEPT_KEYS, TASKS, tasksForDept, taskForPhase, SETTINGS_DEFAULTS, REVENUE_PER_HOUR, SCHEDULABLE_STATUSES, TEAM_DAY_LIMITS
 } from '../../config/scheduler-config.js';
 import { logger } from '../../utils/logger.js';
 
@@ -375,6 +375,27 @@ async function saveCostInput(inp) {
     catch (err) { toast('Could not save the cost: ' + (err.message || err), 'error'); }
 }
 
+/** date -> [{ dept, count, limit, names }] for every team over its castings-per-day limit (whole plant, not just the rows on screen). */
+function overLimitDays() {
+    const sets = new Map();   // date|dept -> Set(casting_id)
+    for (const r of S.rows) {
+        if (!TEAM_DAY_LIMITS[r.department] || !(Number(r.hours) > 0 || r.task)) continue;
+        const k = `${r.date}|${r.department}`;
+        if (!sets.has(k)) sets.set(k, new Set());
+        sets.get(k).add(r.casting_id);
+    }
+    const out = new Map();
+    for (const [k, ids] of sets) {
+        const [date, dept] = k.split('|');
+        const limit = TEAM_DAY_LIMITS[dept];
+        if (ids.size <= limit) continue;
+        if (!out.has(date)) out.set(date, []);
+        out.get(date).push({ dept, count: ids.size, limit, names: [...ids].map(id => { const c = S.castingById.get(id); return c ? `${c.project_number} ${castingLabel(c)}` : 'unknown casting'; }) });
+    }
+    return out;
+}
+const deptLabel = (k) => DEPARTMENTS.find(d => d.key === k)?.label || k;
+
 function renderBanner() {
     const b = $('sc-banner');
     if (isScheduleMigrationPending()) {
@@ -383,10 +404,15 @@ function renderBanner() {
         b.hidden = false;
         return;
     }
+    const msgs = [];
+    const days = new Set(windowDays());
+    const over = [...overLimitDays()].filter(([d]) => days.has(d)).sort(([a], [b2]) => a.localeCompare(b2));
+    if (over.length) msgs.push(`Over the team limit on ${over.length} day${over.length === 1 ? '' : 's'}: ` + over.slice(0, 6).map(([d, list]) => `${shortDay(d)} (${list.map(x => `${deptLabel(x.dept)} ${x.count}/${x.limit}`).join(', ')})`).join('; ') + (over.length > 6 ? '; …' : '') + '. Parts, FO, Cast and DM take 1 casting a day; F, Seal and Spec take 5.');
     const bad = visibleCastings().filter(c => !lockOk(lockReport(c.id)) && rowsOfCasting(c.id).length);
-    if (bad.length) {
-        b.className = 'sc-banner sc-banner-warn';
-        b.textContent = `${bad.length} casting${bad.length === 1 ? '' : 's'} on screen no longer match the Optimizer Hours tab (red dot on the row) — open the row menu and regenerate.`;
+    if (bad.length) msgs.push(`${bad.length} casting${bad.length === 1 ? '' : 's'} on screen no longer match the Optimizer Hours tab (red dot on the row) — open the row menu and regenerate.`);
+    if (msgs.length) {
+        b.className = 'sc-banner ' + (over.length ? 'sc-banner-error' : 'sc-banner-warn');
+        b.innerHTML = msgs.map(m => `<div>${esc(m)}</div>`).join('');
         b.hidden = false;
         return;
     }
@@ -398,6 +424,7 @@ function renderGrid() {
     const days = windowDays();
     const today = todayIso();
     const castings = visibleCastings();
+    const overByDay = overLimitDays();   // team limits per day (Parts/FO/Cast/DM 1, F/Seal/Spec 5)
     const cellMap = new Map();   // cid|date|dept -> rows
     for (const r of S.rows) {
         const k = `${r.casting_id}|${r.date}|${r.department}`;
@@ -429,11 +456,18 @@ function renderGrid() {
     });
     h += '</tr><tr>';
     for (const d of days) {
-        const cls = ['sc-day', isWeekend(d) ? 'sc-weekend' : '', isHoliday(d) ? 'sc-holiday' : '', d === today ? 'sc-today' : ''].join(' ');
-        h += `<th class="${cls}" colspan="${DEPT_KEYS.length}" title="${isHoliday(d) ? 'Holiday — never scheduled' : isWeekend(d) ? 'Weekend — needs an allow' : ''}">${esc(shortDay(d))}</th>`;
+        const ov = overByDay.get(d) || [];
+        const cls = ['sc-day', isWeekend(d) ? 'sc-weekend' : '', isHoliday(d) ? 'sc-holiday' : '', d === today ? 'sc-today' : '', ov.length ? 'sc-day-over' : ''].join(' ');
+        const tip = ov.length
+            ? 'OVER THE TEAM LIMIT\n' + ov.map(x => `${deptLabel(x.dept)}: ${x.count} castings (limit ${x.limit}) — ${x.names.join(', ')}`).join('\n')
+            : (isHoliday(d) ? 'Holiday — never scheduled' : isWeekend(d) ? 'Weekend — needs an allow' : '');
+        h += `<th class="${cls}" colspan="${DEPT_KEYS.length}" title="${esc(tip)}">${ov.length ? '&#9888; ' : ''}${esc(shortDay(d))}${ov.length ? ` <span class="sc-over-what">${esc(ov.map(x => `${deptLabel(x.dept)} ${x.count}/${x.limit}`).join(' · '))}</span>` : ''}</th>`;
     }
     h += '</tr><tr>';
-    for (const d of days) DEPARTMENTS.forEach((dep, i) => { h += `<th class="sc-dept ${i === 0 ? 'sc-dept-first' : ''} ${isWeekend(d) ? 'sc-weekend' : ''} ${isHoliday(d) ? 'sc-holiday' : ''}" data-dept="${dep.key}">${dep.label}</th>`; });
+    for (const d of days) DEPARTMENTS.forEach((dep, i) => {
+        const x = (overByDay.get(d) || []).find(o => o.dept === dep.key);
+        h += `<th class="sc-dept ${i === 0 ? 'sc-dept-first' : ''} ${isWeekend(d) ? 'sc-weekend' : ''} ${isHoliday(d) ? 'sc-holiday' : ''} ${x ? 'sc-dept-over' : ''}" data-dept="${dep.key}"${x ? ` title="${esc(`${x.count} castings, limit ${x.limit}: ${x.names.join(', ')}`)}"` : ''}>${dep.label}</th>`;
+    });
     h += '</tr></thead><tbody>';
 
     if (!castings.length) {

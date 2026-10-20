@@ -120,6 +120,9 @@ export const DEFAULT_HOLIDAYS = [
     '2027-05-31', '2027-07-05', '2027-09-06', '2027-11-25', '2027-11-26', '2027-12-24'
 ];
 
+/** Most castings a team takes on one day before the day header turns red (user rule 2026-10-20). Teams not listed: no limit. */
+export const TEAM_DAY_LIMITS = { Parts: 1, FO: 1, Cast: 1, DM: 1, F: 5, Seal: 5, Spec: 5 };
+
 /** Revenue per labor hour (the Optimizer's Rev tab). */
 export const REVENUE_PER_HOUR = 135;
 
