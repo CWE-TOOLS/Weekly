@@ -16,10 +16,10 @@ import { loadAllCastingPhasesForProject } from '../../services/optimizer-hours-s
 import {
     loadScheduleRange, loadScheduleForCastings, insertScheduleRows, updateScheduleRow, deleteScheduleRow,
     deleteCastingSchedule, loadScheduleSettings, saveScheduleSetting, isScheduleMigrationPending
-} from '../../services/schedule-service.js';
+} from '../../services/schedule-service.js?v=20261020-1';
 import {
     DEPARTMENTS, DEPT_KEYS, TASKS, tasksForDept, taskForPhase, SETTINGS_DEFAULTS, REVENUE_PER_HOUR, SCHEDULABLE_STATUSES, TEAM_DAY_LIMITS
-} from '../../config/scheduler-config.js';
+} from '../../config/scheduler-config.js?v=20261020-2';
 import { logger } from '../../utils/logger.js';
 
 // ---------------------------------------------------------------------------
