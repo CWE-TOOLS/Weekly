@@ -215,6 +215,18 @@ table.sc-grid { border-collapse: separate; border-spacing: 0; table-layout: fixe
 .sc-rv-in:hover { border-bottom-color: #9ca3af; }
 .sc-rv-in:focus { outline: 2px solid #2563eb; background: #eff6ff; }
 .sc-rv > .sc-hint { padding: 0 16px; }
+/* Month Total block — the sheet's bottom-right totals */
+.sc-rv-c-extra { width: 150px; }
+.sc-rv-month { margin-top: 6px; }
+.sc-rv-month td { font-size: 12px; }
+.sc-rv-mhead { background: #ffff00; text-align: center !important; font-weight: 600; }
+.sc-rv-mlabel { text-align: right !important; font-weight: 700; }
+.sc-rv-mval { text-align: right; }
+.sc-rv-mtotal td.sc-rv-mlabel, .sc-rv-mtotal td.sc-rv-mval { background: #ffff99; font-weight: 700; }
+.sc-rv-mcogs td.sc-rv-mval { border-top: 1px solid #111; }
+.sc-rv-mpct { text-align: left !important; font-weight: 700; }
+.sc-rv-target { text-align: left !important; font-weight: 700; white-space: nowrap; }
+.sc-rv-target-in { width: 80px !important; text-align: left !important; font-weight: 700; font-size: 12px !important; }
 
 .sc-toast { position: fixed; bottom: 24px; right: 24px; background: #0f172a; color: #fff; padding: 10px 18px; border-radius: 8px; font-size: 13px; z-index: 100; box-shadow: 0 10px 25px rgba(15,23,42,.2); }
 .sc-toast.sc-toast-error { background: #b91c1c; }

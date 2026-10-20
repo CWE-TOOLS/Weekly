@@ -350,17 +350,35 @@ function renderRevenue() {
         html += `<tr class="sc-rv-cogs"><td class="sc-rv-label">COGS</td>${days.map(d => pctCell(cogsTotal(d), net(d))).join('')}${pctCell(sum(days, cogsTotal), sum(days, net))}</tr>`;
         html += '</tbody></table>';
     });
-    // the month, counting only its own days
+    // Month Total — like the bottom-right block of the sheet's Rev tab: labels left of the WEEK TOTAL column,
+    // values under it, the % of the monthly target beside Total Rev. Counts only the month's own days.
     const mdays = []; for (let d = first; d <= last; d = addDays(d, 1)) mdays.push(d);
-    html += `<table class="sc-rv-table sc-rv-month"><colgroup><col class="sc-rv-c-label"><col class="sc-rv-c-day"></colgroup><thead><tr><th class="sc-rv-week">${esc(monthLabel(S.from).toUpperCase())}</th><th class="sc-rv-total" title="Counts only the days of ${esc(monthLabel(S.from))} itself, so a week shared with the next or previous month is not counted twice">MONTH TOTAL</th></tr></thead><tbody>`;
-    html += `<tr class="sc-rv-fab"><td class="sc-rv-label">Fabrication Revenue</td><td>${money2(sum(mdays, fab))}</td></tr>`;
-    for (const r of REV_ROWS) html += `<tr class="sc-rv-dept" data-dept="${r.key}"><td class="sc-rv-label">${esc(r.label)}</td><td>${money(sum(mdays, d => rev(d, r.key)))}</td></tr>`;
-    html += `<tr class="sc-rv-net"><td class="sc-rv-label">NET REVENUE</td><td>${money2(sum(mdays, net))}</td></tr>`;
-    for (const c of COST_ROWS) html += `<tr class="sc-rv-cost"><td class="sc-rv-label">${c.label}</td><td>${money2(sum(mdays, d => costOf(d, c.key)))}</td></tr>`;
-    html += `<tr class="sc-rv-cogs-total"><td class="sc-rv-label">Total COGS</td><td>${money2(sum(mdays, cogsTotal))}</td></tr>`;
-    html += `<tr class="sc-rv-cogs"><td class="sc-rv-label">COGS</td>${pctCell(sum(mdays, cogsTotal), sum(mdays, net))}</tr>`;
-    html += `</tbody></table><p class="sc-hint">Revenue = scheduled hours × $${REVENUE_PER_HOUR}. Fabrication Revenue is every team except Ship; Net Revenue adds Ship. Type Labor, Material and Subcontractor costs straight into their cells (saved for everyone). Months run in full weeks, Monday to Saturday, so week 1 can start in the previous month and the last week can end in the next. The Month Total counts only ${esc(monthLabel(S.from))}'s own days.</p></div>`;
+    const mRev = sum(mdays, fab), mShip = sum(mdays, d => rev(d, 'Ship')), mTotal = mRev + mShip;
+    const mLabor = sum(mdays, d => costOf(d, 'labor')), mMat = sum(mdays, d => costOf(d, 'material')), mSub = sum(mdays, d => costOf(d, 'sub'));
+    const mCogs = mLabor + mMat + mSub;
+    const target = Number(S.settings.target) || 400000;
+    const blanks = '<td></td>'.repeat(5);
+    const mrow = (label, value, cls = '', extra = '<td></td>') => `<tr class="${cls}"><td></td>${blanks}<td class="sc-rv-mlabel">${label}</td><td class="sc-rv-mval">${value}</td>${extra}</tr>`;
+    html += `<table class="sc-rv-table sc-rv-month"><colgroup><col class="sc-rv-c-label">${'<col class="sc-rv-c-day">'.repeat(7)}<col class="sc-rv-c-extra"></colgroup><tbody>`;
+    html += `<tr><td></td>${blanks}<td></td><td class="sc-rv-mhead" title="Counts only the days of ${esc(monthLabel(S.from))} itself, so a week shared with the next or previous month is not counted twice">Month Total</td><td></td></tr>`;
+    html += mrow('Rev', money2(mRev));
+    html += mrow('', '', '', `<td class="sc-rv-target">TARGET = $<input class="sc-rv-in sc-rv-target-in" data-target value="${esc(target.toLocaleString('en-US'))}" title="Monthly revenue target — click to change (saved for everyone)"></td>`);
+    html += mrow('Shipping', money2(mShip));
+    html += mrow('Total Rev', money2(mTotal), 'sc-rv-mtotal', `<td class="sc-rv-mpct" title="Total Rev ÷ target">${Math.round(mTotal / target * 100)}%</td>`);
+    html += mrow('Labor', money2(mLabor));
+    html += mrow('Material', money2(mMat));
+    html += mrow('Sub', money2(mSub));
+    html += mrow('Total COGS', money2(mCogs), 'sc-rv-mcogs');
+    html += `<tr><td></td>${blanks}<td></td>${pctCell(mCogs, mTotal)}<td></td></tr>`;
+    html += `</tbody></table><p class="sc-hint">Revenue = scheduled hours × $${REVENUE_PER_HOUR}. Fabrication Revenue is every team except Ship; Net Revenue adds Ship. Type Labor, Material and Subcontractor costs straight into their cells, and the monthly target beside the Month Total (all saved for everyone). Months run in full weeks, Monday to Saturday; the Month Total counts only ${esc(monthLabel(S.from))}'s own days.</p></div>`;
     wrap.innerHTML = html;
+}
+
+async function saveTargetInput(inp) {
+    const v = Math.round(Number(String(inp.value).replace(/[$,\s]/g, '')) || 0);
+    if (v <= 0) { toast('Enter the monthly target in dollars.', 'error'); renderRevenue(); return; }
+    try { await saveScheduleSetting('target', v); S.settings.target = v; renderRevenue(); toast(`Monthly target set to $${v.toLocaleString('en-US')} for everyone.`); }
+    catch (err) { toast('Could not save the target: ' + (err.message || err), 'error'); }
 }
 
 async function saveCostInput(inp) {
@@ -1064,8 +1082,11 @@ function wire() {
     $('sc-prev').addEventListener('click', () => { S.from = addMonths(S.from, -1); reloadRows(); });
     $('sc-next').addEventListener('click', () => { S.from = addMonths(S.from, 1); reloadRows(); });
     $('sc-today').addEventListener('click', () => { S.from = firstOfMonth(todayIso()); reloadRows(); });
-    $('sc-grid-wrap').addEventListener('change', (e) => { const inp = e.target.closest('input[data-cost]'); if (inp) saveCostInput(inp); });
-    $('sc-grid-wrap').addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.matches('input[data-cost]')) e.target.blur(); });
+    $('sc-grid-wrap').addEventListener('change', (e) => {
+        const inp = e.target.closest('input[data-cost]'); if (inp) { saveCostInput(inp); return; }
+        const tg = e.target.closest('input[data-target]'); if (tg) saveTargetInput(tg);
+    });
+    $('sc-grid-wrap').addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.matches('input[data-cost], input[data-target]')) e.target.blur(); });
     $('sc-view-toggle').addEventListener('click', () => { S.view = S.view === 'revenue' ? 'grid' : 'revenue'; closeEditor(); render(); });
     $('sc-show-weekends').addEventListener('change', (e) => { S.settings.showWeekends = !!e.target.checked; try { localStorage.setItem('sc-weekends', S.settings.showWeekends ? '1' : '0'); } catch (_) { /* ignore */ } render(); });
     $('sc-search').addEventListener('input', (e) => { S.search = e.target.value; render(); });
@@ -1174,6 +1195,7 @@ async function init() {
         if (saved.dayHours) S.settings.dayHours = { ...SETTINGS_DEFAULTS.dayHours, ...saved.dayHours };
         if (Array.isArray(saved.holidays)) S.settings.holidays = saved.holidays;
         if (saved.costs && typeof saved.costs === 'object') S.settings.costs = saved.costs;
+        if (Number(saved.target) > 0) S.settings.target = Number(saved.target);
         await loadBase();
         await loadRows();
         render();
