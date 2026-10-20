@@ -34,29 +34,34 @@ export const DEPARTMENTS = [
 ];
 export const DEPT_KEYS = DEPARTMENTS.map(d => d.key);
 
-/** Task code -> the departments that may do it (first = default). */
+/**
+ * Task code -> the teams that may do it (first = default). The user's list (2026-10-20), nothing else is allowed:
+ *   CNC = CNC · Parts = PARTS, PARTS/FO · FO = FO · Cast = CAST · DM = DM · F = G/F, GOF, WASH, ACID, TU
+ *   Seal = SEAL, TU, PAINT · Crate = BUILD, LOAD, RACK · Spec = AZEK, STRIP, TU, RACK, DRY/RACK, DRILL, LOAD, BUILD
+ *   Ship = SHIP (not in the list; kept as the Ship team's only task)
+ */
 export const TASKS = {
-    CNC:   ['CNC'],
-    PARTS: ['Parts'],
-    MILL:  ['Parts'],          // anything showing "mill" is Parts-team work only (user 2026-10-20)
-    FO:    ['FO'],
-    CAST:  ['Cast'],
-    DM:    ['DM'],
-    'G/F': ['F'],
-    GOF:   ['F'],
-    ACID:  ['F'],
-    WASH:  ['F'],
-    TU:    ['F', 'Seal'],
-    SEAL:  ['Seal'],
-    AZEK:  ['Spec'],
-    STRIP: ['Spec'],
-    BUILD: ['Crate'],
-    RACK:  ['Crate', 'Spec'],
-    DRY:   ['Spec'],
-    DRILL: ['Spec'],
-    PAN:   ['Spec'],
-    SHIP:  ['Ship'],
-    LOAD:  ['Ship', 'Crate']
+    CNC:        ['CNC'],
+    PARTS:      ['Parts'],
+    'PARTS/FO': ['Parts'],
+    FO:         ['FO'],
+    CAST:       ['Cast'],
+    DM:         ['DM'],
+    'G/F':      ['F'],
+    GOF:        ['F'],
+    WASH:       ['F'],
+    ACID:       ['F'],
+    TU:         ['F', 'Seal', 'Spec'],
+    SEAL:       ['Seal'],
+    PAINT:      ['Seal'],
+    BUILD:      ['Crate', 'Spec'],
+    LOAD:       ['Crate', 'Spec'],
+    RACK:       ['Crate', 'Spec'],
+    AZEK:       ['Spec'],
+    STRIP:      ['Spec'],
+    'DRY/RACK': ['Spec'],
+    DRILL:      ['Spec'],
+    SHIP:       ['Ship']
 };
 export const TASK_CODES = Object.keys(TASKS);
 
@@ -72,8 +77,8 @@ export function tasksForDept(dept) {
  */
 const PHASE_RULES = [
     [/cnc/i, 'CNC'],
-    [/part/i, 'PARTS'],
-    [/mill/i, 'MILL'],
+    [/parts?\s*\/\s*f\.?o\b|parts?\s*&\s*f\.?o\b|\bm\/f\b/i, 'PARTS/FO'],
+    [/part|mill/i, 'PARTS'],                       // "mill" is Parts-team work (user 2026-10-20)
     [/form\s*out|^fo$|\bf\/o\b|\brb\b|rebuild|rebar|form/i, 'FO'],
     [/cast/i, 'CAST'],
     [/^dm$|demold|de-mold/i, 'DM'],
@@ -82,14 +87,14 @@ const PHASE_RULES = [
     [/acid/i, 'ACID'],
     [/wash/i, 'WASH'],
     [/\btu\b|touch/i, 'TU'],
+    [/paint/i, 'PAINT'],
     [/seal|epoxy/i, 'SEAL'],
     [/azek/i, 'AZEK'],
     [/strip/i, 'STRIP'],
+    [/dry/i, 'DRY/RACK'],
     [/build/i, 'BUILD'],
     [/rack/i, 'RACK'],
-    [/dry/i, 'DRY'],
     [/drill/i, 'DRILL'],
-    [/\bpan\b/i, 'PAN'],
     [/ship/i, 'SHIP'],
     [/load/i, 'LOAD']
 ];

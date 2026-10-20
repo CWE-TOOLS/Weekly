@@ -19,7 +19,7 @@ import {
 } from '../../services/schedule-service.js?v=20261020-1';
 import {
     DEPARTMENTS, DEPT_KEYS, TASKS, tasksForDept, taskForPhase, SETTINGS_DEFAULTS, REVENUE_PER_HOUR, SCHEDULABLE_STATUSES, TEAM_DAY_LIMITS
-} from '../../config/scheduler-config.js?v=20261020-2';
+} from '../../config/scheduler-config.js?v=20261020-3';
 import { logger } from '../../utils/logger.js';
 
 // ---------------------------------------------------------------------------
@@ -134,7 +134,7 @@ async function loadRows() {
     const extra = extraIds.length ? await loadScheduleForCastings(extraIds) : [];
     S.rows = inWindow.concat(extra.filter(r => !seen.has(r.id)));
     // rows saved before the Mill column was split into CNC + Parts (2026-10-19)
-    for (const r of S.rows) if (r.department === 'Mill') r.department = (r.task === 'PARTS' || r.task === 'MILL') ? 'Parts' : 'CNC';
+    for (const r of S.rows) if (r.department === 'Mill') r.department = r.task === 'CNC' ? 'CNC' : 'Parts';
 }
 
 // per-casting helpers
