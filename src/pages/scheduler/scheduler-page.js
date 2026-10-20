@@ -72,17 +72,20 @@ function firstOfMonth(s) { return s.slice(0, 8) + '01'; }
 function lastOfMonth(s) { const d = fromIso(s); return toIso(new Date(d.getFullYear(), d.getMonth() + 1, 0)); }
 function addMonths(s, n) { const d = fromIso(s); return toIso(new Date(d.getFullYear(), d.getMonth() + n, 1)); }
 function monthLabel(s) { return fromIso(s).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }); }
-/** The days of the month on screen (weekends only when switched on). */
+/** A month on screen is made of FULL weeks: from the Monday of the week holding the 1st to the end of the week holding
+ *  the last day — week 1 may start in the previous month, the last week may end in the next (user rule 2026-10-20). */
+function windowStart() { return mondayOf(S.from); }
+function windowEnd() { return addDays(mondayOf(lastOfMonth(S.from)), 6); }
+/** The days on screen: Monday to Friday of every week (weekends only when switched on). */
 function windowDays() {
     const out = [];
-    const last = lastOfMonth(S.from);
-    for (let d = S.from; d <= last; d = addDays(d, 1)) {
+    const end = windowEnd();
+    for (let d = windowStart(); d <= end; d = addDays(d, 1)) {
         if (!S.settings.showWeekends && isWeekend(d)) continue;
         out.push(d);
     }
     return out;
 }
-function windowEnd() { return lastOfMonth(S.from); }
 const money = (n) => '$' + Math.round(n).toLocaleString('en-US');
 const fmtH = (h) => { const n = Number(h) || 0; return Number.isInteger(n) ? String(n) : n.toFixed(1).replace(/\.0$/, ''); };
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -122,7 +125,7 @@ async function loadBase() {
 }
 
 async function loadRows() {
-    const inWindow = await loadScheduleRange(mondayOf(S.from), addDays(mondayOf(windowEnd()), 6));
+    const inWindow = await loadScheduleRange(windowStart(), windowEnd());
     const seen = new Set(inWindow.map(r => r.id));
     const extraIds = [...S.pinned];
     const extra = extraIds.length ? await loadScheduleForCastings(extraIds) : [];
@@ -330,9 +333,9 @@ function renderRevenue() {
 
     let html = `<div class="sc-rv"><div class="sc-rv-banner">${esc(monthLabel(S.from))}</div>`;
     weeks.forEach((days, wi) => {
-        const dcls = (d) => (inMonth(d) ? '' : ' sc-rv-out') + (isHoliday(d) ? ' sc-rv-hol' : '');
+        const dcls = (d) => (isHoliday(d) ? ' sc-rv-hol' : '');
         html += '<table class="sc-rv-table"><colgroup><col class="sc-rv-c-label">' + days.map(() => '<col class="sc-rv-c-day">').join('') + '<col class="sc-rv-c-day"></colgroup>';
-        html += `<thead><tr><th class="sc-rv-week">W E E K ${wi + 1}</th>${days.map(d => `<th class="sc-rv-day${dcls(d)}" title="${inMonth(d) ? '' : 'outside ' + esc(monthLabel(S.from))}${isHoliday(d) ? ' holiday' : ''}">${esc(revDayHead(d))}</th>`).join('')}<th class="sc-rv-total">WEEK TOTAL</th></tr></thead><tbody>`;
+        html += `<thead><tr><th class="sc-rv-week">W E E K ${wi + 1}</th>${days.map(d => `<th class="sc-rv-day${dcls(d)}" title="${isHoliday(d) ? 'holiday' : ''}">${esc(revDayHead(d))}</th>`).join('')}<th class="sc-rv-total">WEEK TOTAL</th></tr></thead><tbody>`;
         html += `<tr class="sc-rv-fab"><td class="sc-rv-label">Fabrication Revenue</td>${days.map(d => `<td class="${dcls(d)}">${money2(fab(d))}</td>`).join('')}<td>${money2(sum(days, fab))}</td></tr>`;
         for (const r of REV_ROWS) {
             html += `<tr class="sc-rv-dept" data-dept="${r.key}"><td class="sc-rv-label">${esc(r.label)}</td>${days.map(d => `<td class="${dcls(d)}">${money(rev(d, r.key))}</td>`).join('')}<td>${money(sum(days, d => rev(d, r.key)))}</td></tr>`;
@@ -347,14 +350,14 @@ function renderRevenue() {
     });
     // the month, counting only its own days
     const mdays = []; for (let d = first; d <= last; d = addDays(d, 1)) mdays.push(d);
-    html += `<table class="sc-rv-table sc-rv-month"><colgroup><col class="sc-rv-c-label"><col class="sc-rv-c-day"></colgroup><thead><tr><th class="sc-rv-week">${esc(monthLabel(S.from).toUpperCase())}</th><th class="sc-rv-total">MONTH TOTAL</th></tr></thead><tbody>`;
+    html += `<table class="sc-rv-table sc-rv-month"><colgroup><col class="sc-rv-c-label"><col class="sc-rv-c-day"></colgroup><thead><tr><th class="sc-rv-week">${esc(monthLabel(S.from).toUpperCase())}</th><th class="sc-rv-total" title="Counts only the days of ${esc(monthLabel(S.from))} itself, so a week shared with the next or previous month is not counted twice">MONTH TOTAL</th></tr></thead><tbody>`;
     html += `<tr class="sc-rv-fab"><td class="sc-rv-label">Fabrication Revenue</td><td>${money2(sum(mdays, fab))}</td></tr>`;
     for (const r of REV_ROWS) html += `<tr class="sc-rv-dept" data-dept="${r.key}"><td class="sc-rv-label">${esc(r.label)}</td><td>${money(sum(mdays, d => rev(d, r.key)))}</td></tr>`;
     html += `<tr class="sc-rv-net"><td class="sc-rv-label">NET REVENUE</td><td>${money2(sum(mdays, net))}</td></tr>`;
     for (const c of COST_ROWS) html += `<tr class="sc-rv-cost"><td class="sc-rv-label">${c.label}</td><td>${money2(sum(mdays, d => costOf(d, c.key)))}</td></tr>`;
     html += `<tr class="sc-rv-cogs-total"><td class="sc-rv-label">Total COGS</td><td>${money2(sum(mdays, cogsTotal))}</td></tr>`;
     html += `<tr class="sc-rv-cogs"><td class="sc-rv-label">COGS</td>${pctCell(sum(mdays, cogsTotal), sum(mdays, net))}</tr>`;
-    html += `</tbody></table><p class="sc-hint">Revenue = scheduled hours × $${REVENUE_PER_HOUR}. Fabrication Revenue is every team except Ship; Net Revenue adds Ship. Type Labor, Material and Subcontractor costs straight into their cells (saved for everyone). Greyed days belong to the next or previous month.</p></div>`;
+    html += `</tbody></table><p class="sc-hint">Revenue = scheduled hours × $${REVENUE_PER_HOUR}. Fabrication Revenue is every team except Ship; Net Revenue adds Ship. Type Labor, Material and Subcontractor costs straight into their cells (saved for everyone). Months run in full weeks, Monday to Saturday, so week 1 can start in the previous month and the last week can end in the next. The Month Total counts only ${esc(monthLabel(S.from))}'s own days.</p></div>`;
     wrap.innerHTML = html;
 }
 
