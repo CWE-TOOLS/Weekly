@@ -134,7 +134,7 @@ async function loadRows() {
     const extra = extraIds.length ? await loadScheduleForCastings(extraIds) : [];
     S.rows = inWindow.concat(extra.filter(r => !seen.has(r.id)));
     // rows saved before the Mill column was split into CNC + Parts (2026-10-19)
-    for (const r of S.rows) if (r.department === 'Mill') r.department = r.task === 'PARTS' ? 'Parts' : 'CNC';
+    for (const r of S.rows) if (r.department === 'Mill') r.department = (r.task === 'PARTS' || r.task === 'MILL') ? 'Parts' : 'CNC';
 }
 
 // per-casting helpers

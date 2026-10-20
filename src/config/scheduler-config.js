@@ -7,7 +7,7 @@
  * it is finalized.
  *
  * Decisions from the user (2026-10-19):
- *   - the Mill column is split into CNC and Parts (2026-10-19)
+ *   - the Mill column is split into CNC and Parts (2026-10-19); a "mill" task is Parts only (2026-10-20)
  *   - task codes: CNC, PARTS, FO, CAST, DM, G/F, GOF, ACID, WASH, TU, SEAL, AZEK, STRIP, BUILD, RACK,
  *     DRY, DRILL, PAN, SHIP  (+ MILL and LOAD for the default "Mill" / "Load Crate" phases)
  *   - TU is done by both the Finish and the Seal team (before the Seal phase -> F, after -> Seal)
@@ -38,7 +38,7 @@ export const DEPT_KEYS = DEPARTMENTS.map(d => d.key);
 export const TASKS = {
     CNC:   ['CNC'],
     PARTS: ['Parts'],
-    MILL:  ['CNC', 'Parts'],
+    MILL:  ['Parts'],          // anything showing "mill" is Parts-team work only (user 2026-10-20)
     FO:    ['FO'],
     CAST:  ['Cast'],
     DM:    ['DM'],
