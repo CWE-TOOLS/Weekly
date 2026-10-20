@@ -74,8 +74,11 @@ function addMonths(s, n) { const d = fromIso(s); return toIso(new Date(d.getFull
 function monthLabel(s) { return fromIso(s).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }); }
 /** A month on screen is made of FULL weeks: from the Monday of the week holding the 1st to the end of the week holding
  *  the last day — week 1 may start in the previous month, the last week may end in the next (user rule 2026-10-20). */
-function windowStart() { return mondayOf(S.from); }
-function windowEnd() { return addDays(mondayOf(lastOfMonth(S.from)), 6); }
+function firstWeekdayOf(s) { let d = s; while (isWeekend(d)) d = addDays(d, 1); return d; }
+function lastWeekdayOf(s) { let d = s; while (isWeekend(d)) d = addDays(d, -1); return d; }
+/** Week 1 = the week holding the month's first weekday (Nov 2026 starts Mon 11/2, not the week of Sun 11/1). */
+function windowStart() { return mondayOf(firstWeekdayOf(S.from)); }
+function windowEnd() { return addDays(mondayOf(lastWeekdayOf(lastOfMonth(S.from))), 6); }
 /** The days on screen: Monday to Friday of every week (weekends only when switched on). */
 function windowDays() {
     const out = [];
@@ -327,7 +330,7 @@ function renderRevenue() {
         return `<td class="sc-rv-pct ${p > COGS_RED_ABOVE ? 'sc-rv-bad' : 'sc-rv-good'}">${Math.round(p * 100)}%</td>`;
     };
     const weeks = [];
-    for (let m = mondayOf(first); m <= last; m = addDays(m, 7)) weeks.push([0, 1, 2, 3, 4, 5].map(i => addDays(m, i)));
+    for (let m = windowStart(); m <= windowEnd(); m = addDays(m, 7)) weeks.push([0, 1, 2, 3, 4, 5].map(i => addDays(m, i)));
     const inMonth = (d) => d >= first && d <= last;
     const sum = (days, f) => days.reduce((n, d) => n + f(d), 0);
 
