@@ -79,12 +79,12 @@ function lastWeekdayOf(s) { let d = s; while (isWeekend(d)) d = addDays(d, -1); 
 /** Week 1 = the week holding the month's first weekday (Nov 2026 starts Mon 11/2, not the week of Sun 11/1). */
 function windowStart() { return mondayOf(firstWeekdayOf(S.from)); }
 function windowEnd() { return addDays(mondayOf(lastWeekdayOf(lastOfMonth(S.from))), 6); }
-/** The days on screen: Monday to Friday of every week (weekends only when switched on). */
+/** The days on screen: Monday to Saturday of every week (Saturday shaded grey as the week break); Sundays when switched on. */
 function windowDays() {
     const out = [];
     const end = windowEnd();
     for (let d = windowStart(); d <= end; d = addDays(d, 1)) {
-        if (!S.settings.showWeekends && isWeekend(d)) continue;
+        if (!S.settings.showWeekends && dow(d) === 0) continue;   // Saturdays always shown (shaded); Sundays on request
         out.push(d);
     }
     return out;
@@ -463,7 +463,7 @@ function renderGrid() {
     h += '</tbody><tfoot><tr><td class="sc-label">Hours needed</td>';
     for (const d of days) DEPT_KEYS.forEach((dept, i) => {
         const v = totals.get(`${d}|${dept}`) || 0;
-        h += `<td class="${i === 0 ? 'sc-dept-first' : ''}">${v ? fmtH(v) : ''}</td>`;
+        h += `<td class="${i === 0 ? 'sc-dept-first' : ''}${isWeekend(d) ? ' sc-weekend' : ''}">${v ? fmtH(v) : ''}</td>`;
     });
     h += '</tr></tfoot></table>';
     wrap.innerHTML = h;

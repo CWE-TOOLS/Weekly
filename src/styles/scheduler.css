@@ -74,7 +74,10 @@ table.sc-grid { border-collapse: separate; border-spacing: 0; table-layout: fixe
 .sc-grid thead th.sc-dept[data-dept="Crate"] { background: var(--c-Crate); }
 .sc-grid thead th.sc-dept[data-dept="Spec"]  { background: var(--c-Spec); }
 .sc-grid thead th.sc-dept[data-dept="Ship"]  { background: var(--c-Ship); }
-.sc-grid thead th.sc-dept.sc-weekend, .sc-grid thead th.sc-dept.sc-holiday { opacity: .55; }
+/* weekend columns (Saturday always, Sunday on request): the whole column light grey — the break between weeks */
+.sc-grid thead th.sc-day.sc-weekend { background: #d1d5db; color: #1f2937; }
+.sc-grid thead th.sc-dept.sc-weekend { background: #d1d5db !important; color: #374151 !important; }
+.sc-grid thead th.sc-dept.sc-holiday { opacity: .55; }
 /* a filled cell: light tint of its column's colour, dark readable text, a solid colour bar on top */
 .sc-grid td.sc-cell.sc-has { --c: #999; background: color-mix(in srgb, var(--c) 14%, white); color: #000; }
 .sc-grid tr.sc-cast-top td.sc-cell.sc-has { box-shadow: inset 0 4px 0 0 var(--c); }   /* colour bar on the task row only */
@@ -95,8 +98,9 @@ table.sc-grid { border-collapse: separate; border-spacing: 0; table-layout: fixe
 .sc-grid td.sc-cell.sc-wkok { box-shadow: inset 0 0 0 3px #a855f7 !important; }
 .sc-task { display: block; font-size: 10px; font-weight: 800; letter-spacing: .1px; color: #000; text-transform: lowercase; overflow: hidden; text-overflow: ellipsis; padding-top: 3px; }
 .sc-h { display: block; font-size: 12px; font-weight: 800; color: #000; }
-.sc-grid .sc-weekend { background: #f3f4f6; color: #9ca3af; }
-.sc-grid td.sc-cell.sc-weekend:hover { background: #e5e7eb; }
+.sc-grid .sc-weekend { background: #e5e7eb; color: #4b5563; }
+.sc-grid td.sc-cell.sc-weekend:hover { background: #d1d5db; }
+.sc-grid tfoot td.sc-weekend { background: #e5e7eb; }
 .sc-grid .sc-holiday { background: repeating-linear-gradient(45deg, #fee2e2, #fee2e2 4px, #fecaca 4px, #fecaca 8px); color: #991b1b; }
 .sc-grid thead th.sc-today { background: #dcfce7; color: #166534; }
 .sc-grid td.sc-today { background: #f0fdf4; }
