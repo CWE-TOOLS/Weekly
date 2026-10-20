@@ -156,15 +156,15 @@ table.sc-grid { border-collapse: separate; border-spacing: 0; table-layout: fixe
 
 /* revenue view */
 .sc-rev { padding: 14px 16px 30px; display: flex; flex-direction: column; gap: 18px; }
-.sc-rev-table { border-collapse: collapse; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
-.sc-rev-table th, .sc-rev-table td { border: 1px solid #9ca3af; padding: 4px 8px; font-size: 12px; text-align: right; white-space: nowrap; }
+.sc-rev-table { border-collapse: collapse; width: auto; table-layout: auto; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.sc-rev-table th, .sc-rev-table td { border: 1px solid #9ca3af; padding: 3px 6px; font-size: 12px; text-align: right; white-space: nowrap; }
 .sc-rev-table thead th { background: #1f2937; color: #fff; font-weight: 700; text-align: center; }
 .sc-rev-table thead th.sc-weekend { background: #4b5563; }
 .sc-rev-table thead th.sc-holiday { background: #7f1d1d; }
-.sc-rev-table th.sc-rev-label, .sc-rev-table td.sc-rev-label { text-align: left; min-width: 170px; font-weight: 600; }
-.sc-rev-table th.sc-rev-label { letter-spacing: 2px; }
+.sc-rev-table th.sc-rev-label, .sc-rev-table td.sc-rev-label { text-align: left; font-weight: 600; }
+.sc-rev-table th.sc-rev-label { letter-spacing: 1px; }
 .sc-rev-table th.sc-rev-total { background: #111827; }
-.sc-rev-cell { min-width: 84px; }
+.sc-rev-cell { width: 1%; }   /* columns only as wide as their widest value */
 .sc-rev-$ { display: block; font-weight: 700; color: #111827; }
 .sc-rev-h { display: block; font-size: 10px; color: #6b7280; }
 .sc-rev-zero { color: #9ca3af; }
