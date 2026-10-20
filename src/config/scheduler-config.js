@@ -86,7 +86,7 @@ const PHASE_RULES = [
     [/gof|grind/i, 'GOF'],
     [/acid/i, 'ACID'],
     [/wash/i, 'WASH'],
-    [/\btu\b|touch/i, 'TU'],
+    [/\btu\s*\d*\b|touch/i, 'TU'],             // TU, TU2, TU 2, Touch Up
     [/paint/i, 'PAINT'],
     [/seal|epoxy/i, 'SEAL'],
     [/azek/i, 'AZEK'],
