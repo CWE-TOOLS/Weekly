@@ -416,8 +416,18 @@ function renderGrid() {
     // header: weeks / days / departments
     let h = '<table class="sc-grid"><thead><tr><th class="sc-label" rowspan="3">Job · Casting</th>';
     const weeks = [];
-    for (const d of days) { const wk = mondayOf(d); if (!weeks.length || weeks[weeks.length - 1].wk !== wk) weeks.push({ wk, n: 0 }); weeks[weeks.length - 1].n++; }
-    for (const w of weeks) h += `<th class="sc-week" colspan="${w.n * DEPT_KEYS.length}">${esc(weekLabel(w.wk))}<span class="sc-rev" title="hours × $${REVENUE_PER_HOUR}">${money((weekHours.get(w.wk) || 0) * REVENUE_PER_HOUR)}</span></th>`;
+    for (const d of days) { const wk = mondayOf(d); if (!weeks.length || weeks[weeks.length - 1].wk !== wk) weeks.push({ wk, days: [] }); weeks[weeks.length - 1].days.push(d); }
+    // "Week 1", "Week 2" … centred over the Wednesday; the week's revenue sits at the right end
+    const nD = DEPT_KEYS.length;
+    weeks.forEach((w, wi) => {
+        let mid = w.days.findIndex(d => dow(d) === 3);
+        if (mid < 0) mid = Math.floor((w.days.length - 1) / 2);
+        const before = mid, after = w.days.length - mid - 1;
+        const revTxt = `<span class="sc-rev" title="Week ${wi + 1}: scheduled hours × $${REVENUE_PER_HOUR}">${money((weekHours.get(w.wk) || 0) * REVENUE_PER_HOUR)}</span>`;
+        if (before) h += `<th class="sc-week sc-week-start" colspan="${before * nD}"></th>`;
+        h += `<th class="sc-week sc-week-mid${before ? '' : ' sc-week-start'}" colspan="${nD}" title="Week of ${esc(shortDay(w.wk))}">Week ${wi + 1}</th>`;
+        if (after) h += `<th class="sc-week sc-week-end" colspan="${after * nD}">${revTxt}</th>`;
+    });
     h += '</tr><tr>';
     for (const d of days) {
         const cls = ['sc-day', isWeekend(d) ? 'sc-weekend' : '', isHoliday(d) ? 'sc-holiday' : '', d === today ? 'sc-today' : ''].join(' ');

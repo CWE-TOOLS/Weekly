@@ -37,11 +37,14 @@
 table.sc-grid { border-collapse: separate; border-spacing: 0; table-layout: fixed; }
 .sc-grid th, .sc-grid td { border-right: 1px solid #9ca3af; border-bottom: 1px solid #9ca3af; padding: 0; height: 30px; font-size: 11px; white-space: nowrap; box-sizing: border-box; }
 .sc-grid thead th { position: sticky; background: #fff; z-index: 3; font-weight: 600; text-align: center; }
-.sc-grid thead tr:nth-child(1) th { top: 0; height: 24px; background: #eef2ff; color: #3730a3; }
-.sc-grid thead tr:nth-child(2) th { top: 24px; height: 24px; }
-.sc-grid thead tr:nth-child(3) th { top: 48px; height: 22px; font-size: 10px; color: #6b7280; font-weight: 500; }
-.sc-grid th.sc-week { border-left: 3px solid #1f2937; text-align: left; padding-left: 6px; }
-.sc-grid th.sc-week .sc-rev { color: #065f46; font-weight: 700; margin-left: 8px; }
+.sc-grid thead tr:nth-child(1) th { top: 0; height: 30px; background: #eef2ff; color: #3730a3; }
+.sc-grid thead tr:nth-child(2) th { top: 30px; height: 24px; }
+.sc-grid thead tr:nth-child(3) th { top: 54px; height: 22px; font-size: 10px; color: #6b7280; font-weight: 500; }
+.sc-grid th.sc-week { border-right: none; }
+.sc-grid th.sc-week-start { border-left: 3px solid #1f2937; }
+.sc-grid th.sc-week-mid { text-align: center; font-size: 17px; font-weight: 800; color: #1e1b4b; letter-spacing: .5px; overflow: visible; }
+.sc-grid th.sc-week-end { text-align: right; padding-right: 8px; border-right: 1px solid #9ca3af; }
+.sc-grid th.sc-week .sc-rev { color: #065f46; font-weight: 700; font-size: 12px; }
 .sc-grid th.sc-day { border-left: 3px solid #1f2937; }
 .sc-grid .sc-dept-first, .sc-grid td.sc-dept-first { border-left: 3px solid #1f2937; }
 .sc-grid th.sc-label, .sc-grid td.sc-label { position: sticky; left: 0; z-index: 2; background: #fff; width: 190px; min-width: 190px; max-width: 190px; text-align: left; padding: 0 8px; overflow: hidden; text-overflow: ellipsis; border-right: 3px solid #1f2937; }
