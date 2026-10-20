@@ -739,6 +739,13 @@ async function moveCellEntries(cid, fromDate, dept, to, cascade = false) {
     if (!rows.length) return false;
     const n = workingOffset(fromDate, to);
     const later = cascade ? S.rows.filter(r => r.casting_id === cid && r.date > fromDate).map(r => ({ row: r, date: stepWorking(r.date, n) })) : [];
+    // a cascade that pushes tasks over a weekend asks whether any of them should land on that Saturday instead
+    const satChoices = saturdayChoices(later);
+    if (satChoices.length) {
+        const picked = await askSaturdays(satChoices);
+        if (picked === null) return false;
+        picked.forEach(i => { satChoices[i].x.date = satChoices[i].sat; satChoices[i].x.sat = true; });
+    }
     const landing = [{ date: to, department: dept }, ...later.map(x => ({ date: x.date, department: x.row.department }))];
     if (landing.some(x => TEAM_DAY_LIMITS[x.department])) {
         const span = landing.map(x => x.date).sort();
@@ -750,7 +757,7 @@ async function moveCellEntries(cid, fromDate, dept, to, cascade = false) {
     const __h = await histBegin(label, [cid]);
     try {
         for (const r of rows) await updateScheduleRow(r.id, { date: to, weekend_ok: isWeekend(to) ? true : r.weekend_ok });
-        for (const x of later) await updateScheduleRow(x.row.id, { date: x.date, weekend_ok: isWeekend(x.date) ? x.row.weekend_ok : false });
+        for (const x of later) await updateScheduleRow(x.row.id, { date: x.date, weekend_ok: x.sat ? true : (isWeekend(x.date) ? x.row.weekend_ok : false) });
         await histEnd(__h);
         await loadRows();
         render();
@@ -758,6 +765,45 @@ async function moveCellEntries(cid, fromDate, dept, to, cascade = false) {
         return true;
     } catch (err) { toast('Move failed: ' + (err.message || err), 'error'); return false; }
     finally { setBusy(false); }
+}
+/** Cascaded tasks that jump over a Saturday: the Saturday they could land on instead. */
+function saturdayChoices(later) {
+    const out = [];
+    for (const x of later) {
+        const from = x.row.date, to = x.date;
+        if (to > from) {
+            const sat = addDays(to, -((dow(to) + 1) % 7));          // the Saturday just before the new day
+            if (dow(sat) === 6 && sat > from && !isHoliday(sat) && nextWorking(sat, 1) === to) out.push({ x, sat });
+        } else if (to < from) {
+            const sat = addDays(to, (6 - dow(to) + 7) % 7);         // the Saturday just after the new day
+            if (dow(sat) === 6 && sat < from && !isHoliday(sat) && nextWorking(sat, -1) === to) out.push({ x, sat });
+        }
+    }
+    return out;
+}
+/** Ask which of those tasks should land on the Saturday. Resolves to a Set of indexes, or null = cancel the move. */
+function askSaturdays(choices) {
+    return new Promise((resolve) => {
+        const box = document.createElement('div');
+        box.className = 'sc-panel-backdrop';
+        box.id = 'sc-satq';
+        box.innerHTML = `<div class="sc-panel sc-panel-sm" role="dialog" aria-modal="true">
+            <div class="sc-panel-head"><h2>Land a task on a Saturday?</h2><button type="button" class="sc-x" data-act="cancel">&times;</button></div>
+            <div class="sc-panel-body">
+                <p class="sc-hint">This cascade pushes ${choices.length === 1 ? 'a task' : 'these tasks'} over a weekend. Tick any you would like to land on the Saturday instead (it is marked as an allowed weekend day). Leave them unticked to keep the weekday.</p>
+                ${choices.map((c, i) => `<label class="sc-choice"><input type="checkbox" data-i="${i}"> <span><strong>${esc(String(c.x.row.task).toLowerCase())}</strong> (${esc(deptLabel(c.x.row.department))}): <strong>${esc(shortDay(c.sat))}</strong> instead of ${esc(shortDay(c.x.date))}</span></label>`).join('')}
+            </div>
+            <div class="sc-panel-foot"><button type="button" class="btn-secondary" data-act="cancel">Cancel the move</button><button type="button" class="btn-primary" data-act="ok">Move</button></div>
+        </div>`;
+        document.body.appendChild(box);
+        box.addEventListener('click', (e) => {
+            const act = e.target.closest('[data-act]')?.dataset.act;
+            if (!act) return;
+            const picked = act === 'ok' ? new Set([...box.querySelectorAll('input[data-i]:checked')].map(el => Number(el.dataset.i))) : null;
+            box.remove();
+            resolve(picked);
+        });
+    });
 }
 function setCascade(on) {
     S.cascade = !!on;
