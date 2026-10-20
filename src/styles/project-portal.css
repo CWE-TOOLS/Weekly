@@ -6616,3 +6616,31 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
 .pp-tab-panel[data-panel="jig-list"] th .es{display:block;font-size:10px;letter-spacing:0}
 .pp-tab-panel[data-panel="jig-list"] .cncnote .es-block{margin-top:6px;font-size:12.5px}
 .pp-tab-panel[data-panel="jig-list"] .listnote .es b,.pp-tab-panel[data-panel="jig-list"] .cncnote .es b{color:#333}
+
+/* Casting Inventory (2026-10-20): PM fields (blue) vs engineering fields (purple); remake rows; the two "ready" buttons */
+.pp-inv-input.pp-inv-pm { border-color: #3b82f6; background: #eff6ff; }
+.pp-inv-input.pp-inv-eng { border-color: #8b5cf6; background: #f5f3ff; }
+.pp-inv-input.pp-inv-pm:hover, .pp-inv-input.pp-inv-eng:hover { background: #ffffff; }
+.pp-inv-header-fields .pp-inv-h-pm { color: #1d4ed8; }
+.pp-inv-header-fields .pp-inv-h-eng { color: #6d28d9; }
+.pp-inv-legend { display: flex; gap: 16px; justify-content: flex-end; padding: 0 4px 5px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+.pp-inv-legend span { display: inline-flex; align-items: center; gap: 5px; cursor: help; }
+.pp-inv-legend span::before { content: ''; width: 12px; height: 12px; border-radius: 3px; border: 1.5px solid; }
+.pp-inv-legend-pm { color: #1d4ed8; }
+.pp-inv-legend-pm::before { border-color: #3b82f6; background: #eff6ff; }
+.pp-inv-legend-eng { color: #6d28d9; }
+.pp-inv-legend-eng::before { border-color: #8b5cf6; background: #f5f3ff; }
+.pp-inv-row.pp-inv-row-remake { border: 2px solid #dc2626; }
+.pp-inv-row.pp-inv-row-remake .pp-inv-remake-cell { color: #b91c1c; font-weight: 700; border-color: #fca5a5; background: #fef2f2; }
+.pp-cast-card-ms-action { display: inline-flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.pp-ms-ci-pm, .pp-ms-ci-eng { display: inline-flex; gap: 6px; align-items: center; }
+.pp-ms-btn-pm { background: #1d4ed8; }
+.pp-ms-btn-pm:hover { background: #1e40af; }
+.pp-ms-btn-eng { background: #16a34a; }
+.pp-ms-btn-eng:hover { background: #15803d; }
+.pp-ms-btn-eng:disabled { background: #cbd5e1; color: #64748b; cursor: not-allowed; }
+.pp-ms-btn-done { background: #e2e8f0; color: #64748b; cursor: default; }
+/* Tracking tab: "incl. N rejections from cast X" under the component count */
+.pp-track-section-counts { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+.pp-track-section-counts .pp-track-section-count { margin-left: 0; }
+.pp-track-section-remakes { font-size: 11px; color: #9a3412; background: #ffedd5; border: 1px solid #fdba74; padding: 1px 8px; border-radius: 999px; font-weight: 700; white-space: nowrap; }

@@ -149,6 +149,8 @@ export async function updateInventoryItem(itemId, fields) {
     if (fields.extras !== undefined) payload.extras = cleanExtras(fields.extras);
     if (fields.cu_ft !== undefined) payload.cu_ft = cleanNumber(fields.cu_ft);
     if (fields.ff_sq_ft !== undefined) payload.ff_sq_ft = cleanNumber(fields.ff_sq_ft);
+    if (fields.remake_of_panel_id !== undefined) payload.remake_of_panel_id = cleanText(fields.remake_of_panel_id);
+    if (fields.remake_of_casting_id !== undefined) payload.remake_of_casting_id = cleanUuid(fields.remake_of_casting_id);
     if (Object.keys(payload).length === 0) return null;
 
     const { data, error } = await client

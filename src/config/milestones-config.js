@@ -65,9 +65,9 @@ export function milestonesApply(projectNumber, createdAt = null) {
     return true;
 }
 
-/** Wording for the Casting Inventory lock box. */
+/** Wording for the Casting Inventory box (PM: "Ready for engineering", engineering: "Casting Inventory ready"). */
 export const CI_STATE = {
-    red:    { label: 'Casting Inventory — being entered', next: 'Ready for engineering' },
-    orange: { label: 'Casting Inventory — with engineering', next: 'Engineering done — lock it' },
-    green:  { label: 'Casting Inventory — final & locked', next: null }
+    red:    { label: 'Casting Inventory — nothing entered yet', next: 'Ready for engineering' },
+    orange: { label: 'Casting Inventory — in progress', next: 'Casting Inventory ready' },
+    green:  { label: 'Casting Inventory — ready (final)', next: null }
 };
