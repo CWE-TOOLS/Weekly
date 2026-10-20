@@ -601,13 +601,29 @@ function openEditor(td) {
         const ph = phasesOf(cid).find(p => p.id === r.phase_id);
         const all = S.rows.filter(x => x.phase_id === r.phase_id);
         const tot = all.reduce((n, x) => n + (Number(x.hours) || 0), 0);
-        return `<div class="sc-ed-phase">Optimizer Hours: ${esc(ph?.phase_name || '?')} ${fmtH(ph?.hours)} h over ${all.length} day${all.length === 1 ? '' : 's'} (scheduled ${fmtH(tot)} h). Changing this day moves the difference to the phase's other days.</div>`;
+        return `<div class="sc-ed-phase">Optimizer Hours: ${esc(ph?.phase_name || '?')} ${fmtH(ph?.hours)} h over ${all.length} day${all.length === 1 ? '' : 's'} (scheduled ${fmtH(tot)} h). Hours come from the portal and can't be changed here — use Roll over to split them with the next day.</div>`;
+    };
+    // roll-over: split this day's hours with the next working day (the pair always totals what it had)
+    const rollPanel = (r) => {
+        if (!r.phase_id) return '';
+        const next = nextWorking(r.date, 1);
+        const nextRow = S.rows.find(x => x.phase_id === r.phase_id && x.date === next && x.department === r.department);
+        const total = Math.round(((Number(r.hours) || 0) + (nextRow ? Number(nextRow.hours) || 0 : 0)) * 100) / 100;
+        const todayH = nextRow ? Number(r.hours) || 0 : Math.round(total / 2 * 2) / 2;
+        return `<div class="sc-roll" data-roll="${r.id}" data-total="${total}" data-next="${next}" hidden>
+            <div class="sc-roll-row"><span>${esc(shortDay(r.date))}</span><input type="number" step="0.5" min="0" max="${total}" data-roll-today value="${fmtH(todayH)}"> h</div>
+            <div class="sc-roll-row"><span>${esc(shortDay(next))}${nextRow ? '' : ' (new day)'}</span><input type="number" step="0.5" min="0" max="${total}" data-roll-next value="${fmtH(Math.round((total - todayH) * 100) / 100)}"> h</div>
+            <div class="sc-roll-total">Together they must stay <strong>${fmtH(total)} h</strong>. Change either day — the other follows.</div>
+            <button type="button" class="btn-primary" data-roll-save>Save roll-over</button>
+        </div>`;
     };
     let html = `<h4>${esc(projectLabel(c.project_number))} — ${esc(castingLabel(c))}</h4><div class="sc-sub">${esc(shortDay(date))} · ${esc(DEPARTMENTS.find(d => d.key === dept)?.label || dept)}</div>`;
     if (holiday) html += '<div class="sc-ed-alert">Holiday — nothing can be scheduled on this day. Change the holiday list in Settings if that is wrong.</div>';
     else if (weekend && !weekendAllowed) html += `<div class="sc-ed-alert">Weekend. Work is only scheduled here if someone allows it.<br><button type="button" class="btn-secondary" id="sc-ed-allow">Allow this weekend day for this casting</button></div>`;
     for (const r of rows) {
-        html += `<div class="sc-ed-row" data-id="${r.id}"><select data-task>${opts.map(o => `<option${o === r.task ? ' selected' : ''}>${o}</option>`).join('')}${opts.includes(r.task) ? '' : `<option selected>${esc(r.task)}</option>`}</select><input type="number" step="0.5" min="0" data-hours value="${fmtH(r.hours)}"><button type="button" class="sc-del" data-del title="Remove">&times;</button>${phaseLine(r)}</div>`;
+        const lockedH = r.phase_id ? ' readonly class="sc-ed-locked" title="Locked to the Optimizer Hours tab in the portal"' : '';
+        const rollBtn = r.phase_id && !holiday ? `<button type="button" class="btn-secondary sc-roll-open" data-roll-open="${r.id}" title="The task did not finish today: carry part of its hours to the next working day">Roll over to next day &#9656;</button>` : '';
+        html += `<div class="sc-ed-row" data-id="${r.id}"><select data-task>${opts.map(o => `<option${o === r.task ? ' selected' : ''}>${o}</option>`).join('')}${opts.includes(r.task) ? '' : `<option selected>${esc(r.task)}</option>`}</select><input type="number" step="0.5" min="0" data-hours value="${fmtH(r.hours)}"${lockedH}><button type="button" class="sc-del" data-del title="Remove">&times;</button>${phaseLine(r)}${rollBtn}${rollPanel(r)}</div>`;
     }
     const canEdit = !holiday && (!weekend || weekendAllowed);
     if (canEdit) html += `<div class="sc-ed-add"><select id="sc-ed-add-task">${opts.map(o => `<option>${o}</option>`).join('')}</select><input type="number" id="sc-ed-add-hours" step="0.5" min="0" placeholder="hours"><button type="button" class="btn-secondary" id="sc-ed-add">Add</button></div>`;
@@ -672,9 +688,8 @@ async function saveEditor() {
             const task = line.querySelector('[data-task]').value;
             const hours = Math.max(0, Number(line.querySelector('[data-hours]').value) || 0);
             if (task !== row.task) await updateScheduleRow(row.id, { task, note: /Unmapped/.test(row.note || '') ? null : row.note });
-            if (Math.abs(hours - (Number(row.hours) || 0)) > 0.001) {
-                if (row.phase_id) { const err = await changePhaseDayHours(row, hours); if (err) { toast(err, 'error'); } }
-                else if (hours <= 0) await deleteScheduleRow(row.id);
+            if (!row.phase_id && Math.abs(hours - (Number(row.hours) || 0)) > 0.001) {   // portal hours are never edited here
+                if (hours <= 0) await deleteScheduleRow(row.id);
                 else await updateScheduleRow(row.id, { hours });
             }
         }
@@ -683,6 +698,36 @@ async function saveEditor() {
         render();
         closeEditor();
     } catch (err) { toast('Save failed: ' + (err.message || err), 'error'); }
+    finally { setBusy(false); }
+}
+
+/** Split a phase day with the next working day: today keeps todayH, the next day gets the rest of the pair's hours. */
+async function saveRollover(rowId, todayH) {
+    const row = S.rows.find(r => r.id === rowId);
+    if (!row || !row.phase_id) return;
+    const next = nextWorking(row.date, 1);
+    const nextRow = S.rows.find(x => x.phase_id === row.phase_id && x.date === next && x.department === row.department);
+    const total = Math.round(((Number(row.hours) || 0) + (nextRow ? Number(nextRow.hours) || 0 : 0)) * 100) / 100;
+    todayH = Math.round((Number(todayH) || 0) * 100) / 100;
+    const nextH = Math.round((total - todayH) * 100) / 100;
+    if (todayH <= 0 || nextH <= 0) { toast(`Both days need some hours (together ${fmtH(total)} h). To move the whole task, use Move instead.`, 'error'); return; }
+    if (!nextRow && TEAM_DAY_LIMITS[row.department]) {
+        const load = await loadTeamLoad(next, next, row.casting_id);
+        if (!confirmOverload(overloadsOf([{ date: next, department: row.department }], load))) return;
+    }
+    setBusy(true);
+    const __h = await histBegin(`roll over ${String(row.task).toLowerCase()} to ${shortDay(next)}`, [row.casting_id]);
+    try {
+        await updateScheduleRow(row.id, { hours: todayH });
+        if (nextRow) await updateScheduleRow(nextRow.id, { hours: nextH });
+        else await insertScheduleRows([{ project_number: row.project_number, casting_id: row.casting_id, phase_id: row.phase_id, date: next, department: row.department, task: row.task, hours: nextH, weekend_ok: false, note: `Rolled over from ${shortDay(row.date)}` }]);
+        await histEnd(__h);
+        await loadRows();
+        render();
+        toast(`${String(row.task).toLowerCase()}: ${fmtH(todayH)} h on ${shortDay(row.date)}, ${fmtH(nextH)} h on ${shortDay(next)} (total ${fmtH(total)} h kept)`);
+        const td = document.querySelector(`tr.sc-cast-top td.sc-cell[data-cid="${row.casting_id}"][data-date="${row.date}"][data-dept="${row.department}"]`);
+        if (td) openEditor(td); else closeEditor();
+    } catch (err) { toast('Roll-over failed: ' + (err.message || err), 'error'); }
     finally { setBusy(false); }
 }
 
@@ -1159,6 +1204,14 @@ function wire() {
     });
     $('sc-cascade').addEventListener('change', (e) => setCascade(e.target.checked));
     $('sc-editor').addEventListener('change', (e) => { if (e.target.id === 'sc-ed-cascade') setCascade(e.target.checked); });
+    $('sc-editor').addEventListener('input', (e) => {
+        const panel = e.target.closest('.sc-roll');
+        if (!panel) return;
+        const total = Number(panel.dataset.total) || 0;
+        const clamp = (v) => Math.min(total, Math.max(0, Math.round((Number(v) || 0) * 100) / 100));
+        if (e.target.matches('[data-roll-today]')) panel.querySelector('[data-roll-next]').value = fmtH(Math.round((total - clamp(e.target.value)) * 100) / 100);
+        if (e.target.matches('[data-roll-next]')) panel.querySelector('[data-roll-today]').value = fmtH(Math.round((total - clamp(e.target.value)) * 100) / 100);
+    });
     $('sc-undo').addEventListener('click', undo);
     $('sc-redo').addEventListener('click', redo);
     document.addEventListener('keydown', (e) => {
@@ -1196,6 +1249,9 @@ function wire() {
         if (t.id === 'sc-ed-save') { await saveEditor(); return; }
         if (t.id === 'sc-ed-add') { await addEditorEntry(); return; }
         if (t.id === 'sc-ed-allow') { await allowWeekendHere(); return; }
+        const ro = t.closest('[data-roll-open]');
+        if (ro) { const pnl = $('sc-editor').querySelector(`.sc-roll[data-roll="${ro.dataset.rollOpen}"]`); if (pnl) { pnl.hidden = !pnl.hidden; placeEditor(document.querySelector(`td.sc-cell[data-cid="${editorCtx.cid}"][data-date="${editorCtx.date}"][data-dept="${editorCtx.dept}"]`) || ro); } return; }
+        if (t.closest('[data-roll-save]')) { const pnl = t.closest('.sc-roll'); await saveRollover(pnl.dataset.roll, pnl.querySelector('[data-roll-today]').value); return; }
         if (t.id === 'sc-ed-move') { await moveEditorEntries(); return; }
         const del = t.closest('[data-del]');
         if (del) { await deleteEditorEntry(del.closest('.sc-ed-row').dataset.id); return; }

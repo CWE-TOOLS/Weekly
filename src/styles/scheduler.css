@@ -135,6 +135,13 @@ table.sc-grid { border-collapse: separate; border-spacing: 0; table-layout: fixe
 .sc-ed-row select, .sc-ed-row input, .sc-editor input[type=date] { padding: 4px 6px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; width: 100%; box-sizing: border-box; }
 .sc-ed-row .sc-del { background: none; border: none; color: #b91c1c; font-size: 16px; cursor: pointer; }
 .sc-ed-phase { font-size: 11px; color: #6b7280; grid-column: 1 / -1; margin-top: -4px; }
+.sc-ed-row input.sc-ed-locked { background: #f3f4f6; color: #374151; cursor: not-allowed; }
+.sc-roll-open { grid-column: 1 / -1; justify-self: start; padding: 3px 8px !important; font-size: 12px !important; }
+.sc-roll { grid-column: 1 / -1; border: 1px solid #bfdbfe; background: #eff6ff; border-radius: 8px; padding: 8px 10px; margin-top: 4px; }
+.sc-roll[hidden] { display: none; }
+.sc-roll-row { display: grid; grid-template-columns: 1fr 80px auto; gap: 6px; align-items: center; margin-bottom: 5px; font-size: 12px; font-weight: 600; }
+.sc-roll-row input { padding: 4px 6px; border: 1px solid #93c5fd; border-radius: 6px; font-size: 13px; }
+.sc-roll-total { font-size: 11px; color: #1e3a8a; margin: 2px 0 6px; }
 .sc-ed-alert { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; border-radius: 6px; padding: 6px 8px; font-size: 12px; margin: 6px 0; }
 .sc-ed-alert button { margin-top: 6px; }
 .sc-ed-actions { display: flex; justify-content: space-between; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
