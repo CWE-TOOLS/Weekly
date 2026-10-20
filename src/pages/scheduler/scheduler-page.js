@@ -439,7 +439,7 @@ function renderGrid() {
     }
 
     // header: weeks / days / departments
-    let h = '<table class="sc-grid"><thead><tr><th class="sc-label" rowspan="3">Job · Casting</th>';
+    let h = '<table class="sc-grid"><thead><tr><th class="sc-label" rowspan="4">Job · Casting</th>';
     const weeks = [];
     for (const d of days) { const wk = mondayOf(d); if (!weeks.length || weeks[weeks.length - 1].wk !== wk) weeks.push({ wk, days: [] }); weeks[weeks.length - 1].days.push(d); }
     // "Week 1", "Week 2" … centred over the Wednesday (revenue lives in the Revenue view only)
@@ -452,14 +452,19 @@ function renderGrid() {
         h += `<th class="sc-week sc-week-mid${before ? '' : ' sc-week-start'}" colspan="${nD}" title="Week of ${esc(shortDay(w.wk))}">Week ${wi + 1}</th>`;
         if (after) h += `<th class="sc-week sc-week-end" colspan="${after * nD}"></th>`;
     });
+    h += '</tr><tr class="sc-alert-row">';
+    // alert row: a team over its castings-per-day limit shows here, above its day, in large type
+    for (const d of days) {
+        const ov = overByDay.get(d) || [];
+        const tip = ov.length ? 'OVER THE TEAM LIMIT\n' + ov.map(x => `${deptLabel(x.dept)}: ${x.count} castings (limit ${x.limit}) — ${x.names.join(', ')}`).join('\n') : '';
+        h += `<th class="sc-alert ${ov.length ? 'sc-alert-on' : ''} ${isWeekend(d) ? 'sc-weekend' : ''}" colspan="${DEPT_KEYS.length}"${tip ? ` title="${esc(tip)}"` : ''}>${ov.length ? '&#9888; ' + esc(ov.map(x => `${deptLabel(x.dept)} ${x.count}/${x.limit}`).join(' · ')) : ''}</th>`;
+    }
     h += '</tr><tr>';
     for (const d of days) {
         const ov = overByDay.get(d) || [];
         const cls = ['sc-day', isWeekend(d) ? 'sc-weekend' : '', isHoliday(d) ? 'sc-holiday' : '', d === today ? 'sc-today' : '', ov.length ? 'sc-day-over' : ''].join(' ');
-        const tip = ov.length
-            ? 'OVER THE TEAM LIMIT\n' + ov.map(x => `${deptLabel(x.dept)}: ${x.count} castings (limit ${x.limit}) — ${x.names.join(', ')}`).join('\n')
-            : (isHoliday(d) ? 'Holiday — never scheduled' : isWeekend(d) ? 'Weekend — needs an allow' : '');
-        h += `<th class="${cls}" colspan="${DEPT_KEYS.length}" title="${esc(tip)}">${ov.length ? '&#9888; ' : ''}${esc(shortDay(d))}${ov.length ? ` <span class="sc-over-what">${esc(ov.map(x => `${deptLabel(x.dept)} ${x.count}/${x.limit}`).join(' · '))}</span>` : ''}</th>`;
+        const tip = isHoliday(d) ? 'Holiday — never scheduled' : isWeekend(d) ? 'Weekend — needs an allow' : '';
+        h += `<th class="${cls}" colspan="${DEPT_KEYS.length}" title="${esc(tip)}">${esc(shortDay(d))}</th>`;
     }
     h += '</tr><tr>';
     for (const d of days) DEPARTMENTS.forEach((dep, i) => {

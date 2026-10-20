@@ -38,8 +38,9 @@ table.sc-grid { border-collapse: separate; border-spacing: 0; table-layout: fixe
 .sc-grid th, .sc-grid td { border-right: 1px solid #9ca3af; border-bottom: 1px solid #9ca3af; padding: 0; height: 30px; font-size: 11px; white-space: nowrap; box-sizing: border-box; }
 .sc-grid thead th { position: sticky; background: #fff; z-index: 3; font-weight: 600; text-align: center; }
 .sc-grid thead tr:nth-child(1) th { top: 0; height: 30px; background: #eef2ff; color: #3730a3; }
-.sc-grid thead tr:nth-child(2) th { top: 30px; height: 24px; }
-.sc-grid thead tr:nth-child(3) th { top: 54px; height: 22px; font-size: 10px; color: #6b7280; font-weight: 500; }
+.sc-grid thead tr:nth-child(2) th { top: 30px; height: 32px; }                 /* alert row */
+.sc-grid thead tr:nth-child(3) th { top: 62px; height: 24px; }                 /* days */
+.sc-grid thead tr:nth-child(4) th { top: 86px; height: 22px; font-size: 10px; color: #6b7280; font-weight: 500; }   /* teams */
 .sc-grid th.sc-week { border-right: none; }
 .sc-grid th.sc-week-start { border-left: 3px solid #1f2937; }
 .sc-grid th.sc-week-mid { text-align: center; font-size: 17px; font-weight: 800; color: #1e1b4b; letter-spacing: .5px; overflow: visible; }
@@ -82,8 +83,10 @@ table.sc-grid { border-collapse: separate; border-spacing: 0; table-layout: fixe
 .sc-grid thead th.sc-dept.sc-weekend { background: #d1d5db !important; color: #374151 !important; }
 .sc-grid thead th.sc-dept.sc-holiday { opacity: .55; }
 /* team over its castings-per-day limit */
-.sc-grid thead th.sc-day.sc-day-over { background: #dc2626 !important; color: #fff !important; font-weight: 800; }
-.sc-grid thead th.sc-day.sc-day-over .sc-over-what { font-size: 10px; font-weight: 700; opacity: .95; }
+.sc-grid thead th.sc-alert { background: #fff; border-left: 3px solid #1f2937; font-size: 22px; font-weight: 800; line-height: 1; overflow: hidden; text-overflow: ellipsis; padding: 0 4px; }
+.sc-grid thead th.sc-alert.sc-weekend { background: #e5e7eb; }
+.sc-grid thead th.sc-alert.sc-alert-on { background: #dc2626 !important; color: #fff; }
+.sc-grid thead th.sc-day.sc-day-over { box-shadow: inset 0 -3px 0 0 #dc2626; color: #b91c1c; font-weight: 800; }
 .sc-grid thead th.sc-dept.sc-dept-over { box-shadow: inset 0 0 0 3px #dc2626, inset 0 -6px 0 0 #dc2626; }
 /* a filled cell: light tint of its column's colour, dark readable text, a solid colour bar on top */
 .sc-grid td.sc-cell.sc-has { --c: #999; background: color-mix(in srgb, var(--c) 14%, white); color: #000; }
