@@ -4259,35 +4259,59 @@ function msBarTop() {
 }
 function msArmStamp(ids, milestone) { msPendingStamp = { ids, milestone }; setTimeout(() => { if (msPendingStamp && msPendingStamp.milestone === milestone) msPendingStamp = null; }, 8000); }
 /** The inventory of this casting changed: everything printed from it is out of date until reprinted. */
-// ---- Inventory fingerprint (2026-10-19): the lock remembers what the inventory looked like when it was locked
-// (a short hash kept at the end of the Casting Inventory milestone's note). An edit that leaves the inventory
-// exactly as printed is not a change: linked prints that went orange because of our own edits go back to green.
-const INV_MARK_RE = /\s*\[inv:([0-9a-z-]+)\]$/;
+// ---- Inventory fingerprints (2026-10-19/20): the lock remembers what each linked print saw in the inventory
+// (one short hash per print, kept at the end of the Casting Inventory milestone's note as [inv:b=…;l=…;…]).
+// Each print only reacts to the fields it uses (user's matrix 2026-10-20): volume / sq ft touch Batching Sheets
+// only, sizes touch the sheet-type prints, colour touches Batching Sheets only, row order never counts. An edit
+// that leaves a print's fields as printed is not a change for that print: ones that went orange because of our
+// own edits go back to green (their print stamp stays).
+const INV_MARK_RE = /\s*\[inv:([^\]]+)\]$/;
 const INV_CHANGED_NOTE = 'Casting Inventory changed after this was printed — print it again';
+const INV_PRINT_FIELDS = {
+    'Batching Sheets': ['cu_ft', 'ff_sq_ft', 'color_log_id', 'quantity', 'extras'],
+    'Labels':          ['type', 'width', 'length', 'quantity', 'extras'],
+    'Final Tracking':  ['type', 'width', 'length', 'quantity', 'extras'],
+    'Casting Layout':  ['type', 'width', 'length', 'quantity', 'extras'],
+    'Jig List':        ['type', 'width', 'length']
+};
+const INV_MARK_KEYS = { 'Batching Sheets': 'b', 'Labels': 'l', 'Final Tracking': 't', 'Casting Layout': 'c', 'Jig List': 'j' };
 /** A milestone note without the hidden inventory marker. */
 function msNote(r) { return String(r?.note || '').replace(INV_MARK_RE, ''); }
-function invFingerprint(castingId) {
-    const skip = new Set(['id', 'casting_id', 'created_at', 'updated_at']);
-    const rows = getInventoryFor(castingId).map(it => Object.keys(it).filter(k => !skip.has(k)).sort()
-        .map(k => k + '=' + (it[k] === null || it[k] === undefined ? '' : String(it[k]))).join('|'));
+function invHash(s) { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0; return h.toString(36); }
+/** Fingerprint of the inventory as one print sees it: the sorted set of its rows' relevant fields (row order ignored, rows added/removed counted). */
+function invFingerprint(castingId, milestone) {
+    const fields = INV_PRINT_FIELDS[milestone] || [];
+    const rows = getInventoryFor(castingId).map(it => fields.map(k => (it[k] === null || it[k] === undefined ? '' : String(it[k]))).join('|'));
     rows.sort();
-    const s = rows.join('\n');
-    let h = 5381;
-    for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
-    return h.toString(36) + '-' + rows.length;
+    return invHash(rows.join('\n')) + '-' + rows.length;
 }
-function invBaseline(castingId) { const m = String(msRow(castingId, 'Casting Inventory')?.note || '').match(INV_MARK_RE); return m ? m[1] : null; }
-function withInvMark(note, hash) { return `${note || ''} [inv:${hash}]`; }
+/** All per-print fingerprints as one marker body: b=…;l=…;t=…;c=…;j=… */
+function invMarks(castingId) { return CI_DEPENDENT.map(m => INV_MARK_KEYS[m] + '=' + invFingerprint(castingId, m)).join(';'); }
+/** Baselines stored at lock time: milestone -> hash (empty when the lock predates per-print marks). */
+function invBaselines(castingId) {
+    const m = String(msRow(castingId, 'Casting Inventory')?.note || '').match(INV_MARK_RE);
+    const out = {};
+    if (!m || !m[1].includes('=')) return out;
+    for (const part of m[1].split(';')) {
+        const [k, v] = part.split('=');
+        const ms = Object.keys(INV_MARK_KEYS).find(name => INV_MARK_KEYS[name] === k);
+        if (ms && v) out[ms] = v;
+    }
+    return out;
+}
+function withInvMark(note, marks) { return `${note || ''} [inv:${marks}]`; }
+/** The marker body already stored on the Casting Inventory row (kept as-is through an unlock). */
+function invMarks0(castingId) { const m = String(msRow(castingId, 'Casting Inventory')?.note || '').match(INV_MARK_RE); return m ? m[1] : ''; }
 
 function msInventoryChanged(castingId) {
     if (!msOn() || !castingId) return;
-    const base = invBaseline(castingId);
-    const backAsPrinted = !!base && invFingerprint(castingId) === base;
+    const base = invBaselines(castingId);
     for (const m of CI_DEPENDENT) {
         const r = msRow(castingId, m);
         if (!r) continue;
-        if (backAsPrinted) {
-            if (r.status === MS.ORANGE && r.note === INV_CHANGED_NOTE) msSet(castingId, m, MS.GREEN, { note: null });   // printed state restored; the print stamp stays
+        const asPrinted = !!base[m] && invFingerprint(castingId, m) === base[m];
+        if (asPrinted) {
+            if (r.status === MS.ORANGE && r.note === INV_CHANGED_NOTE) msSet(castingId, m, MS.GREEN, { note: null });   // this print's fields are back as printed; the stamp stays
         } else if (r.status === MS.GREEN && !String(r.note || '').startsWith(LAYOUT_CONDITION_PREFIX)) {
             msSet(castingId, m, MS.ORANGE, { note: INV_CHANGED_NOTE });
         }
@@ -4327,13 +4351,13 @@ function scheduleStagingDerive() { clearTimeout(msStagingDeriveTimer); msStaging
 async function ciAdvance(castingId) {
     const s = ciStatus(castingId);
     if (s === MS.RED) await msSet(castingId, 'Casting Inventory', MS.ORANGE, { note: 'Ready for engineering', stamp: true });
-    else if (s === MS.ORANGE) await msSet(castingId, 'Casting Inventory', MS.GREEN, { locked: true, note: withInvMark('Engineering done — final', invFingerprint(castingId)), stamp: true });
+    else if (s === MS.ORANGE) await msSet(castingId, 'Casting Inventory', MS.GREEN, { locked: true, note: withInvMark('Engineering done — final', invMarks(castingId)), stamp: true });
     invEdits.clear();
     renderCastings();
 }
 async function ciUnlock(castingId) {
     // Keep the locked inventory's fingerprint (older locks have none: the inventory as it is now becomes the baseline).
-    await msSet(castingId, 'Casting Inventory', MS.ORANGE, { locked: false, note: withInvMark('Unlocked for changes — lock it again when done', invBaseline(castingId) || invFingerprint(castingId)), stamp: true });
+    await msSet(castingId, 'Casting Inventory', MS.ORANGE, { locked: false, note: withInvMark('Unlocked for changes — lock it again when done', Object.keys(invBaselines(castingId)).length ? invMarks0(castingId) : invMarks(castingId)), stamp: true });
     renderCastings();
 }
 
