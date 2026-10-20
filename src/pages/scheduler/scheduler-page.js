@@ -393,6 +393,9 @@ function overLimitDays() {
     return out;
 }
 const deptLabel = (k) => DEPARTMENTS.find(d => d.key === k)?.label || k;
+/** Alert wording, e.g. "casting - 3 jobs" (user 2026-10-20). */
+const ALERT_NAMES = { CNC: 'CNC', Parts: 'parts', FO: 'form out', Cast: 'casting', DM: 'demold', F: 'finish', Seal: 'seal', Crate: 'crate', Spec: 'special', Ship: 'ship' };
+const alertText = (x) => `${ALERT_NAMES[x.dept] || x.dept} - ${x.count} jobs`;
 
 function renderBanner() {
     const b = $('sc-banner');
@@ -405,7 +408,7 @@ function renderBanner() {
     const msgs = [];
     const days = new Set(windowDays());
     const over = [...overLimitDays()].filter(([d]) => days.has(d)).sort(([a], [b2]) => a.localeCompare(b2));
-    if (over.length) msgs.push(`Over the team limit on ${over.length} day${over.length === 1 ? '' : 's'}: ` + over.slice(0, 6).map(([d, list]) => `${shortDay(d)} (${list.map(x => `${deptLabel(x.dept)} ${x.count}/${x.limit}`).join(', ')})`).join('; ') + (over.length > 6 ? '; …' : '') + '. Parts, FO, Cast and DM take 1 casting a day; F, Seal and Spec take 5.');
+    if (over.length) msgs.push(`Over the team limit on ${over.length} day${over.length === 1 ? '' : 's'}: ` + over.slice(0, 6).map(([d, list]) => `${shortDay(d)} (${list.map(alertText).join(', ')})`).join('; ') + (over.length > 6 ? '; …' : '') + '. Parts, FO, Cast and DM take 1 casting a day; F, Seal and Spec take 5.');
     const bad = visibleCastings().filter(c => !lockOk(lockReport(c.id)) && rowsOfCasting(c.id).length);
     if (bad.length) msgs.push(`${bad.length} casting${bad.length === 1 ? '' : 's'} on screen no longer match the Optimizer Hours tab (red dot on the row) — open the row menu and regenerate.`);
     if (msgs.length) {
@@ -457,7 +460,7 @@ function renderGrid() {
     for (const d of days) {
         const ov = overByDay.get(d) || [];
         const tip = ov.length ? 'OVER THE TEAM LIMIT\n' + ov.map(x => `${deptLabel(x.dept)}: ${x.count} castings (limit ${x.limit}) — ${x.names.join(', ')}`).join('\n') : '';
-        h += `<th class="sc-alert ${ov.length ? 'sc-alert-on' : ''} ${isWeekend(d) ? 'sc-weekend' : ''}" colspan="${DEPT_KEYS.length}"${tip ? ` title="${esc(tip)}"` : ''}>${ov.length ? '&#9888; ' + esc(ov.map(x => `${deptLabel(x.dept)} ${x.count}/${x.limit}`).join(' · ')) : ''}</th>`;
+        h += `<th class="sc-alert ${ov.length ? 'sc-alert-on' : ''} ${isWeekend(d) ? 'sc-weekend' : ''}" colspan="${DEPT_KEYS.length}"${tip ? ` title="${esc(tip)}"` : ''}>${ov.length ? '&#9888; ' + esc(ov.map(alertText).join(' · ')) : ''}</th>`;
     }
     h += '</tr><tr>';
     for (const d of days) {
