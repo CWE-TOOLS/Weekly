@@ -41,7 +41,7 @@ table.sc-grid { border-collapse: separate; border-spacing: 0; table-layout: fixe
 .sc-grid thead tr:nth-child(1) th { top: 0; height: 30px; background: #eef2ff; color: #3730a3; }
 .sc-grid thead tr:nth-child(2) th { top: 30px; height: 32px; }                 /* alert row */
 .sc-grid thead tr:nth-child(3) th { top: 62px; height: 24px; }                 /* days */
-.sc-grid thead tr:nth-child(4) th { top: 86px; height: 22px; font-size: 10px; color: #6b7280; font-weight: 500; }   /* teams */
+.sc-grid thead tr:nth-child(4) th { top: 86px; height: 26px; font-size: 10px; color: #6b7280; font-weight: 500; }   /* teams */
 .sc-grid th.sc-week { border-right: none; }
 .sc-grid th.sc-week-start { border-left: 3px solid #1f2937; }
 .sc-grid th.sc-week-mid { text-align: center; font-size: 17px; font-weight: 800; color: #1e1b4b; letter-spacing: .5px; overflow: visible; }
@@ -55,7 +55,7 @@ table.sc-grid { border-collapse: separate; border-spacing: 0; table-layout: fixe
 .sc-grid td.sc-label:hover { background: #f3f4f6; }
 .sc-grid tr.sc-project td { background: #f3f4f6; font-weight: 700; color: #1f2937; height: 24px; }
 .sc-grid tr.sc-project td.sc-label { background: #f3f4f6; }
-.sc-grid td.sc-cell { width: 36px; min-width: 36px; max-width: 36px; text-align: center; vertical-align: middle; cursor: pointer; line-height: 1.05; height: 20px; }
+.sc-grid td.sc-cell { width: 42px; min-width: 42px; max-width: 42px; text-align: center; vertical-align: middle; cursor: pointer; line-height: 1.05; height: 20px; }
 .sc-grid tr.sc-cast-top td.sc-cell { border-bottom: 1px dotted #c4c8d0; }   /* light line between the task row and its hours row */
 .sc-grid tr.sc-cast-bottom td { border-bottom: 2px solid #6b7280; }        /* heavier line between castings */
 .sc-grid tr.sc-cast-top td.sc-label { vertical-align: middle; border-bottom: 2px solid #6b7280; }
@@ -66,7 +66,7 @@ table.sc-grid { border-collapse: separate; border-spacing: 0; table-layout: fixe
 .sc-grid td.sc-cell.sc-mismatch { box-shadow: inset 0 0 0 2px #dc2626; }
 /* column colours — the original Optimizer's; CNC is new (grey-blue) */
 .sc-grid { --c-CNC: #607D8B; --c-Parts: #4FC3F7; --c-FO: #0000FF; --c-Cast: #FF0000; --c-DM: #FFD966; --c-F: #9900FF; --c-Seal: #6B7280; --c-Crate: #7B3F00; --c-Spec: #FF4FA3; --c-Ship: #0B8043; }
-.sc-grid thead th.sc-dept { color: #fff; font-weight: 800; font-size: 11px; }
+.sc-grid thead th.sc-dept { color: #000 !important; font-weight: 800; font-size: 13px !important; letter-spacing: 0; text-shadow: 0 0 2px #fff, 0 0 2px #fff, 0 0 3px #fff; }   /* black team names, white halo keeps them readable on the dark colours */
 .sc-grid thead th.sc-dept[data-dept="Spec"], .sc-grid thead th.sc-dept[data-dept="Parts"], .sc-grid thead th.sc-dept[data-dept="DM"] { color: #111; }
 .sc-grid thead th.sc-dept[data-dept="CNC"]   { background: var(--c-CNC); }
 .sc-grid thead th.sc-dept[data-dept="Parts"] { background: var(--c-Parts); color: #111; }
@@ -81,7 +81,7 @@ table.sc-grid { border-collapse: separate; border-spacing: 0; table-layout: fixe
 .sc-grid thead th.sc-dept[data-dept="Ship"]  { background: var(--c-Ship); }
 /* weekend columns (Saturday always, Sunday on request): the whole column light grey — the break between weeks */
 .sc-grid thead th.sc-day.sc-weekend { background: #d1d5db; color: #1f2937; }
-.sc-grid thead th.sc-dept.sc-weekend { background: #d1d5db !important; color: #374151 !important; }
+.sc-grid thead th.sc-dept.sc-weekend { background: #d1d5db !important; }
 .sc-grid thead th.sc-dept.sc-holiday { opacity: .55; }
 /* team over its castings-per-day limit */
 .sc-grid thead th.sc-alert { background: #fff; border-left: 3px solid #1f2937; font-size: 22px; font-weight: 800; line-height: 1; overflow: hidden; text-overflow: ellipsis; padding: 0 4px; }
