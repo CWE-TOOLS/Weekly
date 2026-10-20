@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="src/styles/variables.css">
     <link rel="stylesheet" href="src/styles/base.css">
     <link rel="stylesheet" href="src/styles/buttons.css">
-    <link rel="stylesheet" href="src/styles/scheduler.css?v=20261019-11">
+    <link rel="stylesheet" href="src/styles/scheduler.css?v=20261020-1">
 </head>
 <body>
 <div id="sc-app">
@@ -21,13 +21,12 @@
         </div>
         <div class="sc-top-right">
             <input type="search" id="sc-search" placeholder="Search job # or name…" autocomplete="off">
-            <button type="button" class="btn-secondary" id="sc-prev" title="Previous week">&lsaquo;</button>
-            <button type="button" class="btn-secondary" id="sc-today">Today</button>
-            <button type="button" class="btn-secondary" id="sc-next" title="Next week">&rsaquo;</button>
-            <label class="sc-ctl">Weeks
-                <select id="sc-weeks"><option value="2">2</option><option value="4" selected>4</option><option value="6">6</option><option value="8">8</option></select>
-            </label>
+            <button type="button" class="btn-secondary" id="sc-prev" title="Previous month">&lsaquo;</button>
+            <span id="sc-month-label" class="sc-month">—</span>
+            <button type="button" class="btn-secondary" id="sc-next" title="Next month">&rsaquo;</button>
+            <button type="button" class="btn-secondary" id="sc-today">This month</button>
             <label class="sc-ctl"><input type="checkbox" id="sc-show-weekends"> Show weekends</label>
+            <button type="button" class="btn-primary" id="sc-view-toggle" title="Flip between the schedule grid and the revenue table">Revenue</button>
             <button type="button" class="btn-secondary" id="sc-undo" disabled title="Nothing to undo">&#8630; Undo</button>
             <button type="button" class="btn-secondary" id="sc-redo" disabled title="Nothing to redo">&#8631; Redo</button>
             <button type="button" class="btn-secondary" id="sc-settings-btn">Settings</button>
@@ -83,6 +82,6 @@
 
     <div id="sc-toast" class="sc-toast" hidden></div>
 </div>
-<script type="module" src="src/pages/scheduler/scheduler-page.js?v=20261019-7"></script>
+<script type="module" src="src/pages/scheduler/scheduler-page.js?v=20261020-1"></script>
 </body>
 </html>

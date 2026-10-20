@@ -34,7 +34,8 @@ const S = {
     phasesByCasting: new Map(),   // castingId -> casting_phases rows (sorted)
     withInventory: new Set(),     // castings that have Casting Inventory rows (the gate for "Not yet scheduled")
     rows: [],                     // plant_schedule rows in the window (+ pinned castings)
-    from: '',                     // Monday the window starts on (ISO)
+    from: '',                     // first day of the month on screen (ISO)
+    view: 'grid',                 // 'grid' (castings × days) | 'revenue' (teams × days, $ per week — the sheet's Rev tab)
     search: '',
     pinned: new Set(),            // castings shown even without rows in the window
     busy: false
@@ -67,17 +68,21 @@ function nextWorking(s, dir = 1, allowWeekend = false) {
     return cur;
 }
 function workingOrNext(s) { return (isHoliday(s) || isWeekend(s)) ? nextWorking(s, 1) : s; }
+function firstOfMonth(s) { return s.slice(0, 8) + '01'; }
+function lastOfMonth(s) { const d = fromIso(s); return toIso(new Date(d.getFullYear(), d.getMonth() + 1, 0)); }
+function addMonths(s, n) { const d = fromIso(s); return toIso(new Date(d.getFullYear(), d.getMonth() + n, 1)); }
+function monthLabel(s) { return fromIso(s).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }); }
+/** The days of the month on screen (weekends only when switched on). */
 function windowDays() {
     const out = [];
-    const n = (Number(S.settings.weeks) || 4) * 7;
-    for (let i = 0; i < n; i++) {
-        const d = addDays(S.from, i);
+    const last = lastOfMonth(S.from);
+    for (let d = S.from; d <= last; d = addDays(d, 1)) {
         if (!S.settings.showWeekends && isWeekend(d)) continue;
         out.push(d);
     }
     return out;
 }
-function windowEnd() { return addDays(S.from, (Number(S.settings.weeks) || 4) * 7 - 1); }
+function windowEnd() { return lastOfMonth(S.from); }
 const money = (n) => '$' + Math.round(n).toLocaleString('en-US');
 const fmtH = (h) => { const n = Number(h) || 0; return Number.isInteger(n) ? String(n) : n.toFixed(1).replace(/\.0$/, ''); };
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -269,9 +274,61 @@ function visibleCastings() {
 }
 
 function render() {
-    renderGrid();
+    const ml = $('sc-month-label'); if (ml) ml.textContent = monthLabel(S.from);
+    const vt = $('sc-view-toggle'); if (vt) vt.textContent = S.view === 'revenue' ? 'Schedule' : 'Revenue';
+    if (S.view === 'revenue') renderRevenue(); else renderGrid();
     renderUnscheduled();
     renderBanner();
+}
+
+// ---------------------------------------------------------------------------
+// revenue view — the sheet's "Rev" tab: one block per week, teams × days, hours × $135
+// ---------------------------------------------------------------------------
+const REV_LABELS = { CNC: 'CNC', Parts: 'Parts', FO: 'FO', Cast: 'Cast', DM: 'Demold', F: 'Finish', Seal: 'Seal', Crate: 'Crate', Spec: 'Specialty', Ship: 'Ship' };
+function renderRevenue() {
+    const wrap = $('sc-grid-wrap');
+    const first = S.from, last = lastOfMonth(S.from);
+    const hours = new Map();   // date|dept -> h
+    for (const r of S.rows) {
+        if (r.date < first || r.date > last) continue;
+        const k = `${r.date}|${r.department}`;
+        hours.set(k, (hours.get(k) || 0) + (Number(r.hours) || 0));
+    }
+    // weeks of the month (Mon-Sat like the sheet; Sunday only when it carries hours)
+    const weeks = [];
+    for (let d = first; d <= last; d = addDays(d, 1)) {
+        const wk = mondayOf(d);
+        if (!weeks.length || weeks[weeks.length - 1].wk !== wk) weeks.push({ wk, days: [] });
+        const sunHas = DEPT_KEYS.some(k => hours.get(`${d}|${k}`));
+        if (dow(d) !== 0 || sunHas) weeks[weeks.length - 1].days.push(d);
+    }
+    const cell = (h, strong = false) => h
+        ? `<td class="sc-rev-cell${strong ? ' sc-rev-strong' : ''}"><span class="sc-rev-$">${money(h * REVENUE_PER_HOUR)}</span><span class="sc-rev-h">${fmtH(h)} h</span></td>`
+        : `<td class="sc-rev-cell sc-rev-zero">$0</td>`;
+    const fabDepts = DEPT_KEYS.filter(k => k !== 'Ship');
+    let html = '<div class="sc-rev">';
+    let monthFab = 0, monthNet = 0, monthH = 0;
+    const weekFabs = [];
+    weeks.forEach((w, wi) => {
+        const dayFab = w.days.map(d => fabDepts.reduce((n, k) => n + (hours.get(`${d}|${k}`) || 0), 0));
+        const dayNet = w.days.map((d, i) => dayFab[i] + (hours.get(`${d}|Ship`) || 0));
+        const weekFab = dayFab.reduce((a, b) => a + b, 0), weekNet = dayNet.reduce((a, b) => a + b, 0);
+        monthFab += weekFab; monthNet += weekNet; monthH += weekNet;
+        weekFabs.push({ wk: w.wk, fab: weekFab });
+        html += `<table class="sc-rev-table"><thead><tr><th class="sc-rev-label">W E E K ${wi + 1}</th>${w.days.map(d => `<th class="${isWeekend(d) ? 'sc-weekend' : ''} ${isHoliday(d) ? 'sc-holiday' : ''}">${esc(shortDay(d))}</th>`).join('')}<th class="sc-rev-total">WEEK TOTAL</th></tr></thead><tbody>`;
+        html += `<tr class="sc-rev-fab"><td class="sc-rev-label">Fabrication Revenue</td>${dayFab.map(h => cell(h, true)).join('')}${cell(weekFab, true)}</tr>`;
+        for (const k of DEPT_KEYS) {
+            const hs = w.days.map(d => hours.get(`${d}|${k}`) || 0);
+            html += `<tr><td class="sc-rev-label sc-rev-dept" data-dept="${k}"><span class="sc-rev-dot"></span>${REV_LABELS[k]}</td>${hs.map(h => cell(h)).join('')}${cell(hs.reduce((a, b) => a + b, 0))}</tr>`;
+        }
+        html += `<tr class="sc-rev-net"><td class="sc-rev-label">NET REVENUE</td>${dayNet.map(h => cell(h, true)).join('')}${cell(weekNet, true)}</tr>`;
+        html += '</tbody></table>';
+    });
+    html += `<table class="sc-rev-table sc-rev-month"><thead><tr><th class="sc-rev-label">${esc(monthLabel(S.from))}</th>${weekFabs.map((w, i) => `<th>Week ${i + 1}<br><small>${esc(weekLabel(w.wk).replace('Week of ', ''))}</small></th>`).join('')}<th class="sc-rev-total">MONTH</th></tr></thead><tbody>`;
+    html += `<tr class="sc-rev-fab"><td class="sc-rev-label">Fabrication Revenue</td>${weekFabs.map(w => cell(w.fab, true)).join('')}${cell(monthFab, true)}</tr>`;
+    html += `<tr class="sc-rev-net"><td class="sc-rev-label">NET REVENUE (incl. Ship)</td>${weekFabs.map((w, i) => { const net = weeks[i].days.reduce((n, d) => n + DEPT_KEYS.reduce((m, k) => m + (hours.get(`${d}|${k}`) || 0), 0), 0); return cell(net, true); }).join('')}${cell(monthNet, true)}</tr>`;
+    html += `</tbody></table><p class="sc-hint">Hours on the schedule × $${REVENUE_PER_HOUR}/h, like the Optimizer's Rev tab. Fabrication Revenue = every team except Ship; Net Revenue adds Ship. Labor, material and subcontractor costs are not in the portal yet. Month total: ${fmtH(monthH)} h.</p></div>`;
+    wrap.innerHTML = html;
 }
 
 function renderBanner() {
@@ -794,10 +851,10 @@ function toast(msg, kind = 'success') {
 function setBusy(b) { S.busy = b; document.body.style.cursor = b ? 'progress' : ''; }
 
 function wire() {
-    $('sc-prev').addEventListener('click', () => { S.from = addDays(S.from, -7); reloadRows(); });
-    $('sc-next').addEventListener('click', () => { S.from = addDays(S.from, 7); reloadRows(); });
-    $('sc-today').addEventListener('click', () => { S.from = mondayOf(todayIso()); reloadRows(); });
-    $('sc-weeks').addEventListener('change', (e) => { S.settings.weeks = Number(e.target.value) || 4; try { localStorage.setItem('sc-weeks', String(S.settings.weeks)); } catch (_) { /* ignore */ } reloadRows(); });
+    $('sc-prev').addEventListener('click', () => { S.from = addMonths(S.from, -1); reloadRows(); });
+    $('sc-next').addEventListener('click', () => { S.from = addMonths(S.from, 1); reloadRows(); });
+    $('sc-today').addEventListener('click', () => { S.from = firstOfMonth(todayIso()); reloadRows(); });
+    $('sc-view-toggle').addEventListener('click', () => { S.view = S.view === 'revenue' ? 'grid' : 'revenue'; closeEditor(); render(); });
     $('sc-show-weekends').addEventListener('change', (e) => { S.settings.showWeekends = !!e.target.checked; try { localStorage.setItem('sc-weekends', S.settings.showWeekends ? '1' : '0'); } catch (_) { /* ignore */ } render(); });
     $('sc-search').addEventListener('input', (e) => { S.search = e.target.value; render(); });
     $('sc-settings-btn').addEventListener('click', openSettings);
@@ -893,8 +950,8 @@ async function reloadRows() {
 
 async function init() {
     wire();
-    S.from = mondayOf(todayIso());
-    try { const w = Number(localStorage.getItem('sc-weeks')); if (w) { S.settings.weeks = w; $('sc-weeks').value = String(w); } S.settings.showWeekends = localStorage.getItem('sc-weekends') === '1'; $('sc-show-weekends').checked = S.settings.showWeekends; } catch (_) { /* ignore */ }
+    S.from = firstOfMonth(todayIso());
+    try { S.settings.showWeekends = localStorage.getItem('sc-weekends') === '1'; $('sc-show-weekends').checked = S.settings.showWeekends; } catch (_) { /* ignore */ }
     try {
         await initializeSupabase();
         const saved = await loadScheduleSettings();

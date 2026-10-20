@@ -152,6 +152,34 @@ table.sc-grid { border-collapse: separate; border-spacing: 0; table-layout: fixe
 .sc-dayhours label { display: flex; justify-content: space-between; align-items: center; gap: 6px; font-size: 13px; }
 .sc-dayhours input { width: 60px; padding: 4px 6px; border: 1px solid #d1d5db; border-radius: 6px; }
 
+.sc-month { font-weight: 700; font-size: 15px; min-width: 150px; text-align: center; color: #111827; }
+
+/* revenue view */
+.sc-rev { padding: 14px 16px 30px; display: flex; flex-direction: column; gap: 18px; }
+.sc-rev-table { border-collapse: collapse; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.sc-rev-table th, .sc-rev-table td { border: 1px solid #9ca3af; padding: 4px 8px; font-size: 12px; text-align: right; white-space: nowrap; }
+.sc-rev-table thead th { background: #1f2937; color: #fff; font-weight: 700; text-align: center; }
+.sc-rev-table thead th.sc-weekend { background: #4b5563; }
+.sc-rev-table thead th.sc-holiday { background: #7f1d1d; }
+.sc-rev-table th.sc-rev-label, .sc-rev-table td.sc-rev-label { text-align: left; min-width: 170px; font-weight: 600; }
+.sc-rev-table th.sc-rev-label { letter-spacing: 2px; }
+.sc-rev-table th.sc-rev-total { background: #111827; }
+.sc-rev-cell { min-width: 84px; }
+.sc-rev-$ { display: block; font-weight: 700; color: #111827; }
+.sc-rev-h { display: block; font-size: 10px; color: #6b7280; }
+.sc-rev-zero { color: #9ca3af; }
+.sc-rev-fab td { background: #ecfdf5; font-weight: 700; }
+.sc-rev-net td { background: #eef2ff; font-weight: 700; border-top: 2px solid #1f2937; }
+.sc-rev-strong .sc-rev-$ { font-size: 13px; }
+.sc-rev-dept .sc-rev-dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; background: #999; }
+.sc-rev-dept[data-dept="CNC"] .sc-rev-dot { background: #607D8B; } .sc-rev-dept[data-dept="Parts"] .sc-rev-dot { background: #4FC3F7; }
+.sc-rev-dept[data-dept="FO"] .sc-rev-dot { background: #0000FF; } .sc-rev-dept[data-dept="Cast"] .sc-rev-dot { background: #FF0000; }
+.sc-rev-dept[data-dept="DM"] .sc-rev-dot { background: #FFD966; } .sc-rev-dept[data-dept="F"] .sc-rev-dot { background: #9900FF; }
+.sc-rev-dept[data-dept="Seal"] .sc-rev-dot { background: #6B7280; } .sc-rev-dept[data-dept="Crate"] .sc-rev-dot { background: #7B3F00; }
+.sc-rev-dept[data-dept="Spec"] .sc-rev-dot { background: #FF4FA3; } .sc-rev-dept[data-dept="Ship"] .sc-rev-dot { background: #0B8043; }
+.sc-rev-month thead th { background: #065f46; }
+.sc-rev-month th small { font-weight: 400; opacity: .85; }
+
 .sc-toast { position: fixed; bottom: 24px; right: 24px; background: #0f172a; color: #fff; padding: 10px 18px; border-radius: 8px; font-size: 13px; z-index: 100; box-shadow: 0 10px 25px rgba(15,23,42,.2); }
 .sc-toast.sc-toast-error { background: #b91c1c; }
 .sc-toast.sc-toast-info { background: #1d4ed8; }
