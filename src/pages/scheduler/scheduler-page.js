@@ -122,7 +122,7 @@ async function loadBase() {
 }
 
 async function loadRows() {
-    const inWindow = await loadScheduleRange(S.from, windowEnd());
+    const inWindow = await loadScheduleRange(mondayOf(S.from), addDays(mondayOf(windowEnd()), 6));
     const seen = new Set(inWindow.map(r => r.id));
     const extraIds = [...S.pinned];
     const extra = extraIds.length ? await loadScheduleForCastings(extraIds) : [];
@@ -284,51 +284,89 @@ function render() {
 // ---------------------------------------------------------------------------
 // revenue view — the sheet's "Rev" tab: one block per week, teams × days, hours × $135
 // ---------------------------------------------------------------------------
-const REV_LABELS = { CNC: 'CNC', Parts: 'Parts', FO: 'FO', Cast: 'Cast', DM: 'Demold', F: 'Finish', Seal: 'Seal', Crate: 'Crate', Spec: 'Specialty', Ship: 'Ship' };
+const REV_ROWS = [
+    { key: 'CNC',   label: 'CNC' },
+    { key: 'Parts', label: 'Parts' },
+    { key: 'FO',    label: 'FO' },
+    { key: 'Cast',  label: 'Cast' },
+    { key: 'DM',    label: 'Demold' },
+    { key: 'F',     label: 'Finish' },
+    { key: 'Seal',  label: 'Seal' },
+    { key: 'Crate', label: 'Crate' },
+    { key: 'Spec',  label: 'SPECIALITY' },
+    { key: 'Ship',  label: 'Ship' }
+];
+const COST_ROWS = [
+    { key: 'labor',    label: 'Labor Costs' },
+    { key: 'material', label: 'Material Costs' },
+    { key: 'sub',      label: 'Subcontractor Costs' }
+];
+const COGS_RED_ABOVE = 0.55;   // the sheet shows 55 %+ in red, below in green
+const money2 = (n) => '$' + (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function revDayHead(s) { const d = fromIso(s); return `${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()]}, ${d.toLocaleDateString('en-US', { month: 'short' })} ${pad(d.getDate())}`; }
+function costOf(date, key) { return Number(((S.settings.costs || {})[date] || {})[key]) || 0; }
+
+/** The revenue view — laid out like the Optimizer's "Rev" tab (one block per week, Mon-Sat). */
 function renderRevenue() {
     const wrap = $('sc-grid-wrap');
     const first = S.from, last = lastOfMonth(S.from);
     const hours = new Map();   // date|dept -> h
     for (const r of S.rows) {
-        if (r.date < first || r.date > last) continue;
         const k = `${r.date}|${r.department}`;
         hours.set(k, (hours.get(k) || 0) + (Number(r.hours) || 0));
     }
-    // weeks of the month (Mon-Sat like the sheet; Sunday only when it carries hours)
+    const rev = (d, k) => (hours.get(`${d}|${k}`) || 0) * REVENUE_PER_HOUR;
+    const fab = (d) => REV_ROWS.filter(r => r.key !== 'Ship').reduce((n, r) => n + rev(d, r.key), 0);
+    const net = (d) => fab(d) + rev(d, 'Ship');
+    const cogsTotal = (d) => COST_ROWS.reduce((n, c) => n + costOf(d, c.key), 0);
+    const pctCell = (cost, netv) => {
+        const p = netv > 0 ? cost / netv : 0;
+        return `<td class="sc-rv-pct ${p > COGS_RED_ABOVE ? 'sc-rv-bad' : 'sc-rv-good'}">${Math.round(p * 100)}%</td>`;
+    };
     const weeks = [];
-    for (let d = first; d <= last; d = addDays(d, 1)) {
-        const wk = mondayOf(d);
-        if (!weeks.length || weeks[weeks.length - 1].wk !== wk) weeks.push({ wk, days: [] });
-        const sunHas = DEPT_KEYS.some(k => hours.get(`${d}|${k}`));
-        if (dow(d) !== 0 || sunHas) weeks[weeks.length - 1].days.push(d);
-    }
-    const cell = (h, strong = false) => h
-        ? `<td class="sc-rev-cell${strong ? ' sc-rev-strong' : ''}"><span class="sc-rev-$">${money(h * REVENUE_PER_HOUR)}</span><span class="sc-rev-h">${fmtH(h)} h</span></td>`
-        : `<td class="sc-rev-cell sc-rev-zero">$0</td>`;
-    const fabDepts = DEPT_KEYS.filter(k => k !== 'Ship');
-    let html = '<div class="sc-rev">';
-    let monthFab = 0, monthNet = 0, monthH = 0;
-    const weekFabs = [];
-    weeks.forEach((w, wi) => {
-        const dayFab = w.days.map(d => fabDepts.reduce((n, k) => n + (hours.get(`${d}|${k}`) || 0), 0));
-        const dayNet = w.days.map((d, i) => dayFab[i] + (hours.get(`${d}|Ship`) || 0));
-        const weekFab = dayFab.reduce((a, b) => a + b, 0), weekNet = dayNet.reduce((a, b) => a + b, 0);
-        monthFab += weekFab; monthNet += weekNet; monthH += weekNet;
-        weekFabs.push({ wk: w.wk, fab: weekFab });
-        html += `<table class="sc-rev-table"><thead><tr><th class="sc-rev-label">W E E K ${wi + 1}</th>${w.days.map(d => `<th class="${isWeekend(d) ? 'sc-weekend' : ''} ${isHoliday(d) ? 'sc-holiday' : ''}">${esc(shortDay(d))}</th>`).join('')}<th class="sc-rev-total">WEEK TOTAL</th></tr></thead><tbody>`;
-        html += `<tr class="sc-rev-fab"><td class="sc-rev-label">Fabrication Revenue</td>${dayFab.map(h => cell(h, true)).join('')}${cell(weekFab, true)}</tr>`;
-        for (const k of DEPT_KEYS) {
-            const hs = w.days.map(d => hours.get(`${d}|${k}`) || 0);
-            html += `<tr><td class="sc-rev-label sc-rev-dept" data-dept="${k}"><span class="sc-rev-dot"></span>${REV_LABELS[k]}</td>${hs.map(h => cell(h)).join('')}${cell(hs.reduce((a, b) => a + b, 0))}</tr>`;
+    for (let m = mondayOf(first); m <= last; m = addDays(m, 7)) weeks.push([0, 1, 2, 3, 4, 5].map(i => addDays(m, i)));
+    const inMonth = (d) => d >= first && d <= last;
+    const sum = (days, f) => days.reduce((n, d) => n + f(d), 0);
+
+    let html = `<div class="sc-rv"><div class="sc-rv-banner">${esc(monthLabel(S.from))}</div>`;
+    weeks.forEach((days, wi) => {
+        const dcls = (d) => (inMonth(d) ? '' : ' sc-rv-out') + (isHoliday(d) ? ' sc-rv-hol' : '');
+        html += '<table class="sc-rv-table"><colgroup><col class="sc-rv-c-label">' + days.map(() => '<col class="sc-rv-c-day">').join('') + '<col class="sc-rv-c-day"></colgroup>';
+        html += `<thead><tr><th class="sc-rv-week">W E E K ${wi + 1}</th>${days.map(d => `<th class="sc-rv-day${dcls(d)}" title="${inMonth(d) ? '' : 'outside ' + esc(monthLabel(S.from))}${isHoliday(d) ? ' holiday' : ''}">${esc(revDayHead(d))}</th>`).join('')}<th class="sc-rv-total">WEEK TOTAL</th></tr></thead><tbody>`;
+        html += `<tr class="sc-rv-fab"><td class="sc-rv-label">Fabrication Revenue</td>${days.map(d => `<td class="${dcls(d)}">${money2(fab(d))}</td>`).join('')}<td>${money2(sum(days, fab))}</td></tr>`;
+        for (const r of REV_ROWS) {
+            html += `<tr class="sc-rv-dept" data-dept="${r.key}"><td class="sc-rv-label">${esc(r.label)}</td>${days.map(d => `<td class="${dcls(d)}">${money(rev(d, r.key))}</td>`).join('')}<td>${money(sum(days, d => rev(d, r.key)))}</td></tr>`;
         }
-        html += `<tr class="sc-rev-net"><td class="sc-rev-label">NET REVENUE</td>${dayNet.map(h => cell(h, true)).join('')}${cell(weekNet, true)}</tr>`;
+        html += `<tr class="sc-rv-net"><td class="sc-rv-label">NET REVENUE</td>${days.map(d => `<td class="${dcls(d)}">${money2(net(d))}</td>`).join('')}<td>${money2(sum(days, net))}</td></tr>`;
+        for (const c of COST_ROWS) {
+            html += `<tr class="sc-rv-cost"><td class="sc-rv-label">${c.label}</td>${days.map(d => `<td class="${dcls(d)}"><input class="sc-rv-in" data-cost="${c.key}" data-date="${d}" value="${costOf(d, c.key) ? esc(money2(costOf(d, c.key))) : ''}" placeholder="—" title="Type the ${c.label.toLowerCase()} for ${esc(shortDay(d))}"></td>`).join('')}<td>${money2(sum(days, d => costOf(d, c.key)))}</td></tr>`;
+        }
+        html += `<tr class="sc-rv-cogs-total"><td class="sc-rv-label">Total COGS</td>${days.map(d => `<td class="${dcls(d)}">${money2(cogsTotal(d))}</td>`).join('')}<td>${money2(sum(days, cogsTotal))}</td></tr>`;
+        html += `<tr class="sc-rv-cogs"><td class="sc-rv-label">COGS</td>${days.map(d => pctCell(cogsTotal(d), net(d))).join('')}${pctCell(sum(days, cogsTotal), sum(days, net))}</tr>`;
         html += '</tbody></table>';
     });
-    html += `<table class="sc-rev-table sc-rev-month"><thead><tr><th class="sc-rev-label">${esc(monthLabel(S.from))}</th>${weekFabs.map((w, i) => `<th>Week ${i + 1}<br><small>${esc(weekLabel(w.wk).replace('Week of ', ''))}</small></th>`).join('')}<th class="sc-rev-total">MONTH</th></tr></thead><tbody>`;
-    html += `<tr class="sc-rev-fab"><td class="sc-rev-label">Fabrication Revenue</td>${weekFabs.map(w => cell(w.fab, true)).join('')}${cell(monthFab, true)}</tr>`;
-    html += `<tr class="sc-rev-net"><td class="sc-rev-label">NET REVENUE (incl. Ship)</td>${weekFabs.map((w, i) => { const net = weeks[i].days.reduce((n, d) => n + DEPT_KEYS.reduce((m, k) => m + (hours.get(`${d}|${k}`) || 0), 0), 0); return cell(net, true); }).join('')}${cell(monthNet, true)}</tr>`;
-    html += `</tbody></table><p class="sc-hint">Hours on the schedule × $${REVENUE_PER_HOUR}/h, like the Optimizer's Rev tab. Fabrication Revenue = every team except Ship; Net Revenue adds Ship. Labor, material and subcontractor costs are not in the portal yet. Month total: ${fmtH(monthH)} h.</p></div>`;
+    // the month, counting only its own days
+    const mdays = []; for (let d = first; d <= last; d = addDays(d, 1)) mdays.push(d);
+    html += `<table class="sc-rv-table sc-rv-month"><colgroup><col class="sc-rv-c-label"><col class="sc-rv-c-day"></colgroup><thead><tr><th class="sc-rv-week">${esc(monthLabel(S.from).toUpperCase())}</th><th class="sc-rv-total">MONTH TOTAL</th></tr></thead><tbody>`;
+    html += `<tr class="sc-rv-fab"><td class="sc-rv-label">Fabrication Revenue</td><td>${money2(sum(mdays, fab))}</td></tr>`;
+    for (const r of REV_ROWS) html += `<tr class="sc-rv-dept" data-dept="${r.key}"><td class="sc-rv-label">${esc(r.label)}</td><td>${money(sum(mdays, d => rev(d, r.key)))}</td></tr>`;
+    html += `<tr class="sc-rv-net"><td class="sc-rv-label">NET REVENUE</td><td>${money2(sum(mdays, net))}</td></tr>`;
+    for (const c of COST_ROWS) html += `<tr class="sc-rv-cost"><td class="sc-rv-label">${c.label}</td><td>${money2(sum(mdays, d => costOf(d, c.key)))}</td></tr>`;
+    html += `<tr class="sc-rv-cogs-total"><td class="sc-rv-label">Total COGS</td><td>${money2(sum(mdays, cogsTotal))}</td></tr>`;
+    html += `<tr class="sc-rv-cogs"><td class="sc-rv-label">COGS</td>${pctCell(sum(mdays, cogsTotal), sum(mdays, net))}</tr>`;
+    html += `</tbody></table><p class="sc-hint">Revenue = scheduled hours × $${REVENUE_PER_HOUR}. Fabrication Revenue is every team except Ship; Net Revenue adds Ship. Type Labor, Material and Subcontractor costs straight into their cells (saved for everyone). Greyed days belong to the next or previous month.</p></div>`;
     wrap.innerHTML = html;
+}
+
+async function saveCostInput(inp) {
+    const d = inp.dataset.date, k = inp.dataset.cost;
+    const v = Math.max(0, Number(String(inp.value).replace(/[$,\s]/g, '')) || 0);
+    const costs = { ...(S.settings.costs || {}) };
+    costs[d] = { ...(costs[d] || {}), [k]: v };
+    if (!v) delete costs[d][k];
+    if (!Object.keys(costs[d]).length) delete costs[d];
+    try { await saveScheduleSetting('costs', costs); S.settings.costs = costs; renderRevenue(); }
+    catch (err) { toast('Could not save the cost: ' + (err.message || err), 'error'); }
 }
 
 function renderBanner() {
@@ -854,6 +892,8 @@ function wire() {
     $('sc-prev').addEventListener('click', () => { S.from = addMonths(S.from, -1); reloadRows(); });
     $('sc-next').addEventListener('click', () => { S.from = addMonths(S.from, 1); reloadRows(); });
     $('sc-today').addEventListener('click', () => { S.from = firstOfMonth(todayIso()); reloadRows(); });
+    $('sc-grid-wrap').addEventListener('change', (e) => { const inp = e.target.closest('input[data-cost]'); if (inp) saveCostInput(inp); });
+    $('sc-grid-wrap').addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.matches('input[data-cost]')) e.target.blur(); });
     $('sc-view-toggle').addEventListener('click', () => { S.view = S.view === 'revenue' ? 'grid' : 'revenue'; closeEditor(); render(); });
     $('sc-show-weekends').addEventListener('change', (e) => { S.settings.showWeekends = !!e.target.checked; try { localStorage.setItem('sc-weekends', S.settings.showWeekends ? '1' : '0'); } catch (_) { /* ignore */ } render(); });
     $('sc-search').addEventListener('input', (e) => { S.search = e.target.value; render(); });
@@ -957,6 +997,7 @@ async function init() {
         const saved = await loadScheduleSettings();
         if (saved.dayHours) S.settings.dayHours = { ...SETTINGS_DEFAULTS.dayHours, ...saved.dayHours };
         if (Array.isArray(saved.holidays)) S.settings.holidays = saved.holidays;
+        if (saved.costs && typeof saved.costs === 'object') S.settings.costs = saved.costs;
         await loadBase();
         await loadRows();
         render();
