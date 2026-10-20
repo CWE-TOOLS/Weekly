@@ -163,19 +163,10 @@ function lockOk(report) { return report.every(r => Math.abs(r.scheduled - r.opti
 // ---------------------------------------------------------------------------
 // spreading (the default schedule from the Optimizer Hours tab)
 // ---------------------------------------------------------------------------
-function spreadPhase(m, startIso, dir) {
-    const hours = Number(m.phase.hours) || 0;
-    const perDay = Number((S.settings.dayHours || {})[m.dept]) || 8;
-    const n = Math.max(1, Math.ceil(hours / perDay - 1e-9));
-    const even = Math.round((hours / n) * 100) / 100;
-    const rows = [];
-    let cur = startIso;
-    for (let k = 0; k < n; k++) {
-        const h = k === n - 1 ? Math.round((hours - even * (n - 1)) * 100) / 100 : even;
-        rows.push({ date: cur, hours: h });
-        if (k < n - 1) cur = nextWorking(cur, dir);
-    }
-    return { rows, endIso: cur };
+/** One phase on the Optimizer Hours tab = ONE day with all its hours (user rule 2026-10-20: "Form Out 26 h" is one FO day,
+ *  not two). A job that needs two days of a team lists two phases there, e.g. "Rebuild Day 1" / "Rebuild Day 2". */
+function spreadPhase(m, startIso) {
+    return { rows: [{ date: startIso, hours: Number(m.phase.hours) || 0 }], endIso: startIso };
 }
 
 /** Build the rows for one casting. anchorIso = cast date (Cast phase lands there). */
@@ -883,20 +874,14 @@ async function confirmScheduleDialog() {
 // settings
 // ---------------------------------------------------------------------------
 function openSettings() {
-    const box = $('sc-dayhours');
-    box.innerHTML = DEPARTMENTS.map(d => `<label>${d.label}<input type="number" min="1" step="1" data-dept="${d.key}" value="${Number((S.settings.dayHours || {})[d.key]) || 8}"></label>`).join('');
     $('sc-holidays').value = (S.settings.holidays || []).join('\n');
     $('sc-settings').hidden = false;
 }
 async function saveSettings() {
-    const dayHours = {};
-    for (const inp of $('sc-dayhours').querySelectorAll('input')) dayHours[inp.dataset.dept] = Math.max(1, Number(inp.value) || 8);
     const holidays = $('sc-holidays').value.split(/\r?\n/).map(s => s.trim()).filter(s => /^\d{4}-\d{2}-\d{2}$/.test(s)).sort();
     setBusy(true);
     try {
-        await saveScheduleSetting('dayHours', dayHours);
         await saveScheduleSetting('holidays', holidays);
-        S.settings.dayHours = dayHours;
         S.settings.holidays = holidays;
         $('sc-settings').hidden = true;
         render();

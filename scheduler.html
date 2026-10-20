@@ -45,7 +45,7 @@
             <div id="sc-unscheduled" class="sc-unscheduled"></div>
             <div class="sc-side-head">
                 <strong>How the spread works</strong>
-                <span class="sc-hint">Each phase on the Optimizer Hours tab becomes one task. Days per phase = hours ÷ the department's hours-per-day (Settings). Hours are split evenly, so the grid always totals exactly the Optimizer Hours. The Cast phase lands on the cast date; earlier phases run back from it, later ones forward. Weekends are skipped unless you allow one; holidays are never used.</span>
+                <span class="sc-hint">Each phase on the Optimizer Hours tab becomes one day with all of its hours, so the grid always totals exactly the Optimizer Hours. A team that needs two days gets two phases on that tab (e.g. "Rebuild Day 1", "Rebuild Day 2"). The Cast phase lands on the cast date; earlier phases run back from it, later ones forward. Weekends are skipped unless you allow one; holidays are never used.</span>
             </div>
         </aside>
         <main class="sc-main">
@@ -63,9 +63,6 @@
         <div class="sc-panel" role="dialog" aria-modal="true" aria-labelledby="sc-settings-title">
             <div class="sc-panel-head"><h2 id="sc-settings-title">Scheduler settings</h2><button type="button" class="sc-x" data-close>&times;</button></div>
             <div class="sc-panel-body">
-                <h3>Hours per department-day</h3>
-                <p class="sc-hint">Used only to decide how many days a phase spreads over (phase hours ÷ this = days). Shared by everyone.</p>
-                <div id="sc-dayhours" class="sc-dayhours"></div>
                 <h3>Holidays (never scheduled)</h3>
                 <p class="sc-hint">One date per line, YYYY-MM-DD.</p>
                 <textarea id="sc-holidays" rows="8"></textarea>
@@ -82,6 +79,6 @@
 
     <div id="sc-toast" class="sc-toast" hidden></div>
 </div>
-<script type="module" src="src/pages/scheduler/scheduler-page.js?v=20261020-9"></script>
+<script type="module" src="src/pages/scheduler/scheduler-page.js?v=20261020-10"></script>
 </body>
 </html>
