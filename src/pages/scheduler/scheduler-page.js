@@ -626,7 +626,7 @@ function openEditor(td) {
         html += `<div class="sc-ed-row" data-id="${r.id}"><select data-task>${opts.map(o => `<option${o === r.task ? ' selected' : ''}>${o}</option>`).join('')}${opts.includes(r.task) ? '' : `<option selected>${esc(r.task)}</option>`}</select><input type="number" step="0.5" min="0" data-hours value="${fmtH(r.hours)}"${lockedH}><button type="button" class="sc-del" data-del title="Remove">&times;</button>${phaseLine(r)}${rollBtn}${rollPanel(r)}</div>`;
     }
     const canEdit = !holiday && (!weekend || weekendAllowed);
-    if (canEdit) html += `<div class="sc-ed-add"><select id="sc-ed-add-task">${opts.map(o => `<option>${o}</option>`).join('')}</select><input type="number" id="sc-ed-add-hours" step="0.5" min="0" placeholder="hours"><button type="button" class="btn-secondary" id="sc-ed-add">Add</button></div>`;
+    if (canEdit) html += addFormHtml(cid, dept, date);
     if (rows.length) {
         const nLater = S.rows.filter(r => r.casting_id === cid && r.date > date).length;
         html += `<div class="sc-ed-move">Move these to <input type="date" id="sc-ed-move-date" value="${date}"><button type="button" class="btn-secondary" id="sc-ed-move">Move</button></div>`;
@@ -635,6 +635,7 @@ function openEditor(td) {
     html += `<div class="sc-ed-actions"><button type="button" class="btn-secondary" id="sc-ed-cancel">Close</button><div class="right">${canEdit && rows.length ? '<button type="button" class="btn-primary" id="sc-ed-save">Save</button>' : ''}</div></div>`;
     ed.innerHTML = html;
     ed.hidden = false;
+    refreshAddForm();
     placeEditor(td);
 }
 
@@ -731,26 +732,77 @@ async function saveRollover(rowId, todayH) {
     finally { setBusy(false); }
 }
 
+/** Optimizer Hours tasks of this casting that this team may do — the only things a new day can be. */
+function addablePhases(cid, dept) {
+    return mappedPhases(cid).filter(m => (TASKS[m.code] || []).includes(dept) || m.dept === dept);
+}
+function addFormHtml(cid, dept, date) {
+    const list = addablePhases(cid, dept);
+    if (!list.length) return `<div class="sc-ed-add-none">This casting has no ${esc(deptLabel(dept))} task on the Optimizer Hours tab, so there is nothing to add here. Hours only come from the portal.</div>`;
+    const opt = (m) => {
+        const days = S.rows.filter(r => r.phase_id === m.phase.id).length;
+        return `<option value="${m.phase.id}">${esc(String(m.code).toLowerCase())} — ${esc(m.phase.phase_name)} (${fmtH(m.phase.hours)} h${days ? `, on ${days} day${days === 1 ? '' : 's'}` : ', not scheduled yet'})</option>`;
+    };
+    return `<div class="sc-ed-add-wrap"><div class="sc-ed-add-title">Add a day for</div>
+        <div class="sc-ed-add"><select id="sc-ed-add-phase">${list.map(opt).join('')}</select><input type="number" id="sc-ed-add-hours" step="0.5" min="0" placeholder="h"><button type="button" class="btn-secondary" id="sc-ed-add">Add</button></div>
+        <div id="sc-ed-add-note" class="sc-ed-phase"></div></div>`;
+}
+/** Fill the hours box with an even share and explain where the hours come from. */
+function refreshAddForm() {
+    const sel = $('sc-ed-add-phase'), hin = $('sc-ed-add-hours'), note = $('sc-ed-add-note');
+    if (!sel || !hin || !note) return;
+    const m = mappedPhases(editorCtx.cid).find(x => x.phase.id === sel.value);
+    if (!m) return;
+    const total = Number(m.phase.hours) || 0;
+    const days = S.rows.filter(r => r.phase_id === m.phase.id);
+    if (!days.length) {
+        hin.value = fmtH(total); hin.readOnly = true;
+        note.textContent = `Not scheduled yet: this day gets all ${fmtH(total)} h from the Optimizer Hours tab.`;
+    } else {
+        hin.readOnly = false;
+        if (!hin.dataset.touched) hin.value = fmtH(Math.max(0.5, Math.round(total / (days.length + 1) * 2) / 2));
+        note.textContent = `Already on ${days.map(r => shortDay(r.date)).join(', ')}. The hours for this day are taken from those days (in proportion) so the total stays ${fmtH(total)} h.`;
+    }
+}
+
 async function addEditorEntry() {
     if (!editorCtx) return;
-    const task = $('sc-ed-add-task').value;
-    const hours = Number($('sc-ed-add-hours').value) || 0;
-    if (hours <= 0) { toast('Enter the hours first.', 'error'); return; }
-    const c = S.castingById.get(editorCtx.cid);
-    const weekend = isWeekend(editorCtx.date);
-    if (TEAM_DAY_LIMITS[editorCtx.dept]) {
-        const load = await loadTeamLoad(editorCtx.date, editorCtx.date, editorCtx.cid);
-        if (!confirmOverload(overloadsOf([{ date: editorCtx.date, department: editorCtx.dept }], load))) return;
+    const sel = $('sc-ed-add-phase');
+    if (!sel) return;
+    const cid = editorCtx.cid, date = editorCtx.date, dept = editorCtx.dept;
+    const m = mappedPhases(cid).find(x => x.phase.id === sel.value);
+    if (!m) { toast('Pick a task first.', 'error'); return; }
+    const total = Math.round((Number(m.phase.hours) || 0) * 100) / 100;
+    const days = S.rows.filter(r => r.phase_id === m.phase.id);
+    if (days.some(r => r.date === date && r.department === dept)) { toast('This task is already on this day — use Roll over or Move instead.', 'error'); return; }
+    let hours = days.length ? Math.round((Number($('sc-ed-add-hours').value) || 0) * 100) / 100 : total;
+    if (days.length && (hours <= 0 || hours >= total)) { toast(`Enter between 0 and ${fmtH(total)} h — the other day${days.length === 1 ? '' : 's'} must keep some hours.`, 'error'); return; }
+    // the other days give up the new day's hours in proportion to what they hold, so the phase still totals the portal's hours
+    const held = days.reduce((n, r) => n + (Number(r.hours) || 0), 0);
+    const plan = days.map(r => ({ row: r, hours: Math.round((Number(r.hours) || 0) * (held - hours) / held * 100) / 100 }));
+    if (plan.length) {
+        const diff = Math.round(((total - hours) - plan.reduce((n, x) => n + x.hours, 0)) * 100) / 100;
+        const big = plan.reduce((a, x) => (x.hours > a.hours ? x : a), plan[0]);
+        big.hours = Math.round((big.hours + diff) * 100) / 100;
+        if (plan.some(x => x.hours <= 0)) { toast('That would leave another day with no hours — enter fewer hours.', 'error'); return; }
+    }
+    const c = S.castingById.get(cid);
+    const weekend = isWeekend(date);
+    if (TEAM_DAY_LIMITS[dept]) {
+        const load = await loadTeamLoad(date, date, cid);
+        if (!confirmOverload(overloadsOf([{ date, department: dept }], load))) return;
     }
     setBusy(true);
-    const __h = await histBegin('add task', [editorCtx.cid]);
+    const __h = await histBegin(`add ${String(m.code).toLowerCase()} on ${shortDay(date)}`, [cid]);
     try {
-        await insertScheduleRows([{ project_number: c.project_number, casting_id: c.id, phase_id: null, date: editorCtx.date, department: editorCtx.dept, task, hours, weekend_ok: weekend, note: 'Typed by hand' }]);
+        for (const x of plan) await updateScheduleRow(x.row.id, { hours: x.hours });
+        await insertScheduleRows([{ project_number: c.project_number, casting_id: c.id, phase_id: m.phase.id, date, department: dept, task: m.code, hours, weekend_ok: weekend, note: null }]);
         S.pinned.add(c.id);
         await histEnd(__h);
         await loadRows();
         render();
-        const td = document.querySelector(`td.sc-cell[data-cid="${c.id}"][data-date="${editorCtx.date}"][data-dept="${editorCtx.dept}"]`);
+        toast(plan.length ? `Added ${fmtH(hours)} h of ${String(m.code).toLowerCase()} on ${shortDay(date)}; the other day${plan.length === 1 ? '' : 's'} now ${plan.length === 1 ? 'has' : 'have'} ${plan.map(x => fmtH(x.hours) + ' h').join(', ')} (total ${fmtH(total)} h)` : `Added ${String(m.code).toLowerCase()} with all ${fmtH(total)} h on ${shortDay(date)}`);
+        const td = document.querySelector(`tr.sc-cast-top td.sc-cell[data-cid="${c.id}"][data-date="${date}"][data-dept="${dept}"]`);
         if (td) openEditor(td); else closeEditor();
     } catch (err) { toast('Add failed: ' + (err.message || err), 'error'); }
     finally { setBusy(false); }
@@ -780,7 +832,7 @@ async function allowWeekendHere() {
 function showWeekendAddForm() {
     const ed = $('sc-editor');
     const alert = ed.querySelector('.sc-ed-alert');
-    if (alert) alert.outerHTML = `<div class="sc-ed-add"><select id="sc-ed-add-task">${tasksForDept(editorCtx.dept).map(o => `<option>${o}</option>`).join('')}</select><input type="number" id="sc-ed-add-hours" step="0.5" min="0" placeholder="hours"><button type="button" class="btn-secondary" id="sc-ed-add">Add</button></div>`;
+    if (alert) { alert.outerHTML = addFormHtml(editorCtx.cid, editorCtx.dept, editorCtx.date); refreshAddForm(); }
 }
 
 /** Working days from one date to another (signed); a weekend target counts as the next working day. */
@@ -1204,7 +1256,9 @@ function wire() {
     });
     $('sc-cascade').addEventListener('change', (e) => setCascade(e.target.checked));
     $('sc-editor').addEventListener('change', (e) => { if (e.target.id === 'sc-ed-cascade') setCascade(e.target.checked); });
+    $('sc-editor').addEventListener('change', (e) => { if (e.target.id === 'sc-ed-add-phase') { const h = $('sc-ed-add-hours'); if (h) delete h.dataset.touched; refreshAddForm(); } });
     $('sc-editor').addEventListener('input', (e) => {
+        if (e.target.id === 'sc-ed-add-hours') e.target.dataset.touched = '1';
         const panel = e.target.closest('.sc-roll');
         if (!panel) return;
         const total = Number(panel.dataset.total) || 0;
