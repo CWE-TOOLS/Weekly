@@ -73,13 +73,10 @@ function firstOfMonth(s) { return s.slice(0, 8) + '01'; }
 function lastOfMonth(s) { const d = fromIso(s); return toIso(new Date(d.getFullYear(), d.getMonth() + 1, 0)); }
 function addMonths(s, n) { const d = fromIso(s); return toIso(new Date(d.getFullYear(), d.getMonth() + n, 1)); }
 function monthLabel(s) { return fromIso(s).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }); }
-/** A month on screen is made of FULL weeks: from the Monday of the week holding the 1st to the end of the week holding
- *  the last day — week 1 may start in the previous month, the last week may end in the next (user rule 2026-10-20). */
-function firstWeekdayOf(s) { let d = s; while (isWeekend(d)) d = addDays(d, 1); return d; }
-function lastWeekdayOf(s) { let d = s; while (isWeekend(d)) d = addDays(d, -1); return d; }
-/** Week 1 = the week holding the month's first weekday (Nov 2026 starts Mon 11/2, not the week of Sun 11/1). */
-function windowStart() { return mondayOf(firstWeekdayOf(S.from)); }
-function windowEnd() { return addDays(mondayOf(lastWeekdayOf(lastOfMonth(S.from))), 6); }
+/** A month on screen = every week whose MONDAY falls in that month (user rule 2026-10-20: "October is a 4-week month
+ *  with week 1 starting on the 5th"). Weeks never belong to two months, so nothing is counted twice. */
+function windowStart() { let d = S.from; while (dow(d) !== 1) d = addDays(d, 1); return d; }
+function windowEnd() { let d = lastOfMonth(S.from); while (dow(d) !== 1) d = addDays(d, -1); return addDays(d, 6); }
 /** The days on screen: Monday to Saturday of every week (Saturday shaded grey as the week break); Sundays when switched on. */
 function windowDays() {
     const out = [];
@@ -352,7 +349,7 @@ function renderRevenue() {
     });
     // Month Total — like the bottom-right block of the sheet's Rev tab: labels left of the WEEK TOTAL column,
     // values under it, the % of the monthly target beside Total Rev. Counts only the month's own days.
-    const mdays = []; for (let d = first; d <= last; d = addDays(d, 1)) mdays.push(d);
+    const mdays = weeks.flat();   // the month's own weeks, Monday to Saturday
     const mRev = sum(mdays, fab), mShip = sum(mdays, d => rev(d, 'Ship')), mTotal = mRev + mShip;
     const mLabor = sum(mdays, d => costOf(d, 'labor')), mMat = sum(mdays, d => costOf(d, 'material')), mSub = sum(mdays, d => costOf(d, 'sub'));
     const mCogs = mLabor + mMat + mSub;
@@ -360,7 +357,7 @@ function renderRevenue() {
     const blanks = '<td></td>'.repeat(5);
     const mrow = (label, value, cls = '', extra = '<td></td>') => `<tr class="${cls}"><td></td>${blanks}<td class="sc-rv-mlabel">${label}</td><td class="sc-rv-mval">${value}</td>${extra}</tr>`;
     html += `<table class="sc-rv-table sc-rv-month"><colgroup><col class="sc-rv-c-label">${'<col class="sc-rv-c-day">'.repeat(7)}<col class="sc-rv-c-extra"></colgroup><tbody>`;
-    html += `<tr><td></td>${blanks}<td></td><td class="sc-rv-mhead" title="Counts only the days of ${esc(monthLabel(S.from))} itself, so a week shared with the next or previous month is not counted twice">Month Total</td><td></td></tr>`;
+    html += `<tr><td></td>${blanks}<td></td><td class="sc-rv-mhead" title="All ${weeks.length} weeks of ${esc(monthLabel(S.from))}">Month Total</td><td></td></tr>`;
     html += mrow('Rev', money2(mRev));
     html += mrow('', '', '', `<td class="sc-rv-target">TARGET = $<input class="sc-rv-in sc-rv-target-in" data-target value="${esc(target.toLocaleString('en-US'))}" title="Monthly revenue target — click to change (saved for everyone)"></td>`);
     html += mrow('Shipping', money2(mShip));
@@ -370,7 +367,7 @@ function renderRevenue() {
     html += mrow('Sub', money2(mSub));
     html += mrow('Total COGS', money2(mCogs), 'sc-rv-mcogs');
     html += `<tr><td></td>${blanks}<td></td>${pctCell(mCogs, mTotal)}<td></td></tr>`;
-    html += `</tbody></table><p class="sc-hint">Revenue = scheduled hours × $${REVENUE_PER_HOUR}. Fabrication Revenue is every team except Ship; Net Revenue adds Ship. Type Labor, Material and Subcontractor costs straight into their cells, and the monthly target beside the Month Total (all saved for everyone). Months run in full weeks, Monday to Saturday; the Month Total counts only ${esc(monthLabel(S.from))}'s own days.</p></div>`;
+    html += `</tbody></table><p class="sc-hint">Revenue = scheduled hours × $${REVENUE_PER_HOUR}. Fabrication Revenue is every team except Ship; Net Revenue adds Ship. Type Labor, Material and Subcontractor costs straight into their cells, and the monthly target beside the Month Total (all saved for everyone). A month is every week whose Monday falls in it, so ${esc(monthLabel(S.from))} has ${weeks.length} weeks; the Month Total adds them up.</p></div>`;
     wrap.innerHTML = html;
 }
 
