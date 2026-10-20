@@ -33,6 +33,7 @@ const S = {
     castingById: new Map(),
     phasesByCasting: new Map(),   // castingId -> casting_phases rows (sorted)
     withInventory: new Set(),     // castings that have Casting Inventory rows (the gate for "Not yet scheduled")
+    invSummary: new Map(),        // castingId -> { types, pcs, sqft, sqftMissing } from the Casting Inventory
     rows: [],                     // plant_schedule rows in the window (+ pinned castings)
     from: '',                     // first day of the month on screen (ISO)
     view: 'grid',                 // 'grid' (castings × days) | 'revenue' (teams × days, $ per week — the sheet's Rev tab)
@@ -118,10 +119,21 @@ async function loadBase() {
     }
     // Only castings with a Casting Inventory are offered for scheduling (user rule 2026-10-19).
     S.withInventory = new Set();
+    S.invSummary = new Map();
     for (let i = 0; i < ids.length; i += 60) {
-        const { data, error } = await client.from('casting_inventory').select('casting_id').in('casting_id', ids.slice(i, i + 60));
+        const { data, error } = await client.from('casting_inventory').select('casting_id, quantity, extras, ff_sq_ft').in('casting_id', ids.slice(i, i + 60));
         if (error) throw error;
-        for (const r of data || []) S.withInventory.add(r.casting_id);
+        for (const r of data || []) {
+            S.withInventory.add(r.casting_id);
+            // same totals as the portal's casting title block: types = rows, pcs = qty + extras, sq ft = FF sq ft × pcs
+            const s = S.invSummary.get(r.casting_id) || { types: 0, pcs: 0, sqft: 0, sqftMissing: 0 };
+            const units = (parseInt(r.quantity, 10) || 0) + (parseInt(r.extras, 10) || 0);
+            s.types += 1;
+            s.pcs += units;
+            if (r.ff_sq_ft === null || r.ff_sq_ft === undefined || r.ff_sq_ft === '') s.sqftMissing += 1;
+            s.sqft += (Number(r.ff_sq_ft) || 0) * units;
+            S.invSummary.set(r.casting_id, s);
+        }
     }
 }
 
@@ -144,6 +156,13 @@ function mappedPhases(castingId) {
 }
 function rowsOfCasting(castingId) { return S.rows.filter(r => r.casting_id === castingId); }
 function castingLabel(c) { return `Cast ${c.casting_number}`; }
+/** "3 types · 14 pcs · 49 sq ft" from the casting's Casting Inventory. */
+function invSummaryText(castingId) {
+    const s = S.invSummary.get(castingId);
+    if (!s) return 'no Casting Inventory';
+    const sq = Math.round(s.sqft * 10) / 10;
+    return `${s.types} ${s.types === 1 ? 'type' : 'types'} · ${s.pcs} pcs · ${sq.toLocaleString('en-US')} sq ft${s.sqftMissing ? ' (incomplete)' : ''}`;
+}
 function projectLabel(num) { const p = S.projectByNumber.get(num); return p ? `${num} · ${p.project_name || ''}` : num; }
 
 /** Scheduled vs Optimizer hours per phase of a casting (any date). */
@@ -523,7 +542,7 @@ function renderGrid() {
                 hourTds += `<td class="${cls} sc-hrow" ${attrs}${drag}><span class="sc-h">${hrs}</span></td>`;
             });
         }
-        h += `<tr class="sc-cast-top"><td class="sc-label" rowspan="2" data-cid="${c.id}" title="${esc(tip)}\n\nClick for options"><span class="sc-castnum">${esc(castingLabel(c))}</span><span class="sc-castdate">${c.casting_date ? 'cast ' + esc(shortDay(c.casting_date)) : 'no cast date'}</span>${bad ? '<span class="sc-lock" title="Scheduled hours differ from the Optimizer Hours tab"></span>' : ''}</td>${taskTds}</tr>`;
+        h += `<tr class="sc-cast-top"><td class="sc-label" rowspan="2" data-cid="${c.id}" title="${esc(tip)}\n\nClick for options"><span class="sc-castnum">${esc(castingLabel(c))}</span><span class="sc-castdate">${c.casting_date ? 'cast ' + esc(shortDay(c.casting_date)) : 'no cast date'}</span>${bad ? '<span class="sc-lock" title="Scheduled hours differ from the Optimizer Hours tab"></span>' : ''}<span class="sc-castinv" title="From the Casting Inventory: types, pieces (qty + extras), finished-face sq ft">${esc(invSummaryText(c.id))}</span></td>${taskTds}</tr>`;
         h += `<tr class="sc-cast-bottom">${hourTds}</tr>`;
     }
     h += '</tbody><tfoot><tr><td class="sc-label">Hours needed</td>';

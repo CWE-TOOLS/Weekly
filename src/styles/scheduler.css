@@ -125,6 +125,7 @@ table.sc-grid { border-collapse: separate; border-spacing: 0; table-layout: fixe
 .sc-lock { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #dc2626; margin-left: 6px; vertical-align: middle; }
 .sc-castnum { font-weight: 700; }
 .sc-castdate { color: #6b7280; font-size: 10px; margin-left: 6px; }
+.sc-castinv { display: block; font-size: 10px; font-weight: 600; color: #374151; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; }
 
 /* cell editor */
 .sc-editor { position: absolute; z-index: 50; background: #fff; border: 1px solid #cbd5e1; border-radius: 10px; box-shadow: 0 14px 40px rgba(15,23,42,.2); width: 360px; padding: 12px 14px; font-size: 13px; }
