@@ -38,6 +38,8 @@ const S = {
     from: '',                     // first day of the month on screen (ISO)
     view: 'grid',                 // 'grid' (castings × days) | 'revenue' (teams × days, $ per week — the sheet's Rev tab)
     search: '',
+    unsSearch: '',                // the "Not yet scheduled" panel's own search box
+    scheduledIds: new Set(),      // every casting with days anywhere on the scheduler (any month)
     pinned: new Set(),            // castings shown even without rows in the window
     busy: false,
     cascade: false                // moving a task also moves every later task of that casting by the same working days
@@ -143,6 +145,11 @@ async function loadRows() {
     const extraIds = [...S.pinned];
     const extra = extraIds.length ? await loadScheduleForCastings(extraIds) : [];
     S.rows = inWindow.concat(extra.filter(r => !seen.has(r.id)));
+    // which castings are on the scheduler at all, whatever month (so they never show as "not yet scheduled")
+    try {
+        const { data } = await getSupabaseClient().from('plant_schedule').select('casting_id');
+        S.scheduledIds = new Set((data || []).map(r => r.casting_id));
+    } catch (_) { S.scheduledIds = new Set(S.rows.map(r => r.casting_id)); }
     // rows saved before the Mill column was split into CNC + Parts (2026-10-19)
     for (const r of S.rows) if (r.department === 'Mill') r.department = r.task === 'CNC' ? 'CNC' : 'Parts';
 }
@@ -556,14 +563,17 @@ function renderGrid() {
 
 function renderUnscheduled() {
     const box = $('sc-unscheduled');
-    const scheduled = new Set(S.rows.map(r => r.casting_id));
+    const scheduled = new Set([...S.scheduledIds, ...S.rows.map(r => r.casting_id)]);
     const q = S.search.trim().toLowerCase();
-    const list = S.castings.filter(c => {
-        if (scheduled.has(c.id)) return false;
-        if (!S.withInventory.has(c.id)) return false;   // no Casting Inventory yet -> not offered
-        if (q) { const p = S.projectByNumber.get(c.project_number); if (!(c.project_number.toLowerCase().includes(q) || (p && (p.project_name || '').toLowerCase().includes(q)))) return false; }
-        return true;
-    });
+    const uq = S.unsSearch.trim().toLowerCase();
+    const matches = (c, s) => {
+        const p = S.projectByNumber.get(c.project_number);
+        return c.project_number.toLowerCase().includes(s) || (p && (p.project_name || '').toLowerCase().includes(s)) || `cast ${c.casting_number}`.toLowerCase().includes(s);
+    };
+    const all = S.castings.filter(c => !scheduled.has(c.id) && S.withInventory.has(c.id));   // no Casting Inventory yet -> not offered
+    const list = all.filter(c => (!q || matches(c, q)) && (!uq || matches(c, uq)));
+    const cnt = $('sc-uns-count');
+    if (cnt) cnt.textContent = uq || q ? `${list.length} of ${all.length} castings match` : `${all.length} castings waiting`;
     // upcoming cast dates first (soonest first), then castings without a date, then past dates (latest first)
     const today = todayIso();
     const rank = (c) => !c.casting_date ? 1 : (c.casting_date >= today ? 0 : 2);
@@ -1249,6 +1259,7 @@ function wire() {
     $('sc-view-toggle').addEventListener('click', () => { S.view = S.view === 'revenue' ? 'grid' : 'revenue'; closeEditor(); render(); });
     $('sc-show-weekends').addEventListener('change', (e) => { S.settings.showWeekends = !!e.target.checked; try { localStorage.setItem('sc-weekends', S.settings.showWeekends ? '1' : '0'); } catch (_) { /* ignore */ } render(); });
     $('sc-search').addEventListener('input', (e) => { S.search = e.target.value; render(); });
+    $('sc-uns-search').addEventListener('input', (e) => { S.unsSearch = e.target.value; renderUnscheduled(); });
     $('sc-settings-btn').addEventListener('click', openSettings);
     $('sc-sched').addEventListener('click', (e) => {
         if (e.target.closest('[data-close]') || e.target === $('sc-sched')) { $('sc-sched').hidden = true; schedCtx = null; return; }

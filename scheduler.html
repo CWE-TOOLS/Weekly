@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="src/styles/variables.css">
     <link rel="stylesheet" href="src/styles/base.css">
     <link rel="stylesheet" href="src/styles/buttons.css">
-    <link rel="stylesheet" href="src/styles/scheduler.css?v=20261020-14">
+    <link rel="stylesheet" href="src/styles/scheduler.css?v=20261020-15">
 </head>
 <body>
 <div id="sc-app">
@@ -43,6 +43,8 @@
                 <strong>Not yet scheduled</strong>
                 <span class="sc-hint">Castings that have a Casting Inventory in the portal and no days on the grid yet. Hours come from the casting's Optimizer Hours tab. Schedule = spread those tasks from the cast date.</span>
             </div>
+            <input type="search" id="sc-uns-search" class="sc-uns-search" placeholder="Search not-scheduled jobs…" autocomplete="off">
+            <div id="sc-uns-count" class="sc-hint"></div>
             <div id="sc-unscheduled" class="sc-unscheduled"></div>
             <div class="sc-side-head">
                 <strong>How the spread works</strong>
@@ -83,6 +85,6 @@
 
     <div id="sc-toast" class="sc-toast" hidden></div>
 </div>
-<script type="module" src="src/pages/scheduler/scheduler-page.js?v=20261020-26"></script>
+<script type="module" src="src/pages/scheduler/scheduler-page.js?v=20261020-27"></script>
 </body>
 </html>

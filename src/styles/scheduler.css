@@ -22,6 +22,7 @@
 .sc-side { width: 260px; flex: none; border-right: 1px solid #e5e7eb; background: #fff; overflow: auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 12px; }
 .sc-side-head { display: flex; flex-direction: column; gap: 4px; }
 .sc-hint { font-size: 11px; color: #6b7280; line-height: 1.4; }
+.sc-uns-search { width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid #9ca3af; border-radius: 6px; font-size: 13px; }
 .sc-unscheduled { display: flex; flex-direction: column; gap: 6px; }
 .sc-uns { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 6px 8px; border: 1px solid #e5e7eb; border-radius: 6px; background: #fafafa; }
 .sc-uns-name { font-size: 12px; line-height: 1.3; }
