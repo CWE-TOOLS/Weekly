@@ -241,13 +241,11 @@ async function scheduleCasting(castingId, anchorIso, { replace = false } = {}) {
 async function shiftCasting(castingId, n) {
     const rows = rowsOfCasting(castingId);
     if (!rows.length || !n) return;
-    // one casting per day: where would this casting's Cast day(s) land?
-    const moved = rows.filter(r => r.department === 'Cast').map(r => { let d = r.date; for (let i = 0; i < Math.abs(n); i++) d = nextWorking(d, Math.sign(n)); return d; });
-    if (moved.length) {
-        const taken = await takenCastDays(castingId);
-        const clash = moved.find(d => taken.has(d));
-        if (clash) { toast(`Can't shift: ${shortDay(clash)} already has ${whoCasts(taken.get(clash))}. Castings are one per day.`, 'error'); return; }
-    }
+    // team limits: where would the casting land? over-scheduling is allowed after a confirm
+    const moved = rows.map(r => { let d = r.date; for (let i = 0; i < Math.abs(n); i++) d = nextWorking(d, Math.sign(n)); return { ...r, date: d }; });
+    const span = moved.map(r => r.date).sort();
+    const load = await loadTeamLoad(span[0], span[span.length - 1], castingId);
+    if (!confirmOverload(overloadsOf(moved, load))) return;
     setBusy(true);
     const __h = await histBegin('shift ' + castingLabel(S.castingById.get(castingId) || {}), [castingId]);
     try {
@@ -647,6 +645,10 @@ async function addEditorEntry() {
     if (hours <= 0) { toast('Enter the hours first.', 'error'); return; }
     const c = S.castingById.get(editorCtx.cid);
     const weekend = isWeekend(editorCtx.date);
+    if (TEAM_DAY_LIMITS[editorCtx.dept]) {
+        const load = await loadTeamLoad(editorCtx.date, editorCtx.date, editorCtx.cid);
+        if (!confirmOverload(overloadsOf([{ date: editorCtx.date, department: editorCtx.dept }], load))) return;
+    }
     setBusy(true);
     const __h = await histBegin('add task', [editorCtx.cid]);
     try {
@@ -695,9 +697,9 @@ async function moveEditorEntries() {
     if (isHoliday(to)) { toast(`${shortDay(to)} is a holiday — nothing can be scheduled there.`, 'error'); return; }
     if (isWeekend(to) && !window.confirm(`${shortDay(to)} is a weekend. Allow it for these entries?`)) return;
     const rows = S.rows.filter(r => r.casting_id === editorCtx.cid && r.date === editorCtx.date && r.department === editorCtx.dept);
-    if (editorCtx.dept === 'Cast') {
-        const other = (await loadScheduleRange(to, to)).find(r => r.department === 'Cast' && r.casting_id !== editorCtx.cid);
-        if (other) { toast(`${shortDay(to)} already has ${whoCasts(other.casting_id)}. Castings are one per day.`, 'error'); return; }
+    if (TEAM_DAY_LIMITS[editorCtx.dept]) {
+        const load = await loadTeamLoad(to, to, editorCtx.cid);
+        if (!confirmOverload(overloadsOf([{ date: to, department: editorCtx.dept }], load))) return;
     }
     setBusy(true);
     const __h = await histBegin('move day', [editorCtx.cid]);
@@ -767,52 +769,75 @@ function askAnchor(c) {
 }
 
 // ---------------------------------------------------------------------------
-// cast day choice — one casting per day
+// cast day choice — team limits are a warning, not a block (user 2026-10-20: "I just want to be prompted")
 // ---------------------------------------------------------------------------
-/** date -> casting_id of every Cast day on the grid (any job), excluding one casting. */
-async function takenCastDays(excludeCastingId) {
-    const rows = await loadScheduleRange(addDays(todayIso(), -60), addDays(todayIso(), 365));
-    const map = new Map();
-    for (const r of rows) if (r.department === 'Cast' && r.casting_id !== excludeCastingId) map.set(r.date, r.casting_id);
-    return map;
-}
 function whoCasts(castingId) {
     const c = S.castingById.get(castingId);
-    return c ? `${projectLabel(c.project_number)} ${castingLabel(c)}` : 'another casting';
+    return c ? `${c.project_number} ${castingLabel(c)}` : 'another casting';
 }
-function castDatesOfPlan(plan) { return plan.filter(r => r.department === 'Cast').map(r => r.date); }
-/** First working day on/after `from` where this casting's Cast day(s) collide with nobody. */
-function nextAvailableCastDay(c, taken, from) {
+/** date|dept -> Set(casting_id) for the limited teams, from the database, leaving one casting out. */
+async function loadTeamLoad(fromIso, toIso, excludeCastingId) {
+    const rows = await loadScheduleRange(fromIso, toIso);
+    const m = new Map();
+    for (const r of rows) {
+        if (r.casting_id === excludeCastingId || !TEAM_DAY_LIMITS[r.department]) continue;
+        const k = `${r.date}|${r.department}`;
+        if (!m.has(k)) m.set(k, new Set());
+        m.get(k).add(r.casting_id);
+    }
+    return m;
+}
+/** Which team-days would go over their limit if these rows (one casting's) were added. */
+function overloadsOf(rows, load) {
+    const seen = new Set(), out = [];
+    for (const r of rows) {
+        const lim = TEAM_DAY_LIMITS[r.department];
+        if (!lim) continue;
+        const k = `${r.date}|${r.department}`;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        const others = load.get(k) || new Set();
+        if (others.size + 1 > lim) out.push({ date: r.date, dept: r.department, count: others.size + 1, limit: lim, names: [...others].map(whoCasts) });
+    }
+    return out.sort((x, y) => x.date.localeCompare(y.date));
+}
+function overloadLines(list) {
+    return list.map(x => `${shortDay(x.date)} ${deptLabel(x.dept)}: ${x.count} castings (limit ${x.limit})${x.names.length ? ' — with ' + x.names.join(', ') : ''}`);
+}
+/** Ask before over-scheduling; true = go ahead. */
+function confirmOverload(list) {
+    if (!list.length) return true;
+    const lines = overloadLines(list.slice(0, 12)).join('\n') + (list.length > 12 ? `\n… and ${list.length - 12} more` : '');
+    return window.confirm(`This will OVER-SCHEDULE ${list.length} team-day${list.length === 1 ? '' : 's'}:\n\n${lines}\n\nParts, FO, Cast and DM take 1 casting a day; F, Seal and Spec take 5.\n\nOK = over-schedule anyway.   Cancel = go back.`);
+}
+/** First working day on/after `from` where the whole casting fits without putting any team over its limit. */
+function nextFreeCastDay(c, load, from) {
     let d = workingOrNext(from);
     for (let i = 0; i < 400; i++) {
-        const dates = castDatesOfPlan(planCasting(c, d));
-        if (!dates.length || !dates.some(x => taken.has(x))) return d;
+        if (!overloadsOf(planCasting(c, d), load).length) return d;
         d = nextWorking(d, 1);
     }
-    return d;
+    return workingOrNext(from);
 }
-let schedCtx = null;   // { cid, replace, taken, next }
+let schedCtx = null;   // { cid, replace, load, next }
 async function openScheduleDialog(castingId, { replace = false } = {}) {
     const c = S.castingById.get(castingId);
     if (!c) return;
     setBusy(true);
-    let taken;
-    try { taken = await takenCastDays(castingId); } catch (err) { toast('Could not read the grid: ' + (err.message || err), 'error'); setBusy(false); return; }
+    let load;
+    try { load = await loadTeamLoad(addDays(todayIso(), -90), addDays(todayIso(), 400), castingId); }
+    catch (err) { toast('Could not read the grid: ' + (err.message || err), 'error'); setBusy(false); return; }
     finally { setBusy(false); }
-    const next = nextAvailableCastDay(c, taken, todayIso());
-    schedCtx = { cid: castingId, replace, taken, next };
+    const next = nextFreeCastDay(c, load, todayIso());
+    schedCtx = { cid: castingId, replace, load, next };
     const own = c.casting_date || '';
-    const ownNote = own
-        ? (taken.has(own) ? `${esc(shortDay(own))} on the Castings tab — but ${esc(whoCasts(taken.get(own)))} already casts that day`
-                          : `${esc(shortDay(own))} on the Castings tab`)
-        : 'none on the Castings tab';
     const box = $('sc-sched');
     box.innerHTML = `<div class="sc-panel sc-panel-sm" role="dialog" aria-modal="true">
         <div class="sc-panel-head"><h2>${replace ? 'Regenerate' : 'Schedule'} ${esc(castingLabel(c))} — ${esc(projectLabel(c.project_number))}</h2><button type="button" class="sc-x" data-close>&times;</button></div>
         <div class="sc-panel-body">
-            <p class="sc-hint">Would you like to schedule on the next available cast day, or choose a cast day? Castings are one per day. Cast date on the job: ${ownNote}.</p>
-            <label class="sc-choice"><input type="radio" name="sc-cast-mode" value="next" checked> <strong>Next available cast day:</strong> ${esc(shortDay(next))}</label>
-            <label class="sc-choice"><input type="radio" name="sc-cast-mode" value="pick"> <strong>Choose a cast day:</strong> <input type="date" id="sc-cast-pick" value="${esc(own && !taken.has(own) ? own : next)}"></label>
+            <p class="sc-hint">Would you like to schedule on the next available cast day, or choose a cast day? Cast date on the job: ${own ? esc(shortDay(own)) + ' (Castings tab)' : 'none on the Castings tab'}.</p>
+            <label class="sc-choice"><input type="radio" name="sc-cast-mode" value="next" checked> <strong>Next available cast day:</strong> ${esc(shortDay(next))} <small class="sc-hint">(no team over its limit)</small></label>
+            <label class="sc-choice"><input type="radio" name="sc-cast-mode" value="pick"> <strong>Choose a cast day:</strong> <input type="date" id="sc-cast-pick" value="${esc(own || next)}"></label>
             <div id="sc-cast-note" class="sc-hint"></div>
         </div>
         <div class="sc-panel-foot"><button type="button" class="btn-secondary" data-close>Cancel</button><button type="button" class="btn-primary" id="sc-cast-go">${replace ? 'Regenerate' : 'Schedule'}</button></div>
@@ -823,11 +848,18 @@ async function openScheduleDialog(castingId, { replace = false } = {}) {
     const check = () => {
         const mode = box.querySelector('input[name="sc-cast-mode"]:checked')?.value;
         const d = mode === 'next' ? next : pick.value;
+        note.classList.remove('sc-note-warn');
         if (!d) { note.textContent = ''; return; }
-        if (isHoliday(d)) note.textContent = `${shortDay(d)} is a holiday — nothing is scheduled on holidays.`;
-        else if (taken.has(d)) note.textContent = `${shortDay(d)} already has ${whoCasts(taken.get(d))}. Castings are one per day — pick another day.`;
-        else if (isWeekend(d)) note.textContent = `${shortDay(d)} is a weekend — the Cast day will be moved to the next working day unless you allow the weekend on the grid afterwards.`;
-        else note.textContent = `Cast on ${shortDay(d)}; earlier phases run back from it, later ones forward.`;
+        if (isHoliday(d)) { note.textContent = `${shortDay(d)} is a holiday — nothing is scheduled on holidays.`; note.classList.add('sc-note-warn'); return; }
+        const over = overloadsOf(planCasting(c, d), load);
+        if (over.length) {
+            note.classList.add('sc-note-warn');
+            note.innerHTML = `&#9888; This over-schedules ${over.length} team-day${over.length === 1 ? '' : 's'}: ` + esc(overloadLines(over.slice(0, 4)).join('; ')) + (over.length > 4 ? '; …' : '') + '. You will be asked to confirm.';
+            return;
+        }
+        note.textContent = isWeekend(d)
+            ? `${shortDay(d)} is a weekend — the Cast day moves to the next working day unless you allow the weekend on the grid afterwards.`
+            : `Cast on ${shortDay(d)}; earlier phases run back from it, later ones forward. No team goes over its limit.`;
     };
     pick.addEventListener('input', () => { box.querySelector('input[name="sc-cast-mode"][value="pick"]').checked = true; check(); });
     box.querySelectorAll('input[name="sc-cast-mode"]').forEach(r => r.addEventListener('change', check));
@@ -841,8 +873,7 @@ async function confirmScheduleDialog() {
     if (!d) { toast('Pick a cast day first.', 'error'); return; }
     if (isHoliday(d)) { toast(`${shortDay(d)} is a holiday.`, 'error'); return; }
     const c = S.castingById.get(schedCtx.cid);
-    const clash = castDatesOfPlan(planCasting(c, d)).find(x => schedCtx.taken.has(x));
-    if (clash) { toast(`${shortDay(clash)} already has ${whoCasts(schedCtx.taken.get(clash))}. Castings are one per day.`, 'error'); return; }
+    if (!confirmOverload(overloadsOf(planCasting(c, d), schedCtx.load))) return;
     const ctx = schedCtx;
     box.hidden = true; schedCtx = null;
     await scheduleCasting(ctx.cid, d, { replace: ctx.replace });

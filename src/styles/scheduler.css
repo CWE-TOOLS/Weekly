@@ -159,6 +159,7 @@ table.sc-grid { border-collapse: separate; border-spacing: 0; table-layout: fixe
 .sc-choice:has(input:checked) { border-color: #2563eb; background: #eff6ff; }
 .sc-choice input[type=date] { padding: 4px 6px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; }
 #sc-cast-note { min-height: 18px; margin-top: 4px; }
+#sc-cast-note.sc-note-warn { color: #b91c1c; font-weight: 600; background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; padding: 6px 8px; }
 .sc-dayhours { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px 12px; }
 .sc-dayhours label { display: flex; justify-content: space-between; align-items: center; gap: 6px; font-size: 13px; }
 .sc-dayhours input { width: 60px; padding: 4px 6px; border: 1px solid #d1d5db; border-radius: 6px; }
