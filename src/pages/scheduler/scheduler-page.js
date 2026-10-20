@@ -502,8 +502,9 @@ function renderGrid() {
                     hrs = fmtH(rows.reduce((n, r) => n + (Number(r.hours) || 0), 0));
                 }
                 const attrs = `data-cid="${c.id}" data-date="${d}" data-dept="${dept}"`;
-                taskTds += `<td class="${cls} sc-trow" ${attrs}><span class="sc-task">${esc(task)}</span></td>`;
-                hourTds += `<td class="${cls} sc-hrow" ${attrs}><span class="sc-h">${hrs}</span></td>`;
+                const drag = rows.length ? ' draggable="true" title="Drag to another day on this row to move it; click to edit"' : '';
+                taskTds += `<td class="${cls} sc-trow" ${attrs}${drag}><span class="sc-task">${esc(task)}</span></td>`;
+                hourTds += `<td class="${cls} sc-hrow" ${attrs}${drag}><span class="sc-h">${hrs}</span></td>`;
             });
         }
         h += `<tr class="sc-cast-top"><td class="sc-label" rowspan="2" data-cid="${c.id}" title="${esc(tip)}\n\nClick for options"><span class="sc-castnum">${esc(castingLabel(c))}</span><span class="sc-castdate">${c.casting_date ? 'cast ' + esc(shortDay(c.casting_date)) : 'no cast date'}</span>${bad ? '<span class="sc-lock" title="Scheduled hours differ from the Optimizer Hours tab"></span>' : ''}</td>${taskTds}</tr>`;
@@ -698,28 +699,83 @@ function showWeekendAddForm() {
     if (alert) alert.outerHTML = `<div class="sc-ed-add"><select id="sc-ed-add-task">${tasksForDept(editorCtx.dept).map(o => `<option>${o}</option>`).join('')}</select><input type="number" id="sc-ed-add-hours" step="0.5" min="0" placeholder="hours"><button type="button" class="btn-secondary" id="sc-ed-add">Add</button></div>`;
 }
 
-async function moveEditorEntries() {
-    if (!editorCtx) return;
-    const to = $('sc-ed-move-date').value;
-    if (!to || to === editorCtx.date) return;
-    if (isHoliday(to)) { toast(`${shortDay(to)} is a holiday — nothing can be scheduled there.`, 'error'); return; }
-    if (isWeekend(to) && !window.confirm(`${shortDay(to)} is a weekend. Allow it for these entries?`)) return;
-    const rows = S.rows.filter(r => r.casting_id === editorCtx.cid && r.date === editorCtx.date && r.department === editorCtx.dept);
-    if (TEAM_DAY_LIMITS[editorCtx.dept]) {
-        const load = await loadTeamLoad(to, to, editorCtx.cid);
-        if (!confirmOverload(overloadsOf([{ date: to, department: editorCtx.dept }], load))) return;
+/** Move one casting's task(s) in one team column from one day to another (Move button and drag-and-drop). */
+async function moveCellEntries(cid, fromDate, dept, to) {
+    if (!to || to === fromDate) return false;
+    if (isHoliday(to)) { toast(`${shortDay(to)} is a holiday — nothing can be scheduled there.`, 'error'); return false; }
+    if (isWeekend(to) && !window.confirm(`${shortDay(to)} is a weekend. Allow it for these entries?`)) return false;
+    const rows = S.rows.filter(r => r.casting_id === cid && r.date === fromDate && r.department === dept);
+    if (!rows.length) return false;
+    if (TEAM_DAY_LIMITS[dept]) {
+        const load = await loadTeamLoad(to, to, cid);
+        if (!confirmOverload(overloadsOf([{ date: to, department: dept }], load))) return false;
     }
     setBusy(true);
-    const __h = await histBegin('move day', [editorCtx.cid]);
+    const __h = await histBegin(`move ${rows.map(r => r.task).join('+').toLowerCase()} to ${shortDay(to)}`, [cid]);
     try {
         for (const r of rows) await updateScheduleRow(r.id, { date: to, weekend_ok: isWeekend(to) ? true : r.weekend_ok });
         await histEnd(__h);
         await loadRows();
         render();
-        closeEditor();
         toast(`Moved to ${shortDay(to)}`);
-    } catch (err) { toast('Move failed: ' + (err.message || err), 'error'); }
+        return true;
+    } catch (err) { toast('Move failed: ' + (err.message || err), 'error'); return false; }
     finally { setBusy(false); }
+}
+async function moveEditorEntries() {
+    if (!editorCtx) return;
+    const ctx = editorCtx;
+    if (await moveCellEntries(ctx.cid, ctx.date, ctx.dept, $('sc-ed-move-date').value)) closeEditor();
+}
+
+// ---- drag a task to another day on the same casting's row (it keeps its team column)
+let dragCtx = null;   // { cid, date, dept }
+function dropTargetFor(td) {
+    if (!dragCtx || !td || td.dataset.cid !== dragCtx.cid) return null;
+    return document.querySelector(`tr.sc-cast-top td.sc-cell[data-cid="${dragCtx.cid}"][data-date="${td.dataset.date}"][data-dept="${dragCtx.dept}"]`);
+}
+function clearDropMarks() { document.querySelectorAll('.sc-drop-target, .sc-drop-target-h').forEach(el => el.classList.remove('sc-drop-target', 'sc-drop-target-h')); }
+function markDrop(td) {
+    clearDropMarks();
+    const top = dropTargetFor(td);
+    if (!top) return;
+    top.classList.add('sc-drop-target');
+    const bottom = document.querySelector(`tr.sc-cast-bottom td.sc-cell[data-cid="${dragCtx.cid}"][data-date="${td.dataset.date}"][data-dept="${dragCtx.dept}"]`);
+    if (bottom) bottom.classList.add('sc-drop-target-h');
+}
+function wireDrag(wrap) {
+    wrap.addEventListener('dragstart', (e) => {
+        const td = e.target.closest && e.target.closest('td.sc-cell.sc-has');
+        if (!td || S.busy) { e.preventDefault(); return; }
+        dragCtx = { cid: td.dataset.cid, date: td.dataset.date, dept: td.dataset.dept };
+        closeEditor();
+        e.dataTransfer.effectAllowed = 'move';
+        try { e.dataTransfer.setData('text/plain', `${dragCtx.dept} ${dragCtx.date}`); } catch (_) { /* ignore */ }
+        document.querySelectorAll(`td.sc-cell[data-cid="${dragCtx.cid}"][data-date="${dragCtx.date}"][data-dept="${dragCtx.dept}"]`).forEach(el => el.classList.add('sc-dragging'));
+    });
+    wrap.addEventListener('dragover', (e) => {
+        const td = e.target.closest && e.target.closest('td.sc-cell');
+        if (!dragCtx || !td || td.dataset.cid !== dragCtx.cid) return;   // only the same casting's row accepts the drop
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        markDrop(td);
+    });
+    wrap.addEventListener('dragleave', (e) => { if (!wrap.contains(e.relatedTarget)) clearDropMarks(); });
+    wrap.addEventListener('drop', async (e) => {
+        const td = e.target.closest && e.target.closest('td.sc-cell');
+        if (!dragCtx || !td || td.dataset.cid !== dragCtx.cid) return;
+        e.preventDefault();
+        const ctx = dragCtx, to = td.dataset.date;
+        dragCtx = null;
+        clearDropMarks();
+        document.querySelectorAll('.sc-dragging').forEach(el => el.classList.remove('sc-dragging'));
+        if (to !== ctx.date) await moveCellEntries(ctx.cid, ctx.date, ctx.dept, to);
+    });
+    wrap.addEventListener('dragend', () => {
+        dragCtx = null;
+        clearDropMarks();
+        document.querySelectorAll('.sc-dragging').forEach(el => el.classList.remove('sc-dragging'));
+    });
 }
 
 async function deleteEditorEntry(id) {
@@ -1011,6 +1067,7 @@ function wire() {
         await openScheduleDialog(c.id, { replace: false });
     });
 
+    wireDrag($('sc-grid-wrap'));
     $('sc-grid-wrap').addEventListener('click', (e) => {
         if (S.busy) return;
         const cell = e.target.closest('td.sc-cell');

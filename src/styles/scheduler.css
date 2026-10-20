@@ -106,6 +106,11 @@ table.sc-grid { border-collapse: separate; border-spacing: 0; table-layout: fixe
 .sc-grid td.sc-cell.sc-has:hover { background: color-mix(in srgb, var(--c) 26%, white); }
 .sc-grid td.sc-cell.sc-unmapped { box-shadow: inset 0 0 0 3px #f97316 !important; }
 .sc-grid td.sc-cell.sc-wkok { box-shadow: inset 0 0 0 3px #a855f7 !important; }
+/* drag a task to another day */
+.sc-grid td.sc-cell.sc-has[draggable="true"] { cursor: grab; }
+.sc-grid td.sc-cell.sc-dragging { opacity: .35; }
+.sc-grid td.sc-cell.sc-drop-target { outline: 3px dashed #2563eb; outline-offset: -3px; background: #dbeafe !important; }
+.sc-grid td.sc-cell.sc-drop-target-h { outline: 3px dashed #2563eb; outline-offset: -3px; background: #dbeafe !important; }
 .sc-task { display: block; font-size: 10px; font-weight: 800; letter-spacing: .1px; color: #000; text-transform: lowercase; overflow: hidden; text-overflow: ellipsis; padding-top: 3px; }
 .sc-h { display: block; font-size: 12px; font-weight: 800; color: #000; }
 .sc-grid .sc-weekend { background: #e5e7eb; color: #4b5563; }
