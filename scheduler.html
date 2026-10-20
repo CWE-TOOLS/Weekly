@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="src/styles/variables.css">
     <link rel="stylesheet" href="src/styles/base.css">
     <link rel="stylesheet" href="src/styles/buttons.css">
-    <link rel="stylesheet" href="src/styles/scheduler.css?v=20261020-9">
+    <link rel="stylesheet" href="src/styles/scheduler.css?v=20261020-10">
 </head>
 <body>
 <div id="sc-app">
@@ -26,6 +26,7 @@
             <button type="button" class="btn-secondary" id="sc-next" title="Next month">&rsaquo;</button>
             <button type="button" class="btn-secondary" id="sc-today">This month</button>
             <label class="sc-ctl"><input type="checkbox" id="sc-show-weekends"> Show Sundays</label>
+            <label class="sc-ctl sc-ctl-cascade" title="When on, moving a task (drag or the Move button) also moves every later task of that casting by the same number of working days. Holding Shift while dropping does the same for one drag."><input type="checkbox" id="sc-cascade"> Cascade moves</label>
             <button type="button" class="btn-primary" id="sc-view-toggle" title="Flip between the schedule grid and the revenue table">Revenue</button>
             <button type="button" class="btn-secondary" id="sc-undo" disabled title="Nothing to undo">&#8630; Undo</button>
             <button type="button" class="btn-secondary" id="sc-redo" disabled title="Nothing to redo">&#8631; Redo</button>
@@ -82,6 +83,6 @@
 
     <div id="sc-toast" class="sc-toast" hidden></div>
 </div>
-<script type="module" src="src/pages/scheduler/scheduler-page.js?v=20261020-19"></script>
+<script type="module" src="src/pages/scheduler/scheduler-page.js?v=20261020-20"></script>
 </body>
 </html>

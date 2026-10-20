@@ -38,7 +38,8 @@ const S = {
     view: 'grid',                 // 'grid' (castings × days) | 'revenue' (teams × days, $ per week — the sheet's Rev tab)
     search: '',
     pinned: new Set(),            // castings shown even without rows in the window
-    busy: false
+    busy: false,
+    cascade: false                // moving a task also moves every later task of that casting by the same working days
 };
 const $ = (id) => document.getElementById(id);
 
@@ -576,7 +577,11 @@ function openEditor(td) {
     }
     const canEdit = !holiday && (!weekend || weekendAllowed);
     if (canEdit) html += `<div class="sc-ed-add"><select id="sc-ed-add-task">${opts.map(o => `<option>${o}</option>`).join('')}</select><input type="number" id="sc-ed-add-hours" step="0.5" min="0" placeholder="hours"><button type="button" class="btn-secondary" id="sc-ed-add">Add</button></div>`;
-    if (rows.length) html += `<div class="sc-ed-move">Move these to <input type="date" id="sc-ed-move-date" value="${date}"><button type="button" class="btn-secondary" id="sc-ed-move">Move</button></div>`;
+    if (rows.length) {
+        const nLater = S.rows.filter(r => r.casting_id === cid && r.date > date).length;
+        html += `<div class="sc-ed-move">Move these to <input type="date" id="sc-ed-move-date" value="${date}"><button type="button" class="btn-secondary" id="sc-ed-move">Move</button></div>`;
+        html += `<label class="sc-ed-cascade"><input type="checkbox" id="sc-ed-cascade"${S.cascade ? ' checked' : ''}${nLater ? '' : ' disabled'}> Cascade: also move every task after this one (${nLater}) by the same number of working days</label>`;
+    }
     html += `<div class="sc-ed-actions"><button type="button" class="btn-secondary" id="sc-ed-cancel">Close</button><div class="right">${canEdit && rows.length ? '<button type="button" class="btn-primary" id="sc-ed-save">Save</button>' : ''}</div></div>`;
     ed.innerHTML = html;
     ed.hidden = false;
@@ -699,33 +704,56 @@ function showWeekendAddForm() {
     if (alert) alert.outerHTML = `<div class="sc-ed-add"><select id="sc-ed-add-task">${tasksForDept(editorCtx.dept).map(o => `<option>${o}</option>`).join('')}</select><input type="number" id="sc-ed-add-hours" step="0.5" min="0" placeholder="hours"><button type="button" class="btn-secondary" id="sc-ed-add">Add</button></div>`;
 }
 
-/** Move one casting's task(s) in one team column from one day to another (Move button and drag-and-drop). */
-async function moveCellEntries(cid, fromDate, dept, to) {
+/** Working days from one date to another (signed); a weekend target counts as the next working day. */
+function workingOffset(from, to) {
+    if (to === from) return 0;
+    const dir = to > from ? 1 : -1;
+    let d = from, n = 0;
+    for (let i = 0; i < 500; i++) { d = nextWorking(d, dir); n += dir; if (dir > 0 ? d >= to : d <= to) break; }
+    return n;
+}
+function stepWorking(d, n) { for (let i = 0; i < Math.abs(n); i++) d = nextWorking(d, Math.sign(n)); return d; }
+
+/** Move one casting's task(s) in one team column from one day to another (Move button and drag-and-drop).
+ *  cascade: every task of that casting dated after the moved one moves by the same number of working days. */
+async function moveCellEntries(cid, fromDate, dept, to, cascade = false) {
     if (!to || to === fromDate) return false;
     if (isHoliday(to)) { toast(`${shortDay(to)} is a holiday — nothing can be scheduled there.`, 'error'); return false; }
     if (isWeekend(to) && !window.confirm(`${shortDay(to)} is a weekend. Allow it for these entries?`)) return false;
     const rows = S.rows.filter(r => r.casting_id === cid && r.date === fromDate && r.department === dept);
     if (!rows.length) return false;
-    if (TEAM_DAY_LIMITS[dept]) {
-        const load = await loadTeamLoad(to, to, cid);
-        if (!confirmOverload(overloadsOf([{ date: to, department: dept }], load))) return false;
+    const n = workingOffset(fromDate, to);
+    const later = cascade ? S.rows.filter(r => r.casting_id === cid && r.date > fromDate).map(r => ({ row: r, date: stepWorking(r.date, n) })) : [];
+    const landing = [{ date: to, department: dept }, ...later.map(x => ({ date: x.date, department: x.row.department }))];
+    if (landing.some(x => TEAM_DAY_LIMITS[x.department])) {
+        const span = landing.map(x => x.date).sort();
+        const load = await loadTeamLoad(span[0], span[span.length - 1], cid);
+        if (!confirmOverload(overloadsOf(landing, load))) return false;
     }
     setBusy(true);
-    const __h = await histBegin(`move ${rows.map(r => r.task).join('+').toLowerCase()} to ${shortDay(to)}`, [cid]);
+    const label = `move ${rows.map(r => r.task).join('+').toLowerCase()} to ${shortDay(to)}${later.length ? ` + ${later.length} later task${later.length === 1 ? '' : 's'}` : ''}`;
+    const __h = await histBegin(label, [cid]);
     try {
         for (const r of rows) await updateScheduleRow(r.id, { date: to, weekend_ok: isWeekend(to) ? true : r.weekend_ok });
+        for (const x of later) await updateScheduleRow(x.row.id, { date: x.date, weekend_ok: isWeekend(x.date) ? x.row.weekend_ok : false });
         await histEnd(__h);
         await loadRows();
         render();
-        toast(`Moved to ${shortDay(to)}`);
+        toast(later.length ? `Moved to ${shortDay(to)} and cascaded ${later.length} later task${later.length === 1 ? '' : 's'} by ${n > 0 ? '+' : ''}${n} working day${Math.abs(n) === 1 ? '' : 's'}` : `Moved to ${shortDay(to)}`);
         return true;
     } catch (err) { toast('Move failed: ' + (err.message || err), 'error'); return false; }
     finally { setBusy(false); }
 }
+function setCascade(on) {
+    S.cascade = !!on;
+    const hc = $('sc-cascade'); if (hc) hc.checked = S.cascade;
+    const ec = $('sc-ed-cascade'); if (ec) ec.checked = S.cascade;
+    try { localStorage.setItem('sc-cascade', S.cascade ? '1' : '0'); } catch (_) { /* ignore */ }
+}
 async function moveEditorEntries() {
     if (!editorCtx) return;
     const ctx = editorCtx;
-    if (await moveCellEntries(ctx.cid, ctx.date, ctx.dept, $('sc-ed-move-date').value)) closeEditor();
+    if (await moveCellEntries(ctx.cid, ctx.date, ctx.dept, $('sc-ed-move-date').value, !!$('sc-ed-cascade')?.checked)) closeEditor();
 }
 
 // ---- drag a task to another day on the same casting's row (it keeps its team column)
@@ -769,7 +797,7 @@ function wireDrag(wrap) {
         dragCtx = null;
         clearDropMarks();
         document.querySelectorAll('.sc-dragging').forEach(el => el.classList.remove('sc-dragging'));
-        if (to !== ctx.date) await moveCellEntries(ctx.cid, ctx.date, ctx.dept, to);
+        if (to !== ctx.date) await moveCellEntries(ctx.cid, ctx.date, ctx.dept, to, S.cascade || e.shiftKey);   // Shift while dropping = cascade too
     });
     wrap.addEventListener('dragend', () => {
         dragCtx = null;
@@ -1046,6 +1074,8 @@ function wire() {
         if (e.target.closest('[data-close]') || e.target === $('sc-sched')) { $('sc-sched').hidden = true; schedCtx = null; return; }
         if (e.target.id === 'sc-cast-go' && !S.busy) confirmScheduleDialog();
     });
+    $('sc-cascade').addEventListener('change', (e) => setCascade(e.target.checked));
+    $('sc-editor').addEventListener('change', (e) => { if (e.target.id === 'sc-ed-cascade') setCascade(e.target.checked); });
     $('sc-undo').addEventListener('click', undo);
     $('sc-redo').addEventListener('click', redo);
     document.addEventListener('keydown', (e) => {
@@ -1137,6 +1167,7 @@ async function init() {
     wire();
     S.from = firstOfMonth(todayIso());
     try { S.settings.showWeekends = localStorage.getItem('sc-weekends') === '1'; $('sc-show-weekends').checked = S.settings.showWeekends; } catch (_) { /* ignore */ }
+    try { setCascade(localStorage.getItem('sc-cascade') === '1'); } catch (_) { /* ignore */ }
     try {
         await initializeSupabase();
         const saved = await loadScheduleSettings();
