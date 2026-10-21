@@ -165,9 +165,9 @@ function createPrintTaskCard(task, departmentClass) {
     // Color log title + cast method + batch count — mirror the on-screen card's
     // bands below the pieces count. Set during data load by enrichTasksWithPieces.
     const colorLogTitle = typeof task.colorLogTitle === 'string' ? task.colorLogTitle.trim() : '';
-    const colorLogHtml = colorLogTitle
+    const colorLogHtml = ((colorLogTitle || isCastCastingLinked) ? band('print-task-section-label', 'Color log') : '') + (colorLogTitle
         ? band('print-task-color-log', colorLogTitle)
-        : (isCastCastingLinked ? band('print-task-color-log', 'Missing color log', true) : '');
+        : (isCastCastingLinked ? band('print-task-color-log', 'Missing color log', true) : ''));
     const castMethod = typeof task.castMethod === 'string' ? task.castMethod.trim() : '';
     const castMethodHtml = castMethod
         ? band('print-task-cast-method', castMethod)

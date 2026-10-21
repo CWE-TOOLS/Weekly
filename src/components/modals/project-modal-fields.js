@@ -69,9 +69,9 @@ export function renderTaskCard(task, index) {
     }
     const batchPrintHtml = batchPrintText(task.batchPrintState) ? band('task-batch-print', batchPrintText(task.batchPrintState)) : '';
     const colorLogTitle = typeof task.colorLogTitle === 'string' ? task.colorLogTitle.trim() : '';
-    const colorLogHtml = colorLogTitle
+    const colorLogHtml = ((colorLogTitle || isCastCastingLinked) ? band('task-section-label', 'Color log') : '') + (colorLogTitle
         ? band('task-color-log', colorLogTitle)
-        : (isCastCastingLinked ? band('task-color-log', 'Missing color log', true) : '');
+        : (isCastCastingLinked ? band('task-color-log', 'Missing color log', true) : ''));
     const castMethod = typeof task.castMethod === 'string' ? task.castMethod.trim() : '';
     const castMethodHtml = castMethod
         ? band('task-cast-method', castMethod)

@@ -168,6 +168,7 @@ export function createTaskCard(task, rowClass, isEditingUnlocked) {
     // Color log title — name(s) of the color log(s) used by this casting's
     // batch tickets. Set during load by enrichTasksWithPieces.
     const colorLogTitle = typeof task.colorLogTitle === 'string' ? task.colorLogTitle.trim() : '';
+    if (colorLogTitle || isCastCastingLinked) appendBand('task-section-label', 'Color log');   // a part type can share the log's name
     if (colorLogTitle) {
         appendBand('task-color-log', colorLogTitle);
     } else if (isCastCastingLinked) {

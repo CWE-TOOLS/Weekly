@@ -316,6 +316,29 @@
   text-decoration: underline;
 }
 
+/* Sections of the card in different shades of its colour (2026-10-21): inventory darker, colour log lighter. */
+.task-inv-summary,
+.task-inv-types {
+  background-color: rgba(0, 0, 0, 0.09);
+}
+.task-color-log,
+.task-cast-method,
+.task-batch-count {
+  background-color: rgba(255, 255, 255, 0.18);
+}
+.task-section-label {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.85;
+  text-align: center;
+  padding: 0.2rem 0 0;
+  margin: -0.15rem -0.35rem 0.15rem -0.35rem;
+  background-color: rgba(255, 255, 255, 0.18);
+  color: inherit;
+}
+
 /* Batch tickets still to be printed (Cast cards; from the Releasability Board). */
 .task-batch-print {
   font-size: 0.82rem;

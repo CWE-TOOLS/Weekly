@@ -292,6 +292,15 @@ li:last-child {
     .print-task-inv-type { display: flex; justify-content: center; gap: 0.4em; }
     .print-task-inv-type span:last-child { font-weight: 700 !important; }
     .print-task-inv-more { font-style: italic; text-align: center; }
+    .print-task-section-label {
+        font-size: 0.75em !important;
+        font-weight: 700 !important;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: #64748b !important;
+        text-align: center;
+        margin-top: 0.1em;
+    }
     /* Batch tickets still to be printed (Cast cards). */
     .print-task-batch-print {
         font-size: 0.95em !important;
