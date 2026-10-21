@@ -60,7 +60,7 @@ export function renderTaskCard(task, index) {
         const inv = task.invSummary;
         const open = inv.byType.length <= INV_TYPES_COLLAPSE_AT;   // the modal card has room: show every type
         piecesHtml = `<div class="task-pieces-count task-inv-summary" title="${escapeHtml(invSummaryTitle(inv))}">${escapeHtml(invSummaryLine(inv))}</div>
-            <div class="task-inv-types${open ? '' : ' task-inv-types-collapsed'}">${open ? '' : `<button type="button" class="task-inv-toggle" data-inv-toggle>&#9656; ${inv.byType.length} types</button>`}${inv.byType.map(({ type, qty }) =>
+            <div class="task-inv-types${open ? '' : ' task-inv-types-collapsed'}">${open ? '' : `<button type="button" class="task-inv-toggle" data-inv-toggle>&#9656; Show ${inv.byType.length} types</button>`}${inv.byType.map(({ type, qty }) =>
                 `<div class="task-inv-type"><span class="task-inv-type-name">${escapeHtml(type)}</span><span class="task-inv-type-qty">${qty}</span></div>`).join('')}</div>`;
     } else {
         piecesHtml = (typeof task.piecesCount === 'number' && task.piecesCount > 0)

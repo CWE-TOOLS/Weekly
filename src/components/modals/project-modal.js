@@ -93,7 +93,7 @@ export function initializeProjectModal() {
             e.stopPropagation();
             const list = invToggle.closest('.task-inv-types');
             const open = list && list.classList.toggle('task-inv-types-collapsed') === false;
-            invToggle.innerHTML = `${open ? '&#9662;' : '&#9656;'} ${invToggle.textContent.replace(/^[^0-9]*/, '')}`;
+            invToggle.innerHTML = `${open ? '&#9662; Hide' : '&#9656; Show'} ${invToggle.textContent.replace(/^[^0-9]*/, '')}`;
         }
     });
 
