@@ -289,7 +289,7 @@ li:last-child {
         padding: 0 0.3em;
         font-variant-numeric: tabular-nums;
     }
-    .print-task-inv-type { display: flex; justify-content: space-between; gap: 0.5em; }
+    .print-task-inv-type { display: flex; justify-content: center; gap: 0.4em; }
     .print-task-inv-type span:last-child { font-weight: 700 !important; }
     .print-task-inv-more { font-style: italic; text-align: center; }
     /* Batch tickets still to be printed (Cast cards). */
