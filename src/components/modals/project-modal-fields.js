@@ -5,6 +5,7 @@
  */
 
 import { normalizeDepartmentClass } from '../../utils/ui-utils.js';
+import { invSummaryLine, invSummaryTitle, batchPrintText, INV_TYPES_COLLAPSE_AT } from '../../utils/inventory-card.js';
 import { parseDate } from '../../utils/date-utils.js';
 import { ANIMATION_CONFIG } from '../../config/visual-constants.js';
 import { escapeHtml, sanitizeDescription } from '../../utils/security-utils.js';
@@ -54,9 +55,19 @@ export function renderTaskCard(task, index) {
         && String(task.castingNumber || '').trim() !== '';
     const band = (className, text, missing) =>
         `<div class="${className}${missing ? ' task-missing-data' : ''}">${escapeHtml(text)}</div>`;
-    const piecesHtml = (typeof task.piecesCount === 'number' && task.piecesCount > 0)
-        ? band('task-pieces-count', `${task.piecesCount} pcs`)
-        : (isCastCastingLinked ? band('task-pieces-count', 'Missing pcs count', true) : '');
+    let piecesHtml;
+    if (task.invSummary && task.invSummary.pcs > 0) {
+        const inv = task.invSummary;
+        const open = inv.byType.length <= INV_TYPES_COLLAPSE_AT;   // the modal card has room: show every type
+        piecesHtml = `<div class="task-pieces-count task-inv-summary" title="${escapeHtml(invSummaryTitle(inv))}">${escapeHtml(invSummaryLine(inv))}</div>
+            <div class="task-inv-types${open ? '' : ' task-inv-types-collapsed'}">${open ? '' : `<button type="button" class="task-inv-toggle" data-inv-toggle>&#9656; ${inv.byType.length} types</button>`}${inv.byType.map(({ type, qty }) =>
+                `<div class="task-inv-type"><span class="task-inv-type-name">${escapeHtml(type)}</span><span class="task-inv-type-qty">${qty}</span></div>`).join('')}</div>`;
+    } else {
+        piecesHtml = (typeof task.piecesCount === 'number' && task.piecesCount > 0)
+            ? band('task-pieces-count', `${task.piecesCount} pcs`)
+            : (isCastCastingLinked ? band('task-pieces-count', 'Missing pcs count', true) : '');
+    }
+    const batchPrintHtml = batchPrintText(task.batchPrintState) ? band('task-batch-print', batchPrintText(task.batchPrintState)) : '';
     const colorLogTitle = typeof task.colorLogTitle === 'string' ? task.colorLogTitle.trim() : '';
     const colorLogHtml = colorLogTitle
         ? band('task-color-log', colorLogTitle)
@@ -81,6 +92,7 @@ export function renderTaskCard(task, index) {
             ${colorLogHtml}
             ${castMethodHtml}
             ${batchCountHtml}
+            ${batchPrintHtml}
             <div class="task-description">${task.description && task.description.trim() ? sanitizeDescription(task.description) : '<span class="missing-description">Staging Missing</span>'}</div>
             <div class="task-details">
                 <strong>Date:</strong> ${escapeHtml(formattedDate)}<br>

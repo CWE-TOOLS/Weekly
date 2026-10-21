@@ -5,6 +5,7 @@
  */
 
 import { getIsEditingUnlocked } from '../core/state.js';
+import { invSummaryLine, invSummaryTitle, batchPrintText, INV_TYPES_COLLAPSE_AT } from '../utils/inventory-card.js';
 import { getActualHours } from './modals/actual-hours-modal.js';
 import { RENDERING } from '../config/rendering-constants.js';
 import { normalizeDepartmentClass } from '../config/department-config.js';
@@ -114,10 +115,54 @@ export function createTaskCard(task, rowClass, isEditingUnlocked) {
     // Pieces count — for tasks linked to a casting in the project portal, show
     // the casting's total inventory pieces (quantity + extras) as a slim band
     // directly below the day counter. Set during load by enrichTasksWithPieces.
-    if (typeof task.piecesCount === 'number' && task.piecesCount > 0) {
+    if (task.invSummary && task.invSummary.pcs > 0) {
+        const inv = task.invSummary;
+        const line = document.createElement('div');
+        line.className = 'task-pieces-count task-inv-summary';
+        line.textContent = invSummaryLine(inv);
+        line.title = invSummaryTitle(inv);
+        card.appendChild(line);
+        // Pieces per type: open when short, folded behind a "N types" toggle when long.
+        const list = document.createElement('div');
+        list.className = 'task-inv-types';
+        const collapsible = inv.byType.length > INV_TYPES_COLLAPSE_AT;
+        if (collapsible) {
+            list.classList.add('task-inv-types-collapsed');
+            const toggle = document.createElement('button');
+            toggle.type = 'button';
+            toggle.className = 'task-inv-toggle';
+            toggle.textContent = `\u25B8 ${inv.byType.length} types`;
+            toggle.title = 'Show the pieces per type';
+            toggle.addEventListener('click', (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                const open = list.classList.toggle('task-inv-types-collapsed') === false;
+                toggle.textContent = `${open ? '\u25BE' : '\u25B8'} ${inv.byType.length} types`;
+                toggle.title = open ? 'Hide the pieces per type' : 'Show the pieces per type';
+            });
+            list.appendChild(toggle);
+        }
+        for (const { type, qty } of inv.byType) {
+            const row = document.createElement('div');
+            row.className = 'task-inv-type';
+            const name = document.createElement('span');
+            name.className = 'task-inv-type-name';
+            name.textContent = type;
+            const n = document.createElement('span');
+            n.className = 'task-inv-type-qty';
+            n.textContent = String(qty);
+            row.append(name, n);
+            list.appendChild(row);
+        }
+        card.appendChild(list);
+    } else if (typeof task.piecesCount === 'number' && task.piecesCount > 0) {
         appendBand('task-pieces-count', `${task.piecesCount} pcs`);
     } else if (isCastCastingLinked) {
         appendBand('task-pieces-count', 'Missing pcs count', true);
+    }
+    // Batch tickets still to be printed (Cast cards; from the Releasability Board's Batching Sheets cell).
+    if (batchPrintText(task.batchPrintState)) {
+        appendBand('task-batch-print', batchPrintText(task.batchPrintState));
     }
 
     // Color log title — name(s) of the color log(s) used by this casting's

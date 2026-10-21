@@ -33,7 +33,8 @@ import { loadCastingsForProjects } from './castings-service.js';
 import { loadAllInventoryForProject } from './inventory-service.js';
 import { loadBatchTicketsForCastings } from './batch-ticket-service.js';
 import { loadColorLogsForProjects } from './color-log-service.js';
-import { buildBatchPlan, getColorLogSandLbs } from '../utils/batch-calc.js';
+import { buildBatchPlan, getColorLogSandLbs, roundSig } from '../utils/batch-calc.js';
+import { loadMilestonesForProjects } from './milestones-service.js';
 import { getSpecialBatching } from '../config/special-batching.js';
 import { parseDate } from '../utils/date-utils.js';
 import { setAllTasks, getAllTasks } from '../core/state.js';
@@ -493,18 +494,49 @@ export async function enrichTasksWithPieces(tasks) {
         // Sum quantity + extras per casting (same formula as the portal "pcs"
         // total). Batch tickets + color logs load in parallel — they feed the
         // color-log-title / batch-count enrichment below.
-        const [inventoryByCasting, ticketsByCasting, colorLogsByProject] = await Promise.all([
+        const [inventoryByCasting, ticketsByCasting, colorLogsByProject, milestones] = await Promise.all([
             loadAllInventoryForProject([...referencedIds]),
             loadBatchTicketsForCastings([...referencedIds]),
-            loadColorLogsForProjects(projectNumbers)
+            loadColorLogsForProjects(projectNumbers),
+            loadMilestonesForProjects(projectNumbers).catch(err => { logger.error('[data-service] milestones load failed (non-fatal):', err); return { byCasting: new Map(), touched: new Set() }; })
         ]);
+        // Per-casting inventory summary (2026-10-21): the portal's title-block line
+        // "N types · pcs · cu ft · ff sq ft" plus the pieces per type (qty + extras), in inventory order.
         const piecesById = new Map();
+        const invSummaryById = new Map();
+        const blank = (v) => v === null || v === undefined || v === '';
         for (const [castingId, rows] of inventoryByCasting) {
-            const total = (rows || []).reduce(
-                (sum, r) => sum + (parseInt(r.quantity, 10) || 0) + (parseInt(r.extras, 10) || 0),
-                0
-            );
+            const list = rows || [];
+            const units = (r) => (parseInt(r.quantity, 10) || 0) + (parseInt(r.extras, 10) || 0);
+            const total = list.reduce((sum, r) => sum + units(r), 0);
             if (total > 0) piecesById.set(castingId, total);
+            if (!list.length) continue;
+            const byType = new Map();
+            for (const r of list) {
+                const name = String(r.type || '').trim() || '(no type)';
+                byType.set(name, (byType.get(name) || 0) + units(r));
+            }
+            invSummaryById.set(castingId, {
+                types: list.length,
+                pcs: total,
+                cuFt: roundSig(list.reduce((s, r) => s + (Number(r.cu_ft) || 0) * units(r), 0), 2),
+                ff: roundSig(list.reduce((s, r) => s + (Number(r.ff_sq_ft) || 0) * units(r), 0), 2),
+                cuFtComplete: list.every(r => !blank(r.cu_ft)),
+                ffComplete: list.every(r => !blank(r.ff_sq_ft)),
+                byType: [...byType].map(([type, qty]) => ({ type, qty }))
+            });
+        }
+        // Batch tickets that still have to be printed (2026-10-21), from the Releasability Board's
+        // Batching Sheets cell: never printed (jobs on the board format only) or printed, then the
+        // Casting Inventory changed enough that the tickets come out different.
+        const INV_CHANGED_NOTE = 'Casting Inventory changed after this was printed — print it again';
+        const batchPrintById = new Map();
+        for (const castingId of referencedIds) {
+            const project = (castings.find(c => c.id === castingId) || {}).project_number;
+            if (!milestones.touched.has(String(project || '').trim())) continue;
+            const row = milestones.byCasting.get(castingId)?.get('Batching Sheets') || null;
+            if (!row || row.status === 'red') batchPrintById.set(castingId, 'unprinted');
+            else if (row.status === 'orange' && row.note === INV_CHANGED_NOTE) batchPrintById.set(castingId, 'reprint');
         }
 
         // Per-casting color log title + batch count, mirroring the portal's
@@ -576,6 +608,10 @@ export async function enrichTasksWithPieces(tasks) {
             const id = idByKey.get(`${String(t.projectNumber).trim()}|${String(t.castingNumber).trim()}`);
             const total = id ? piecesById.get(id) : undefined;
             if (total) { t.piecesCount = total; matched++; }
+            const inv = id ? invSummaryById.get(id) : undefined;
+            if (inv) t.invSummary = inv;
+            const bp = (id && t.department === 'Cast') ? batchPrintById.get(id) : undefined;
+            if (bp) t.batchPrintState = bp;
 
             // Color log / cast method / batch count are Cast-department-only
             // readouts (matches t.department === 'Cast' comparisons used

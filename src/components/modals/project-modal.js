@@ -85,6 +85,15 @@ export function initializeProjectModal() {
     modalElement.addEventListener('click', (e) => {
         if (e.target === modalElement) {
             hideProjectModal();
+            return;
+        }
+        // Pieces-per-type fold on a card (2026-10-21): toggles the list, nothing else.
+        const invToggle = e.target.closest('[data-inv-toggle]');
+        if (invToggle) {
+            e.stopPropagation();
+            const list = invToggle.closest('.task-inv-types');
+            const open = list && list.classList.toggle('task-inv-types-collapsed') === false;
+            invToggle.innerHTML = `${open ? '&#9662;' : '&#9656;'} ${invToggle.textContent.replace(/^[^0-9]*/, '')}`;
         }
     });
 

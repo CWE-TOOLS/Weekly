@@ -4,6 +4,8 @@
  */
 
 import { REVENUE } from '../../config/business-constants.js';
+import { invSummaryLine, batchPrintText, INV_TYPES_COLLAPSE_AT } from '../../utils/inventory-card.js';
+import { escapeHtml } from '../../utils/security-utils.js';
 import { PRINT_LAYOUT } from '../../config/layout-constants.js';
 
 
@@ -146,9 +148,19 @@ function createPrintTaskCard(task, departmentClass) {
     // Pieces count (casting inventory qty + extras) for casting-linked tasks —
     // mirrors the on-screen card, sitting just below the day counter. Set during
     // data load by enrichTasksWithPieces; omitted when the casting has no inventory.
-    const piecesHtml = (typeof task.piecesCount === 'number' && task.piecesCount > 0)
-        ? band('print-task-pieces-count', `${task.piecesCount} pcs`)
-        : (isCastCastingLinked ? band('print-task-pieces-count', 'Missing pcs count', true) : '');
+    let piecesHtml;
+    if (task.invSummary && task.invSummary.pcs > 0) {
+        const inv = task.invSummary;
+        const shown = inv.byType.slice(0, INV_TYPES_COLLAPSE_AT);
+        const more = inv.byType.length - shown.length;
+        piecesHtml = band('print-task-pieces-count', escapeHtml(invSummaryLine(inv)))
+            + `<div class="print-task-inv-types">${shown.map(({ type, qty }) => `<div class="print-task-inv-type"><span>${escapeHtml(type)}</span><span>${qty}</span></div>`).join('')}${more > 0 ? `<div class="print-task-inv-more">+ ${more} more ${more === 1 ? 'type' : 'types'}</div>` : ''}</div>`;
+    } else {
+        piecesHtml = (typeof task.piecesCount === 'number' && task.piecesCount > 0)
+            ? band('print-task-pieces-count', `${task.piecesCount} pcs`)
+            : (isCastCastingLinked ? band('print-task-pieces-count', 'Missing pcs count', true) : '');
+    }
+    const batchPrintHtml = batchPrintText(task.batchPrintState) ? band('print-task-batch-print', batchPrintText(task.batchPrintState)) : '';
 
     // Color log title + cast method + batch count — mirror the on-screen card's
     // bands below the pieces count. Set during data load by enrichTasksWithPieces.
@@ -176,6 +188,7 @@ function createPrintTaskCard(task, departmentClass) {
         ${colorLogHtml}
         ${castMethodHtml}
         ${batchCountHtml}
+        ${batchPrintHtml}
         <div class="print-task-description">
             ${task.description && task.description.trim() ? task.description : '<span class="print-missing-description">Staging Missing</span>'}
         </div>

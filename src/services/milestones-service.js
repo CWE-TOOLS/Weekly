@@ -61,6 +61,32 @@ export async function loadMilestonesForProject(projectNumber) {
 }
 
 /**
+ * Every milestone row of several projects (the weekly's cards).
+ * @returns {Promise<{byCasting: Map<string, Map<string, Object>>, touched: Set<string>}>}
+ *   byCasting: castingId -> milestone -> row; touched: project numbers that have any row (= on the new format)
+ */
+export async function loadMilestonesForProjects(projectNumbers) {
+    const out = { byCasting: new Map(), touched: new Set() };
+    const list = [...new Set((projectNumbers || []).map(p => String(p || '').trim()).filter(Boolean))];
+    if (!list.length) return out;
+    const client = await getClient();
+    if (!client) return out;
+    const { data, error } = await client.from(TABLE).select('*').in('project_number', list);
+    if (error) {
+        if (isMissingTable(error)) { notePending(); return out; }
+        logger.error('[milestones] load (projects) failed:', error);
+        throw error;
+    }
+    for (const row of data || []) {
+        out.touched.add(String(row.project_number || '').trim());
+        if (!out.byCasting.has(row.casting_id)) out.byCasting.set(row.casting_id, new Map());
+        out.byCasting.get(row.casting_id).set(row.milestone, row);
+    }
+    migrationPending = false;
+    return out;
+}
+
+/**
  * Every milestone row in the database, with the casting's identity for the board.
  * @returns {Promise<Array<Object>>} rows with .casting = {project_number, casting_number, phase_id}
  */
