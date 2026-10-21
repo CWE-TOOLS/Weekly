@@ -160,10 +160,6 @@ export function createTaskCard(task, rowClass, isEditingUnlocked) {
     } else if (isCastCastingLinked) {
         appendBand('task-pieces-count', 'Missing pcs count', true);
     }
-    // Batch tickets still to be printed (Cast cards; from the Releasability Board's Batching Sheets cell).
-    if (batchPrintText(task.batchPrintState)) {
-        appendBand('task-batch-print', batchPrintText(task.batchPrintState));
-    }
 
     // Color log title — name(s) of the color log(s) used by this casting's
     // batch tickets. Set during load by enrichTasksWithPieces.
@@ -191,6 +187,11 @@ export function createTaskCard(task, rowClass, isEditingUnlocked) {
         appendBand('task-batch-count', `${task.batchCount} ${task.batchCount === 1 ? 'batch' : 'batches'}`);
     } else if (isCastCastingLinked) {
         appendBand('task-batch-count', 'Missing batching', true);
+    }
+
+    // Batch tickets still to be printed (Cast cards; from the Releasability Board's Batching Sheets cell).
+    if (batchPrintText(task.batchPrintState)) {
+        appendBand('task-batch-print', batchPrintText(task.batchPrintState));
     }
 
     // Task description
