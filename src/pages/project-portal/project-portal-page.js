@@ -459,7 +459,8 @@ let currentOptDescExpanded = new Set();    // phaseIds whose description editor 
 // Pre-fills every casting column with the standard production departments so task
 // descriptions can be authored before the Google Sheet schedules them. Names come
 // from DEPARTMENT_ORDER so they match the weekly board's plain department names.
-const STG_DEPARTMENT_SEQUENCE = ['Mill', 'Form Out', 'Cast', 'Demold', 'Finish', 'Seal'];
+const STG_DEPARTMENT_SEQUENCE = ['CNC', 'Parts', 'Form Out', 'Cast', 'Demold', 'Finish', 'Seal'];          // from Nov 2026 the Optimizer has CNC + Parts instead of Mill
+const STG_DEPARTMENT_SEQUENCE_MILL = ['Mill', 'Form Out', 'Cast', 'Demold', 'Finish', 'Seal'];            // castings scheduled or noted under Mill keep their Mill column
 let currentStagingCastingId = null;          // active casting column in the Staging tab
 let currentStagingDescriptions = new Map();  // `${castingNumber}|${dept}|${day}` -> {description, castingSide}
 let currentStagingScaffold = new Map();      // castingNumber -> Array<{ department, days:number }>
@@ -2928,15 +2929,18 @@ function buildStgScaffold() {
         const deptMax = seen.get(castNum) || new Map();
         const depts = [];
         const used = new Set();
-        for (const dept of STG_DEPARTMENT_SEQUENCE) {
+        const legacyMill = deptMax.has('Mill') && !deptMax.has('CNC') && !deptMax.has('Parts');
+        for (const dept of (legacyMill ? STG_DEPARTMENT_SEQUENCE_MILL : STG_DEPARTMENT_SEQUENCE)) {
             depts.push({ department: dept, days: Math.max(1, deptMax.get(dept) || 0) });
             used.add(dept);
         }
         const extras = [...deptMax.keys()].filter(d => !used.has(d));
-        extras.sort((a, b) => DEPARTMENT_ORDER.indexOf(a) - DEPARTMENT_ORDER.indexOf(b));
         for (const dept of extras) {
             depts.push({ department: dept, days: Math.max(1, deptMax.get(dept) || 1) });
         }
+        // Weekly order throughout (a casting with October Mill days and November Parts days reads CNC, Parts, Mill, Form Out…).
+        const orderIdx = (d) => { const i = DEPARTMENT_ORDER.indexOf(d); return i === -1 ? Number.MAX_SAFE_INTEGER : i; };
+        depts.sort((a, b) => orderIdx(a.department) - orderIdx(b.department));
         currentStagingScaffold.set(castNum, depts);
     }
 }

@@ -16,6 +16,8 @@ const PRINT_UTILS = {
     PAGE_HEIGHT_INCHES: 8.0, // Approximate for landscape letter
     DEPARTMENT_ORDER: [
         'Special Events',
+        'CNC',
+        'Parts',
         'Mill',
         'Form Out',
         'Cast',
@@ -39,6 +41,8 @@ const PRINT_UTILS = {
  */
 function getDepartmentColorMapping() {
     return {
+        'cnc': { bg: '#607D8B', text: '#FFFFFF' },
+        'parts': { bg: '#4FC3F7', text: '#0F172A' },
         'mill': { bg: '#06B6D4', text: '#FFFFFF' },
         'form-out': { bg: '#3B82F6', text: '#FFFFFF' },
         'cast': { bg: '#EF4444', text: '#FFFFFF' },

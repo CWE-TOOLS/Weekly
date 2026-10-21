@@ -38,7 +38,7 @@ let currentDeptListKind = 'default';
 // BUY_IN_CRATE_SHIP_LABEL in print-renderer.js for the renderer-side handling.
 export const BUY_IN_CRATE_SHIP = 'Crate / Ship';
 export const BUY_IN_DEPARTMENTS = [
-    'Mill', 'Form Out', 'Cast', 'Batch', 'Samples', 'Demold', 'Layout',
+    'CNC', 'Parts', 'Mill', 'Form Out', 'Cast', 'Batch', 'Samples', 'Demold', 'Layout',
     'Finish', 'Seal', 'Final Insp.', 'Special', BUY_IN_CRATE_SHIP
 ];
 

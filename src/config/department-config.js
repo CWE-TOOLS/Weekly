@@ -6,6 +6,8 @@
 // Department order for sorting
 export const DEPARTMENT_ORDER = [
     'Special Events',
+    'CNC',
+    'Parts',
     'Mill',
     'Form Out',
     'Cast',
@@ -62,6 +64,14 @@ export const DEPARTMENT_DAY_MAPPING = {
 
 // Department colors (CSS custom properties)
 export const DEPARTMENT_COLORS = {
+    cnc: {
+        background: '#607D8B',
+        text: '#FFFFFF'
+    },
+    parts: {
+        background: '#4FC3F7',
+        text: '#0F172A'
+    },
     mill: {
         background: '#06B6D4',
         text: '#FFFFFF'
@@ -143,6 +153,8 @@ export function normalizeDepartment(dept) {
 
     // Handle case-insensitive matching for department names
     if (normalized === 'special events') return 'Special Events';
+    if (normalized === 'cnc') return 'CNC';
+    if (normalized === 'parts') return 'Parts';
     if (normalized === 'mill') return 'Mill';
     if (normalized === 'formout' || normalized === 'form out') return 'Form Out';
     if (normalized === 'cast') return 'Cast';

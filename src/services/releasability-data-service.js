@@ -501,7 +501,7 @@ export async function loadProjectsFromSheets(forceRefresh = false) {
       // The releasability board only tracks Mill and Form Out work
       const relevantDeptTasks = dateInfo.filter(info => {
         const dept = info.task.department;
-        return dept === 'Mill' || dept === 'Form Out';
+        return dept === 'CNC' || dept === 'Parts' || dept === 'Mill' || dept === 'Form Out';   // CNC + Parts replaced Mill from Nov 2026
       });
 
       // Skip project if it has no Mill or Form Out tasks

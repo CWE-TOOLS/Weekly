@@ -48,6 +48,8 @@ export const EDIT_PASSWORD = 'cwe';
 // Department order for sorting
 export const DEPARTMENT_ORDER = [
     'Special Events',
+    'CNC',
+    'Parts',
     'Mill',
     'Form Out',
     'Cast',

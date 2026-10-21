@@ -232,6 +232,16 @@ body { top: 0 !important; }
   text-orientation: mixed;
 }
 
+.department-label.department-cnc {
+  background-color: var(--color-cnc);
+  color: var(--color-cnc-text);
+}
+
+.department-label.department-parts {
+  background-color: var(--color-parts);
+  color: var(--color-parts-text);
+}
+
 .department-label.department-mill {
   background-color: var(--color-mill);
   color: var(--color-mill-text);

@@ -1149,7 +1149,7 @@ function _buildBoardUnresolvedPage(unresolved) {
 // components/modals/print-config-manager.js — that one drives the picker, this
 // one drives the iteration order in the renderer.
 const BUY_IN_DEPARTMENTS = [
-    'Mill', 'Form Out', 'Cast', 'Batch', 'Samples', 'Demold', 'Layout',
+    'CNC', 'Parts', 'Mill', 'Form Out', 'Cast', 'Batch', 'Samples', 'Demold', 'Layout',
     'Finish', 'Seal', 'Final Insp.', 'Special', 'Crate / Ship'
 ];
 

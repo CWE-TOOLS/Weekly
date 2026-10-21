@@ -12,6 +12,16 @@
   position: relative;
 }
 
+.task-card.department-cnc {
+  background-color: var(--color-cnc);
+  color: var(--color-cnc-text);
+}
+
+.task-card.department-parts {
+  background-color: var(--color-parts);
+  color: var(--color-parts-text);
+}
+
 .task-card.department-mill {
   background-color: var(--color-mill);
   color: var(--color-mill-text);

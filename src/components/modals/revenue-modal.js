@@ -17,6 +17,8 @@ import { logger } from '../../utils/logger.js';
 const RATE = 135;
 
 const REVENUE_DEPARTMENTS = [
+    { department: 'CNC', displayName: 'CNC', colorKey: 'cnc' },
+    { department: 'Parts', displayName: 'Parts', colorKey: 'parts' },
     { department: 'Mill', displayName: 'Mill', colorKey: 'mill' },
     { department: 'Form Out', displayName: 'FO', colorKey: 'form-out' },
     { department: 'Cast', displayName: 'Cast', colorKey: 'cast' },

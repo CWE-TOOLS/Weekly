@@ -165,6 +165,8 @@ export function normalizeDepartment(dept) {
     const normalized = dept.toLowerCase().trim();
     // Handle case-insensitive matching for department names
     if (normalized === 'special events') return 'Special Events';
+    if (normalized === 'cnc') return 'CNC';
+    if (normalized === 'parts') return 'Parts';
     if (normalized === 'mill') return 'Mill';
     if (normalized === 'formout' || normalized === 'form out') return 'Form Out';
     if (normalized === 'cast') return 'Cast';

@@ -49,6 +49,12 @@
   --space-2xl: 2rem;
 
   /* Department Colors */
+  --color-cnc: #607D8B;
+  --color-cnc-text: #FFFFFF;
+
+  --color-parts: #4FC3F7;
+  --color-parts-text: #0F172A;
+
   --color-mill: #06B6D4;
   --color-mill-text: #FFFFFF;
 

@@ -11,6 +11,8 @@ import { DEPARTMENT_ORDER, SYNTHETIC_DEPARTMENT_NAMES, normalizeDepartmentClass 
 
 import { logger } from '../utils/logger.js';
 
+const NEW_DEPARTMENTS = ['CNC', 'Parts'];   // added 2026-10 (the Optimizer split Mill into CNC + Parts)
+
 /**
  * Get currently selected departments from checkboxes
  * @returns {string[]} Array of selected department names
@@ -108,6 +110,13 @@ export function populateDepartmentCheckboxes() {
             savedDepartments = [...savedDepartments, dept];
         }
     }
+    // A department added to the list after someone saved their selection starts ticked
+    // (CNC + Parts, November 2026), otherwise its rows would silently stay filtered out.
+    const known = loadState('knownDepartments', null) || departments.filter(d => !NEW_DEPARTMENTS.includes(d));
+    for (const dept of departments) {
+        if (!known.includes(dept) && !savedDepartments.includes(dept)) savedDepartments = [...savedDepartments, dept];
+    }
+    saveState('knownDepartments', departments);
 
     departments.forEach(dept => {
         const listItem = document.createElement('li');

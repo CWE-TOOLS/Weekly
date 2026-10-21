@@ -384,6 +384,16 @@
   }
 }
 
+.task-card.department-cnc {
+  background-color: var(--color-cnc);
+  color: var(--color-cnc-text);
+}
+
+.task-card.department-parts {
+  background-color: var(--color-parts);
+  color: var(--color-parts-text);
+}
+
 .task-card.department-mill {
   background-color: var(--color-mill);
   color: var(--color-mill-text);
@@ -2090,6 +2100,8 @@ body.dragging-active .task-card-placeholder {
 }
 
 /* Department color classes */
+.print-preview-viewport .print-department-header.department-cnc { background-color: #607D8B !important; color: #FFFFFF !important; }
+.print-preview-viewport .print-department-header.department-parts { background-color: #4FC3F7 !important; color: #0F172A !important; }
 .print-preview-viewport .print-department-header.department-mill { background-color: #06B6D4 !important; color: #FFFFFF !important; }
 .print-preview-viewport .print-department-header.department-form-out { background-color: #3B82F6 !important; color: #FFFFFF !important; }
 .print-preview-viewport .print-department-header.department-cast { background-color: #EF4444 !important; color: #FFFFFF !important; }
