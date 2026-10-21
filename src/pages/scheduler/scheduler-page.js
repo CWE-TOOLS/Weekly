@@ -14,9 +14,9 @@ import { initializeSupabase, getSupabaseClient, registerRefreshHandler, isPortal
 import { loadAllProjects } from '../../services/projects-service.js';
 import { loadAllCastingPhasesForProject } from '../../services/optimizer-hours-service.js';
 import {
-    loadScheduleRange, loadScheduleForCastings, insertScheduleRows, updateScheduleRow, deleteScheduleRow,
+    loadScheduleRange, loadScheduleForCastings, insertScheduleRows, updateScheduleRow, deleteScheduleRow, readyFromSettings,
     deleteCastingSchedule, loadScheduleSettings, saveScheduleSetting, isScheduleMigrationPending
-} from '../../services/schedule-service.js?v=20261020-1';
+} from '../../services/schedule-service.js?v=20261021-1';
 import {
     DEPARTMENTS, DEPT_KEYS, TASKS, tasksForDept, taskForPhase, SETTINGS_DEFAULTS, REVENUE_PER_HOUR, SCHEDULABLE_STATUSES, TEAM_DAY_LIMITS
 } from '../../config/scheduler-config.js?v=20261020-5';
@@ -40,6 +40,7 @@ const S = {
     search: '',
     unsSearch: '',                // the "Not yet scheduled" panel's own search box
     scheduledIds: new Set(),      // every casting with days anywhere on the scheduler (any month)
+    ready: new Map(),             // castingId -> flag: "Ready for scheduling" clicked on the portal's Optimizer Hours tab
     pinned: new Set(),            // castings shown even without rows in the window
     busy: false,
     cascade: false                // moving a task also moves every later task of that casting by the same working days
@@ -570,7 +571,8 @@ function renderUnscheduled() {
         const p = S.projectByNumber.get(c.project_number);
         return c.project_number.toLowerCase().includes(s) || (p && (p.project_name || '').toLowerCase().includes(s)) || `cast ${c.casting_number}`.toLowerCase().includes(s);
     };
-    const all = S.castings.filter(c => !scheduled.has(c.id) && S.withInventory.has(c.id));   // no Casting Inventory yet -> not offered
+    // offered only when the PM clicked "Ready for scheduling" on the Optimizer Hours tab AND the casting has a Casting Inventory
+    const all = S.castings.filter(c => !scheduled.has(c.id) && S.ready.has(c.id) && S.withInventory.has(c.id));
     const list = all.filter(c => (!q || matches(c, q)) && (!uq || matches(c, uq)));
     const cnt = $('sc-uns-count');
     if (cnt) cnt.textContent = uq || q ? `${list.length} of ${all.length} castings match` : `${all.length} castings waiting`;
@@ -1354,6 +1356,10 @@ function wire() {
         if (tables.has('casting_phases') || tables.has('project_castings') || tables.has('projects') || tables.has('casting_inventory')) {
             try { await loadBase(); } catch (err) { logger.warn('[scheduler] reload base failed', err); }
         }
+        if (tables.has('plant_schedule_settings')) {
+            try { const saved = await loadScheduleSettings(); S.ready = readyFromSettings(saved); if (Number(saved.target) > 0) S.settings.target = Number(saved.target); if (saved.costs) S.settings.costs = saved.costs; }
+            catch (err) { logger.warn('[scheduler] reload settings failed', err); }
+        }
         if (tables.has('plant_schedule') || tables.has('plant_schedule_settings') || tables.has('casting_phases') || tables.has('project_castings')) {
             if (!editorCtx) { try { await loadRows(); render(); toast('Updated by someone else — reloaded', 'info'); } catch (err) { logger.warn('[scheduler] reload rows failed', err); } }
         }
@@ -1379,6 +1385,7 @@ async function init() {
         if (Array.isArray(saved.holidays)) S.settings.holidays = saved.holidays;
         if (saved.costs && typeof saved.costs === 'object') S.settings.costs = saved.costs;
         if (Number(saved.target) > 0) S.settings.target = Number(saved.target);
+        S.ready = readyFromSettings(saved);
         await loadBase();
         await loadRows();
         render();

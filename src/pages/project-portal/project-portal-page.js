@@ -131,6 +131,8 @@ import { activateJigListTab } from './jig-list.js?v=20261026-1';
 import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, APPROVALS_TAB_ITEMS } from '../../config/milestones-config.js?v=20261020-2';
 import { loadMilestonesForProject, saveMilestone, isMilestonesMigrationPending, loadLayoutConditions, LAYOUT_CONDITION_PREFIX, layoutConditionNote, parseLayoutCondition, sideWords } from '../../services/milestones-service.js';
 import { loadJigListsForProject as loadJigListsForScrim, scrimForInventory } from '../../services/jig-list-service.js';
+import { loadReadyFlags, setReadyFlag } from '../../services/schedule-service.js?v=20261021-1';
+import { loadMilestonesForProject, saveMilestone, isMilestonesMigrationPending, loadLayoutConditions, LAYOUT_CONDITION_PREFIX } from '../../services/milestones-service.js';
 import {
     loadLayoutPositions,
     snapshotLayout,
@@ -2745,6 +2747,7 @@ async function activateOptimizerTab() {
         currentOptCastingId = phaseScoped[0].id;
     }
     await loadAllPhasesForProject();
+    try { optReady = await loadReadyFlags(currentCastings.map(c => c.id)); } catch (e) { optReady = new Map(); }
     renderOptimizer();
 }
 
@@ -3541,6 +3544,7 @@ async function loadAllPhasesForProject() {
 }
 
 function renderOptimizer() {
+    renderOptReadyBar();
     renderOptPills();
     renderOptColumns();
     renderOptTotals();
@@ -3589,6 +3593,49 @@ function renderOptPills() {
 }
 
 /** The Final Optimizer HRS cell on a casting column — looks and works like the board's cell (red − / green ✓). */
+// ---- "Ready for scheduling" (2026-10-21): puts the casting in the Plant Scheduler's "Not yet scheduled" list.
+let optReady = new Map();   // castingId -> { project_number, at }
+function optCastingHours(castingId) { return getPhasesFor(castingId).reduce((n, p) => n + (Number(p.hours) || 0), 0); }
+function optReadyHtml(castingId) {
+    const on = optReady.has(castingId);
+    const at = on && optReady.get(castingId).at ? new Date(optReady.get(castingId).at).toLocaleString() : '';
+    const tip = on ? `Ready for scheduling since ${at} — it is in the Plant Scheduler's "Not yet scheduled" list (once it has a Casting Inventory). Click to take it back.`
+                   : 'Click when this casting\'s hours are ready to be scheduled — it then shows in the Plant Scheduler\'s "Not yet scheduled" list (it also needs a Casting Inventory).';
+    return `<button type="button" class="pp-opt-ready ${on ? 'pp-opt-ready-on' : ''}" data-action="toggle-ready" data-casting-id="${escapeAttr(castingId)}" title="${escapeAttr(tip)}">${on ? '&#10003; Ready for scheduling' : 'Ready for scheduling'}</button>`;
+}
+function renderOptReadyBar() {
+    const bar = document.getElementById('pp-opt-ready-bar');
+    if (!bar) return;
+    const list = getCastingsForActivePhase();
+    if (!list.length) { bar.innerHTML = ''; return; }
+    const n = list.filter(c => optReady.has(c.id)).length;
+    bar.innerHTML = `<span class="pp-opt-ready-count"><strong>${n} of ${list.length}</strong> casting${list.length === 1 ? '' : 's'} ready for scheduling</span>
+        ${n < list.length ? '<button type="button" class="pp-opt-ready-all" data-action="ready-all">Mark all castings ready for scheduling</button>' : '<span class="pp-opt-ready-done">&#10003; all ready</span>'}`;
+}
+async function toggleReady(castingId) {
+    if (!castingId || !currentProjectNumber) return;
+    const on = !optReady.has(castingId);
+    if (on && optCastingHours(castingId) <= 0 && !window.confirm('This casting has no Optimizer Hours yet. Mark it ready for scheduling anyway?')) return;
+    try {
+        await setReadyFlag(castingId, currentProjectNumber, on);
+        if (on) optReady.set(castingId, { project_number: currentProjectNumber, at: new Date().toISOString() }); else optReady.delete(castingId);
+        renderOptimizer();
+        const c = currentCastings.find(x => x.id === castingId);
+        showToast(on ? `Cast ${c?.casting_number || ''} is ready for scheduling` : `Cast ${c?.casting_number || ''} taken back from scheduling`);
+    } catch (err) { showToast('Could not save: ' + (err.message || err), 'error'); }
+}
+async function markAllReady() {
+    const list = getCastingsForActivePhase().filter(c => !optReady.has(c.id));
+    if (!list.length || !currentProjectNumber) return;
+    const empty = list.filter(c => optCastingHours(c.id) <= 0).length;
+    if (!window.confirm(`Mark ${list.length} casting${list.length === 1 ? '' : 's'} ready for scheduling?${empty ? `\n\n${empty} of them ha${empty === 1 ? 's' : 've'} no Optimizer Hours yet.` : ''}`)) return;
+    try {
+        for (const c of list) { await setReadyFlag(c.id, currentProjectNumber, true); optReady.set(c.id, { project_number: currentProjectNumber, at: new Date().toISOString() }); }
+        renderOptimizer();
+        showToast(`${list.length} casting${list.length === 1 ? '' : 's'} ready for scheduling`);
+    } catch (err) { showToast('Could not save: ' + (err.message || err), 'error'); renderOptimizer(); }
+}
+
 function optMsCellHtml(castingId) {
     if (!msOn()) return '';
     const green = msStatus(castingId, 'Final Optimizer HRS') === MS.GREEN;
@@ -3695,6 +3742,7 @@ function renderOptColumn(casting) {
                     </button>
                 </div>
                 ${optMsCellHtml(casting.id)}
+                ${optReadyHtml(casting.id)}
             </div>
             <div class="pp-opt-cards" data-casting-id="${escapeAttr(casting.id)}">
                 ${cardsHtml}
@@ -5913,6 +5961,7 @@ const LIVE_TABLE_TABS = {
     batch_tickets: ['batch-tickets', 'color-log'],
     color_logs: ['color-log', 'batch-tickets', 'castings'],
     casting_phases: ['optimizer', 'actual-labor'],
+    plant_schedule_settings: ['optimizer'],   // "Ready for scheduling" flags
     actual_hours: ['actual-labor'],
     task_descriptions: ['staging'],
     jig_lists: ['jig-list'],
@@ -8465,12 +8514,16 @@ function wireEvents() {
         if (cell) { await toggleApproval(cell.dataset.castingId, cell.dataset.milestone); renderApprovals(); }
     });
 
+    document.getElementById('pp-opt-ready-bar')?.addEventListener('click', (e) => { if (e.target.closest('[data-action="ready-all"]')) markAllReady(); });
+
     // Optimizer: column container (event delegation across all visible columns)
     const optColumns = document.getElementById('pp-opt-columns');
 
     optColumns.addEventListener('click', (e) => {
         const msBtn = e.target.closest('button[data-action="toggle-final-hours"]');
         if (msBtn) { toggleFinalHours(msBtn.dataset.castingId); return; }
+        const readyBtn = e.target.closest('button[data-action="toggle-ready"]');
+        if (readyBtn) { toggleReady(readyBtn.dataset.castingId); return; }
         // Copy hours
         const copyBtn = e.target.closest('button[data-action="copy-hours"]');
         if (copyBtn) {

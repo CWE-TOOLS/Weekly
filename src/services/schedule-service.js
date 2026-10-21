@@ -92,6 +92,45 @@ export async function deleteCastingSchedule(castingId, all = false) {
     if (error) { logger.error('[schedule] deleteCastingSchedule', error); throw error; }
 }
 
+/** "Ready for scheduling" (set on the portal's Optimizer Hours tab): one settings row per casting, key "ready:<castingId>". */
+export const READY_PREFIX = 'ready:';
+
+/** castingId -> { project_number, at } for the given castings. */
+export async function loadReadyFlags(castingIds) {
+    const out = new Map();
+    const client = await getClient();
+    if (!client || !castingIds.length) return out;
+    for (let i = 0; i < castingIds.length; i += 80) {
+        const keys = castingIds.slice(i, i + 80).map(id => READY_PREFIX + id);
+        const { data, error } = await client.from(SETTINGS_TABLE).select('key, value').in('key', keys);
+        if (error) {
+            if (missingTable(error)) { migrationPending = true; return out; }
+            logger.error('[schedule] loadReadyFlags', error);
+            return out;
+        }
+        for (const r of data || []) out.set(r.key.slice(READY_PREFIX.length), r.value || {});
+    }
+    return out;
+}
+
+/** Mark / unmark one casting ready for scheduling. */
+export async function setReadyFlag(castingId, projectNumber, on) {
+    const client = await getClient();
+    if (!client || !castingId) return;
+    const key = READY_PREFIX + castingId;
+    const { error } = on
+        ? await client.from(SETTINGS_TABLE).upsert({ key, value: { project_number: projectNumber || null, at: new Date().toISOString() }, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+        : await client.from(SETTINGS_TABLE).delete().eq('key', key);
+    if (error) { logger.error('[schedule] setReadyFlag', error); throw error; }
+}
+
+/** The ready flags out of a loadScheduleSettings() object. */
+export function readyFromSettings(saved) {
+    const out = new Map();
+    for (const [k, v] of Object.entries(saved || {})) if (k.startsWith(READY_PREFIX)) out.set(k.slice(READY_PREFIX.length), v || {});
+    return out;
+}
+
 /** Shared settings as one object (keys: dayHours, holidays, weeks, showWeekends …). */
 export async function loadScheduleSettings() {
     const client = await getClient();

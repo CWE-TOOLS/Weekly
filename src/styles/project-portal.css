@@ -6699,3 +6699,12 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
 .pp-bt-totals-scrim-warn {
     color: #b45309;
 }
+/* Ready for scheduling (Plant Scheduler) — Optimizer Hours tab, 2026-10-21 */
+.pp-opt-ready { display: block; width: 100%; margin-top: 6px; padding: 5px 8px; border: 1px dashed #2563eb; border-radius: 6px; background: #fff; color: #1d4ed8; font-weight: 700; font-size: 12px; cursor: pointer; }
+.pp-opt-ready:hover { background: #eff6ff; }
+.pp-opt-ready.pp-opt-ready-on { border-style: solid; border-color: #15803d; background: #dcfce7; color: #14532d; }
+.pp-opt-ready-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0 0 10px; font-size: 13px; }
+.pp-opt-ready-bar:empty { display: none; }
+.pp-opt-ready-all { padding: 5px 12px; border: 1px solid #2563eb; border-radius: 6px; background: #2563eb; color: #fff; font-weight: 700; font-size: 12px; cursor: pointer; }
+.pp-opt-ready-all:hover { background: #1d4ed8; }
+.pp-opt-ready-done { color: #15803d; font-weight: 700; }
