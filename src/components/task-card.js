@@ -131,13 +131,13 @@ export function createTaskCard(task, rowClass, isEditingUnlocked) {
             const toggle = document.createElement('button');
             toggle.type = 'button';
             toggle.className = 'task-inv-toggle';
-            toggle.textContent = `\u25B8 ${inv.byType.length} types`;
+            toggle.textContent = `\u25B8 Show ${inv.byType.length} types`;
             toggle.title = 'Show the pieces per type';
             toggle.addEventListener('click', (e) => {
                 e.stopPropagation();
                 e.preventDefault();
                 const open = list.classList.toggle('task-inv-types-collapsed') === false;
-                toggle.textContent = `${open ? '\u25BE' : '\u25B8'} ${inv.byType.length} types`;
+                toggle.textContent = `${open ? '\u25BE Hide' : '\u25B8 Show'} ${inv.byType.length} types`;
                 toggle.title = open ? 'Hide the pieces per type' : 'Show the pieces per type';
             });
             list.appendChild(toggle);
