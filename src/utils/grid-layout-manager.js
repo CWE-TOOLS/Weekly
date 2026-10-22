@@ -39,31 +39,29 @@
  *
  * @modifies DOM - Sets minHeight on all grid rows
  */
+/** false = each card is as tall as its own content; true = every card in a row is stretched to the row's tallest card. */
+export const CARDS_STRETCH_TO_ROW = false;
+
 export function equalizeAllCardHeights() {
     const container = document.getElementById('schedule-container');
     if (!container) return;
 
-    const allRowClasses = new Set();
-
-    // Collect all row classes from all grids
-    container.querySelectorAll('.schedule-grid').forEach(grid => {
-        const rowClasses = grid.dataset.rowClasses || '';
-        rowClasses.split(',').forEach(cls => {
-            if (cls) allRowClasses.add(cls);
-        });
-    });
-
-    // PHASE 0+1 (merged): Query once, clear minHeight, cache refs, then read heights
-    // This eliminates a duplicate querySelectorAll per row class (~30+ saved queries)
+    // Each week equalises on its own (2026-10-22): a row is as tall as the tallest card in that row
+    // THIS week, not the tallest card in any week in memory (that left whole rows of empty, very long cards).
+    // PHASE 0+1 (merged): query once per grid + row class, clear minHeight, cache refs, then read heights
     const rowNodeLists = new Map();
 
-    allRowClasses.forEach(rowClass => {
-        const rows = container.querySelectorAll(`.${rowClass}`);
-        if (rows.length === 0) return;
-        // Clear minHeight so rows return to natural height
-        rows.forEach(row => { row.style.minHeight = ''; });
-        // Cache the NodeList for read + write phases
-        rowNodeLists.set(rowClass, rows);
+    container.querySelectorAll('.schedule-grid').forEach((grid, gridIdx) => {
+        const rowClasses = grid.dataset.rowClasses || '';
+        rowClasses.split(',').forEach(cls => {
+            if (!cls) return;
+            const rows = grid.querySelectorAll(`.${cls}`);
+            if (rows.length === 0) return;
+            // Clear minHeight so rows return to natural height
+            rows.forEach(row => { row.style.minHeight = ''; });
+            // Cache the NodeList for read + write phases
+            rowNodeLists.set(`${gridIdx}:${cls}`, rows);
+        });
     });
 
     // Force a reflow so the browser recalculates natural heights
@@ -87,6 +85,9 @@ export function equalizeAllCardHeights() {
 
     // PHASE 2: Batch all DOM writes after all reads complete
     // This ensures the browser only needs to reflow once after all changes
+    // Cards keep their own height (2026-10-22): the row is still as tall as its longest card, but the other
+    // cards in it no longer stretch to fill it, so a long note does not turn its neighbours into empty blue columns.
+    if (!CARDS_STRETCH_TO_ROW) return;
     rowHeights.forEach(({ rows, maxHeight }) => {
         rows.forEach(row => {
             row.style.minHeight = `${maxHeight}px`;  // DOM WRITE only
