@@ -27,6 +27,7 @@ const S = {
     placements: new Map(),   // key -> finishing_map row
     projects: new Map(),     // project_number -> { project_name, status, pm }
     selectedKey: null,       // tap-to-move: the card waiting for an area
+    expandedKey: null,       // a card inside an area opened to its full size
     search: '',
     loading: false,
     log: [],
@@ -136,33 +137,56 @@ function matchesSearch(c, q = S.search) { return !q || searchText(c).includes(q)
 
 // ---------------------------------------------------------------- cards
 
-/** Full card: the queue. */
-function queueCardHtml(c) {
-    const row = S.placements.get(c.key);
+/** The lines every full card shows (queue card, expanded chip, expanded pop-up row). */
+function cardBodyHtml(c) {
     const p = projectOf(c.projectNumber);
     const inv = c.inv ? `${c.inv.types} types · ${c.inv.pcs} pcs` : '';
     const finish = c.finishDays ? `Finish day ${Math.min(c.finishDaysDone, c.finishDays) || 1} of ${c.finishDays}` : '';
     const next = c.next ? `Next: ${c.next.department} ${fmtDate(c.next.date)}` : (c.lastShip ? `Ship ${fmtDate(c.lastShip)}` : '');
-    const stale = isStale(c);
-    const staleNote = stale ? (c.lastDate ? `No weekly days since ${fmtDate(c.lastDate)} — shipped?` : 'Not on the weekly any more — shipped?') : '';
-    const moved = row && row.moved_at ? `${row.moved_by ? escapeHtml(row.moved_by) + ' · ' : ''}${new Date(row.moved_at).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })}` : '';
-    const cls = ['fm-card', S.selectedKey === c.key ? 'fm-card-selected' : '', matchesSearch(c) ? '' : 'fm-card-dim', stale ? 'fm-card-stale' : ''].filter(Boolean).join(' ');
-    return `<div class="${cls}" draggable="true" data-key="${escapeHtml(c.key)}" title="${escapeHtml(c.sheetName || jobName(c))}">
-        <div class="fm-card-job">${escapeHtml(jobName(c))}</div>
+    const staleNote = isStale(c) ? (c.lastDate ? `No weekly days since ${fmtDate(c.lastDate)} — shipped?` : 'Not on the weekly any more — shipped?') : '';
+    return `<div class="fm-card-job">${escapeHtml(jobName(c))}</div>
         <div class="fm-card-cast">Cast ${escapeHtml(c.castingNumber)}<span class="fm-card-pn">${escapeHtml(c.projectNumber)}</span></div>
         ${p && p.pm ? `<div class="fm-card-meta">${escapeHtml(p.pm)}</div>` : ''}
         ${inv ? `<div class="fm-card-meta">${escapeHtml(inv)}</div>` : ''}
         ${finish ? `<div class="fm-card-meta fm-card-finish">${escapeHtml(finish)}</div>` : ''}
         ${next ? `<div class="fm-card-meta">${escapeHtml(next)}</div>` : ''}
-        ${staleNote ? `<div class="fm-card-meta fm-card-stale-note">${escapeHtml(staleNote)}</div>` : ''}
+        ${staleNote ? `<div class="fm-card-meta fm-card-stale-note">${escapeHtml(staleNote)}</div>` : ''}`;
+}
+
+function movedLine(c) {
+    const row = S.placements.get(c.key);
+    return row && row.moved_at ? `${row.moved_by ? escapeHtml(row.moved_by) + ' · ' : ''}${new Date(row.moved_at).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })}` : '';
+}
+
+function moveSelectHtml(c, currentArea) {
+    const options = [`<option value="">Move to…</option>`, `<option value="__queue">Queue (not placed)</option>`]
+        .concat(FINISHING_AREAS.filter(a => a.id !== currentArea).map(a => `<option value="${a.id}">${escapeHtml(areaLabel(a.id))}</option>`))
+        .join('');
+    return `<select class="fm-move-select" data-move-one="${escapeHtml(c.key)}" title="Move this casting">${options}</select>`;
+}
+
+/** Full card: the queue. */
+function queueCardHtml(c) {
+    const moved = movedLine(c);
+    const cls = ['fm-card', S.selectedKey === c.key ? 'fm-card-selected' : '', matchesSearch(c) ? '' : 'fm-card-dim', isStale(c) ? 'fm-card-stale' : ''].filter(Boolean).join(' ');
+    return `<div class="${cls}" draggable="true" data-key="${escapeHtml(c.key)}" title="${escapeHtml(c.sheetName || jobName(c))}">
+        ${cardBodyHtml(c)}
         <div class="fm-card-foot">${moved ? `<span class="fm-card-moved">${moved}</span>` : '<span></span>'}<button type="button" class="fm-mini-btn" data-action="ship" data-key="${escapeHtml(c.key)}" title="Mark this casting as shipped">Shipped</button></div>
     </div>`;
 }
 
-/** Collapsed card: inside an area (job, cast, job number, pieces). */
+/** Collapsed card: inside an area (job, cast, job number, pieces). Click = open to the full card. */
 function chipHtml(c) {
     const pcs = c.inv && c.inv.pcs != null ? `${c.inv.pcs} pcs` : '';
     const stale = isStale(c);
+    if (S.expandedKey === c.key) {
+        const moved = movedLine(c);
+        const cls = ['fm-card', 'fm-chip-expanded', matchesSearch(c) ? '' : 'fm-card-dim', stale ? 'fm-card-stale' : ''].filter(Boolean).join(' ');
+        return `<div class="${cls}" draggable="true" data-key="${escapeHtml(c.key)}" data-expanded="1" title="Click the name to close">
+            ${cardBodyHtml(c)}
+            <div class="fm-card-foot">${moved ? `<span class="fm-card-moved">${moved}</span>` : '<span></span>'}${moveSelectHtml(c, S.placements.get(c.key)?.area || null)}<button type="button" class="fm-mini-btn" data-action="ship" data-key="${escapeHtml(c.key)}" title="Mark this casting as shipped">Shipped</button></div>
+        </div>`;
+    }
     const cls = ['fm-chip', S.selectedKey === c.key ? 'fm-card-selected' : '', matchesSearch(c) ? '' : 'fm-card-dim', stale ? 'fm-card-stale' : ''].filter(Boolean).join(' ');
     return `<div class="${cls}" draggable="true" data-key="${escapeHtml(c.key)}" title="${escapeHtml(c.sheetName || jobName(c))}${stale ? ' — no weekly days for a while, shipped?' : ''}">
         <span class="fm-chip-job">${escapeHtml(jobName(c))}</span>
@@ -173,17 +197,16 @@ function chipHtml(c) {
 /** Row in the area pop-up: tick box + collapsed info + Shipped. Moves happen from the bar above the list. */
 function modalRowHtml(c) {
     const pcs = c.inv && c.inv.pcs != null ? `${c.inv.pcs} pcs` : '';
-    const p = projectOf(c.projectNumber);
     const stale = isStale(c);
     const checked = S.modal && S.modal.selected && S.modal.selected.has(c.key);
-    return `<label class="fm-mrow${stale ? ' fm-card-stale' : ''}${checked ? ' fm-mrow-checked' : ''}" data-key="${escapeHtml(c.key)}">
+    const open = S.modal && S.modal.expandedKey === c.key;
+    return `<div class="fm-mrow${stale ? ' fm-card-stale' : ''}${checked ? ' fm-mrow-checked' : ''}${open ? ' fm-mrow-open' : ''}" data-key="${escapeHtml(c.key)}" data-mrow="${escapeHtml(c.key)}">
         <input type="checkbox" class="fm-mrow-check" data-check="${escapeHtml(c.key)}"${checked ? ' checked' : ''}>
-        <div class="fm-mrow-text">
-            <div class="fm-card-job">${escapeHtml(jobName(c))} <b>Cast ${escapeHtml(c.castingNumber)}</b> <span class="fm-card-pn">${escapeHtml(c.projectNumber)}</span></div>
-            <div class="fm-card-meta">${[p && p.pm, pcs, c.next ? `Next: ${c.next.department} ${fmtDate(c.next.date)}` : '', stale ? (c.lastDate ? `No weekly days since ${fmtDate(c.lastDate)} — shipped?` : 'Not on the weekly any more — shipped?') : ''].filter(Boolean).map(escapeHtml).join(' · ')}</div>
+        <div class="fm-mrow-text" data-expand="${escapeHtml(c.key)}" title="${open ? 'Click to close' : 'Click for the full card'}">
+            ${open ? cardBodyHtml(c) : `<div class="fm-card-job">${escapeHtml(jobName(c))} <b>Cast ${escapeHtml(c.castingNumber)}</b> <span class="fm-card-pn">${escapeHtml(c.projectNumber)}</span> <span class="fm-card-meta">${escapeHtml(pcs)}</span></div>`}
         </div>
         <button type="button" class="fm-mini-btn" data-action="ship" data-key="${escapeHtml(c.key)}">Shipped</button>
-    </label>`;
+    </div>`;
 }
 
 /** The bar above an area's list: select all, how many are ticked, where to move them. */
@@ -245,7 +268,14 @@ function renderMap() {
     $('fm-shipped-count').textContent = String(shipped.length);
     document.body.classList.toggle('fm-selecting', !!S.selectedKey);
     markOverflow();
+    const openChip = map.querySelector('[data-expanded="1"]');
+    if (openChip) openChip.addEventListener('mouseleave', () => { if (S.expandedKey === openChip.dataset.key) { S.expandedKey = null; renderMap(); } }, { once: true });
     if (S.modal) renderModalBody();
+}
+
+function armRowCollapse() {
+    const openRow = document.querySelector('#fm-modal .fm-mrow-open');
+    if (openRow) openRow.addEventListener('mouseleave', () => { if (S.modal && S.modal.expandedKey === openRow.dataset.mrow) { S.modal.expandedKey = null; renderModalBody(); } }, { once: true });
 }
 
 /** A full cell: the title says how many are out of sight and that clicking shows them all. */
@@ -289,6 +319,7 @@ function renderModalBody() {
         const keep = new Set(list.map(c => c.key));
         for (const k of [...S.modal.selected]) if (!keep.has(k)) S.modal.selected.delete(k);   // moved away or shipped: drop it
         body.innerHTML = bulkBarHtml(id, rows.map(c => c.key)) + (rows.length ? rows.map(c => modalRowHtml(c)).join('') : `<div class="fm-empty">${list.length ? 'No jobs match.' : 'Nothing here.'}</div>`);
+        armRowCollapse();
     } else if (S.modal.kind === 'shipped') {
         const { shipped } = partition();
         title.textContent = `Shipped — last ${SHIPPED_WINDOW_DAYS} days (${shipped.length})`;
@@ -476,6 +507,10 @@ function wireEvents() {
         zone.classList.add('fm-drop-hover');
     });
     app.addEventListener('dragleave', (e) => { e.target.closest?.('[data-area]')?.classList.remove('fm-drop-hover'); });
+    app.addEventListener('change', (e) => {
+        const sel = e.target.closest('select[data-move-one]');
+        if (sel && sel.value) { const v = sel.value; S.expandedKey = null; moveTo(sel.dataset.moveOne, v === '__queue' ? null : v); }
+    });
     app.addEventListener('drop', (e) => {
         const zone = e.target.closest('[data-area]');
         if (!zone) return;
@@ -495,9 +530,15 @@ function wireEvents() {
         }
         const head = e.target.closest('[data-open-area]');
         if (head) { S.selectedKey = null; renderMap(); openModal('area', { areaId: head.dataset.openArea }); return; }
+        if (e.target.closest('select')) return;
         const card = e.target.closest('[draggable="true"][data-key]');
         if (card) {
-            S.selectedKey = S.selectedKey === card.dataset.key ? null : card.dataset.key;
+            if (card.classList.contains('fm-chip') || card.dataset.expanded) {        // inside an area: open / close the full card
+                S.expandedKey = S.expandedKey === card.dataset.key ? null : card.dataset.key;
+                S.selectedKey = null;
+            } else {                                                                   // queue card: tap, then tap an area
+                S.selectedKey = S.selectedKey === card.dataset.key ? null : card.dataset.key;
+            }
             renderMap();
             return;
         }
@@ -532,6 +573,12 @@ function wireEvents() {
             e.preventDefault();
             if (btn.dataset.action === 'ship') ship(btn.dataset.key);
             if (btn.dataset.action === 'unship') ship(btn.dataset.key, true);
+            return;
+        }
+        const txt = e.target.closest('[data-expand]');
+        if (txt && S.modal && S.modal.kind === 'area') {
+            S.modal.expandedKey = S.modal.expandedKey === txt.dataset.expand ? null : txt.dataset.expand;
+            renderModalBody();
             return;
         }
         const jobRow = e.target.closest('[data-log-key]');
