@@ -7213,8 +7213,10 @@ function buildColorLogSelectHtml(selectedId, opts = {}) {
         return `<option value="${escapeHtml(l.id)}"${sel}>${escapeHtml(l.name || '(unnamed)')}</option>`;
     }).join('');
     // Auto-select first when nothing matches (e.g. legacy row with null FK).
-    const placeholderOpt = selectedId && !currentColorLogs.some(l => l.id === selectedId)
-        ? `<option value="" disabled selected>— Pick color log —</option>`
+    // No colour stored (or one that no longer exists): say so instead of letting the browser show the first log
+    // as if it were chosen — that is how whole castings ended up printing "no color in the inventory" (2026-10-22).
+    const placeholderOpt = !selectedId || !currentColorLogs.some(l => l.id === selectedId)
+        ? `<option value="" selected>— Pick color —</option>`
         : '';
     return `<select class="${cls}" ${dataAttrs}>${placeholderOpt}${options}</select>`;
 }
