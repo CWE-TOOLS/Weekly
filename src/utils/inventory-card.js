@@ -33,6 +33,13 @@ export function invMissingText(task) {
     return task.castingInPortal ? 'NO CASTING INVENTORY YET' : 'CAST NOT FOUND IN THE PORTAL';
 }
 
+/** "SPECIAL CONDITION — SIDE A: vertical curing racks" for a Cast card whose casting has one ('' otherwise). */
+export function layoutConditionText(task) {
+    const c = task && task.layoutCondition;
+    if (!c || !c.name) return '';
+    return `SPECIAL CONDITION${c.side ? ' \u2014 SIDE ' + c.side : ''}: ${c.name}`;
+}
+
 export function batchPrintText(state) {
     if (state === 'unprinted') return 'BATCH TICKETS NOT PRINTED YET';
     if (state === 'reprint') return 'BATCH TICKETS CHANGED — PRINT AGAIN';

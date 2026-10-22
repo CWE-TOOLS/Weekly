@@ -354,6 +354,17 @@
 }
 
 /* Batch tickets still to be printed (Cast cards; from the Releasability Board). */
+.task-layout-cond {
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-align: center;
+  padding: 0.2rem 0.3rem;
+  margin: -0.1rem -0.35rem 0.25rem -0.35rem;
+  background-color: #4c1d95;
+  color: #ffffff;
+}
+
 .task-batch-print {
   font-size: 0.82rem;
   font-weight: 800;

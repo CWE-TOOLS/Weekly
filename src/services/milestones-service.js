@@ -107,6 +107,23 @@ export async function loadAllMilestones() {
 
 /** Prefix used in the note of a "Casting Layout" row that was marked green by a special condition. */
 export const LAYOUT_CONDITION_PREFIX = 'Special condition: ';
+const LAYOUT_SIDE_RE = /\s*\(Side ([AB])\)\s*$/;
+
+/** Note text for a special layout condition: "Special condition: <name> (Side A)". */
+export function layoutConditionNote(name, side) {
+    const s = (side === 'A' || side === 'B') ? ` (Side ${side})` : '';
+    return LAYOUT_CONDITION_PREFIX + String(name || '').trim() + s;
+}
+/** { name, side } from a Casting Layout note, or null when it is not a special condition. side is 'A' | 'B' | null. */
+export function parseLayoutCondition(note) {
+    const n = String(note || '');
+    if (!n.startsWith(LAYOUT_CONDITION_PREFIX)) return null;
+    let name = n.slice(LAYOUT_CONDITION_PREFIX.length).trim();
+    const m = name.match(LAYOUT_SIDE_RE);
+    const side = m ? m[1] : null;
+    if (m) name = name.slice(0, m.index).trim();
+    return name ? { name, side } : null;
+}
 
 /**
  * Every special layout condition ever used, on any job — the names after the prefix, A→Z.
@@ -127,8 +144,8 @@ export async function loadLayoutConditions() {
     }
     const names = new Set();
     for (const r of data || []) {
-        const n = String(r.note || '').slice(LAYOUT_CONDITION_PREFIX.length).trim();
-        if (n) names.add(n);
+        const c = parseLayoutCondition(r.note);
+        if (c) names.add(c.name);
     }
     return [...names].sort((a, b) => a.localeCompare(b));
 }

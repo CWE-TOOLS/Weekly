@@ -34,7 +34,7 @@ import { loadAllInventoryForProject } from './inventory-service.js';
 import { loadBatchTicketsForCastings } from './batch-ticket-service.js';
 import { loadColorLogsForProjects } from './color-log-service.js';
 import { buildBatchPlan, getColorLogSandLbs, roundSig } from '../utils/batch-calc.js';
-import { loadMilestonesForProjects } from './milestones-service.js';
+import { loadMilestonesForProjects, parseLayoutCondition } from './milestones-service.js';
 import { getSpecialBatching } from '../config/special-batching.js';
 import { parseDate } from '../utils/date-utils.js';
 import { setAllTasks, getAllTasks } from '../core/state.js';
@@ -478,9 +478,11 @@ export async function enrichTasksWithPieces(tasks) {
         if (!castings || castings.length === 0) return;
 
         const idByKey = new Map();
+        const sideById = new Map();   // the casting's own Side A/B (project_castings.casting_side)
         for (const c of castings) {
             const key = `${String(c.project_number || '').trim()}|${String(c.casting_number || '').trim()}`;
             if (c.id) idByKey.set(key, c.id);
+            if (c.id && (c.casting_side === 'A' || c.casting_side === 'B')) sideById.set(c.id, c.casting_side);
         }
 
         // Only fetch inventory for castings actually referenced by a task in view.
@@ -607,6 +609,14 @@ export async function enrichTasksWithPieces(tasks) {
         for (const t of linked) {
             const id = idByKey.get(`${String(t.projectNumber).trim()}|${String(t.castingNumber).trim()}`);
             t.castingInPortal = !!id;   // false = no casting with this job + cast number in the portal (name mismatch, or not entered yet)
+            if (id) t.castingId = id;
+            // The casting's Side A/B lives on the casting itself (portal + weekly keep it in sync); it wins over the old per-day value.
+            if (id && sideById.has(id) && (t.department === 'Cast' || t.department === 'Demold')) t.castingSide = sideById.get(id);
+            // Special layout condition (Casting Layout milestone note) shows on the Cast cards.
+            if (id && t.department === 'Cast') {
+                const cond = parseLayoutCondition(milestones.byCasting.get(id)?.get('Casting Layout')?.note);
+                if (cond) t.layoutCondition = cond;
+            }
             const total = id ? piecesById.get(id) : undefined;
             if (total) { t.piecesCount = total; matched++; }
             const inv = id ? invSummaryById.get(id) : undefined;

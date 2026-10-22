@@ -5,7 +5,7 @@
  */
 
 import { getIsEditingUnlocked } from '../core/state.js';
-import { invSummaryLine, invSummaryTitle, batchPrintText, invMissingText, INV_TYPES_COLLAPSE_AT } from '../utils/inventory-card.js';
+import { invSummaryLine, invSummaryTitle, batchPrintText, invMissingText, layoutConditionText, INV_TYPES_COLLAPSE_AT } from '../utils/inventory-card.js';
 import { getActualHours } from './modals/actual-hours-modal.js';
 import { RENDERING } from '../config/rendering-constants.js';
 import { normalizeDepartmentClass } from '../config/department-config.js';
@@ -83,6 +83,14 @@ export function createTaskCard(task, rowClass, isEditingUnlocked) {
         sideDiv.className = 'task-casting-side';
         sideDiv.textContent = `Side ${task.castingSide}`;
         card.appendChild(sideDiv);
+    }
+    // Special layout condition from the portal's Casting Layout tab (Cast cards; 2026-10-22).
+    if (task.department === 'Cast' && layoutConditionText(task)) {
+        const condDiv = document.createElement('div');
+        condDiv.className = 'task-layout-cond';
+        condDiv.textContent = layoutConditionText(task);
+        condDiv.title = 'Set in the portal: Casting Layout tab, special condition';
+        card.appendChild(condDiv);
     }
 
     // Project manager (from projects table) — falls back to the Google Sheet

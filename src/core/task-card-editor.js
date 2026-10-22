@@ -160,6 +160,19 @@ export async function saveTaskCardEdit(taskCard) {
                 await saveToStaging(task.project, [entry]);
             }
 
+            // Side A/B is a property of the casting: write it to the portal's casting too, and keep the
+            // other cards of the same casting (Cast + Demold days) in step (2026-10-22).
+            if (newCastingSide !== undefined && task.castingId) {
+                try {
+                    const { updateCasting } = await import('../services/castings-service.js');
+                    await updateCasting(task.castingId, { casting_side: newCastingSide });
+                    for (const o of allTasks) {
+                        if (o !== task && o.castingId === task.castingId && (o.department === 'Cast' || o.department === 'Demold')) o.castingSide = newCastingSide;
+                    }
+                } catch (err) {
+                    logger.error('[task-card-editor] casting side not saved to the portal (run migration/casting-side.sql?):', err);
+                }
+            }
             // Send refresh signal to other clients
             await supabaseService.sendRefreshSignal({
                 operation: 'task_description_update',

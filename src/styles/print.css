@@ -302,6 +302,16 @@ li:last-child {
         margin-top: 0.1em;
     }
     /* Batch tickets still to be printed (Cast cards). */
+    .print-task-layout-cond {
+        font-size: 0.95em !important;
+        font-weight: 800 !important;
+        letter-spacing: 0.03em;
+        text-align: center;
+        margin-bottom: 0.2em;
+        background: #4c1d95 !important;
+        color: #ffffff !important;
+        padding: 0.15em 0.3em;
+    }
     .print-task-batch-print {
         font-size: 0.95em !important;
         font-weight: 800 !important;

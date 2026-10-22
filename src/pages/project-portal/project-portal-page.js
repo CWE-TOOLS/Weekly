@@ -129,7 +129,7 @@ import { renderCastingLayout } from './casting-layout.js?v=20260701-01';
 import { attachLayoutDrag } from './casting-layout-drag.js?v=20260701-01';
 import { activateJigListTab } from './jig-list.js?v=20261014-6';
 import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, APPROVALS_TAB_ITEMS } from '../../config/milestones-config.js?v=20261020-2';
-import { loadMilestonesForProject, saveMilestone, isMilestonesMigrationPending, loadLayoutConditions, LAYOUT_CONDITION_PREFIX } from '../../services/milestones-service.js';
+import { loadMilestonesForProject, saveMilestone, isMilestonesMigrationPending, loadLayoutConditions, LAYOUT_CONDITION_PREFIX, layoutConditionNote, parseLayoutCondition } from '../../services/milestones-service.js';
 import {
     loadLayoutPositions,
     snapshotLayout,
@@ -4578,8 +4578,11 @@ function msCastHead(castingId) { return `<div class="pp-ms-cast">${escapeHtml(ms
 // ---- Special layout conditions (2026-10-16): a casting that is never laid out (e.g. Jane Street — forms cast and
 // stacked on vertical curing racks) goes green by picking a named condition. Names are shared across every job.
 function layoutConditionOf(castingId) {
-    const note = String(msRow(castingId, 'Casting Layout')?.note || '');
-    return note.startsWith(LAYOUT_CONDITION_PREFIX) ? note.slice(LAYOUT_CONDITION_PREFIX.length) : '';
+    return parseLayoutCondition(msRow(castingId, 'Casting Layout')?.note)?.name || '';
+}
+/** 'A' | 'B' | null — the side the casting's special condition applies to. */
+function layoutConditionSideOf(castingId) {
+    return parseLayoutCondition(msRow(castingId, 'Casting Layout')?.note)?.side || null;
 }
 function layoutConditionHtml(castingId) {
     if (msLayoutConditions === null) {
@@ -4587,16 +4590,31 @@ function layoutConditionHtml(castingId) {
         loadLayoutConditions().then(list => { msLayoutConditions = list; updateMsFloat(); }).catch(() => {});
     }
     const cur = layoutConditionOf(castingId);
+    const curSide = layoutConditionSideOf(castingId) || 'A';
     const names = msLayoutConditions.includes(cur) || !cur ? msLayoutConditions : [cur, ...msLayoutConditions];
-    return `<label class="pp-ms-tick pp-ms-cond" title="A casting that is never laid out (vertical curing racks, etc.) goes green by naming the special condition. The list is shared by every job.">Special condition
+    return `<label class="pp-ms-tick pp-ms-cond" title="A casting that is never laid out (vertical curing racks, etc.) goes green by naming the special condition and the side it applies to. The list of names is shared by every job; the weekly's Cast cards show it.">Special condition
+        <select data-ms-layout-side="${escapeAttr(castingId)}" class="pp-ms-cond-select pp-ms-cond-side" title="Which side the condition applies to">
+            <option value="A"${curSide === 'A' ? ' selected' : ''}>Side A</option>
+            <option value="B"${curSide === 'B' ? ' selected' : ''}>Side B</option>
+        </select>
         <select data-ms-layout-cond="${escapeAttr(castingId)}" class="pp-ms-cond-select">
             <option value=""${cur ? '' : ' selected'}>— none —</option>
             ${names.map(n => `<option value="${escapeAttr(n)}"${n === cur ? ' selected' : ''}>${escapeHtml(n)}</option>`).join('')}
             <option value="__add__">Add a condition…</option>
         </select></label>`;
 }
+/** The side select changed: re-save the condition (if there is one) with the new side. */
+async function handleLayoutConditionSide(castingId, side) {
+    const name = layoutConditionOf(castingId);
+    if (!castingId || !name || (side !== 'A' && side !== 'B')) return;
+    await msSet(castingId, 'Casting Layout', MS.GREEN, { note: layoutConditionNote(name, side), stamp: true });
+    msFloatEl && (msFloatEl.dataset.key = '');
+    updateMsFloat();
+    showToast(`Cast ${currentCastings.find(c => c.id === castingId)?.casting_number || ''}: special condition "${name}" now on Side ${side}.`);
+}
 async function handleLayoutConditionPick(castingId, value) {
     if (!castingId) return;
+    const side = document.querySelector(`[data-ms-layout-side="${CSS.escape(castingId)}"]`)?.value === 'B' ? 'B' : 'A';
     let name = value;
     if (value === '__add__') {
         name = (window.prompt('Name the special layout condition (e.g. "vertical curing racks"). It will be offered on every job from now on.') || '').trim();
@@ -4611,10 +4629,10 @@ async function handleLayoutConditionPick(castingId, value) {
         return;
     }
     if (!msLayoutConditions.includes(name)) msLayoutConditions = [...msLayoutConditions, name].sort((a, b) => a.localeCompare(b));
-    await msSet(castingId, 'Casting Layout', MS.GREEN, { note: LAYOUT_CONDITION_PREFIX + name, stamp: true });
+    await msSet(castingId, 'Casting Layout', MS.GREEN, { note: layoutConditionNote(name, side), stamp: true });
     msFloatEl && (msFloatEl.dataset.key = '');
     updateMsFloat();
-    showToast(`Cast ${currentCastings.find(c => c.id === castingId)?.casting_number || ''}: Casting Layout green — special condition "${name}".`);
+    showToast(`Cast ${currentCastings.find(c => c.id === castingId)?.casting_number || ''}: Casting Layout green — special condition "${name}" on Side ${side}.`);
 }
 /** One column for many castings: "Shop Folder Cover: ● Cast 1  ● Cast 2 …" */
 function msListChips(castings, milestone) {
@@ -4679,6 +4697,8 @@ function updateMsFloat() {
             if (cb) { msSet(cb.dataset.msOptDone, 'Final Optimizer HRS', cb.checked ? MS.GREEN : MS.RED, { note: cb.checked ? 'Final hours confirmed' : null, stamp: true }); return; }
             const sel = e.target.closest('[data-ms-layout-cond]');
             if (sel) { handleLayoutConditionPick(sel.dataset.msLayoutCond, sel.value); return; }
+            const sideSel = e.target.closest('[data-ms-layout-side]');
+            if (sideSel) { handleLayoutConditionSide(sideSel.dataset.msLayoutSide, sideSel.value); return; }
             const jc = e.target.closest('[data-ms-jig-cond]');
             if (jc) handleJigConditionPick(jc.dataset.msJigCond, jc.value);
         });
@@ -5086,6 +5106,13 @@ function castingLayoutLabel(c) {
     return desc ? `${base} — ${desc}` : base;
 }
 
+/** The Casting Layout tab's "Casting side" select shows the selected casting's own Side A/B (shared with the weekly). */
+function syncClaySideSelect() {
+    const el = document.getElementById('pp-clay-side');
+    if (!el) return;
+    const casting = currentCastings.find(c => c.id === clSelectedCastingId);
+    el.value = (casting?.casting_side === 'A' || casting?.casting_side === 'B') ? casting.casting_side : '';
+}
 async function activateCastingLayoutTab() {
     const needsSave = document.getElementById('pp-clay-needs-save');
     const noCastings = document.getElementById('pp-clay-no-castings');
@@ -5139,6 +5166,7 @@ async function activateCastingLayoutTab() {
     }
     const areaSel = document.getElementById('pp-clay-area');
     if (areaSel) areaSel.value = clSelectedArea;
+    syncClaySideSelect();
     const offsetInput = document.getElementById('pp-clay-offset');
     if (offsetInput) offsetInput.value = clOffsetPerSide;
     const gapInput = document.getElementById('pp-clay-gap');
@@ -5231,7 +5259,8 @@ async function printCastingLayout() {
     // A casting under a special layout condition has no layout to print — offer the notice for the job folder instead.
     const cond = layoutConditionOf(clSelectedCastingId);
     if (cond) {
-        if (window.confirm(`This casting has no form layout — special condition: "${cond}".
+        const condSide = layoutConditionSideOf(clSelectedCastingId);
+        if (window.confirm(`This casting has no form layout — special condition: "${cond}"${condSide ? ' (Side ' + condSide + ')' : ''}.
 
 Print a SPECIAL CONDITION NOTICE for the job folder instead?`)) printLayoutConditionNotice(clSelectedCastingId, cond);
         return;
@@ -5266,7 +5295,7 @@ function printLayoutConditionNotice(castingId, cond) {
       <div class="sub">NO FORM LAYOUT IS ISSUED FOR THIS CASTING &mdash; SEE THE CONDITION BELOW</div>
       <hr class="rule">
       <div class="meta"><div><b>Job</b> ${escapeHtml(job)}</div><div><b>Casting</b> ${escapeHtml(cast)}${casting?.description ? ' &mdash; ' + escapeHtml(casting.description) : ''}</div><div><b>Issued</b> ${escapeHtml(today)}</div></div>
-      <div class="cond"><div class="lab">SPECIAL LAYOUT CONDITION</div><div class="name">${escapeHtml(cond)}</div></div>
+      <div class="cond"><div class="lab">SPECIAL LAYOUT CONDITION${layoutConditionSideOf(castingId) ? ' &mdash; SIDE ' + layoutConditionSideOf(castingId) : ''}</div><div class="name">${escapeHtml(cond)}</div></div>
       <p class="note">The casting layout step for this casting is complete under the condition above. The forms are handled as the condition describes and are not arranged on the shop-floor tables, so there is no form layout drawing to issue. This notice goes in the job folder so the layout step is not mistaken for forgotten.</p>
       <div class="foot"><span>Casting Layout &middot; ${escapeHtml(job)}</span><span>Cast ${escapeHtml(cast)} &middot; special condition notice</span></div>
     </body></html>`;
@@ -8175,12 +8204,27 @@ function wireEvents() {
     // ----- Casting Layout: control wiring -----
     document.getElementById('pp-clay-casting')?.addEventListener('change', async (e) => {
         clSelectedCastingId = e.target.value;
+        syncClaySideSelect();
         await loadLayoutPositionsForSelected();
         renderCastingLayoutTab();
     });
     document.getElementById('pp-clay-area')?.addEventListener('change', (e) => {
         clSelectedArea = e.target.value;
         renderCastingLayoutTab();
+    });
+    document.getElementById('pp-clay-side')?.addEventListener('change', async (e) => {
+        const side = (e.target.value === 'A' || e.target.value === 'B') ? e.target.value : null;
+        const casting = currentCastings.find(c => c.id === clSelectedCastingId);
+        if (!casting) return;
+        try {
+            await updateCasting(casting.id, { casting_side: side });
+            casting.casting_side = side;
+            showToast(`Cast ${casting.casting_number}: ${side ? 'Side ' + side : 'no side'} — the weekly's Cast cards follow on their next refresh.`);
+        } catch (err) {
+            logger.error('[project-portal] casting side save failed:', err);
+            showToast('Side not saved — run migration/casting-side.sql in Supabase first', 'error');
+            syncClaySideSelect();
+        }
     });
     document.getElementById('pp-clay-offset')?.addEventListener('input', (e) => {
         const v = parseFloat(e.target.value);

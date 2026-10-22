@@ -4,7 +4,7 @@
  */
 
 import { REVENUE } from '../../config/business-constants.js';
-import { invSummaryLine, batchPrintText, invMissingText, INV_TYPES_COLLAPSE_AT } from '../../utils/inventory-card.js';
+import { invSummaryLine, batchPrintText, invMissingText, layoutConditionText, INV_TYPES_COLLAPSE_AT } from '../../utils/inventory-card.js';
 import { escapeHtml } from '../../utils/security-utils.js';
 import { PRINT_LAYOUT } from '../../config/layout-constants.js';
 
@@ -181,6 +181,7 @@ function createPrintTaskCard(task, departmentClass) {
             ${task.project || 'Unknown Project'}
         </div>
         ${castingSideHtml}
+        ${task.department === 'Cast' && layoutConditionText(task) ? `<div class="print-task-layout-cond">${escapeHtml(layoutConditionText(task))}</div>` : ''}
         <div class="print-task-day-counter">
             ${task.dayCounter || ''}
         </div>

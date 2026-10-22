@@ -62,10 +62,17 @@ export async function loadCastingsForProjects(projectNumbers) {
     if (!client) return [];
 
     try {
-        const { data, error } = await client
+        let { data, error } = await client
             .from(CASTINGS_TABLE)
-            .select('id, project_number, casting_number')
+            .select('id, project_number, casting_number, casting_side')
             .in('project_number', projectNumbers);
+        if (error && /casting_side/.test(String(error.message || ''))) {
+            // migration/casting-side.sql not run yet: read without the column
+            ({ data, error } = await client
+                .from(CASTINGS_TABLE)
+                .select('id, project_number, casting_number')
+                .in('project_number', projectNumbers));
+        }
 
         if (error) {
             logger.error('[castings-service] loadCastingsForProjects error:', error);
@@ -151,6 +158,7 @@ export async function updateCasting(id, fields) {
     if (fields.casting_number !== undefined) payload.casting_number = fields.casting_number.trim();
     if (fields.description !== undefined) payload.description = fields.description ? fields.description.trim() : null;
     if (fields.casting_date !== undefined) payload.casting_date = fields.casting_date || null;
+    if (fields.casting_side !== undefined) payload.casting_side = (fields.casting_side === 'A' || fields.casting_side === 'B') ? fields.casting_side : null;
 
     const { data, error } = await client
         .from(CASTINGS_TABLE)
