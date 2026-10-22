@@ -24,6 +24,15 @@ export function invSummaryTitle(inv) {
 }
 
 /** Wording of the batch-print warning band, or '' when there is nothing to say. */
+/** Message for a casting-linked card whose casting has no inventory pieces ('' when there is nothing to say). */
+export function invMissingText(task) {
+    if (!task || String(task.projectNumber || '').trim() === '' || String(task.castingNumber || '').trim() === '') return '';
+    if (task.invSummary && task.invSummary.pcs > 0) return '';
+    if (typeof task.piecesCount === 'number' && task.piecesCount > 0) return '';
+    if (task.castingInPortal === undefined) return '';          // portal data did not load: say nothing rather than something wrong
+    return task.castingInPortal ? 'NO CASTING INVENTORY YET' : 'CAST NOT FOUND IN THE PORTAL';
+}
+
 export function batchPrintText(state) {
     if (state === 'unprinted') return 'BATCH TICKETS NOT PRINTED YET';
     if (state === 'reprint') return 'BATCH TICKETS CHANGED — PRINT AGAIN';

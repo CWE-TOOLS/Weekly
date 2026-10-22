@@ -606,6 +606,7 @@ export async function enrichTasksWithPieces(tasks) {
         let batchMatched = 0;
         for (const t of linked) {
             const id = idByKey.get(`${String(t.projectNumber).trim()}|${String(t.castingNumber).trim()}`);
+            t.castingInPortal = !!id;   // false = no casting with this job + cast number in the portal (name mismatch, or not entered yet)
             const total = id ? piecesById.get(id) : undefined;
             if (total) { t.piecesCount = total; matched++; }
             const inv = id ? invSummaryById.get(id) : undefined;

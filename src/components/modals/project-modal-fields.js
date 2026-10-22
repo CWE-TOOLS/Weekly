@@ -5,7 +5,7 @@
  */
 
 import { normalizeDepartmentClass } from '../../utils/ui-utils.js';
-import { invSummaryLine, invSummaryTitle, batchPrintText, INV_TYPES_COLLAPSE_AT } from '../../utils/inventory-card.js';
+import { invSummaryLine, invSummaryTitle, batchPrintText, invMissingText, INV_TYPES_COLLAPSE_AT } from '../../utils/inventory-card.js';
 import { parseDate } from '../../utils/date-utils.js';
 import { ANIMATION_CONFIG } from '../../config/visual-constants.js';
 import { escapeHtml, sanitizeDescription } from '../../utils/security-utils.js';
@@ -65,7 +65,7 @@ export function renderTaskCard(task, index) {
     } else {
         piecesHtml = (typeof task.piecesCount === 'number' && task.piecesCount > 0)
             ? band('task-pieces-count', `${task.piecesCount} pcs`)
-            : (isCastCastingLinked ? band('task-pieces-count', 'Missing pcs count', true) : '');
+            : (invMissingText(task) ? band('task-pieces-count task-inv-missing', invMissingText(task), true) : '');
     }
     const batchPrintHtml = batchPrintText(task.batchPrintState) ? band('task-batch-print', batchPrintText(task.batchPrintState)) : '';
     const colorLogTitle = typeof task.colorLogTitle === 'string' ? task.colorLogTitle.trim() : '';

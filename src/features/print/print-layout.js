@@ -4,7 +4,7 @@
  */
 
 import { REVENUE } from '../../config/business-constants.js';
-import { invSummaryLine, batchPrintText, INV_TYPES_COLLAPSE_AT } from '../../utils/inventory-card.js';
+import { invSummaryLine, batchPrintText, invMissingText, INV_TYPES_COLLAPSE_AT } from '../../utils/inventory-card.js';
 import { escapeHtml } from '../../utils/security-utils.js';
 import { PRINT_LAYOUT } from '../../config/layout-constants.js';
 
@@ -158,7 +158,7 @@ function createPrintTaskCard(task, departmentClass) {
     } else {
         piecesHtml = (typeof task.piecesCount === 'number' && task.piecesCount > 0)
             ? band('print-task-pieces-count', `${task.piecesCount} pcs`)
-            : (isCastCastingLinked ? band('print-task-pieces-count', 'Missing pcs count', true) : '');
+            : (invMissingText(task) ? band('print-task-pieces-count', escapeHtml(invMissingText(task)), true) : '');
     }
     const batchPrintHtml = batchPrintText(task.batchPrintState) ? band('print-task-batch-print', batchPrintText(task.batchPrintState)) : '';
 
