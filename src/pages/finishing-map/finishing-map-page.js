@@ -408,6 +408,17 @@ async function moveTo(key, areaId) {
     }
 }
 
+/** Redraw only the bar above the list (count, dropdown, button) after a tick. */
+function refreshBulkBar() {
+    const bar = document.querySelector('#fm-modal .fm-bulk');
+    if (!bar || !S.modal || S.modal.kind !== 'area') return;
+    const visible = [...document.querySelectorAll('#fm-modal input[data-check]')].map(b => b.dataset.check);
+    const chosen = document.getElementById('fm-bulk-area')?.value || '';
+    bar.outerHTML = bulkBarHtml(S.modal.areaId, visible);
+    const sel = document.getElementById('fm-bulk-area');
+    if (sel && chosen) sel.value = chosen;
+}
+
 /** Move several castings to one area, one write each; the pop-up stays open. */
 async function moveMany(keys, areaId) {
     for (const key of keys) await moveTo(key, areaId);
@@ -490,13 +501,17 @@ function wireEvents() {
         const box = e.target.closest('input[data-check]');
         if (box) {
             if (box.checked) S.modal.selected.add(box.dataset.check); else S.modal.selected.delete(box.dataset.check);
-            renderModalBody();
+            box.closest('.fm-mrow')?.classList.toggle('fm-mrow-checked', box.checked);
+            refreshBulkBar();
             return;
         }
         if (e.target.id === 'fm-sel-all') {
-            const keys = [...modal.querySelectorAll('input[data-check]')].map(b => b.dataset.check);
-            if (e.target.checked) keys.forEach(k => S.modal.selected.add(k)); else keys.forEach(k => S.modal.selected.delete(k));
-            renderModalBody();
+            for (const b of modal.querySelectorAll('input[data-check]')) {
+                b.checked = e.target.checked;
+                if (b.checked) S.modal.selected.add(b.dataset.check); else S.modal.selected.delete(b.dataset.check);
+                b.closest('.fm-mrow')?.classList.toggle('fm-mrow-checked', b.checked);
+            }
+            refreshBulkBar();
         }
     });
     modal.addEventListener('click', (e) => {
