@@ -313,10 +313,12 @@ function renderModalBody() {
             : r.kind === 'put_back' ? 'Put back on the map'
             : `${areaLabel(r.from_area)} → ${areaLabel(r.to_area)}`;
         const when = (iso) => { const d = new Date(iso); return d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' }) + ' ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }); };
-        let list = [...groups.values()];
+        // Jobs sitting in the queue are not listed; a job that is in an area (or shipped) keeps its full history,
+        // including the line that shows when it left the queue.
+        let list = [...groups.values()].filter(g => { const row = S.placements.get(g.key); return !!(row && (row.area || row.shipped_on)); });
         if (q) list = list.filter(g => { const c = castingByKey(g.key); return `${c ? jobName(c) : ''} ${g.pn} cast ${g.cn} ${g.rows.map(r => describe(r) + ' ' + (r.moved_by || '')).join(' ')}`.toLowerCase().includes(q); });
         list.sort((a, b) => b.rows[0].moved_at.localeCompare(a.rows[0].moved_at));
-        if (!list.length) { body.innerHTML = `<div class="fm-empty">${S.log.length ? 'No jobs match.' : 'No moves logged yet.'}</div>`; return; }
+        if (!list.length) { body.innerHTML = `<div class="fm-empty">${S.log.length ? (q ? 'No jobs match.' : 'No job is in an area right now.') : 'No moves logged yet.'}</div>`; return; }
         body.innerHTML = `<div class="fm-log-head-row"><span>Job</span><span>Where now</span><span>Last activity</span><span>Moves</span></div>` + list.map(g => {
             const c = castingByKey(g.key);
             const name = c ? jobName(c) : g.pn;
