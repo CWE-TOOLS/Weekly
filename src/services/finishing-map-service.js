@@ -11,6 +11,7 @@ import { initializeSupabase, getSupabaseClient } from './supabase-service.js';
 import { logger } from '../utils/logger.js';
 
 const TABLE = 'finishing_map';
+const LOG_TABLE = 'finishing_map_log';
 let migrationPending = false;
 
 /** True when the table is not there yet (the page shows a notice instead of failing). */
@@ -80,4 +81,27 @@ export async function setShipped(projectNumber, castingNumber, shippedOn, movedB
     };
     const { error } = await sb.from(TABLE).upsert(row, { onConflict: 'project_number,casting_number' });
     if (error) throw error;
+}
+
+/** One line in the move log. Failures are logged, never thrown: the move itself already saved. */
+export async function logMove({ projectNumber, castingNumber, kind, fromArea = null, toArea = null, movedBy = null }) {
+    try {
+        const sb = await client();
+        if (!sb) return;
+        const { error } = await sb.from(LOG_TABLE).insert({
+            project_number: String(projectNumber).trim(), casting_number: String(castingNumber).trim(),
+            kind, from_area: fromArea, to_area: toArea, moved_by: movedBy || null
+        });
+        if (error) logger.warn('[finishing-map] log insert failed', error);
+    } catch (err) { logger.warn('[finishing-map] log insert failed', err); }
+}
+
+/** Newest first, within `days`. */
+export async function loadLog(days = 60, limit = 1000) {
+    const sb = await client();
+    if (!sb) return [];
+    const since = new Date(); since.setDate(since.getDate() - days);
+    const { data, error } = await sb.from(LOG_TABLE).select('*').gte('moved_at', since.toISOString()).order('moved_at', { ascending: false }).limit(limit);
+    if (error) { logger.warn('[finishing-map] log load failed', error); return []; }
+    return data || [];
 }

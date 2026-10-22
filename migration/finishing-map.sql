@@ -33,3 +33,20 @@ DROP POLICY IF EXISTS "finishing_map open" ON finishing_map;
 CREATE POLICY "finishing_map open" ON finishing_map FOR ALL USING (true) WITH CHECK (true);
 
 GRANT ALL ON finishing_map TO anon, authenticated;
+
+-- Every move, ship and put-back, newest first in the page's "Log" panel.
+CREATE TABLE IF NOT EXISTS finishing_map_log (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_number  TEXT NOT NULL,
+    casting_number  TEXT NOT NULL,
+    kind            TEXT NOT NULL CHECK (kind IN ('move', 'shipped', 'put_back')),
+    from_area       TEXT,
+    to_area         TEXT,
+    moved_by        TEXT,
+    moved_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS finishing_map_log_time_idx ON finishing_map_log (moved_at DESC);
+ALTER TABLE finishing_map_log ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "finishing_map_log open" ON finishing_map_log;
+CREATE POLICY "finishing_map_log open" ON finishing_map_log FOR ALL USING (true) WITH CHECK (true);
+GRANT ALL ON finishing_map_log TO anon, authenticated;

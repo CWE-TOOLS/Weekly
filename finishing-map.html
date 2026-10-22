@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="src/styles/variables.css">
     <link rel="stylesheet" href="src/styles/base.css">
     <link rel="stylesheet" href="src/styles/buttons.css">
-    <link rel="stylesheet" href="src/styles/finishing-map.css?v=20261022-1">
+    <link rel="stylesheet" href="src/styles/finishing-map.css?v=20261022-2">
 </head>
 <body>
     <div id="fm-app" class="fm-app">
@@ -24,6 +24,7 @@
             <div class="fm-header-right">
                 <input type="search" id="fm-search" class="fm-search" placeholder="Find a job or cast&hellip;" autocomplete="off">
                 <label class="fm-who"><span>Moves by</span><input type="text" id="fm-who" placeholder="your name" maxlength="40" autocomplete="off"></label>
+                <button type="button" id="fm-log-btn" class="fm-nav-btn" title="Every move with date and time" aria-expanded="false">Log</button>
                 <button type="button" id="fm-refresh" class="fm-nav-btn" title="Reload the weekly and the map">Refresh</button>
                 <span id="fm-updated" class="fm-updated"></span>
             </div>
@@ -46,6 +47,11 @@
             </section>
         </main>
 
+        <section class="fm-log" id="fm-log" hidden>
+            <div class="fm-log-head"><span>Move log &mdash; last 60 days</span><input type="search" id="fm-log-search" placeholder="Filter by job, cast, area or name" autocomplete="off"><button type="button" class="fm-mini-btn" id="fm-log-close">Close</button></div>
+            <div class="fm-log-body" id="fm-log-body"></div>
+        </section>
+
         <section class="fm-shipped" id="fm-shipped">
             <button type="button" class="fm-shipped-toggle" id="fm-shipped-toggle" aria-expanded="false">
                 Shipped <span class="fm-area-count" id="fm-shipped-count">0</span> <span class="fm-shipped-sub">last 60 days</span>
@@ -54,6 +60,6 @@
         </section>
     </div>
 
-    <script type="module" src="src/pages/finishing-map/finishing-map-page.js?v=20261022-1"></script>
+    <script type="module" src="src/pages/finishing-map/finishing-map-page.js?v=20261022-2"></script>
 </body>
 </html>

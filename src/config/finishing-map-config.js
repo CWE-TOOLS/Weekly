@@ -30,3 +30,16 @@ export const SHIPPED_STATUSES = ['Shipped', 'Closed Out'];
 
 /** The shipped drawer shows castings shipped within this many days. */
 export const SHIPPED_WINDOW_DAYS = 60;
+
+/** A card goes grey when the casting has had no day on the weekly for this many days (probably gone, never marked shipped). */
+export const STALE_AFTER_DAYS = 30;
+
+/** The move log panel shows this many days back. */
+export const LOG_WINDOW_DAYS = 60;
+
+/** Area label for the log and tooltips ("Coop. #3", "Tent #1", "Queue"). */
+export function areaLabel(id) {
+    if (!id) return 'Queue';
+    const a = FINISHING_AREAS.find(x => x.id === id);
+    return a ? (a.group ? `${a.group} ${a.label}` : a.label) : id;
+}
