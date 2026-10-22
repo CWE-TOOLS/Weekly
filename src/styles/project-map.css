@@ -34,6 +34,7 @@
 .pm-chip-day { font-size: 10.5px; color: #6d28d9; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pm-col-scheduled .pm-chip-day { color: #475569; }
 .pm-trail { margin-top: 0.25rem; padding-top: 0.25rem; border-top: 1px dashed #e2e8f0; font-size: 11px; }
+.pm-trail-here { color: #0f172a; font-weight: 800; }
 #fm-popover .fm-chip-expanded { cursor: default; }
 
 @media (max-width: 1100px) {

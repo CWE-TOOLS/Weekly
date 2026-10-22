@@ -144,15 +144,19 @@ function entryLine(e) {
 function cardBodyHtml(c, e) {
     const p = projectOf(c.projectNumber);
     const inv = c.inv ? `${c.inv.types} types · ${c.inv.pcs} pcs` : '';
+    // The trail through the departments; the department this card was opened from is bold.
     const trail = [...c.days.entries()].filter(([d]) => deptRank(d) !== -1).sort((a, b) => deptRank(a[0]) - deptRank(b[0]))
-        .map(([d, list]) => `${d} ${fmtShort(list[0])}${list.length > 1 ? `–${fmtShort(list[list.length - 1])}` : ''}`).join(' · ');
+        .map(([d, list]) => {
+            const text = escapeHtml(`${d} ${fmtShort(list[0])}${list.length > 1 ? `–${fmtShort(list[list.length - 1])}` : ''}`);
+            return e && e.dept === d && e.dayTotal ? `<b class="pm-trail-here">${text}</b>` : text;
+        }).join(' · ');
     return `<div class="fm-card-job">${escapeHtml(jobName(c))}</div>
         <div class="fm-card-cast">Cast ${escapeHtml(c.castingNumber)}<span class="fm-card-pn">${escapeHtml(c.projectNumber)}</span></div>
         ${p && p.pm ? `<div class="fm-card-meta">${escapeHtml(p.pm)}</div>` : ''}
         ${inv ? `<div class="fm-card-meta">${escapeHtml(inv)}</div>` : ''}
         ${e ? `<div class="fm-card-meta fm-card-finish">${escapeHtml(e.dept && e.dayTotal ? e.dept + ': ' : '')}${escapeHtml(entryLine(e))}</div>` : ''}
         ${c.lastShip ? `<div class="fm-card-meta">Ship ${fmtDate(c.lastShip)}</div>` : ''}
-        ${trail ? `<div class="fm-card-meta pm-trail">${escapeHtml(trail)}</div>` : ''}`;
+        ${trail ? `<div class="fm-card-meta pm-trail">${trail}</div>` : ''}`;
 }
 
 function chipHtml(e, col) {
