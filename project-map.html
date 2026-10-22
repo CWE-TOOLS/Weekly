@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Production Map - Weekly Schedule</title>
+    <title>Project Map - Weekly Schedule</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='0.9em' font-size='90'%3E%F0%9F%8F%AD%3C/text%3E%3C/svg%3E">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="src/styles/base.css">
     <link rel="stylesheet" href="src/styles/buttons.css">
     <link rel="stylesheet" href="src/styles/finishing-map.css?v=20261022-9">
-    <link rel="stylesheet" href="src/styles/production-map.css?v=20261022-1">
+    <link rel="stylesheet" href="src/styles/project-map.css?v=20261022-1">
 </head>
 <body class="pm-body">
     <div id="fm-app" class="fm-app pm-app">
@@ -21,7 +21,17 @@
                 <a href="index.html" class="fm-nav-btn" title="Weekly Schedule">Weekly Schedule</a>
                 <a href="finishing-map.html" class="fm-nav-btn" title="Finishing Map">Finishing Map</a>
             </div>
-            <h1 class="fm-title">Production Map</h1>
+            <h1 class="fm-title">Project Map</h1>
+            <div class="pm-when">
+                <div class="pm-view" role="group" aria-label="View">
+                    <button type="button" class="pm-view-btn pm-view-on" data-view="day">Day</button>
+                    <button type="button" class="pm-view-btn" data-view="week">Week</button>
+                </div>
+                <button type="button" class="fm-nav-btn pm-arrow" id="pm-prev" title="Earlier">&lsaquo;</button>
+                <span class="pm-when-label" id="pm-when-label"></span>
+                <button type="button" class="fm-nav-btn pm-arrow" id="pm-next" title="Later">&rsaquo;</button>
+                <button type="button" class="fm-nav-btn" id="pm-today">Today</button>
+            </div>
             <div class="fm-header-right">
                 <span class="pm-sub" id="pm-sub"></span>
                 <input type="search" id="fm-search" class="fm-search" placeholder="Find a job or cast&hellip;" autocomplete="off">
@@ -34,7 +44,7 @@
         <div id="fm-notice" class="fm-notice" hidden></div>
 
         <main class="pm-main" id="pm-map" aria-label="Departments">
-            <!-- department columns are rendered from production-map-config.js -->
+            <!-- the Scheduled column and the department columns are rendered from project-map-config.js -->
         </main>
     </div>
 
@@ -49,6 +59,6 @@
         </div>
     </div>
 
-    <script type="module" src="src/pages/production-map/production-map-page.js?v=20261022-1"></script>
+    <script type="module" src="src/pages/project-map/project-map-page.js?v=20261022-1"></script>
 </body>
 </html>
