@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Finishing Map - Weekly Schedule</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='0.9em' font-size='90'%3E%F0%9F%97%BA%EF%B8%8F%3C/text%3E%3C/svg%3E">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+    <link rel="stylesheet" href="src/styles/variables.css">
+    <link rel="stylesheet" href="src/styles/base.css">
+    <link rel="stylesheet" href="src/styles/buttons.css">
+    <link rel="stylesheet" href="src/styles/finishing-map.css?v=20261022-1">
+</head>
+<body>
+    <div id="fm-app" class="fm-app">
+        <header class="fm-header">
+            <div class="fm-header-left">
+                <a href="project-portal.html" class="fm-nav-btn" title="Project Portal">&larr; Project Portal</a>
+                <a href="index.html" class="fm-nav-btn" title="Weekly Schedule">Weekly Schedule</a>
+                <a href="releasability.html" class="fm-nav-btn" title="Releasability Board">Releasability Board</a>
+            </div>
+            <h1 class="fm-title">Finishing Map</h1>
+            <div class="fm-header-right">
+                <input type="search" id="fm-search" class="fm-search" placeholder="Find a job or cast&hellip;" autocomplete="off">
+                <label class="fm-who"><span>Moves by</span><input type="text" id="fm-who" placeholder="your name" maxlength="40" autocomplete="off"></label>
+                <button type="button" id="fm-refresh" class="fm-nav-btn" title="Reload the weekly and the map">Refresh</button>
+                <span id="fm-updated" class="fm-updated"></span>
+            </div>
+        </header>
+
+        <div id="fm-notice" class="fm-notice" hidden></div>
+
+        <main class="fm-main">
+            <aside class="fm-queue" id="fm-queue" data-area="">
+                <div class="fm-area-head">
+                    <span class="fm-area-label">In finishing &mdash; not placed yet</span>
+                    <span class="fm-area-count" id="fm-queue-count">0</span>
+                </div>
+                <p class="fm-queue-help">A casting shows up here on its first Finish day on the weekly. Drag it onto the area it is sitting in, or tap it and then tap the area.</p>
+                <div class="fm-cards" id="fm-queue-cards"></div>
+            </aside>
+
+            <section class="fm-map" id="fm-map" aria-label="Plant areas">
+                <!-- area boxes are rendered from finishing-map-config.js -->
+            </section>
+        </main>
+
+        <section class="fm-shipped" id="fm-shipped">
+            <button type="button" class="fm-shipped-toggle" id="fm-shipped-toggle" aria-expanded="false">
+                Shipped <span class="fm-area-count" id="fm-shipped-count">0</span> <span class="fm-shipped-sub">last 60 days</span>
+            </button>
+            <div class="fm-shipped-body" id="fm-shipped-body" hidden></div>
+        </section>
+    </div>
+
+    <script type="module" src="src/pages/finishing-map/finishing-map-page.js?v=20261022-1"></script>
+</body>
+</html>

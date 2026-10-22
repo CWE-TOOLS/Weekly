@@ -1,0 +1,254 @@
+/* Finishing Map — plant areas laid out like the magnet board, castings as cards */
+
+.fm-app {
+  min-height: 100vh;
+  background: #e5e7eb;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color: #0f172a;
+  padding-bottom: 4.5rem;
+}
+
+/* ---------- header ---------- */
+.fm-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.55rem 1rem;
+  background: #ffffff;
+  border-bottom: 1px solid #d1d5db;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  flex-wrap: wrap;
+}
+.fm-header-left, .fm-header-right { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.fm-header-right { margin-left: auto; }
+.fm-title { margin: 0; font-size: 1.25rem; font-weight: 800; letter-spacing: 0.02em; }
+.fm-nav-btn {
+  color: #1d4ed8;
+  text-decoration: none;
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.fm-nav-btn:hover { background: #eff6ff; }
+.fm-search, .fm-who input {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  min-width: 11rem;
+}
+.fm-who { display: flex; align-items: center; gap: 0.4rem; font-size: 12px; color: #475569; }
+.fm-who input { min-width: 8rem; }
+.fm-updated { font-size: 12px; color: #64748b; }
+
+.fm-notice {
+  margin: 0.6rem 1rem 0;
+  padding: 0.5rem 0.8rem;
+  border-radius: 6px;
+  font-size: 13px;
+  background: #e0f2fe;
+  color: #075985;
+}
+.fm-notice-warn { background: #fef3c7; color: #92400e; }
+.fm-notice-error { background: #fee2e2; color: #991b1b; }
+
+/* ---------- main layout ---------- */
+.fm-main {
+  display: grid;
+  grid-template-columns: 17rem 1fr;
+  gap: 0.9rem;
+  padding: 0.9rem 1rem;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .fm-main { grid-template-columns: 1fr; }
+}
+
+.fm-area-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.35rem 0.6rem;
+  font-weight: 800;
+  font-size: 0.85rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: #111827;
+  color: #f9fafb;
+  border-radius: 6px 6px 0 0;
+}
+.fm-area-count {
+  display: inline-block;
+  min-width: 1.5rem;
+  text-align: center;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background: #f9fafb;
+  color: #111827;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+/* queue */
+.fm-queue {
+  position: sticky;
+  top: 4rem;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  max-height: calc(100vh - 9.5rem);
+  display: flex;
+  flex-direction: column;
+}
+.fm-queue .fm-area-head { background: #b45309; }
+.fm-queue-help { margin: 0; padding: 0.5rem 0.6rem 0; font-size: 11.5px; color: #64748b; }
+.fm-queue .fm-cards { padding: 0.6rem; overflow: auto; }
+
+/* the map: the magnet board's layout */
+.fm-map {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: 6rem repeat(6, 1fr);
+  grid-template-areas:
+    "tent1 tent1 wetroom wetroom blacktop blacktop large"
+    "tent1 tent1 tent2 tent2 tent2 . large"
+    "cooplabel coop1 coop2 coop3 coop4 coop5 coop6";
+}
+@media (max-width: 1250px) {
+  .fm-map {
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-areas:
+      "tent1 wetroom blacktop"
+      "tent2 tent2 large"
+      "cooplabel cooplabel cooplabel"
+      "coop1 coop2 coop3"
+      "coop4 coop5 coop6";
+  }
+}
+.fm-area {
+  background: #f8fafc;
+  border: 2px solid #1f2937;
+  border-radius: 8px;
+  min-height: 9rem;
+  display: flex;
+  flex-direction: column;
+}
+.fm-area-coop { background: #eef2ff; border-color: #3730a3; }
+.fm-area-coop .fm-area-head { background: #3730a3; }
+.fm-group-label {
+  align-self: center;
+  justify-self: center;
+  font-weight: 900;
+  font-size: 1.1rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #1f2937;
+  padding: 0.4rem 0.8rem;
+  border: 2px solid #1f2937;
+  border-radius: 6px;
+  background: #fff;
+}
+.fm-area .fm-cards { padding: 0.55rem; flex: 1; }
+
+.fm-drop-hover { outline: 3px dashed #2563eb; outline-offset: -3px; background: #dbeafe; }
+.fm-selecting [data-area] { cursor: pointer; }
+.fm-selecting [data-area]:hover { outline: 3px dashed #2563eb; outline-offset: -3px; }
+
+/* ---------- cards ---------- */
+.fm-cards { display: flex; flex-wrap: wrap; gap: 0.5rem; align-content: flex-start; }
+.fm-card {
+  width: 10.5rem;
+  background: #fff;
+  border: 1.5px solid #94a3b8;
+  border-left: 6px solid #8b5cf6;   /* finishing purple, like the weekly */
+  border-radius: 6px;
+  padding: 0.4rem 0.5rem 0.35rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  cursor: grab;
+  user-select: none;
+  font-size: 12px;
+  line-height: 1.25;
+}
+.fm-card:active { cursor: grabbing; }
+.fm-card-dragging { opacity: 0.45; }
+.fm-card-selected { outline: 3px solid #2563eb; outline-offset: 1px; }
+.fm-card-dim { opacity: 0.25; }
+.fm-card-job { font-weight: 800; font-size: 13px; }
+.fm-card-cast { font-weight: 700; color: #1e293b; display: flex; justify-content: space-between; gap: 0.4rem; }
+.fm-card-pn { font-weight: 500; color: #64748b; }
+.fm-card-meta { color: #475569; font-size: 11.5px; }
+.fm-card-finish { color: #6d28d9; font-weight: 600; }
+.fm-card-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.3rem;
+  padding-top: 0.25rem;
+  border-top: 1px dashed #e2e8f0;
+  font-size: 11px;
+  color: #64748b;
+}
+.fm-card-moved { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fm-mini-btn {
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 0.1rem 0.5rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #0f172a;
+  cursor: pointer;
+}
+.fm-mini-btn:hover { background: #e2e8f0; }
+.fm-empty { color: #94a3b8; font-size: 12px; padding: 0.3rem; }
+
+/* ---------- shipped drawer (bottom-right, out of the way) ---------- */
+.fm-shipped {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 15;
+  max-width: min(60rem, calc(100vw - 2rem));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.fm-shipped-toggle {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 0.45rem 0.9rem;
+  border: 2px solid #166534;
+  border-radius: 999px;
+  background: #dcfce7;
+  color: #166534;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.fm-shipped-toggle .fm-area-count { background: #166534; color: #fff; }
+.fm-shipped-sub { font-weight: 500; font-size: 11px; opacity: 0.85; }
+.fm-shipped-body {
+  margin-bottom: 0.4rem;
+  background: #fff;
+  border: 2px solid #166534;
+  border-radius: 8px;
+  padding: 0.6rem;
+  max-height: 55vh;
+  overflow: auto;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+}
+.fm-cards-drawer .fm-card { border-left-color: #16a34a; cursor: default; }
