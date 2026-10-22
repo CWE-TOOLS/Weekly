@@ -45,6 +45,7 @@ body.fm-has-test-bar .fm-app { height: calc(100vh - 2.6rem); }
   gap: 0.35rem;
 }
 .fm-nav-btn:hover { background: #eff6ff; }
+.fm-nav-sibling { border-color: #1d4ed8; font-weight: 700; }   /* the other map: one click away */
 .fm-btn-shipped { border-color: #166534; color: #166534; background: #dcfce7; font-weight: 700; }
 .fm-btn-shipped:hover { background: #bbf7d0; }
 .fm-btn-shipped .fm-area-count { background: #166534; color: #fff; }
