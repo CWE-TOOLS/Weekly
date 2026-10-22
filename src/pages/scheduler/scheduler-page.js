@@ -250,8 +250,16 @@ function planCasting(casting, anchorIso, stage) {
         date, department: m.dept, task: m.code, hours, weekend_ok: false,
         note: m.unmapped ? `Unmapped phase "${m.phase.phase_name}" — pick the task` : null
     });
+    // Build Crate always lands on a Monday (user rule 2026-10-22) — the next Monday that is not a holiday going
+    // forward (the previous one going back); only a manual move puts it elsewhere afterwards
+    const toMonday = (d, dir) => {
+        let x = d;
+        for (let i = 0; i < 40; i++) { if (dow(x) === 1 && !isHoliday(x)) return x; x = addDays(x, dir); }
+        return d;
+    };
     // lay one block on consecutive working days starting at `start`, going `dir`; returns the far end date
     const lay = (bl, start, dir) => {
+        if (bl.phases.some(m => m.code === 'BUILD')) start = toMonday(start, dir);
         const dates = [start];
         for (let k = 1; k < bl.days; k++) dates.push(nextWorking(dates[k - 1], dir));
         if (dir < 0) dates.reverse();                    // day 1 is the earliest date either way
