@@ -289,22 +289,19 @@ function planCasting(casting, anchorIso, stage) {
         for (let i = 0; i < 40; i++) { if (dow(x) === 1 && !isHoliday(x)) return x; x = addDays(x, dir); }
         return d;
     };
-    // lay one block on consecutive working days starting at `start`, going `dir`; returns the far end date
+    // lay one block day by day from `start`, going `dir`; a Build Crate day snaps to a Monday; returns the far end date
     const lay = (bl, start, dir) => {
-        if (bl.phases.some(m => m.code === 'BUILD')) start = toMonday(start, dir);
-        const dates = [start];
-        for (let k = 1; k < bl.days; k++) dates.push(nextWorking(dates[k - 1], dir));
-        if (dir < 0) dates.reverse();                    // day 1 is the earliest date either way
-        if (bl.staged) {
-            bl.phases.forEach((m, k) => push(m, dates[k], Number(m.phase.hours) || 0));   // one staged day = one scheduled day, hours as entered
-        } else {
-            const alloc = allocDays(bl);
-            let k = 0;
-            bl.phases.forEach((m, i) => {
-                for (const h of evenSplit(Number(m.phase.hours) || 0, alloc[i])) { if (h > 0) push(m, dates[k], h); k++; }
-            });
-        }
-        return dir > 0 ? dates[dates.length - 1] : dates[0];
+        const items = [];   // the block's days in order: { m, hours }
+        if (bl.staged) bl.phases.forEach(m => items.push({ m, hours: Number(m.phase.hours) || 0 }));
+        else { const alloc = allocDays(bl); bl.phases.forEach((m, i) => { for (const h of evenSplit(Number(m.phase.hours) || 0, alloc[i])) if (h > 0) items.push({ m, hours: h }); }); }
+        if (dir < 0) items.reverse();
+        let cur = start;
+        items.forEach((it, idx) => {
+            if (idx > 0) cur = nextWorking(cur, dir);
+            if (it.m.code === 'BUILD' && (idx === 0 || items[idx - 1].m.code !== 'BUILD')) cur = toMonday(cur, dir);
+            push(it.m, cur, it.hours);
+        });
+        return cur;
     };
     const castIdx = blocks.findIndex(bl => bl.phases.some(m => m.code === 'CAST'));
     if (castIdx >= 0) {
