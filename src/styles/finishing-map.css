@@ -201,7 +201,7 @@ button.fm-area-head:hover { background: #1f2937; }
 .fm-area.fm-area-overflow .fm-area-head { background: #78350f; }                /* full cell: amber title wins */
 
 /* ---------- queue cards (full detail) ---------- */
-.fm-cards { display: flex; flex-wrap: wrap; gap: 0.4rem; align-content: flex-start; }
+.fm-cards { display: flex; flex-wrap: wrap; gap: 0.4rem; align-content: flex-start; align-items: flex-start; }   /* an open card does not stretch its neighbours */
 .fm-card {
   width: 100%;
   background: #fff;
