@@ -6708,3 +6708,7 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
 .pp-opt-ready-all { padding: 5px 12px; border: 1px solid #2563eb; border-radius: 6px; background: #2563eb; color: #fff; font-weight: 700; font-size: 12px; cursor: pointer; }
 .pp-opt-ready-all:hover { background: #1d4ed8; }
 .pp-opt-ready-done { color: #15803d; font-weight: 700; }
+
+/* job view: Back to list + return to the Plant Scheduler side by side (2026-10-22) */
+.pp-form-nav { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pp-sched-return { text-decoration: none; }
