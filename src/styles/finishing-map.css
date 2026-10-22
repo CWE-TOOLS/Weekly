@@ -184,6 +184,22 @@ button.fm-area-head:hover { background: #1f2937; }
 .fm-selecting [data-area] { cursor: pointer; }
 .fm-selecting [data-area]:hover { outline: 3px dashed #2563eb; outline-offset: -3px; }
 
+
+/* ---------- one colour per area (border + title), a faint tint inside; the coop row keeps its indigo ---------- */
+.fm-area[data-area="tent1"]   { border-color: #0e7490; background: #ecfeff; }   /* teal */
+.fm-area[data-area="tent1"] .fm-area-head   { background: #0e7490; }
+.fm-area[data-area="wetroom"] { border-color: #1d4ed8; background: #eff6ff; }   /* blue */
+.fm-area[data-area="wetroom"] .fm-area-head { background: #1d4ed8; }
+.fm-area[data-area="blacktop"] { border-color: #374151; background: #f3f4f6; }  /* asphalt grey */
+.fm-area[data-area="blacktop"] .fm-area-head { background: #374151; }
+.fm-area[data-area="large"]   { border-color: #b45309; background: #fffbeb; }   /* amber */
+.fm-area[data-area="large"] .fm-area-head   { background: #b45309; }
+.fm-area[data-area="tent2"]   { border-color: #15803d; background: #f0fdf4; }   /* green */
+.fm-area[data-area="tent2"] .fm-area-head   { background: #15803d; }
+.fm-area[data-area="outside"] { border-color: #7e22ce; background: #faf5ff; }   /* purple */
+.fm-area[data-area="outside"] .fm-area-head { background: #7e22ce; }
+.fm-area.fm-area-overflow .fm-area-head { background: #78350f; }                /* full cell: amber title wins */
+
 /* ---------- queue cards (full detail) ---------- */
 .fm-cards { display: flex; flex-wrap: wrap; gap: 0.4rem; align-content: flex-start; }
 .fm-card {
