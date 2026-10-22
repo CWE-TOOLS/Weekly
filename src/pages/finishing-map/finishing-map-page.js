@@ -302,26 +302,36 @@ function renderModalBody() {
         </div>`).join('') : `<div class="fm-empty">${shipped.length ? 'No jobs match.' : `Nothing shipped in the last ${SHIPPED_WINDOW_DAYS} days.`}</div>`;
     } else if (S.modal.kind === 'log') {
         title.textContent = `Move log — last ${LOG_WINDOW_DAYS} days`;
-        const rows = S.log.filter(r => {
-            if (!q) return true;
-            const c = castingByKey(placementKey(r.project_number, r.casting_number));
-            return `${c ? jobName(c) : ''} ${r.project_number} cast ${r.casting_number} ${areaLabel(r.from_area)} ${areaLabel(r.to_area)} ${r.moved_by || ''}`.toLowerCase().includes(q);
-        });
-        if (!rows.length) { body.innerHTML = `<div class="fm-empty">${S.log.length ? 'No moves match.' : 'No moves logged yet.'}</div>`; return; }
-        let lastDay = '';
-        const parts = [];
-        for (const r of rows) {
-            const when = new Date(r.moved_at);
-            const day = when.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric', year: 'numeric' });
-            if (day !== lastDay) { parts.push(`<div class="fm-log-day">${escapeHtml(day)}</div>`); lastDay = day; }
-            const c = castingByKey(placementKey(r.project_number, r.casting_number));
-            const name = c ? jobName(c) : r.project_number;
-            const what = r.kind === 'shipped' ? `<span class="fm-log-ship">Shipped</span>${r.from_area ? ` from ${escapeHtml(areaLabel(r.from_area))}` : ''}`
-                : r.kind === 'put_back' ? `<span class="fm-log-ship">Put back</span> on the map`
-                : `${escapeHtml(areaLabel(r.from_area))} <span class="fm-log-arrow">&rarr;</span> <strong>${escapeHtml(areaLabel(r.to_area))}</strong>`;
-            parts.push(`<div class="fm-log-row"><span class="fm-log-time">${when.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span><span class="fm-log-job">${escapeHtml(name)} <b>Cast ${escapeHtml(r.casting_number)}</b></span><span class="fm-log-what">${what}</span><span class="fm-log-who">${escapeHtml(r.moved_by || '')}</span></div>`);
+        // One line per job (casting), newest activity first; click a line to see that job's moves.
+        const groups = new Map();
+        for (const r of S.log) {
+            const key = placementKey(r.project_number, r.casting_number);
+            if (!groups.has(key)) groups.set(key, { key, pn: r.project_number, cn: r.casting_number, rows: [] });
+            groups.get(key).rows.push(r);
         }
-        body.innerHTML = parts.join('');
+        const describe = (r) => r.kind === 'shipped' ? `Shipped${r.from_area ? ' from ' + areaLabel(r.from_area) : ''}`
+            : r.kind === 'put_back' ? 'Put back on the map'
+            : `${areaLabel(r.from_area)} → ${areaLabel(r.to_area)}`;
+        const when = (iso) => { const d = new Date(iso); return d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' }) + ' ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }); };
+        let list = [...groups.values()];
+        if (q) list = list.filter(g => { const c = castingByKey(g.key); return `${c ? jobName(c) : ''} ${g.pn} cast ${g.cn} ${g.rows.map(r => describe(r) + ' ' + (r.moved_by || '')).join(' ')}`.toLowerCase().includes(q); });
+        list.sort((a, b) => b.rows[0].moved_at.localeCompare(a.rows[0].moved_at));
+        if (!list.length) { body.innerHTML = `<div class="fm-empty">${S.log.length ? 'No jobs match.' : 'No moves logged yet.'}</div>`; return; }
+        body.innerHTML = `<div class="fm-log-head-row"><span>Job</span><span>Where now</span><span>Last activity</span><span>Moves</span></div>` + list.map(g => {
+            const c = castingByKey(g.key);
+            const name = c ? jobName(c) : g.pn;
+            const row = S.placements.get(g.key);
+            const now = row && row.shipped_on ? `Shipped ${fmtDate(row.shipped_on)}` : (row && row.area ? areaLabel(row.area) : 'Queue');
+            const last = g.rows[0];
+            const open = S.modal.openKey === g.key;
+            const detail = open ? `<div class="fm-log-detail">${g.rows.map(r => `<div class="fm-log-row"><span class="fm-log-time">${escapeHtml(when(r.moved_at))}</span><span class="fm-log-what">${escapeHtml(describe(r))}</span><span class="fm-log-who">${escapeHtml(r.moved_by || '')}</span></div>`).join('')}</div>` : '';
+            return `<div class="fm-log-job-row${open ? ' fm-log-open' : ''}" data-log-key="${escapeHtml(g.key)}">
+                <span class="fm-log-job"><span class="fm-log-caret">${open ? '&#9662;' : '&#9656;'}</span> ${escapeHtml(name)} <b>Cast ${escapeHtml(g.cn)}</b> <span class="fm-card-pn">${escapeHtml(g.pn)}</span></span>
+                <span class="fm-log-now">${escapeHtml(now)}</span>
+                <span class="fm-log-last">${escapeHtml(when(last.moved_at))} · ${escapeHtml(describe(last))}${last.moved_by ? ' · ' + escapeHtml(last.moved_by) : ''}</span>
+                <span class="fm-log-n">${g.rows.length}</span>
+            </div>${detail}`;
+        }).join('');
     }
 }
 
@@ -520,6 +530,12 @@ function wireEvents() {
             e.preventDefault();
             if (btn.dataset.action === 'ship') ship(btn.dataset.key);
             if (btn.dataset.action === 'unship') ship(btn.dataset.key, true);
+            return;
+        }
+        const jobRow = e.target.closest('[data-log-key]');
+        if (jobRow && S.modal && S.modal.kind === 'log') {
+            S.modal.openKey = S.modal.openKey === jobRow.dataset.logKey ? null : jobRow.dataset.logKey;
+            renderModalBody();
             return;
         }
         if (e.target.closest('#fm-bulk-move')) {
