@@ -21,8 +21,8 @@
 
 /** The day columns, in the Optimizer's order. Mill was split into CNC and Parts on 2026-10-19 (both are the weekly's Mill). */
 export const DEPARTMENTS = [
-    { key: 'CNC',   label: 'CNC',   weekly: 'Mill' },
-    { key: 'Parts', label: 'Parts', weekly: 'Mill' },
+    { key: 'CNC',   label: 'CNC',   weekly: 'CNC' },
+    { key: 'Parts', label: 'Parts', weekly: 'Parts' },
     { key: 'FO',    label: 'FO',    weekly: 'Form Out' },
     { key: 'Cast',  label: 'Cast',  weekly: 'Cast' },
     { key: 'DM',    label: 'DM',    weekly: 'Demold' },

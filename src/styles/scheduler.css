@@ -157,6 +157,12 @@ table.sc-grid { border-collapse: separate; border-spacing: 0; table-layout: fixe
 .sc-ed-add-title { font-size: 12px; font-weight: 700; color: #1f2937; }
 .sc-ed-add-none { margin-top: 8px; font-size: 12px; color: #6b7280; background: #f9fafb; border: 1px dashed #d1d5db; border-radius: 6px; padding: 6px 8px; }
 #sc-ed-add-hours[readonly] { background: #f3f4f6; cursor: not-allowed; }
+.sc-stg { margin-top: 10px; border-top: 1px solid #e5e7eb; padding-top: 8px; }
+.sc-stg-title { font-size: 12px; font-weight: 700; color: #1f2937; margin-bottom: 4px; }
+.sc-stg-title small { font-weight: 500; color: #6b7280; }
+.sc-stg-cur { font-size: 12px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 6px 8px; white-space: pre-wrap; margin-bottom: 6px; color: #111827; }
+.sc-stg textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 13px; padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 6px; resize: vertical; }
+.sc-stg-actions { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
 .sc-editor .sc-ed-add { display: grid; grid-template-columns: 1fr 70px auto; gap: 6px; margin-top: 8px; }
 
 /* casting menu */

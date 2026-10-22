@@ -19,8 +19,9 @@ import {
 } from '../../services/schedule-service.js?v=20261021-1';
 import {
     DEPARTMENTS, DEPT_KEYS, TASKS, tasksForDept, taskForPhase, SETTINGS_DEFAULTS, REVENUE_PER_HOUR, SCHEDULABLE_STATUSES, TEAM_DAY_LIMITS
-} from '../../config/scheduler-config.js?v=20261020-5';
+} from '../../config/scheduler-config.js?v=20261022-1';
 import { logger } from '../../utils/logger.js';
+import { fetchForProject as fetchStagingNotes, upsertOne as saveStagingNote } from '../../services/task-descriptions-service.js?v=20261022-1';
 
 // ---------------------------------------------------------------------------
 // state
@@ -41,6 +42,7 @@ const S = {
     unsSearch: '',                // the "Not yet scheduled" panel's own search box
     scheduledIds: new Set(),      // every casting with days anywhere on the scheduler (any month)
     ready: new Map(),             // castingId -> flag: "Ready for scheduling" clicked on the portal's Optimizer Hours tab
+    staging: new Map(),           // project_number -> Map("cast|weeklyDept|day" -> { description }) from the portal's Staging tab
     pinned: new Set(),            // castings shown even without rows in the window
     busy: false,
     cascade: false                // moving a task also moves every later task of that casting by the same working days
@@ -630,7 +632,7 @@ function openEditor(td) {
             <button type="button" class="btn-primary" data-roll-save>Save roll-over</button>
         </div>`;
     };
-    let html = `<h4>${esc(projectLabel(c.project_number))} — ${esc(castingLabel(c))}</h4><div class="sc-sub">${esc(shortDay(date))} · ${esc(DEPARTMENTS.find(d => d.key === dept)?.label || dept)}</div>`;
+    let html = `<h4>${rows.length ? 'Task mover' : 'Add a day'}</h4><div class="sc-sub">${esc(projectLabel(c.project_number))} — ${esc(castingLabel(c))} · ${esc(shortDay(date))} · ${esc(DEPARTMENTS.find(d => d.key === dept)?.label || dept)}</div>`;
     if (holiday) html += '<div class="sc-ed-alert">Holiday — nothing can be scheduled on this day. Change the holiday list in Settings if that is wrong.</div>';
     else if (weekend && !weekendAllowed) html += `<div class="sc-ed-alert">Weekend. Work is only scheduled here if someone allows it.<br><button type="button" class="btn-secondary" id="sc-ed-allow">Allow this weekend day for this casting</button></div>`;
     for (const r of rows) {
@@ -639,17 +641,70 @@ function openEditor(td) {
         html += `<div class="sc-ed-row" data-id="${r.id}"><select data-task>${opts.map(o => `<option${o === r.task ? ' selected' : ''}>${o}</option>`).join('')}${opts.includes(r.task) ? '' : `<option selected>${esc(r.task)}</option>`}</select><input type="number" step="0.5" min="0" data-hours value="${fmtH(r.hours)}"${lockedH}><button type="button" class="sc-del" data-del title="Remove">&times;</button>${phaseLine(r)}${rollBtn}${rollPanel(r)}</div>`;
     }
     const canEdit = !holiday && (!weekend || weekendAllowed);
-    if (canEdit) html += addFormHtml(cid, dept, date);
+    if (canEdit && !rows.length) html += addFormHtml(cid, dept, date);   // adding a day = click an empty cell
     if (rows.length) {
         const nLater = S.rows.filter(r => r.casting_id === cid && r.date > date).length;
         html += `<div class="sc-ed-move">Move these to <input type="date" id="sc-ed-move-date" value="${date}"><button type="button" class="btn-secondary" id="sc-ed-move">Move</button></div>`;
         html += `<label class="sc-ed-cascade"><input type="checkbox" id="sc-ed-cascade"${S.cascade ? ' checked' : ''}${nLater ? '' : ' disabled'}> Cascade: also move every task after this one (${nLater}) by the same number of working days</label>`;
     }
+    if (rows.length) html += `<div class="sc-stg" id="sc-stg"><div class="sc-stg-title">Staging note</div><div class="sc-hint">Loading the portal's staging note…</div></div>`;
     html += `<div class="sc-ed-actions"><button type="button" class="btn-secondary" id="sc-ed-cancel">Close</button><div class="right">${canEdit && rows.length ? '<button type="button" class="btn-primary" id="sc-ed-save">Save</button>' : ''}</div></div>`;
     ed.innerHTML = html;
     ed.hidden = false;
     refreshAddForm();
     placeEditor(td);
+    if (rows.length) fillStagingSection(cid, dept, date, td);
+}
+
+// ---- staging note (the portal's Staging tab, task_descriptions): casting + weekly department + the day's index in that team
+const weeklyDeptOf = (dept) => DEPARTMENTS.find(d => d.key === dept)?.weekly || dept;
+async function stagingFor(projectNumber) {
+    if (!S.staging.has(projectNumber)) S.staging.set(projectNumber, await fetchStagingNotes(projectNumber));
+    return S.staging.get(projectNumber);
+}
+/** This date's day number among the casting's scheduled days in that team (1 = first), over all months. */
+async function stagingDayOf(cid, dept, date) {
+    const all = S.pinned.has(cid) ? S.rows.filter(r => r.casting_id === cid) : await loadScheduleForCastings([cid]);
+    const dates = [...new Set(all.filter(r => r.department === dept).map(r => r.date))].sort();
+    const i = dates.indexOf(date);
+    return i < 0 ? null : i + 1;
+}
+async function fillStagingSection(cid, dept, date, td) {
+    const box = $('sc-stg');
+    if (!box || !editorCtx || editorCtx.cid !== cid || editorCtx.date !== date || editorCtx.dept !== dept) return;
+    const c = S.castingById.get(cid);
+    try {
+        const [notes, day] = await Promise.all([stagingFor(c.project_number), stagingDayOf(cid, dept, date)]);
+        if (!$('sc-stg') || !editorCtx || editorCtx.cid !== cid || editorCtx.date !== date) return;
+        const wd = weeklyDeptOf(dept);
+        const key = `${c.casting_number}|${wd}|${day}`;
+        const cur = (notes.get(key) || {}).description || '';
+        const where = `${esc(wd)} day ${day} of ${esc(castLabelShort(c))}`;
+        box.innerHTML = `<div class="sc-stg-title">Staging note <small>(${where})</small></div>
+            ${cur.trim() ? `<div class="sc-stg-cur">${esc(cur)}</div>` : `<div class="sc-ed-alert">&#9888; No staging note in the portal for ${where}.</div>`}
+            <textarea id="sc-stg-text" rows="3" placeholder="Type the updated staging note…" data-key="${esc(key)}" data-day="${day}" data-wd="${esc(wd)}">${esc(cur)}</textarea>
+            <div class="sc-stg-actions"><button type="button" class="btn-primary" id="sc-stg-save">Save staging note</button><span class="sc-hint">Saves to the portal's Staging tab and the weekly card.</span></div>`;
+        placeEditor(td);
+    } catch (err) {
+        box.innerHTML = `<div class="sc-stg-title">Staging note</div><div class="sc-ed-alert">Could not load the staging note: ${esc(err.message || err)}</div>`;
+    }
+}
+function castLabelShort(c) { return `Cast ${c.casting_number}`; }
+async function saveStagingFromEditor() {
+    const ta = $('sc-stg-text');
+    if (!ta || !editorCtx) return;
+    const c = S.castingById.get(editorCtx.cid);
+    const text = ta.value;
+    setBusy(true);
+    try {
+        await saveStagingNote({ projectNumber: c.project_number, castingNumber: c.casting_number, department: ta.dataset.wd, dayNumber: ta.dataset.day, description: text });
+        const m = await stagingFor(c.project_number);
+        m.set(ta.dataset.key, { ...(m.get(ta.dataset.key) || {}), description: text });
+        toast(text.trim() ? `Staging note saved for ${ta.dataset.wd} day ${ta.dataset.day} of ${castLabelShort(c)}` : 'Staging note cleared');
+        const td = document.querySelector(`tr.sc-cast-top td.sc-cell[data-cid="${editorCtx.cid}"][data-date="${editorCtx.date}"][data-dept="${editorCtx.dept}"]`);
+        if (td) openEditor(td);
+    } catch (err) { toast('Could not save the staging note: ' + (err.message || err), 'error'); }
+    finally { setBusy(false); }
 }
 
 function placeEditor(anchorEl) {
@@ -1317,6 +1372,7 @@ function wire() {
         if (t.id === 'sc-ed-save') { await saveEditor(); return; }
         if (t.id === 'sc-ed-add') { await addEditorEntry(); return; }
         if (t.id === 'sc-ed-allow') { await allowWeekendHere(); return; }
+        if (t.id === 'sc-stg-save') { await saveStagingFromEditor(); return; }
         const ro = t.closest('[data-roll-open]');
         if (ro) { const pnl = $('sc-editor').querySelector(`.sc-roll[data-roll="${ro.dataset.rollOpen}"]`); if (pnl) { pnl.hidden = !pnl.hidden; placeEditor(document.querySelector(`td.sc-cell[data-cid="${editorCtx.cid}"][data-date="${editorCtx.date}"][data-dept="${editorCtx.dept}"]`) || ro); } return; }
         if (t.closest('[data-roll-save]')) { const pnl = t.closest('.sc-roll'); await saveRollover(pnl.dataset.roll, pnl.querySelector('[data-roll-today]').value); return; }
@@ -1357,6 +1413,7 @@ function wire() {
         if (tables.has('casting_phases') || tables.has('project_castings') || tables.has('projects') || tables.has('casting_inventory')) {
             try { await loadBase(); } catch (err) { logger.warn('[scheduler] reload base failed', err); }
         }
+        if (tables.has('task_descriptions')) S.staging.clear();
         if (tables.has('plant_schedule_settings')) {
             try { const saved = await loadScheduleSettings(); S.ready = readyFromSettings(saved); if (Number(saved.target) > 0) S.settings.target = Number(saved.target); if (saved.costs) S.settings.costs = saved.costs; }
             catch (err) { logger.warn('[scheduler] reload settings failed', err); }
