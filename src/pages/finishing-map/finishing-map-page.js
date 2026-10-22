@@ -179,15 +179,7 @@ function queueCardHtml(c) {
 function chipHtml(c) {
     const pcs = c.inv && c.inv.pcs != null ? `${c.inv.pcs} pcs` : '';
     const stale = isStale(c);
-    if (S.expandedKey === c.key) {
-        const moved = movedLine(c);
-        const cls = ['fm-card', 'fm-chip-expanded', matchesSearch(c) ? '' : 'fm-card-dim', stale ? 'fm-card-stale' : ''].filter(Boolean).join(' ');
-        return `<div class="${cls}" draggable="true" data-key="${escapeHtml(c.key)}" data-expanded="1" title="Click the name to close">
-            ${cardBodyHtml(c)}
-            <div class="fm-card-foot">${moved ? `<span class="fm-card-moved">${moved}</span>` : '<span></span>'}${moveSelectHtml(c, S.placements.get(c.key)?.area || null)}<button type="button" class="fm-mini-btn" data-action="ship" data-key="${escapeHtml(c.key)}" title="Mark this casting as shipped">Shipped</button></div>
-        </div>`;
-    }
-    const cls = ['fm-chip', S.selectedKey === c.key ? 'fm-card-selected' : '', matchesSearch(c) ? '' : 'fm-card-dim', stale ? 'fm-card-stale' : ''].filter(Boolean).join(' ');
+    const cls = ['fm-chip', S.expandedKey === c.key ? 'fm-chip-open' : '', matchesSearch(c) ? '' : 'fm-card-dim', stale ? 'fm-card-stale' : ''].filter(Boolean).join(' ');
     return `<div class="${cls}" draggable="true" data-key="${escapeHtml(c.key)}" title="${escapeHtml(c.sheetName || jobName(c))}${stale ? ' — no weekly days for a while, shipped?' : ''}">
         <span class="fm-chip-job">${escapeHtml(jobName(c))}</span>
         <span class="fm-chip-line"><b>Cast ${escapeHtml(c.castingNumber)}</b><span>${escapeHtml(c.projectNumber)}</span><span>${escapeHtml(pcs)}</span></span>
@@ -268,9 +260,33 @@ function renderMap() {
     $('fm-shipped-count').textContent = String(shipped.length);
     document.body.classList.toggle('fm-selecting', !!S.selectedKey);
     markOverflow();
-    const openChip = map.querySelector('[data-expanded="1"]');
-    if (openChip) openChip.addEventListener('mouseleave', () => { if (S.expandedKey === openChip.dataset.key) { S.expandedKey = null; renderMap(); } }, { once: true });
+    renderPopover();
     if (S.modal) renderModalBody();
+}
+
+/** The full card of the clicked chip, drawn over the chip's own corner so it opens under the cursor. */
+function renderPopover() {
+    let pop = $('fm-popover');
+    const key = S.expandedKey;
+    const chip = key ? $('fm-map').querySelector(`.fm-chip[data-key="${CSS.escape(key)}"]`) : null;
+    const c = key ? castingByKey(key) : null;
+    if (!chip || !c) { if (pop) pop.remove(); if (key) S.expandedKey = null; return; }
+    if (!pop) { pop = document.createElement('div'); pop.id = 'fm-popover'; $('fm-app').appendChild(pop); }
+    const moved = movedLine(c);
+    pop.innerHTML = `<div class="fm-card fm-chip-expanded${isStale(c) ? ' fm-card-stale' : ''}" draggable="true" data-key="${escapeHtml(key)}" data-expanded="1" title="Click the name to close">
+        ${cardBodyHtml(c)}
+        <div class="fm-card-foot">${moved ? `<span class="fm-card-moved">${moved}</span>` : '<span></span>'}${moveSelectHtml(c, S.placements.get(key)?.area || null)}<button type="button" class="fm-mini-btn" data-action="ship" data-key="${escapeHtml(key)}" title="Mark this casting as shipped">Shipped</button></div>
+    </div>`;
+    const r = chip.getBoundingClientRect();
+    pop.style.left = '0px'; pop.style.top = '0px';
+    const w = Math.max(pop.offsetWidth, r.width);
+    const h = pop.offsetHeight;
+    const left = Math.max(4, Math.min(r.left, window.innerWidth - w - 8));
+    const top = Math.max(4, Math.min(r.top, window.innerHeight - h - 8));
+    pop.style.left = left + 'px';
+    pop.style.top = top + 'px';
+    pop.style.minWidth = r.width + 'px';
+    pop.onmouseleave = () => { if (S.expandedKey === key) { S.expandedKey = null; renderMap(); } };
 }
 
 function armRowCollapse() {

@@ -281,8 +281,10 @@ button.fm-area-head:hover { background: #1f2937; }
 .fm-chip-line { display: flex; justify-content: space-between; gap: 0.3rem; color: #334155; }
 .fm-chip-line b { color: #0f172a; }
 
-/* a chip opened to its full card: as wide as the cell allows, sits on top of its neighbours */
-.fm-chip-expanded { flex: 1 1 100%; max-width: 20rem; cursor: grab; }
+/* a chip opened to its full card: drawn over the chip's corner, on top of everything */
+#fm-popover { position: fixed; z-index: 40; width: 17rem; max-width: calc(100vw - 1rem); }
+#fm-popover .fm-chip-expanded { width: 100%; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3); border-width: 2px; cursor: grab; }
+.fm-chip-open { outline: 2px solid #2563eb; outline-offset: 1px; }
 .fm-chip-expanded .fm-card-foot { gap: 0.3rem; }
 .fm-move-select { font: inherit; font-size: 11px; padding: 1px 4px; border: 1px solid #cbd5e1; border-radius: 6px; max-width: 9rem; }
 
