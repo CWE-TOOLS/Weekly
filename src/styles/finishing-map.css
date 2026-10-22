@@ -145,10 +145,12 @@ button.fm-area-head:hover { background: #1f2937; }
   display: grid;
   gap: 0.6rem;
   grid-template-columns: 5.5rem repeat(6, 1fr);
-  grid-template-rows: 1fr 1fr 10rem;
+  /* the boxes keep the size they had; Outside takes whatever is left above the coop row */
+  grid-template-rows: 11rem 11rem minmax(6rem, 1fr) 10rem;
   grid-template-areas:
     "tent1 tent1 wetroom wetroom blacktop blacktop large"
-    "tent1 tent1 tent2 tent2 outside outside outside"
+    "tent1 tent1 tent2 tent2 . . large"
+    "outside outside outside outside outside outside outside"
     "cooplabel coop1 coop2 coop3 coop4 coop5 coop6";
 }
 .fm-area {
