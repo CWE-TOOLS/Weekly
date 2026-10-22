@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Production Map - Weekly Schedule</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='0.9em' font-size='90'%3E%F0%9F%8F%AD%3C/text%3E%3C/svg%3E">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+    <link rel="stylesheet" href="src/styles/variables.css">
+    <link rel="stylesheet" href="src/styles/base.css">
+    <link rel="stylesheet" href="src/styles/buttons.css">
+    <link rel="stylesheet" href="src/styles/finishing-map.css?v=20261022-9">
+    <link rel="stylesheet" href="src/styles/production-map.css?v=20261022-1">
+</head>
+<body class="pm-body">
+    <div id="fm-app" class="fm-app pm-app">
+        <header class="fm-header">
+            <div class="fm-header-left">
+                <a href="project-portal.html" class="fm-nav-btn" title="Project Portal">&larr; Project Portal</a>
+                <a href="index.html" class="fm-nav-btn" title="Weekly Schedule">Weekly Schedule</a>
+                <a href="finishing-map.html" class="fm-nav-btn" title="Finishing Map">Finishing Map</a>
+            </div>
+            <h1 class="fm-title">Production Map</h1>
+            <div class="fm-header-right">
+                <span class="pm-sub" id="pm-sub"></span>
+                <input type="search" id="fm-search" class="fm-search" placeholder="Find a job or cast&hellip;" autocomplete="off">
+                <button type="button" id="fm-shipped-btn" class="fm-nav-btn fm-btn-shipped" title="Castings shipped in the last 60 days">Shipped <span class="fm-area-count" id="fm-shipped-count">0</span></button>
+                <button type="button" id="fm-refresh" class="fm-nav-btn" title="Reload the weekly">Refresh</button>
+                <span id="fm-updated" class="fm-updated"></span>
+            </div>
+        </header>
+
+        <div id="fm-notice" class="fm-notice" hidden></div>
+
+        <main class="pm-main" id="pm-map" aria-label="Departments">
+            <!-- department columns are rendered from production-map-config.js -->
+        </main>
+    </div>
+
+    <div class="fm-modal" id="fm-modal" hidden>
+        <div class="fm-modal-box" role="dialog" aria-modal="true" aria-labelledby="fm-modal-title">
+            <div class="fm-modal-head">
+                <span class="fm-modal-title" id="fm-modal-title"></span>
+                <input type="search" id="fm-modal-search" class="fm-modal-search" placeholder="Filter&hellip;" autocomplete="off">
+                <button type="button" class="fm-mini-btn fm-modal-close" id="fm-modal-close">Close</button>
+            </div>
+            <div class="fm-modal-body" id="fm-modal-body"></div>
+        </div>
+    </div>
+
+    <script type="module" src="src/pages/production-map/production-map-page.js?v=20261022-1"></script>
+</body>
+</html>
