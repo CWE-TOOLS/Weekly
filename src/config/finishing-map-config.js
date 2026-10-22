@@ -11,6 +11,7 @@ export const FINISHING_AREAS = [
     { id: 'blacktop', label: 'Black Top',    grid: 'blacktop' },
     { id: 'large',   label: 'Large Storage', grid: 'large' },
     { id: 'tent2',   label: 'Tent #2',       grid: 'tent2' },
+    { id: 'outside', label: 'Outside',       grid: 'outside' },
     { id: 'coop1',   label: '#1', group: 'Coop.', grid: 'coop1' },
     { id: 'coop2',   label: '#2', group: 'Coop.', grid: 'coop2' },
     { id: 'coop3',   label: '#3', group: 'Coop.', grid: 'coop3' },

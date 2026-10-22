@@ -1,13 +1,15 @@
 /**
- * Finishing Map — where each casting physically sits once it reaches finishing.
+ * Finishing Map — where each casting physically sits once it reaches finishing. Fits one screen.
  *
  * Reads the weekly (fetchAllTasks: Google Sheet + manual tasks + inventory summary) and the finishing_map table:
  *   - a casting enters the QUEUE on its first Finish day (FINISHING_DEPARTMENTS) that is today or earlier,
  *     or as soon as it has a placement row (so it survives the month rolling off the sheet);
  *   - it LEAVES the map when its last Ship day is past, the job is Shipped / Closed Out, or someone presses "Shipped";
- *     it then sits in the Shipped drawer for SHIPPED_WINDOW_DAYS.
- * Moves: drag a card onto an area (or the queue), or tap the card and then tap the area. Every move is written to
- * finishing_map and announced to the other open pages, which reload.
+ *     it then sits in the Shipped pop-up for SHIPPED_WINDOW_DAYS.
+ * Queue cards carry the detail; cards inside an area are collapsed to job, cast, job number and pieces.
+ * Moves: drag a card onto an area (or the queue), tap the card then tap the area, or open a full area (click its
+ * title) and use the Move dropdown there. Every move is written to finishing_map + finishing_map_log and announced
+ * to the other open pages, which reload.
  */
 import { fetchAllTasks } from '../../services/data-service.js';
 import { loadAllProjects } from '../../services/projects-service.js';
@@ -19,7 +21,6 @@ import { escapeHtml } from '../../utils/security-utils.js';
 import { logger } from '../../utils/logger.js';
 
 const WHO_KEY = 'finishingMapMovedBy';
-const SHIPPED_OPEN_KEY = 'finishingMapShippedOpen';
 
 const S = {
     castings: new Map(),     // key -> casting summary built from the weekly
@@ -29,7 +30,7 @@ const S = {
     search: '',
     loading: false,
     log: [],
-    logSearch: ''
+    modal: null,             // { kind: 'area'|'shipped'|'log', areaId?, filter }
 };
 
 const $ = (id) => document.getElementById(id);
@@ -75,8 +76,7 @@ function projectOf(pn) { return S.projects.get(pn) || null; }
 function jobName(c) {
     const p = projectOf(c.projectNumber);
     if (p && p.project_name) return p.project_name;
-    // The sheet name usually ends with "Cast #N" / "- Cast N": strip it so the card reads "Job" + "Cast N".
-    return (c.sheetName || c.projectNumber).replace(/\s*[-–]?\s*cast\s*#?\s*[\w.]+\s*$/i, '').trim() || c.sheetName;
+    return (c.sheetName || c.projectNumber).replace(/\s*[-–]?\s*cast\s*#?\s*[\w.]+\s*$/i, '').trim() || c.sheetName || c.projectNumber;
 }
 
 function shippedOn(c) {
@@ -90,11 +90,15 @@ function shippedOn(c) {
 }
 
 function inFinishing(c) {
-    if (S.placements.has(c.key)) return true;                       // seen before: stays until shipped
+    if (S.placements.has(c.key)) return true;
     return !!(c.firstFinish && c.firstFinish <= today());
 }
 
-/** Castings on the map (queue + areas) and the ones in the shipped drawer. */
+function isStale(c) {
+    return !!(c.offSheet || (c.lastDate && c.lastDate < daysAgo(STALE_AFTER_DAYS)));
+}
+
+/** Castings on the map (queue + areas) and the ones in the shipped list. */
 function partition() {
     const onMap = [], shipped = [];
     const cutoff = daysAgo(SHIPPED_WINDOW_DAYS);
@@ -106,8 +110,7 @@ function partition() {
         if (s) { if (s >= cutoff) shipped.push({ c, shippedOn: s }); }
         else onMap.push(c);
     }
-    // Placement rows whose casting is no longer on the weekly at all (month rolled off): keep them on the map until shipped.
-    for (const [key, row] of S.placements) {
+    for (const [key, row] of S.placements) {          // rows whose casting is no longer on the weekly at all
         if (seen.has(key)) continue;
         const c = { key, projectNumber: row.project_number, castingNumber: row.casting_number, sheetName: '', firstFinish: null, finishDays: 0, finishDaysDone: 0, lastShip: null, next: null, inv: null, lastDate: null, offSheet: true };
         if (row.shipped_on) { if (row.shipped_on >= cutoff) shipped.push({ c, shippedOn: row.shipped_on }); }
@@ -119,26 +122,32 @@ function partition() {
     return { onMap, shipped };
 }
 
-function matchesSearch(c) {
-    if (!S.search) return true;
-    const hay = `${jobName(c)} ${c.sheetName} ${c.projectNumber} cast ${c.castingNumber} ${(projectOf(c.projectNumber) || {}).pm || ''}`.toLowerCase();
-    return hay.includes(S.search);
+function castingByKey(key) {
+    const c = S.castings.get(key);
+    if (c) return c;
+    const row = S.placements.get(key);
+    return row ? { key, projectNumber: row.project_number, castingNumber: row.casting_number, sheetName: '', offSheet: true } : null;
 }
 
-// ---------------------------------------------------------------- render
+function searchText(c) {
+    return `${jobName(c)} ${c.sheetName || ''} ${c.projectNumber} cast ${c.castingNumber} ${(projectOf(c.projectNumber) || {}).pm || ''}`.toLowerCase();
+}
+function matchesSearch(c, q = S.search) { return !q || searchText(c).includes(q); }
 
-function cardHtml(c, { inDrawer = false, shippedOnDate = null } = {}) {
+// ---------------------------------------------------------------- cards
+
+/** Full card: the queue. */
+function queueCardHtml(c) {
     const row = S.placements.get(c.key);
     const p = projectOf(c.projectNumber);
     const inv = c.inv ? `${c.inv.types} types · ${c.inv.pcs} pcs` : '';
-    const finish = c.finishDays ? `Finish day ${Math.min(c.finishDaysDone, c.finishDays) || 1} of ${c.finishDays}` : (c.offSheet ? 'No longer on the weekly' : '');
+    const finish = c.finishDays ? `Finish day ${Math.min(c.finishDaysDone, c.finishDays) || 1} of ${c.finishDays}` : '';
     const next = c.next ? `Next: ${c.next.department} ${fmtDate(c.next.date)}` : (c.lastShip ? `Ship ${fmtDate(c.lastShip)}` : '');
-    const moved = row && row.moved_at ? `${row.moved_by ? escapeHtml(row.moved_by) + ' · ' : ''}${new Date(row.moved_at).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })}` : '';
-    const selected = S.selectedKey === c.key ? ' fm-card-selected' : '';
-    const dim = matchesSearch(c) ? '' : ' fm-card-dim';
-    const stale = !inDrawer && (c.offSheet || (c.lastDate && c.lastDate < daysAgo(STALE_AFTER_DAYS)));
+    const stale = isStale(c);
     const staleNote = stale ? (c.lastDate ? `No weekly days since ${fmtDate(c.lastDate)} — shipped?` : 'Not on the weekly any more — shipped?') : '';
-    return `<div class="fm-card${selected}${dim}${stale ? ' fm-card-stale' : ''}" draggable="${inDrawer ? 'false' : 'true'}" data-key="${escapeHtml(c.key)}" title="${escapeHtml(c.sheetName || jobName(c))}">
+    const moved = row && row.moved_at ? `${row.moved_by ? escapeHtml(row.moved_by) + ' · ' : ''}${new Date(row.moved_at).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })}` : '';
+    const cls = ['fm-card', S.selectedKey === c.key ? 'fm-card-selected' : '', matchesSearch(c) ? '' : 'fm-card-dim', stale ? 'fm-card-stale' : ''].filter(Boolean).join(' ');
+    return `<div class="${cls}" draggable="true" data-key="${escapeHtml(c.key)}" title="${escapeHtml(c.sheetName || jobName(c))}">
         <div class="fm-card-job">${escapeHtml(jobName(c))}</div>
         <div class="fm-card-cast">Cast ${escapeHtml(c.castingNumber)}<span class="fm-card-pn">${escapeHtml(c.projectNumber)}</span></div>
         ${p && p.pm ? `<div class="fm-card-meta">${escapeHtml(p.pm)}</div>` : ''}
@@ -146,29 +155,78 @@ function cardHtml(c, { inDrawer = false, shippedOnDate = null } = {}) {
         ${finish ? `<div class="fm-card-meta fm-card-finish">${escapeHtml(finish)}</div>` : ''}
         ${next ? `<div class="fm-card-meta">${escapeHtml(next)}</div>` : ''}
         ${staleNote ? `<div class="fm-card-meta fm-card-stale-note">${escapeHtml(staleNote)}</div>` : ''}
-        ${inDrawer
-            ? `<div class="fm-card-foot">Shipped ${fmtDate(shippedOnDate)} <button type="button" class="fm-mini-btn" data-action="unship" data-key="${escapeHtml(c.key)}">Put back</button></div>`
-            : `<div class="fm-card-foot">${moved ? `<span class="fm-card-moved">${moved}</span>` : '<span></span>'}<button type="button" class="fm-mini-btn" data-action="ship" data-key="${escapeHtml(c.key)}" title="Mark this casting as shipped">Shipped</button></div>`}
+        <div class="fm-card-foot">${moved ? `<span class="fm-card-moved">${moved}</span>` : '<span></span>'}<button type="button" class="fm-mini-btn" data-action="ship" data-key="${escapeHtml(c.key)}" title="Mark this casting as shipped">Shipped</button></div>
     </div>`;
 }
 
-function renderMap() {
+/** Collapsed card: inside an area (job, cast, job number, pieces). */
+function chipHtml(c) {
+    const pcs = c.inv && c.inv.pcs != null ? `${c.inv.pcs} pcs` : '';
+    const stale = isStale(c);
+    const cls = ['fm-chip', S.selectedKey === c.key ? 'fm-card-selected' : '', matchesSearch(c) ? '' : 'fm-card-dim', stale ? 'fm-card-stale' : ''].filter(Boolean).join(' ');
+    return `<div class="${cls}" draggable="true" data-key="${escapeHtml(c.key)}" title="${escapeHtml(c.sheetName || jobName(c))}${stale ? ' — no weekly days for a while, shipped?' : ''}">
+        <span class="fm-chip-job">${escapeHtml(jobName(c))}</span>
+        <span class="fm-chip-line"><b>Cast ${escapeHtml(c.castingNumber)}</b><span>${escapeHtml(c.projectNumber)}</span><span>${escapeHtml(pcs)}</span></span>
+    </div>`;
+}
+
+/** Row in the area pop-up: tick box + collapsed info + Shipped. Moves happen from the bar above the list. */
+function modalRowHtml(c) {
+    const pcs = c.inv && c.inv.pcs != null ? `${c.inv.pcs} pcs` : '';
+    const p = projectOf(c.projectNumber);
+    const stale = isStale(c);
+    const checked = S.modal && S.modal.selected && S.modal.selected.has(c.key);
+    return `<label class="fm-mrow${stale ? ' fm-card-stale' : ''}${checked ? ' fm-mrow-checked' : ''}" data-key="${escapeHtml(c.key)}">
+        <input type="checkbox" class="fm-mrow-check" data-check="${escapeHtml(c.key)}"${checked ? ' checked' : ''}>
+        <div class="fm-mrow-text">
+            <div class="fm-card-job">${escapeHtml(jobName(c))} <b>Cast ${escapeHtml(c.castingNumber)}</b> <span class="fm-card-pn">${escapeHtml(c.projectNumber)}</span></div>
+            <div class="fm-card-meta">${[p && p.pm, pcs, c.next ? `Next: ${c.next.department} ${fmtDate(c.next.date)}` : '', stale ? (c.lastDate ? `No weekly days since ${fmtDate(c.lastDate)} — shipped?` : 'Not on the weekly any more — shipped?') : ''].filter(Boolean).map(escapeHtml).join(' · ')}</div>
+        </div>
+        <button type="button" class="fm-mini-btn" data-action="ship" data-key="${escapeHtml(c.key)}">Shipped</button>
+    </label>`;
+}
+
+/** The bar above an area's list: select all, how many are ticked, where to move them. */
+function bulkBarHtml(currentArea, visibleKeys) {
+    const n = S.modal.selected.size;
+    const allChecked = visibleKeys.length > 0 && visibleKeys.every(k => S.modal.selected.has(k));
+    const options = [`<option value="">Choose an area…</option>`, `<option value="__queue">Queue (not placed)</option>`]
+        .concat(FINISHING_AREAS.filter(a => a.id !== currentArea).map(a => `<option value="${a.id}">${escapeHtml(areaLabel(a.id))}</option>`))
+        .join('');
+    return `<div class="fm-bulk">
+        <label class="fm-bulk-all"><input type="checkbox" id="fm-sel-all"${allChecked ? ' checked' : ''}> Select all</label>
+        <span class="fm-bulk-count">${n ? `${n} selected` : 'Tick the jobs to move'}</span>
+        <select id="fm-bulk-area"${n ? '' : ' disabled'}>${options}</select>
+        <button type="button" class="fm-mini-btn fm-bulk-go" id="fm-bulk-move"${n ? '' : ' disabled'}>Move selected</button>
+    </div>`;
+}
+
+// ---------------------------------------------------------------- render
+
+function ensureAreaBoxes() {
     const map = $('fm-map');
-    if (!map.children.length) {
-        const groups = new Map();
-        map.innerHTML = FINISHING_AREAS.map(a => `<section class="fm-area${a.group ? ' fm-area-coop' : ''}" data-area="${a.id}" style="grid-area:${a.grid}">
-            <div class="fm-area-head"><span class="fm-area-label">${escapeHtml(a.label)}</span><span class="fm-area-count" data-count="${a.id}">0</span></div>
-            <div class="fm-cards" data-cards="${a.id}"></div>
-        </section>`).join('');
-        for (const a of FINISHING_AREAS) if (a.group && !groups.has(a.group)) { groups.set(a.group, true); }
-        for (const g of groups.keys()) {
-            const label = document.createElement('div');
-            label.className = 'fm-group-label';
-            label.style.gridArea = 'cooplabel';
-            label.textContent = g;
-            map.appendChild(label);
-        }
+    if (map.children.length) return;
+    map.innerHTML = FINISHING_AREAS.map(a => `<section class="fm-area${a.group ? ' fm-area-coop' : ''}" data-area="${a.id}" style="grid-area:${a.grid}">
+        <button type="button" class="fm-area-head" data-open-area="${a.id}" title="See every job in ${escapeHtml(areaLabel(a.id))}">
+            <span class="fm-area-label">${escapeHtml(a.label)}</span>
+            <span class="fm-area-more" data-more="${a.id}"></span>
+            <span class="fm-area-count" data-count="${a.id}">0</span>
+        </button>
+        <div class="fm-cards" data-cards="${a.id}"></div>
+    </section>`).join('');
+    const groups = [...new Set(FINISHING_AREAS.filter(a => a.group).map(a => a.group))];
+    for (const g of groups) {
+        const label = document.createElement('div');
+        label.className = 'fm-group-label';
+        label.style.gridArea = 'cooplabel';
+        label.textContent = g;
+        map.appendChild(label);
     }
+}
+
+function renderMap() {
+    ensureAreaBoxes();
+    const map = $('fm-map');
     const { onMap, shipped } = partition();
     const byArea = new Map(FINISHING_AREAS.map(a => [a.id, []]));
     const queue = [];
@@ -176,51 +234,101 @@ function renderMap() {
         const area = S.placements.get(c.key)?.area;
         if (area && byArea.has(area)) byArea.get(area).push(c); else queue.push(c);
     }
-    $('fm-queue-cards').innerHTML = queue.map(c => cardHtml(c)).join('') || '<div class="fm-empty">Nothing waiting.</div>';
+    $('fm-queue-cards').innerHTML = queue.map(queueCardHtml).join('') || '<div class="fm-empty">Nothing waiting.</div>';
     $('fm-queue-count').textContent = String(queue.length);
     for (const [id, list] of byArea) {
         const box = map.querySelector(`[data-cards="${id}"]`);
-        if (box) box.innerHTML = list.map(c => cardHtml(c)).join('');
+        if (box) box.innerHTML = list.map(chipHtml).join('');
         const n = map.querySelector(`[data-count="${id}"]`);
         if (n) n.textContent = String(list.length);
     }
     $('fm-shipped-count').textContent = String(shipped.length);
-    $('fm-shipped-body').innerHTML = shipped.length
-        ? `<div class="fm-cards fm-cards-drawer">${shipped.map(({ c, shippedOn }) => cardHtml(c, { inDrawer: true, shippedOnDate: shippedOn })).join('')}</div>`
-        : '<div class="fm-empty">Nothing shipped in the last 60 days.</div>';
     document.body.classList.toggle('fm-selecting', !!S.selectedKey);
+    markOverflow();
+    if (S.modal) renderModalBody();
 }
 
-function renderLog() {
-    const body = $('fm-log-body');
-    const q = S.logSearch;
-    const rows = S.log.filter(r => {
-        if (!q) return true;
-        const c = castingByKey(placementKey(r.project_number, r.casting_number));
-        const hay = `${c ? jobName(c) : ''} ${r.project_number} cast ${r.casting_number} ${areaLabel(r.from_area)} ${areaLabel(r.to_area)} ${r.moved_by || ''}`.toLowerCase();
-        return hay.includes(q);
-    });
-    if (!rows.length) { body.innerHTML = `<div class="fm-empty">${S.log.length ? 'No moves match.' : 'No moves logged yet.'}</div>`; return; }
-    let lastDay = '';
-    const parts = [];
-    for (const r of rows) {
-        const when = new Date(r.moved_at);
-        const day = when.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric', year: 'numeric' });
-        if (day !== lastDay) { parts.push(`<div class="fm-log-day">${escapeHtml(day)}</div>`); lastDay = day; }
-        const c = castingByKey(placementKey(r.project_number, r.casting_number));
-        const name = c ? jobName(c) : r.project_number;
-        const what = r.kind === 'shipped' ? `<span class="fm-log-ship">Shipped</span>${r.from_area ? ` from ${escapeHtml(areaLabel(r.from_area))}` : ''}`
-            : r.kind === 'put_back' ? `<span class="fm-log-ship">Put back</span> on the map`
-            : `${escapeHtml(areaLabel(r.from_area))} <span class="fm-log-arrow">&rarr;</span> <strong>${escapeHtml(areaLabel(r.to_area))}</strong>`;
-        parts.push(`<div class="fm-log-row"><span class="fm-log-time">${when.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span><span class="fm-log-job">${escapeHtml(name)} <b>Cast ${escapeHtml(r.casting_number)}</b></span><span class="fm-log-what">${what}</span><span class="fm-log-who">${escapeHtml(r.moved_by || '')}</span></div>`);
+/** A full cell: the title says how many are out of sight and that clicking shows them all. */
+function markOverflow() {
+    for (const area of document.querySelectorAll('.fm-area')) {
+        const box = area.querySelector('.fm-cards');
+        const more = area.querySelector('.fm-area-more');
+        if (!box || !more) continue;
+        const bottom = box.getBoundingClientRect().bottom;
+        let hidden = 0;
+        for (const chip of box.children) if (chip.getBoundingClientRect().bottom > bottom + 2) hidden++;
+        area.classList.toggle('fm-area-overflow', hidden > 0);
+        more.textContent = hidden > 0 ? `+${hidden} more — expand to see all` : '';
     }
-    body.innerHTML = parts.join('');
+}
+
+// ---------------------------------------------------------------- pop-ups
+
+function openModal(kind, extra = {}) {
+    S.modal = { kind, filter: '', selected: new Set(), ...extra };
+    const search = $('fm-modal-search');
+    search.value = '';
+    search.hidden = false;
+    search.placeholder = kind === 'log' ? 'Filter by job, cast, area or name' : 'Filter by job, cast or PM';
+    $('fm-modal').hidden = false;
+    renderModalBody();
+    if (kind === 'log') refreshLog();
+}
+function closeModal() { S.modal = null; $('fm-modal').hidden = true; }
+
+function renderModalBody() {
+    if (!S.modal) return;
+    const title = $('fm-modal-title');
+    const body = $('fm-modal-body');
+    const q = S.modal.filter;
+    if (S.modal.kind === 'area') {
+        const id = S.modal.areaId;
+        const list = partition().onMap.filter(c => (S.placements.get(c.key)?.area || null) === id);
+        title.textContent = `${areaLabel(id)} — ${list.length} ${list.length === 1 ? 'job' : 'jobs'}`;
+        const rows = list.filter(c => matchesSearch(c, q));
+        const keep = new Set(list.map(c => c.key));
+        for (const k of [...S.modal.selected]) if (!keep.has(k)) S.modal.selected.delete(k);   // moved away or shipped: drop it
+        body.innerHTML = bulkBarHtml(id, rows.map(c => c.key)) + (rows.length ? rows.map(c => modalRowHtml(c)).join('') : `<div class="fm-empty">${list.length ? 'No jobs match.' : 'Nothing here.'}</div>`);
+    } else if (S.modal.kind === 'shipped') {
+        const { shipped } = partition();
+        title.textContent = `Shipped — last ${SHIPPED_WINDOW_DAYS} days (${shipped.length})`;
+        const rows = shipped.filter(({ c }) => matchesSearch(c, q));
+        body.innerHTML = rows.length ? rows.map(({ c, shippedOn }) => `<div class="fm-mrow" data-key="${escapeHtml(c.key)}">
+            <div class="fm-mrow-text">
+                <div class="fm-card-job">${escapeHtml(jobName(c))} <b>Cast ${escapeHtml(c.castingNumber)}</b> <span class="fm-card-pn">${escapeHtml(c.projectNumber)}</span></div>
+                <div class="fm-card-meta">Shipped ${fmtDate(shippedOn)}${S.placements.get(c.key)?.moved_by ? ' · ' + escapeHtml(S.placements.get(c.key).moved_by) : ''}</div>
+            </div>
+            <button type="button" class="fm-mini-btn" data-action="unship" data-key="${escapeHtml(c.key)}">Put back on the map</button>
+        </div>`).join('') : `<div class="fm-empty">${shipped.length ? 'No jobs match.' : `Nothing shipped in the last ${SHIPPED_WINDOW_DAYS} days.`}</div>`;
+    } else if (S.modal.kind === 'log') {
+        title.textContent = `Move log — last ${LOG_WINDOW_DAYS} days`;
+        const rows = S.log.filter(r => {
+            if (!q) return true;
+            const c = castingByKey(placementKey(r.project_number, r.casting_number));
+            return `${c ? jobName(c) : ''} ${r.project_number} cast ${r.casting_number} ${areaLabel(r.from_area)} ${areaLabel(r.to_area)} ${r.moved_by || ''}`.toLowerCase().includes(q);
+        });
+        if (!rows.length) { body.innerHTML = `<div class="fm-empty">${S.log.length ? 'No moves match.' : 'No moves logged yet.'}</div>`; return; }
+        let lastDay = '';
+        const parts = [];
+        for (const r of rows) {
+            const when = new Date(r.moved_at);
+            const day = when.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric', year: 'numeric' });
+            if (day !== lastDay) { parts.push(`<div class="fm-log-day">${escapeHtml(day)}</div>`); lastDay = day; }
+            const c = castingByKey(placementKey(r.project_number, r.casting_number));
+            const name = c ? jobName(c) : r.project_number;
+            const what = r.kind === 'shipped' ? `<span class="fm-log-ship">Shipped</span>${r.from_area ? ` from ${escapeHtml(areaLabel(r.from_area))}` : ''}`
+                : r.kind === 'put_back' ? `<span class="fm-log-ship">Put back</span> on the map`
+                : `${escapeHtml(areaLabel(r.from_area))} <span class="fm-log-arrow">&rarr;</span> <strong>${escapeHtml(areaLabel(r.to_area))}</strong>`;
+            parts.push(`<div class="fm-log-row"><span class="fm-log-time">${when.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span><span class="fm-log-job">${escapeHtml(name)} <b>Cast ${escapeHtml(r.casting_number)}</b></span><span class="fm-log-what">${what}</span><span class="fm-log-who">${escapeHtml(r.moved_by || '')}</span></div>`);
+        }
+        body.innerHTML = parts.join('');
+    }
 }
 
 async function refreshLog() {
-    if (isFinishingMapMigrationPending()) { S.log = []; renderLog(); return; }
+    if (isFinishingMapMigrationPending()) { S.log = []; if (S.modal?.kind === 'log') renderModalBody(); return; }
     S.log = await loadLog(LOG_WINDOW_DAYS);
-    renderLog();
+    if (S.modal?.kind === 'log') renderModalBody();
 }
 
 function notice(text, kind = 'info') {
@@ -245,19 +353,20 @@ async function loadAll({ silent = false } = {}) {
         S.projects = new Map((projects || []).map(p => [String(p.project_number || '').trim(), p]));
         S.castings = summariseCastings(tasks);
         S.placements = placements;
-        // Castings that just reached finishing get a row so they stay on the map when their weeks roll off the sheet.
         const fresh = [...S.castings.values()].filter(c => !S.placements.has(c.key) && inFinishing(c) && !shippedOn(c));
         if (fresh.length && !isFinishingMapMigrationPending()) {
             try { await ensurePlacements(fresh); S.placements = await loadPlacements(); }
             catch (err) { logger.warn('[finishing-map] could not record new castings', err); }
         }
-        // A placed casting whose last Ship day has passed is shipped: record the date so the drawer keeps it after the sheet forgets.
         const now = today();
         for (const c of S.castings.values()) {
             const row = S.placements.get(c.key);
             if (row && !row.shipped_on && c.lastShip && c.lastShip <= now && !isFinishingMapMigrationPending()) {
-                try { await setShipped(c.projectNumber, c.castingNumber, c.lastShip, 'weekly'); row.shipped_on = c.lastShip; await logMove({ projectNumber: c.projectNumber, castingNumber: c.castingNumber, kind: 'shipped', fromArea: row.area || null, movedBy: 'weekly (Ship day passed)' }); }
-                catch (err) { logger.warn('[finishing-map] could not stamp shipped', err); }
+                try {
+                    await setShipped(c.projectNumber, c.castingNumber, c.lastShip, 'weekly');
+                    row.shipped_on = c.lastShip;
+                    await logMove({ projectNumber: c.projectNumber, castingNumber: c.castingNumber, kind: 'shipped', fromArea: row.area || null, movedBy: 'weekly (Ship day passed)' });
+                } catch (err) { logger.warn('[finishing-map] could not stamp shipped', err); }
             }
         }
         notice(isFinishingMapMigrationPending() ? 'The finishing_map table is not in the database yet — run migration/finishing-map.sql. Moves will not be saved until then.' : '', 'warn');
@@ -279,19 +388,11 @@ async function reloadPlacementsOnly() {
 
 // ---------------------------------------------------------------- moves
 
-function castingByKey(key) {
-    const c = S.castings.get(key);
-    if (c) return c;
-    const row = S.placements.get(key);
-    return row ? { key, projectNumber: row.project_number, castingNumber: row.casting_number } : null;
-}
-
 async function moveTo(key, areaId) {
     const c = castingByKey(key);
     if (!c) return;
     const current = S.placements.get(key)?.area || null;
     if ((areaId || null) === current) { S.selectedKey = null; renderMap(); return; }
-    // Optimistic: show it there now, write, reload on failure.
     const prev = S.placements.get(key);
     S.placements.set(key, { ...(prev || { project_number: c.projectNumber, casting_number: c.castingNumber }), area: areaId || null, moved_by: who() || null, moved_at: new Date().toISOString() });
     S.selectedKey = null;
@@ -300,15 +401,24 @@ async function moveTo(key, areaId) {
         await setArea(c.projectNumber, c.castingNumber, areaId || null, who());
         await logMove({ projectNumber: c.projectNumber, castingNumber: c.castingNumber, kind: 'move', fromArea: current, toArea: areaId || null, movedBy: who() });
         await refreshLog();
+    } catch (err) {
+        logger.error('[finishing-map] move failed', err);
+        notice('The move was not saved: ' + (err.message || err), 'error');
+        await reloadPlacementsOnly();
     }
-    catch (err) { logger.error('[finishing-map] move failed', err); notice('The move was not saved: ' + (err.message || err), 'error'); await reloadPlacementsOnly(); }
+}
+
+/** Move several castings to one area, one write each; the pop-up stays open. */
+async function moveMany(keys, areaId) {
+    for (const key of keys) await moveTo(key, areaId);
+    if (S.modal) { S.modal.selected.clear(); renderModalBody(); }
 }
 
 async function ship(key, undo = false) {
     const c = castingByKey(key);
     if (!c) return;
     const label = `${jobName(c)} — Cast ${c.castingNumber}`;
-    if (!undo && !window.confirm(`Mark ${label} as shipped? It leaves the map and sits in the Shipped drawer for ${SHIPPED_WINDOW_DAYS} days.`)) return;
+    if (!undo && !window.confirm(`Mark ${label} as shipped? It leaves the map and stays in the Shipped list for ${SHIPPED_WINDOW_DAYS} days.`)) return;
     const prev = S.placements.get(key) || { project_number: c.projectNumber, casting_number: c.castingNumber, area: null };
     S.placements.set(key, { ...prev, shipped_on: undo ? null : today() });
     renderMap();
@@ -316,22 +426,25 @@ async function ship(key, undo = false) {
         await setShipped(c.projectNumber, c.castingNumber, undo ? null : today(), who());
         await logMove({ projectNumber: c.projectNumber, castingNumber: c.castingNumber, kind: undo ? 'put_back' : 'shipped', fromArea: prev.area || null, movedBy: who() });
         await refreshLog();
+    } catch (err) {
+        logger.error('[finishing-map] ship failed', err);
+        notice('Not saved: ' + (err.message || err), 'error');
+        await reloadPlacementsOnly();
     }
-    catch (err) { logger.error('[finishing-map] ship failed', err); notice('Not saved: ' + (err.message || err), 'error'); await reloadPlacementsOnly(); }
 }
 
 function wireEvents() {
     const app = $('fm-app');
 
-    // Drag and drop (mouse / pen / most tablets)
+    // Drag and drop
     app.addEventListener('dragstart', (e) => {
-        const card = e.target.closest('.fm-card[draggable="true"]');
+        const card = e.target.closest('[draggable="true"][data-key]');
         if (!card) return;
         e.dataTransfer.setData('text/plain', card.dataset.key);
         e.dataTransfer.effectAllowed = 'move';
         card.classList.add('fm-card-dragging');
     });
-    app.addEventListener('dragend', (e) => { e.target.closest?.('.fm-card')?.classList.remove('fm-card-dragging'); });
+    app.addEventListener('dragend', (e) => { e.target.closest?.('[data-key]')?.classList.remove('fm-card-dragging'); });
     app.addEventListener('dragover', (e) => {
         const zone = e.target.closest('[data-area]');
         if (!zone) return;
@@ -349,7 +462,7 @@ function wireEvents() {
         if (key) moveTo(key, zone.dataset.area || null);
     });
 
-    // Tap to move: tap a card, then tap an area (or the queue). Buttons on the card do their own thing.
+    // Clicks on the map: card buttons, area titles, tap-to-move
     app.addEventListener('click', (e) => {
         const btn = e.target.closest('button[data-action]');
         if (btn) {
@@ -357,7 +470,9 @@ function wireEvents() {
             if (btn.dataset.action === 'unship') ship(btn.dataset.key, true);
             return;
         }
-        const card = e.target.closest('.fm-card[draggable="true"]');
+        const head = e.target.closest('[data-open-area]');
+        if (head) { S.selectedKey = null; renderMap(); openModal('area', { areaId: head.dataset.openArea }); return; }
+        const card = e.target.closest('[draggable="true"][data-key]');
         if (card) {
             S.selectedKey = S.selectedKey === card.dataset.key ? null : card.dataset.key;
             renderMap();
@@ -367,33 +482,63 @@ function wireEvents() {
         if (zone && S.selectedKey) { moveTo(S.selectedKey, zone.dataset.area || null); return; }
         if (S.selectedKey && !e.target.closest('.fm-header')) { S.selectedKey = null; renderMap(); }
     });
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && S.selectedKey) { S.selectedKey = null; renderMap(); } });
+
+    // Pop-up: Move dropdown, Shipped / Put back, close
+    const modal = $('fm-modal');
+    modal.addEventListener('change', (e) => {
+        if (!S.modal) return;
+        const box = e.target.closest('input[data-check]');
+        if (box) {
+            if (box.checked) S.modal.selected.add(box.dataset.check); else S.modal.selected.delete(box.dataset.check);
+            renderModalBody();
+            return;
+        }
+        if (e.target.id === 'fm-sel-all') {
+            const keys = [...modal.querySelectorAll('input[data-check]')].map(b => b.dataset.check);
+            if (e.target.checked) keys.forEach(k => S.modal.selected.add(k)); else keys.forEach(k => S.modal.selected.delete(k));
+            renderModalBody();
+        }
+    });
+    modal.addEventListener('click', (e) => {
+        const btn = e.target.closest('button[data-action]');
+        if (btn) {
+            e.preventDefault();
+            if (btn.dataset.action === 'ship') ship(btn.dataset.key);
+            if (btn.dataset.action === 'unship') ship(btn.dataset.key, true);
+            return;
+        }
+        if (e.target.closest('#fm-bulk-move')) {
+            const area = $('fm-bulk-area').value;
+            if (!area) { $('fm-bulk-area').focus(); return; }
+            moveMany([...S.modal.selected], area === '__queue' ? null : area);
+            return;
+        }
+        if (e.target === modal || e.target.closest('#fm-modal-close')) closeModal();
+    });
+    $('fm-modal-search').addEventListener('input', (e) => { if (S.modal) { S.modal.filter = e.target.value.trim().toLowerCase(); renderModalBody(); } });
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        if (S.modal) closeModal();
+        else if (S.selectedKey) { S.selectedKey = null; renderMap(); }
+    });
 
     $('fm-search').addEventListener('input', (e) => { S.search = e.target.value.trim().toLowerCase(); renderMap(); });
     $('fm-refresh').addEventListener('click', () => loadAll());
+    $('fm-shipped-btn').addEventListener('click', () => openModal('shipped'));
+    $('fm-log-btn').addEventListener('click', () => openModal('log'));
 
     const whoInput = $('fm-who');
     try { whoInput.value = localStorage.getItem(WHO_KEY) || ''; } catch { /* storage blocked */ }
     whoInput.addEventListener('change', () => { try { localStorage.setItem(WHO_KEY, whoInput.value.trim()); } catch { /* ignore */ } });
 
-    const logPanel = $('fm-log');
-    const logBtn = $('fm-log-btn');
-    const setLogOpen = (open) => { logPanel.hidden = !open; logBtn.setAttribute('aria-expanded', String(open)); if (open) refreshLog(); };
-    logBtn.addEventListener('click', () => setLogOpen(logPanel.hidden));
-    $('fm-log-close').addEventListener('click', () => setLogOpen(false));
-    $('fm-log-search').addEventListener('input', (e) => { S.logSearch = e.target.value.trim().toLowerCase(); renderLog(); });
+    window.addEventListener('resize', markOverflow);
 
-    const toggle = $('fm-shipped-toggle');
-    const body = $('fm-shipped-body');
-    const setOpen = (open) => { body.hidden = !open; toggle.setAttribute('aria-expanded', String(open)); try { localStorage.setItem(SHIPPED_OPEN_KEY, open ? '1' : ''); } catch { /* ignore */ } };
-    toggle.addEventListener('click', () => setOpen(body.hidden));
-    try { if (localStorage.getItem(SHIPPED_OPEN_KEY)) setOpen(true); } catch { /* ignore */ }
-
-    // Other pages' saves (portal / weekly / another map): the finishing_map table reloads alone, anything else reloads all.
+    // Other pages' saves: the finishing_map tables reload alone, anything else reloads all.
     registerRefreshHandler(async (payload, payloads) => {
         const batch = Array.isArray(payloads) && payloads.length ? payloads : [payload];
         const tables = new Set(batch.filter(isPortalChange).map(p => signalInfo(p).table));
-        if (batch.every(isPortalChange) && tables.size === 1 && tables.has('finishing_map')) await reloadPlacementsOnly();
+        const onlyOurs = batch.every(isPortalChange) && [...tables].every(t => t === 'finishing_map' || t === 'finishing_map_log');
+        if (onlyOurs) await reloadPlacementsOnly();
         else await loadAll({ silent: true });
     });
 }
@@ -401,11 +546,13 @@ function wireEvents() {
 // ---------------------------------------------------------------- boot
 
 (async function boot() {
+    if (document.getElementById('ro-test-count') || document.querySelector('[style*="99999"]')) document.body.classList.add('fm-has-test-bar');
     wireEvents();
     renderMap();
     try { await initializeSupabase(); } catch (err) { logger.warn('[finishing-map] supabase init failed', err); }
     await loadAll();
+    if (document.getElementById('ro-test-count')) document.body.classList.add('fm-has-test-bar');
 })();
 
 // Console hook for checks on the test copy.
-window.__finishingMap = { state: S, partition, reload: loadAll };
+window.__finishingMap = { state: S, partition, reload: loadAll, openModal };

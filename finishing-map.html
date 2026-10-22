@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="src/styles/variables.css">
     <link rel="stylesheet" href="src/styles/base.css">
     <link rel="stylesheet" href="src/styles/buttons.css">
-    <link rel="stylesheet" href="src/styles/finishing-map.css?v=20261022-2">
+    <link rel="stylesheet" href="src/styles/finishing-map.css?v=20261022-3">
 </head>
 <body>
     <div id="fm-app" class="fm-app">
@@ -24,7 +24,8 @@
             <div class="fm-header-right">
                 <input type="search" id="fm-search" class="fm-search" placeholder="Find a job or cast&hellip;" autocomplete="off">
                 <label class="fm-who"><span>Moves by</span><input type="text" id="fm-who" placeholder="your name" maxlength="40" autocomplete="off"></label>
-                <button type="button" id="fm-log-btn" class="fm-nav-btn" title="Every move with date and time" aria-expanded="false">Log</button>
+                <button type="button" id="fm-shipped-btn" class="fm-nav-btn fm-btn-shipped" title="Castings shipped in the last 60 days">Shipped <span class="fm-area-count" id="fm-shipped-count">0</span></button>
+                <button type="button" id="fm-log-btn" class="fm-nav-btn" title="Every move with date and time">Log</button>
                 <button type="button" id="fm-refresh" class="fm-nav-btn" title="Reload the weekly and the map">Refresh</button>
                 <span id="fm-updated" class="fm-updated"></span>
             </div>
@@ -35,10 +36,10 @@
         <main class="fm-main">
             <aside class="fm-queue" id="fm-queue" data-area="">
                 <div class="fm-area-head">
-                    <span class="fm-area-label">In finishing &mdash; not placed yet</span>
+                    <span class="fm-area-label">In finishing &mdash; not placed</span>
                     <span class="fm-area-count" id="fm-queue-count">0</span>
                 </div>
-                <p class="fm-queue-help">A casting shows up here on its first Finish day on the weekly. Drag it onto the area it is sitting in, or tap it and then tap the area.</p>
+                <p class="fm-queue-help">Shows up here on its first Finish day. Drag it onto the area it is sitting in, or tap it and then tap the area.</p>
                 <div class="fm-cards" id="fm-queue-cards"></div>
             </aside>
 
@@ -46,20 +47,20 @@
                 <!-- area boxes are rendered from finishing-map-config.js -->
             </section>
         </main>
-
-        <section class="fm-log" id="fm-log" hidden>
-            <div class="fm-log-head"><span>Move log &mdash; last 60 days</span><input type="search" id="fm-log-search" placeholder="Filter by job, cast, area or name" autocomplete="off"><button type="button" class="fm-mini-btn" id="fm-log-close">Close</button></div>
-            <div class="fm-log-body" id="fm-log-body"></div>
-        </section>
-
-        <section class="fm-shipped" id="fm-shipped">
-            <button type="button" class="fm-shipped-toggle" id="fm-shipped-toggle" aria-expanded="false">
-                Shipped <span class="fm-area-count" id="fm-shipped-count">0</span> <span class="fm-shipped-sub">last 60 days</span>
-            </button>
-            <div class="fm-shipped-body" id="fm-shipped-body" hidden></div>
-        </section>
     </div>
 
-    <script type="module" src="src/pages/finishing-map/finishing-map-page.js?v=20261022-2"></script>
+    <!-- pop-ups: an area's full list, the shipped list, the move log -->
+    <div class="fm-modal" id="fm-modal" hidden>
+        <div class="fm-modal-box" role="dialog" aria-modal="true" aria-labelledby="fm-modal-title">
+            <div class="fm-modal-head">
+                <span class="fm-modal-title" id="fm-modal-title"></span>
+                <input type="search" id="fm-modal-search" class="fm-modal-search" placeholder="Filter&hellip;" autocomplete="off" hidden>
+                <button type="button" class="fm-mini-btn fm-modal-close" id="fm-modal-close">Close</button>
+            </div>
+            <div class="fm-modal-body" id="fm-modal-body"></div>
+        </div>
+    </div>
+
+    <script type="module" src="src/pages/finishing-map/finishing-map-page.js?v=20261022-3"></script>
 </body>
 </html>

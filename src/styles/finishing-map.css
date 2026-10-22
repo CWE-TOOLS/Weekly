@@ -1,57 +1,69 @@
-/* Finishing Map — plant areas laid out like the magnet board, castings as cards */
+/* Finishing Map — plant areas laid out like the magnet board, one screen, no page scroll */
+
+html, body { height: 100%; }
+body { margin: 0; overflow: hidden; }
 
 .fm-app {
-  min-height: 100vh;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
   background: #e5e7eb;
   font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   color: #0f172a;
-  padding-bottom: 4.5rem;
 }
+/* the read-only test copy adds a red bar at the bottom: keep the coop row above it */
+body.fm-has-test-bar .fm-app { height: calc(100vh - 2.6rem); }
 
 /* ---------- header ---------- */
 .fm-header {
-  position: sticky;
-  top: 0;
-  z-index: 20;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 1rem;
-  padding: 0.55rem 1rem;
+  padding: 0.45rem 1rem;
   background: #ffffff;
   border-bottom: 1px solid #d1d5db;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   flex-wrap: wrap;
+  z-index: 5;
 }
-.fm-header-left, .fm-header-right { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.fm-header-left, .fm-header-right { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
 .fm-header-right { margin-left: auto; }
-.fm-title { margin: 0; font-size: 1.25rem; font-weight: 800; letter-spacing: 0.02em; }
+.fm-title { margin: 0; font-size: 1.2rem; font-weight: 800; letter-spacing: 0.02em; }
 .fm-nav-btn {
   color: #1d4ed8;
   text-decoration: none;
   background: transparent;
   border: 1px solid transparent;
-  padding: 6px 12px;
+  padding: 5px 10px;
   border-radius: 6px;
   font: inherit;
   font-size: 13px;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
 }
 .fm-nav-btn:hover { background: #eff6ff; }
+.fm-btn-shipped { border-color: #166534; color: #166534; background: #dcfce7; font-weight: 700; }
+.fm-btn-shipped:hover { background: #bbf7d0; }
+.fm-btn-shipped .fm-area-count { background: #166534; color: #fff; }
 .fm-search, .fm-who input {
   font: inherit;
   font-size: 13px;
-  padding: 6px 10px;
+  padding: 5px 10px;
   border: 1px solid #d1d5db;
   border-radius: 6px;
-  min-width: 11rem;
+  min-width: 10rem;
 }
 .fm-who { display: flex; align-items: center; gap: 0.4rem; font-size: 12px; color: #475569; }
-.fm-who input { min-width: 8rem; }
+.fm-who input { min-width: 7.5rem; }
 .fm-updated { font-size: 12px; color: #64748b; }
 
 .fm-notice {
-  margin: 0.6rem 1rem 0;
-  padding: 0.5rem 0.8rem;
+  flex: 0 0 auto;
+  margin: 0.5rem 1rem 0;
+  padding: 0.4rem 0.8rem;
   border-radius: 6px;
   font-size: 13px;
   background: #e0f2fe;
@@ -60,32 +72,46 @@
 .fm-notice-warn { background: #fef3c7; color: #92400e; }
 .fm-notice-error { background: #fee2e2; color: #991b1b; }
 
-/* ---------- main layout ---------- */
+/* ---------- main layout: queue column + the map, both filling the screen ---------- */
 .fm-main {
+  flex: 1 1 auto;
+  min-height: 0;
   display: grid;
-  grid-template-columns: 17rem 1fr;
-  gap: 0.9rem;
-  padding: 0.9rem 1rem;
-  align-items: start;
-}
-@media (max-width: 900px) {
-  .fm-main { grid-template-columns: 1fr; }
+  grid-template-columns: 15.5rem 1fr;
+  gap: 0.7rem;
+  padding: 0.7rem 1rem 0.7rem;
 }
 
 .fm-area-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 0.5rem;
-  padding: 0.35rem 0.6rem;
+  padding: 0.3rem 0.55rem;
+  font: inherit;
   font-weight: 800;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   background: #111827;
   color: #f9fafb;
+  border: none;
   border-radius: 6px 6px 0 0;
+  width: 100%;
+  text-align: left;
+  flex: 0 0 auto;
 }
+button.fm-area-head { cursor: pointer; }
+button.fm-area-head:hover { background: #1f2937; }
+.fm-area-more {
+  flex: 1;
+  text-align: right;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+  font-size: 0.72rem;
+  color: #fde68a;
+}
+.fm-area-overflow .fm-area-head { background: #78350f; }
 .fm-area-count {
   display: inline-block;
   min-width: 1.5rem;
@@ -97,81 +123,74 @@
   font-size: 0.75rem;
   font-weight: 800;
 }
+.fm-area-head .fm-area-count { margin-left: auto; }
+.fm-area-more:not(:empty) + .fm-area-count { margin-left: 0; }
 
-/* queue */
+/* queue (left column, scrolls inside) */
 .fm-queue {
-  position: sticky;
-  top: 4rem;
+  min-height: 0;
   background: #fff;
   border: 1px solid #cbd5e1;
   border-radius: 8px;
-  max-height: calc(100vh - 9.5rem);
   display: flex;
   flex-direction: column;
 }
 .fm-queue .fm-area-head { background: #b45309; }
-.fm-queue-help { margin: 0; padding: 0.5rem 0.6rem 0; font-size: 11.5px; color: #64748b; }
-.fm-queue .fm-cards { padding: 0.6rem; overflow: auto; }
+.fm-queue-help { margin: 0; padding: 0.4rem 0.6rem 0; font-size: 11px; color: #64748b; }
+.fm-queue .fm-cards { padding: 0.5rem; overflow: auto; flex: 1; min-height: 0; }
 
-/* the map: the magnet board's layout */
+/* the map: the magnet board's layout, coop row pinned to the bottom */
 .fm-map {
+  min-height: 0;
   display: grid;
-  gap: 0.9rem;
-  grid-template-columns: 6rem repeat(6, 1fr);
+  gap: 0.6rem;
+  grid-template-columns: 5.5rem repeat(6, 1fr);
+  grid-template-rows: 1fr 1fr 10rem;
   grid-template-areas:
     "tent1 tent1 wetroom wetroom blacktop blacktop large"
-    "tent1 tent1 tent2 tent2 tent2 . large"
+    "tent1 tent1 tent2 tent2 outside outside outside"
     "cooplabel coop1 coop2 coop3 coop4 coop5 coop6";
 }
-@media (max-width: 1250px) {
-  .fm-map {
-    grid-template-columns: repeat(3, 1fr);
-    grid-template-areas:
-      "tent1 wetroom blacktop"
-      "tent2 tent2 large"
-      "cooplabel cooplabel cooplabel"
-      "coop1 coop2 coop3"
-      "coop4 coop5 coop6";
-  }
-}
 .fm-area {
+  min-height: 0;
   background: #f8fafc;
   border: 2px solid #1f2937;
   border-radius: 8px;
-  min-height: 9rem;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 .fm-area-coop { background: #eef2ff; border-color: #3730a3; }
 .fm-area-coop .fm-area-head { background: #3730a3; }
+.fm-area-coop.fm-area-overflow .fm-area-head { background: #78350f; }
 .fm-group-label {
   align-self: center;
   justify-self: center;
   font-weight: 900;
-  font-size: 1.1rem;
+  font-size: 1rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #1f2937;
-  padding: 0.4rem 0.8rem;
+  padding: 0.35rem 0.6rem;
   border: 2px solid #1f2937;
   border-radius: 6px;
   background: #fff;
 }
-.fm-area .fm-cards { padding: 0.55rem; flex: 1; }
+.fm-area .fm-cards { padding: 0.4rem; flex: 1; min-height: 0; overflow: hidden; }
 
 .fm-drop-hover { outline: 3px dashed #2563eb; outline-offset: -3px; background: #dbeafe; }
 .fm-selecting [data-area] { cursor: pointer; }
 .fm-selecting [data-area]:hover { outline: 3px dashed #2563eb; outline-offset: -3px; }
 
-/* ---------- cards ---------- */
-.fm-cards { display: flex; flex-wrap: wrap; gap: 0.5rem; align-content: flex-start; }
+/* ---------- queue cards (full detail) ---------- */
+.fm-cards { display: flex; flex-wrap: wrap; gap: 0.4rem; align-content: flex-start; }
 .fm-card {
-  width: 10.5rem;
+  width: 100%;
   background: #fff;
   border: 1.5px solid #94a3b8;
   border-left: 6px solid #8b5cf6;   /* finishing purple, like the weekly */
   border-radius: 6px;
-  padding: 0.4rem 0.5rem 0.35rem;
+  padding: 0.35rem 0.5rem 0.3rem;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
   cursor: grab;
   user-select: none;
@@ -209,76 +228,112 @@
   background: #f8fafc;
   color: #0f172a;
   cursor: pointer;
+  white-space: nowrap;
 }
 .fm-mini-btn:hover { background: #e2e8f0; }
 .fm-empty { color: #94a3b8; font-size: 12px; padding: 0.3rem; }
 
-/* ---------- shipped drawer (bottom-right, out of the way) ---------- */
-.fm-shipped {
-  position: fixed;
-  right: 1rem;
-  bottom: 1rem;
-  z-index: 15;
-  max-width: min(60rem, calc(100vw - 2rem));
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-}
-.fm-shipped-toggle {
-  font: inherit;
-  font-size: 13px;
-  font-weight: 800;
-  padding: 0.45rem 0.9rem;
-  border: 2px solid #166534;
-  border-radius: 999px;
-  background: #dcfce7;
-  color: #166534;
-  cursor: pointer;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-.fm-shipped-toggle .fm-area-count { background: #166534; color: #fff; }
-.fm-shipped-sub { font-weight: 500; font-size: 11px; opacity: 0.85; }
-.fm-shipped-body {
-  margin-bottom: 0.4rem;
-  background: #fff;
-  border: 2px solid #166534;
-  border-radius: 8px;
-  padding: 0.6rem;
-  max-height: 55vh;
-  overflow: auto;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
-}
-.fm-cards-drawer .fm-card { border-left-color: #16a34a; cursor: default; }
-
-/* ---------- stale cards: nothing on the weekly for STALE_AFTER_DAYS ---------- */
-.fm-card-stale { background: #f1f5f9; border-color: #cbd5e1; border-left-color: #94a3b8; color: #64748b; }
-.fm-card-stale .fm-card-job, .fm-card-stale .fm-card-cast { color: #64748b; }
+/* stale: nothing on the weekly for STALE_AFTER_DAYS */
+.fm-card-stale { background: #f1f5f9 !important; border-color: #cbd5e1 !important; border-left-color: #94a3b8 !important; color: #64748b; }
+.fm-card-stale .fm-card-job, .fm-card-stale .fm-card-cast, .fm-card-stale .fm-chip-job { color: #64748b; }
 .fm-card-stale .fm-card-finish { color: #94a3b8; }
 .fm-card-stale-note { color: #b45309; font-weight: 600; }
 
-/* ---------- move log panel ---------- */
-.fm-log {
-  margin: 0 1rem 1rem;
+/* ---------- chips: collapsed cards inside an area ---------- */
+.fm-chip {
+  flex: 1 1 8.5rem;
+  max-width: 100%;
+  min-width: 0;
   background: #fff;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border: 1.5px solid #94a3b8;
+  border-left: 5px solid #8b5cf6;
+  border-radius: 5px;
+  padding: 0.2rem 0.4rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  cursor: grab;
+  user-select: none;
+  font-size: 11px;
+  line-height: 1.2;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
 }
-.fm-log-head {
+.fm-chip:active { cursor: grabbing; }
+.fm-chip-job { font-weight: 800; font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fm-chip-line { display: flex; justify-content: space-between; gap: 0.3rem; color: #334155; }
+.fm-chip-line b { color: #0f172a; }
+
+/* ---------- pop-ups ---------- */
+.fm-modal[hidden] { display: none; }
+.fm-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(15, 23, 42, 0.55);
   display: flex;
   align-items: center;
-  gap: 0.6rem;
-  padding: 0.5rem 0.8rem;
-  border-bottom: 1px solid #e2e8f0;
-  font-weight: 800;
-  font-size: 0.9rem;
+  justify-content: center;
+  padding: 1.5rem;
 }
-.fm-log-head input { font: inherit; font-size: 12px; font-weight: 500; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 6px; flex: 1; max-width: 22rem; }
-.fm-log-head .fm-mini-btn { margin-left: auto; }
-.fm-log-body { max-height: 40vh; overflow: auto; padding: 0.3rem 0.8rem 0.6rem; font-size: 12.5px; }
+.fm-modal-box {
+  background: #fff;
+  border-radius: 10px;
+  width: min(60rem, 100%);
+  max-height: calc(100vh - 3rem);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+}
+.fm-modal-head {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.6rem 0.9rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+.fm-modal-title { font-weight: 800; font-size: 1rem; }
+.fm-modal-search { font: inherit; font-size: 12px; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 6px; flex: 1; max-width: 20rem; margin-left: auto; }
+.fm-modal-close { font-size: 12px; padding: 0.2rem 0.7rem; }
+.fm-modal-body { overflow: auto; padding: 0.5rem 0.9rem 0.8rem; font-size: 12.5px; }
+
+.fm-mrow {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid #e2e8f0;
+  border-left: 5px solid #8b5cf6;
+  border-radius: 6px;
+  margin: 0.3rem 0;
+  background: #fff;
+}
+.fm-mrow-text { flex: 1; min-width: 0; }
+.fm-mrow .fm-card-job { font-size: 13px; }
+.fm-mrow { cursor: pointer; }
+.fm-mrow-checked { background: #eff6ff; border-color: #93c5fd; }
+.fm-mrow-check { width: 1.1rem; height: 1.1rem; flex: 0 0 auto; cursor: pointer; }
+.fm-bulk {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.45rem 0.5rem;
+  margin: 0 0 0.3rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 12.5px;
+}
+.fm-bulk-all { display: flex; align-items: center; gap: 0.35rem; font-weight: 700; cursor: pointer; }
+.fm-bulk-all input { width: 1.1rem; height: 1.1rem; }
+.fm-bulk-count { color: #475569; flex: 1; }
+.fm-bulk select { font: inherit; font-size: 12px; padding: 3px 6px; border: 1px solid #cbd5e1; border-radius: 6px; }
+.fm-bulk-go { background: #1d4ed8; color: #fff; border-color: #1d4ed8; padding: 0.25rem 0.8rem; font-size: 12px; }
+.fm-bulk-go:hover { background: #1e40af; }
+.fm-bulk-go:disabled, .fm-bulk select:disabled { opacity: 0.5; cursor: default; }
+
 .fm-log-day { font-weight: 800; color: #334155; margin: 0.6rem 0 0.2rem; padding-bottom: 0.15rem; border-bottom: 1px solid #e2e8f0; }
 .fm-log-row { display: grid; grid-template-columns: 5rem minmax(12rem, 1.2fr) minmax(12rem, 1.5fr) 8rem; gap: 0.6rem; padding: 0.18rem 0; align-items: baseline; }
 .fm-log-time { color: #64748b; font-variant-numeric: tabular-nums; }
@@ -286,4 +341,24 @@
 .fm-log-arrow { color: #94a3b8; padding: 0 0.2rem; }
 .fm-log-ship { color: #166534; font-weight: 800; }
 .fm-log-who { color: #475569; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-@media (max-width: 900px) { .fm-log-row { grid-template-columns: 4.5rem 1fr; } .fm-log-who { text-align: left; } }
+
+/* ---------- smaller screens: three columns, page may scroll ---------- */
+@media (max-width: 1100px) {
+  body { overflow: auto; }
+  .fm-app { height: auto; min-height: 100vh; }
+  .fm-main { grid-template-columns: 1fr; }
+  .fm-queue { max-height: 40vh; }
+  .fm-map {
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: none;
+    grid-auto-rows: 9rem;
+    grid-template-areas:
+      "tent1 wetroom blacktop"
+      "tent2 outside large"
+      "cooplabel cooplabel cooplabel"
+      "coop1 coop2 coop3"
+      "coop4 coop5 coop6";
+  }
+  .fm-log-row { grid-template-columns: 4.5rem 1fr; }
+  .fm-log-who { text-align: left; }
+}
