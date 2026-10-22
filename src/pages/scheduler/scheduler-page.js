@@ -190,61 +190,78 @@ function lockOk(report) { return report.every(r => Math.abs(r.scheduled - r.opti
 // ---------------------------------------------------------------------------
 // spreading (the default schedule from the Optimizer Hours tab)
 // ---------------------------------------------------------------------------
-function spreadPhase(m, startIso, dir) {
-    const hours = Number(m.phase.hours) || 0;
-    const perDay = Number((S.settings.dayHours || {})[m.dept]) || 8;
-    const n = Math.max(1, Math.ceil(hours / perDay - 1e-9));
-    const even = Math.round((hours / n) * 100) / 100;
-    const rows = [];
-    let cur = startIso;
-    for (let k = 0; k < n; k++) {
-        const h = k === n - 1 ? Math.round((hours - even * (n - 1)) * 100) / 100 : even;
-        rows.push({ date: cur, hours: h });
-        if (k < n - 1) cur = nextWorking(cur, dir);
+/** How many days each team gets for a casting = the day rows on the portal's Staging tab (task_descriptions,
+ *  max day_number per weekly department). A team with no staged days gets 1. */
+async function stagingDaysFor(casting) {
+    const notes = await stagingFor(casting.project_number);
+    const days = new Map();
+    for (const key of notes.keys()) {
+        const [cast, wd, day] = key.split('|');
+        if (cast !== String(casting.casting_number)) continue;
+        const n = parseInt(day, 10) || 0;
+        if (n > (days.get(wd) || 0)) days.set(wd, n);
     }
-    return { rows, endIso: cur };
+    return days;
+}
+function stagedDaysOf(stage, dept) { return Math.max(1, (stage && stage.get(weeklyDeptOf(dept))) || 1); }
+
+/** Split hours evenly over n days (the last day takes the rounding so the total is exact). */
+function evenSplit(hours, n) {
+    const even = Math.round((hours / n) * 100) / 100;
+    return Array.from({ length: n }, (_, k) => k === n - 1 ? Math.round((hours - even * (n - 1)) * 100) / 100 : even);
 }
 
-/** Build the rows for one casting. anchorIso = cast date (Cast phase lands there). */
-function planCasting(casting, anchorIso) {
+/**
+ * Build the rows for one casting. anchorIso = cast date (the Cast team's block starts there).
+ * Phases are grouped into blocks of consecutive phases of the same team; a block takes as many days as the
+ * portal's Staging tab lists for that team, and each phase's Optimizer Hours are split evenly over those days
+ * (user rule 2026-10-22). Blocks before Cast run back from the cast date, blocks after it run forward.
+ */
+function planCasting(casting, anchorIso, stage) {
     const mapped = mappedPhases(casting.id);
     if (!mapped.length) return [];
-    const castIdx = mapped.findIndex(m => m.code === 'CAST');
+    const blocks = [];
+    for (const m of mapped) {
+        const last = blocks[blocks.length - 1];
+        if (last && last.dept === m.dept) last.phases.push(m); else blocks.push({ dept: m.dept, phases: [m] });
+    }
+    for (const bl of blocks) bl.days = stagedDaysOf(stage, bl.dept);
     const anchor = workingOrNext(anchorIso);
     const out = [];
-    const push = (m, r) => out.push({
+    const push = (m, date, hours) => out.push({
         project_number: casting.project_number, casting_id: casting.id, phase_id: m.phase.id,
-        date: r.date, department: m.dept, task: m.code, hours: r.hours, weekend_ok: false,
+        date, department: m.dept, task: m.code, hours, weekend_ok: false,
         note: m.unmapped ? `Unmapped phase "${m.phase.phase_name}" — pick the task` : null
     });
+    // lay one block on consecutive working days starting at `start`, going `dir`; returns the far end date
+    const lay = (bl, start, dir) => {
+        const dates = [start];
+        for (let k = 1; k < bl.days; k++) dates.push(nextWorking(dates[k - 1], dir));
+        if (dir < 0) dates.reverse();                    // day 1 is the earliest date either way
+        for (const m of bl.phases) {
+            const split = evenSplit(Number(m.phase.hours) || 0, bl.days);
+            dates.forEach((d, k) => push(m, d, split[k]));
+        }
+        return dir > 0 ? dates[dates.length - 1] : dates[0];
+    };
+    const castIdx = blocks.findIndex(bl => bl.phases.some(m => m.code === 'CAST'));
     if (castIdx >= 0) {
         let cur = anchor;
-        for (let i = castIdx; i < mapped.length; i++) {
-            const r = spreadPhase(mapped[i], cur, 1);
-            r.rows.forEach(x => push(mapped[i], x));
-            cur = nextWorking(r.endIso, 1);
-        }
+        for (let i = castIdx; i < blocks.length; i++) cur = nextWorking(lay(blocks[i], cur, 1), 1);
         cur = nextWorking(anchor, -1);
-        for (let i = castIdx - 1; i >= 0; i--) {
-            const r = spreadPhase(mapped[i], cur, -1);
-            r.rows.forEach(x => push(mapped[i], x));
-            cur = nextWorking(r.endIso, -1);
-        }
+        for (let i = castIdx - 1; i >= 0; i--) cur = nextWorking(lay(blocks[i], cur, -1), -1);
     } else {
         let cur = anchor;
-        for (const m of mapped) {
-            const r = spreadPhase(m, cur, 1);
-            r.rows.forEach(x => push(m, x));
-            cur = nextWorking(r.endIso, 1);
-        }
+        for (const bl of blocks) cur = nextWorking(lay(bl, cur, 1), 1);
     }
     return out;
 }
 
-async function scheduleCasting(castingId, anchorIso, { replace = false } = {}) {
+async function scheduleCasting(castingId, anchorIso, { replace = false, stage = null } = {}) {
     const c = S.castingById.get(castingId);
     if (!c) return;
-    const plan = planCasting(c, anchorIso);
+    if (!stage) { try { stage = await stagingDaysFor(c); } catch (_) { stage = new Map(); } }
+    const plan = planCasting(c, anchorIso, stage);
     if (!plan.length) { toast('This casting has no Optimizer Hours with hours > 0.', 'error'); return; }
     setBusy(true);
     const __h = await histBegin('schedule ' + castingLabel(c), [castingId]);
@@ -1148,10 +1165,10 @@ function confirmOverload(list) {
     return window.confirm(`This will OVER-SCHEDULE ${list.length} team-day${list.length === 1 ? '' : 's'}:\n\n${lines}\n\nParts, FO, Cast and DM take 1 casting a day; F, Seal and Spec take 5.\n\nOK = over-schedule anyway.   Cancel = go back.`);
 }
 /** First working day on/after `from` where the whole casting fits without putting any team over its limit. */
-function nextFreeCastDay(c, load, from) {
+function nextFreeCastDay(c, load, from, stage) {
     let d = workingOrNext(from);
     for (let i = 0; i < 400; i++) {
-        if (!overloadsOf(planCasting(c, d), load).length) return d;
+        if (!overloadsOf(planCasting(c, d, stage), load).length) return d;
         d = nextWorking(d, 1);
     }
     return workingOrNext(from);
@@ -1161,18 +1178,23 @@ async function openScheduleDialog(castingId, { replace = false } = {}) {
     const c = S.castingById.get(castingId);
     if (!c) return;
     setBusy(true);
-    let load;
-    try { load = await loadTeamLoad(addDays(todayIso(), -90), addDays(todayIso(), 400), castingId); }
+    let load, stage;
+    try { [load, stage] = await Promise.all([loadTeamLoad(addDays(todayIso(), -90), addDays(todayIso(), 400), castingId), stagingDaysFor(c)]); }
     catch (err) { toast('Could not read the grid: ' + (err.message || err), 'error'); setBusy(false); return; }
     finally { setBusy(false); }
-    const next = nextFreeCastDay(c, load, todayIso());
-    schedCtx = { cid: castingId, replace, load, next };
+    const next = nextFreeCastDay(c, load, todayIso(), stage);
+    schedCtx = { cid: castingId, replace, load, next, stage };
+    // what the Staging tab says: days per team for this casting
+    const teamsUsed = [...new Set(mappedPhases(castingId).map(m => m.dept))];
+    const stagedLine = teamsUsed.map(d => `${deptLabel(d)} ${stagedDaysOf(stage, d)}`).join(' · ');
+    const noStaging = teamsUsed.filter(d => !stage.get(weeklyDeptOf(d)));
     const own = c.casting_date || '';
     const box = $('sc-sched');
     box.innerHTML = `<div class="sc-panel sc-panel-sm" role="dialog" aria-modal="true">
         <div class="sc-panel-head"><h2>${replace ? 'Regenerate' : 'Schedule'} ${esc(castingLabel(c))} — ${esc(projectLabel(c.project_number))}</h2><button type="button" class="sc-x" data-close>&times;</button></div>
         <div class="sc-panel-body">
             <p class="sc-hint">Would you like to schedule on the next available cast day, or choose a cast day? Cast date on the job: ${own ? esc(shortDay(own)) + ' (Castings tab)' : 'none on the Castings tab'}.</p>
+            <p class="sc-hint"><strong>Days per team from the Staging tab:</strong> ${esc(stagedLine)}.${noStaging.length ? ` <span class="sc-stg-warn">&#9888; No staging days for ${esc(noStaging.map(deptLabel).join(', '))} — those get 1 day each.</span>` : ''} Each team's Optimizer Hours are split evenly over its days.</p>
             <label class="sc-choice"><input type="radio" name="sc-cast-mode" value="next" checked> <strong>Next available cast day:</strong> ${esc(shortDay(next))} <small class="sc-hint">(no team over its limit)</small></label>
             <label class="sc-choice"><input type="radio" name="sc-cast-mode" value="pick"> <strong>Choose a cast day:</strong> <input type="date" id="sc-cast-pick" value="${esc(own || next)}"></label>
             <div id="sc-cast-note" class="sc-hint"></div>
@@ -1188,7 +1210,7 @@ async function openScheduleDialog(castingId, { replace = false } = {}) {
         note.classList.remove('sc-note-warn');
         if (!d) { note.textContent = ''; return; }
         if (isHoliday(d)) { note.textContent = `${shortDay(d)} is a holiday — nothing is scheduled on holidays.`; note.classList.add('sc-note-warn'); return; }
-        const over = overloadsOf(planCasting(c, d), load);
+        const over = overloadsOf(planCasting(c, d, stage), load);
         if (over.length) {
             note.classList.add('sc-note-warn');
             note.innerHTML = `&#9888; This over-schedules ${over.length} team-day${over.length === 1 ? '' : 's'}: ` + esc(overloadLines(over.slice(0, 4)).join('; ')) + (over.length > 4 ? '; …' : '') + '. You will be asked to confirm.';
@@ -1210,30 +1232,24 @@ async function confirmScheduleDialog() {
     if (!d) { toast('Pick a cast day first.', 'error'); return; }
     if (isHoliday(d)) { toast(`${shortDay(d)} is a holiday.`, 'error'); return; }
     const c = S.castingById.get(schedCtx.cid);
-    if (!confirmOverload(overloadsOf(planCasting(c, d), schedCtx.load))) return;
+    if (!confirmOverload(overloadsOf(planCasting(c, d, schedCtx.stage), schedCtx.load))) return;
     const ctx = schedCtx;
     box.hidden = true; schedCtx = null;
-    await scheduleCasting(ctx.cid, d, { replace: ctx.replace });
+    await scheduleCasting(ctx.cid, d, { replace: ctx.replace, stage: ctx.stage });
 }
 
 // ---------------------------------------------------------------------------
 // settings
 // ---------------------------------------------------------------------------
 function openSettings() {
-    const box = $('sc-dayhours');
-    box.innerHTML = DEPARTMENTS.map(d => `<label>${d.label}<input type="number" min="1" step="1" data-dept="${d.key}" value="${Number((S.settings.dayHours || {})[d.key]) || 8}"></label>`).join('');
     $('sc-holidays').value = (S.settings.holidays || []).join('\n');
     $('sc-settings').hidden = false;
 }
 async function saveSettings() {
-    const dayHours = {};
-    for (const inp of $('sc-dayhours').querySelectorAll('input')) dayHours[inp.dataset.dept] = Math.max(1, Number(inp.value) || 8);
     const holidays = $('sc-holidays').value.split(/\r?\n/).map(s => s.trim()).filter(s => /^\d{4}-\d{2}-\d{2}$/.test(s)).sort();
     setBusy(true);
     try {
-        await saveScheduleSetting('dayHours', dayHours);
         await saveScheduleSetting('holidays', holidays);
-        S.settings.dayHours = dayHours;
         S.settings.holidays = holidays;
         $('sc-settings').hidden = true;
         render();
@@ -1439,7 +1455,6 @@ async function init() {
     try {
         await initializeSupabase();
         const saved = await loadScheduleSettings();
-        if (saved.dayHours) S.settings.dayHours = { ...SETTINGS_DEFAULTS.dayHours, ...saved.dayHours };
         if (Array.isArray(saved.holidays)) S.settings.holidays = saved.holidays;
         if (saved.costs && typeof saved.costs === 'object') S.settings.costs = saved.costs;
         if (Number(saved.target) > 0) S.settings.target = Number(saved.target);
@@ -1454,6 +1469,6 @@ async function init() {
 }
 
 // debugging hooks (read-only use from the console)
-window.__scheduler = { S, planCasting, lockReport, mappedPhases, nextWorking, undo, redo, HIST };
+window.__scheduler = { S, planCasting, stagingDaysFor, lockReport, mappedPhases, nextWorking, undo, redo, HIST };
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
