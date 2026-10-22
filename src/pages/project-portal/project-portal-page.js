@@ -37,6 +37,7 @@ import {
 import {
     fetchForProject as fetchTaskDescriptionsForProject,
     upsertOne as upsertTaskDescription,
+    isStagingTaskHoursMigrationPending,
     deleteOne as deleteTaskDescription
 } from '../../services/task-descriptions-service.js';
 import {
@@ -132,6 +133,7 @@ import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MA
 import { loadMilestonesForProject, saveMilestone, isMilestonesMigrationPending, loadLayoutConditions, LAYOUT_CONDITION_PREFIX, layoutConditionNote, parseLayoutCondition, sideWords } from '../../services/milestones-service.js';
 import { loadJigListsForProject as loadJigListsForScrim, scrimForInventory } from '../../services/jig-list-service.js';
 import { loadReadyFlags, setReadyFlag } from '../../services/schedule-service.js?v=20261021-1';
+import { tasksForDepartment, teamOfDepartment } from '../../config/scheduler-config.js?v=20261022-2';
 import { loadMilestonesForProject, saveMilestone, isMilestonesMigrationPending, loadLayoutConditions, LAYOUT_CONDITION_PREFIX } from '../../services/milestones-service.js';
 import {
     loadLayoutPositions,
@@ -2748,7 +2750,76 @@ async function activateOptimizerTab() {
     }
     await loadAllPhasesForProject();
     try { optReady = await loadReadyFlags(currentCastings.map(c => c.id)); } catch (e) { optReady = new Map(); }
+    await loadStagingDescriptions();   // the Optimizer Hours tab mirrors Staging (teams × days with task names)
     renderOptimizer();
+}
+
+// ---- Optimizer Hours per staged day (2026-10-22): the tab mirrors the Staging tab; hours live on the staging row.
+function optStagedCells(castNum) {
+    const scaffold = currentStagingScaffold.get(castNum) || [];
+    const cells = [];
+    for (const sec of scaffold) {
+        for (let d = 1; d <= sec.days; d++) {
+            const entry = currentStagingDescriptions.get(`${castNum}|${sec.department}|${d}`) || {};
+            cells.push({ department: sec.department, day: d, taskName: entry.taskName || '', hours: entry.hours == null ? null : Number(entry.hours), description: entry.description || '' });
+        }
+    }
+    return cells;
+}
+function optStagedHours(castNum) { return optStagedCells(castNum).reduce((n, c) => n + (Number(c.hours) || 0), 0); }
+/** Total hours of a casting: the staged days when any carry hours, else the previous task list. */
+function optHoursOf(casting) {
+    const staged = optStagedHours(String(casting.casting_number || ''));
+    if (staged > 0) return staged;
+    return getPhasesFor(casting.id).reduce((n, p) => n + (typeof p.hours === 'number' ? p.hours : 0), 0);
+}
+const optHoursSaveTimers = new Map();
+function scheduleOptHoursSave(castNum, dept, day, value) {
+    const key = `${castNum}|${dept}|${day}`;
+    const hours = value === '' || value == null ? null : Math.max(0, Number(value) || 0);
+    const cur = currentStagingDescriptions.get(key) || { description: '', castingSide: null };
+    currentStagingDescriptions.set(key, { ...cur, hours });
+    renderOptTotals();
+    const prev = optHoursSaveTimers.get(key);
+    if (prev) clearTimeout(prev);
+    optHoursSaveTimers.set(key, setTimeout(async () => {
+        optHoursSaveTimers.delete(key);
+        try { await upsertTaskDescription({ projectNumber: currentProjectNumber, castingNumber: castNum, department: dept, dayNumber: String(day), hours }); }
+        catch (err) { logger.error('[project-portal] save optimizer hours failed:', err); showToast('Save hours failed: ' + (err.message || err), 'error'); }
+    }, 500));
+}
+function renderOptStagedGrid(casting) {
+    const castNum = String(casting.casting_number || '');
+    const scaffold = currentStagingScaffold.get(castNum) || [];
+    const deptChip = (dept) => {
+        const colorKey = normalizeDepartmentClass(normalizeDepartment(dept));
+        const color = DEPARTMENT_COLORS[colorKey];
+        const style = color ? ` style="background:${color.background};color:${color.text}"` : '';
+        return `<span class="pp-opt-dept-chip"${style}>${escapeHtml(dept)}</span>`;
+    };
+    const staged = scaffold.filter(sec => Array.from({ length: sec.days }, (_, i) => i + 1).some(d => currentStagingDescriptions.has(`${castNum}|${sec.department}|${d}`)));
+    if (!staged.length) {
+        return `<div class="pp-opt-staged-empty">Nothing staged yet for Cast ${escapeHtml(castNum)}. Set the days and tasks on the <button type="button" class="pp-link-btn" data-action="goto-staging">Staging tab</button> first — the hours are entered here per day.</div>`;
+    }
+    return staged.map(sec => {
+        const rows = [];
+        for (let d = 1; d <= sec.days; d++) {
+            const entry = currentStagingDescriptions.get(`${castNum}|${sec.department}|${d}`) || {};
+            const task = entry.taskName || '';
+            const hours = entry.hours == null ? '' : String(entry.hours);
+            rows.push(`<div class="pp-opt-stg-row">
+                <span class="pp-opt-day-label">Day ${d}</span>
+                <span class="pp-opt-stg-task${task ? '' : ' pp-opt-stg-task-missing'}" title="${task ? 'Task from the Staging tab' : 'No task picked on the Staging tab yet'}">${task ? escapeHtml(task.toLowerCase()) : '— no task —'}</span>
+                <input type="number" min="0" step="1" class="pp-opt-card-hours" data-action="staged-hours" data-casting-number="${escapeAttr(castNum)}" data-department="${escapeAttr(sec.department)}" data-day="${d}" value="${escapeAttr(hours)}" placeholder="0" title="${escapeAttr((entry.description || '').trim() || 'Hours for this day')}" />
+                <span class="pp-opt-card-hours-label">hrs</span>
+            </div>`);
+        }
+        const deptTotal = Array.from({ length: sec.days }, (_, i) => Number((currentStagingDescriptions.get(`${castNum}|${sec.department}|${i + 1}`) || {}).hours) || 0).reduce((a, b) => a + b, 0);
+        return `<section class="pp-opt-dept pp-opt-stg-dept" data-department="${escapeAttr(sec.department)}">
+            <div class="pp-opt-dept-head">${deptChip(sec.department)}<span class="pp-opt-stg-dept-total" data-dept-total="${escapeAttr(castNum + '|' + sec.department)}">${deptTotal} hrs</span></div>
+            ${rows.join('')}
+        </section>`;
+    }).join('');
 }
 
 // ---------- Staging (pre-author task descriptions per casting, by department × day) ----------
@@ -2949,6 +3020,33 @@ function buildStgScaffold() {
     }
 }
 
+/** The Task box of a staging day: one of the team's tasks (the Plant Scheduler shows this word). */
+function stgTaskSelectHtml(castNum, department, day, current) {
+    const opts = tasksForDepartment(department);
+    const cur = String(current || '').trim();
+    if (!opts.length) return cur ? `<span class="pp-stg-task-fixed" title="Task">${escapeHtml(cur)}</span>` : '';
+    const missing = !cur ? ' pp-stg-task-missing' : '';
+    const extra = cur && !opts.includes(cur) ? `<option value="${escapeAttr(cur)}" selected>${escapeHtml(cur)}</option>` : '';
+    return `<select class="pp-stg-task${missing}" data-action="grid-task" data-casting-number="${escapeAttr(castNum)}" data-department="${escapeAttr(department)}" data-day="${day}" title="${cur ? 'Task for this day (shown on the Plant Scheduler)' : 'No task picked yet — pick the task for this day'}">
+        <option value=""${cur ? '' : ' selected'}>— task —</option>${extra}
+        ${opts.map(o => `<option value="${escapeAttr(o)}"${o === cur ? ' selected' : ''}>${escapeHtml(o.toLowerCase())}</option>`).join('')}
+    </select>`;
+}
+async function handleSaveStagingTask(castNum, dept, day, taskName) {
+    if (!currentProjectNumber || !castNum || !dept || !day) return;
+    const key = `${castNum}|${dept}|${day}`;
+    const cur = currentStagingDescriptions.get(key) || { description: '', castingSide: null };
+    currentStagingDescriptions.set(key, { ...cur, taskName: taskName || '' });
+    try {
+        await upsertTaskDescription({ projectNumber: currentProjectNumber, castingNumber: castNum, department: dept, dayNumber: String(day), taskName: taskName || null });
+        const sel = document.querySelector(`#pp-stg-columns select[data-action="grid-task"][data-casting-number="${CSS.escape(castNum)}"][data-department="${CSS.escape(dept)}"][data-day="${day}"]`);
+        if (sel) sel.classList.toggle('pp-stg-task-missing', !taskName);
+    } catch (err) {
+        logger.error('[project-portal] save staging task failed:', err);
+        showToast('Save task failed: ' + (err.message || err), 'error');
+    }
+}
+
 function renderStaging() {
     renderStgPills();
     renderStgColumns();
@@ -3022,14 +3120,18 @@ function renderStgColumn(casting) {
         for (let d = 1; d <= days; d++) {
             const entry = currentStagingDescriptions.get(`${castNum}|${department}|${d}`);
             const desc = entry ? (entry.description || '') : '';
+            const taskSel = stgTaskSelectHtml(castNum, department, d, entry ? (entry.taskName || '') : '');
             const removable = d === days && days > 1;
             const removeBtn = removable
                 ? `<button type="button" class="pp-opt-day-remove" data-action="remove-day" data-casting-number="${escapeAttr(castNum)}" data-department="${escapeAttr(department)}" data-day="${d}" title="Remove Day ${d}" aria-label="Remove Day ${d}">&times;</button>`
                 : `<span class="pp-opt-day-remove-spacer" aria-hidden="true"></span>`;
             dayRows.push(`
-                <div class="pp-opt-day-row" data-department="${escapeAttr(department)}" data-day="${d}">
+                <div class="pp-opt-day-row pp-stg-day-row" data-department="${escapeAttr(department)}" data-day="${d}">
                     <span class="pp-opt-day-label">Day ${d}</span>
-                    <textarea class="pp-opt-grid-desc" data-action="grid-desc" data-casting-number="${escapeAttr(castNum)}" data-department="${escapeAttr(department)}" data-day="${d}" rows="2" placeholder="Description…">${escapeHtml(desc)}</textarea>
+                    <div class="pp-stg-day-cell">
+                        ${taskSel}
+                        <textarea class="pp-opt-grid-desc" data-action="grid-desc" data-casting-number="${escapeAttr(castNum)}" data-department="${escapeAttr(department)}" data-day="${d}" rows="2" placeholder="Description…">${escapeHtml(desc)}</textarea>
+                    </div>
                     ${removeBtn}
                 </div>`);
         }
@@ -3101,10 +3203,12 @@ async function handleSelectStgCasting(castingId) {
 
 // Snapshot a casting's staging grid (department/day shape + every non-empty description)
 // to the in-memory clipboard so it can be pasted onto another casting.
+let copiedStaging_tasks = {};
 function handleCopyStaging(castNum) {
     if (!castNum) return;
     const scaffold = currentStagingScaffold.get(castNum) || [];
     const descById = {};
+    copiedStaging_tasks = {};
     let count = 0;
     for (const sec of scaffold) {
         for (let d = 1; d <= sec.days; d++) {
@@ -3114,12 +3218,14 @@ function handleCopyStaging(castNum) {
                 descById[`${sec.department}|${d}`] = desc;
                 count++;
             }
+            if (entry && entry.taskName) (copiedStaging_tasks[`${sec.department}|${d}`] = entry.taskName);
         }
     }
     copiedStaging = {
         fromCastNum: castNum,
         scaffold: scaffold.map(s => ({ department: s.department, days: s.days })),
-        descById
+        descById,
+        taskById: { ...copiedStaging_tasks }
     };
     showToast(`Copied staging from Cast ${castNum} (${count} description${count === 1 ? '' : 's'}).`);
     renderStgColumns();   // re-render so the Paste buttons enable on the other columns
@@ -3177,17 +3283,19 @@ async function handlePasteStaging(targetCastNum) {
         }
         // 2. Write the source's non-empty descriptions onto the target.
         for (const cell of srcCells) {
-            if (!(cell.description || '').trim()) continue;
+            const taskName = (copiedStaging.taskById || {})[`${cell.department}|${cell.day}`] || '';
+            if (!(cell.description || '').trim() && !taskName) continue;
             await upsertTaskDescription({
                 projectNumber: currentProjectNumber,
                 castingNumber: targetCastNum,
                 department: cell.department,
                 dayNumber: String(cell.day),
-                description: cell.description
+                description: cell.description,
+                taskName: taskName || null
             });
             const fk = `${targetCastNum}|${cell.department}|${cell.day}`;
-            const prevSide = (currentStagingDescriptions.get(fk) || {}).castingSide || null;
-            currentStagingDescriptions.set(fk, { description: cell.description, castingSide: prevSide });
+            const prev = currentStagingDescriptions.get(fk) || {};
+            currentStagingDescriptions.set(fk, { ...prev, description: cell.description, castingSide: prev.castingSide || null, taskName });
         }
         // 3. Match the target's grid shape to the source.
         currentStagingScaffold.set(targetCastNum, copiedStaging.scaffold.map(s => ({ department: s.department, days: s.days })));
@@ -3205,7 +3313,7 @@ function scheduleStagingGridSave(castNum, dept, day, text) {
     const key = `${castNum}|${dept}|${day}`;
     // Keep the local map current so the Staging milestone (red / orange / green) follows the typing.
     const cur = currentStagingDescriptions.get(key) || {};
-    currentStagingDescriptions.set(key, { description: text == null ? '' : String(text), castingSide: cur.castingSide || null });
+    currentStagingDescriptions.set(key, { ...cur, description: text == null ? '' : String(text), castingSide: cur.castingSide || null });
     scheduleStagingDerive();
     const prev = stagingGridSaveTimers.get(key);
     if (prev) clearTimeout(prev);
@@ -3226,8 +3334,8 @@ async function handleSaveStagingDescription(castNum, dept, day, text) {
             description: desc
         });
         // Update the in-memory map without re-rendering so the caret stays put.
-        const prevSide = (currentStagingDescriptions.get(key) || {}).castingSide || null;
-        currentStagingDescriptions.set(key, { description: desc, castingSide: prevSide });
+        const prev = currentStagingDescriptions.get(key) || {};
+        currentStagingDescriptions.set(key, { ...prev, description: desc, castingSide: prev.castingSide || null });
     } catch (err) {
         logger.error('[project-portal] save staging description failed:', err);
         showToast('Save description failed: ' + (err.message || err), 'error');
@@ -3544,6 +3652,7 @@ async function loadAllPhasesForProject() {
 }
 
 function renderOptimizer() {
+    const mig = document.getElementById('pp-opt-migration'); if (mig) mig.hidden = !isStagingTaskHoursMigrationPending();
     renderOptReadyBar();
     renderOptPills();
     renderOptColumns();
@@ -3595,7 +3704,7 @@ function renderOptPills() {
 /** The Final Optimizer HRS cell on a casting column — looks and works like the board's cell (red − / green ✓). */
 // ---- "Ready for scheduling" (2026-10-21): puts the casting in the Plant Scheduler's "Not yet scheduled" list.
 let optReady = new Map();   // castingId -> { project_number, at }
-function optCastingHours(castingId) { return getPhasesFor(castingId).reduce((n, p) => n + (Number(p.hours) || 0), 0); }
+function optCastingHours(castingId) { const c = currentCastings.find(x => x.id === castingId); return c ? optHoursOf(c) : 0; }
 function optReadyHtml(castingId) {
     const on = optReady.has(castingId);
     const at = on && optReady.get(castingId).at ? new Date(optReady.get(castingId).at).toLocaleString() : '';
@@ -3744,10 +3853,11 @@ function renderOptColumn(casting) {
                 ${optMsCellHtml(casting.id)}
                 ${optReadyHtml(casting.id)}
             </div>
-            <div class="pp-opt-cards" data-casting-id="${escapeAttr(casting.id)}">
+            ${renderOptStagedGrid(casting)}
+            ${phases.length ? `<details class="pp-opt-legacy"><summary>Previous task list (${phases.length} task${phases.length === 1 ? '' : 's'} · ${phases.reduce((s, p) => s + (typeof p.hours === 'number' ? p.hours : 0), 0)} hrs) — read only</summary>
+            <div class="pp-opt-cards pp-opt-cards-legacy" data-casting-id="${escapeAttr(casting.id)}">
                 ${cardsHtml}
-            </div>
-            <button type="button" class="pp-add-btn pp-opt-col-add" data-action="add-task" data-casting-id="${escapeAttr(casting.id)}">+ Add Task</button>
+            </div></details>` : ''}
             <div class="pp-opt-col-total">
                 <span class="pp-opt-col-total-label">Total</span>
                 <span class="pp-opt-col-total-value"><strong data-col-total="${escapeAttr(casting.id)}">0</strong> hrs</span>
@@ -3764,10 +3874,17 @@ function renderOptTotals() {
         return total;
     };
 
-    // Per-column totals (visible columns only)
+    // Per-column totals (visible columns only) — staged hours when any, else the previous task list
     document.querySelectorAll('[data-col-total]').forEach(el => {
         const castingId = el.getAttribute('data-col-total');
-        el.textContent = String(sumPhases(getPhasesFor(castingId)));
+        const c = currentCastings.find(x => x.id === castingId);
+        el.textContent = String(c ? optHoursOf(c) : sumPhases(getPhasesFor(castingId)));
+    });
+    document.querySelectorAll('[data-dept-total]').forEach(el => {
+        const [castNum, dept] = el.getAttribute('data-dept-total').split('|');
+        const sec = (currentStagingScaffold.get(castNum) || []).find(s => s.department === dept);
+        const n = sec ? Array.from({ length: sec.days }, (_, i) => Number((currentStagingDescriptions.get(`${castNum}|${dept}|${i + 1}`) || {}).hours) || 0).reduce((a, b) => a + b, 0) : 0;
+        el.textContent = `${n} hrs`;
     });
 
     // Grand/Phase total — for phased projects, sum only the active phase's
@@ -3775,15 +3892,7 @@ function renderOptTotals() {
     const grandEl = document.getElementById('pp-opt-grand-total');
     if (grandEl) {
         let grand = 0;
-        if (currentPhasesEnabled) {
-            for (const c of getCastingsForActivePhase()) {
-                grand += sumPhases(getPhasesFor(c.id));
-            }
-        } else {
-            for (const phases of currentCastingPhases.values()) {
-                grand += sumPhases(phases);
-            }
-        }
+        for (const c of (currentPhasesEnabled ? getCastingsForActivePhase() : currentCastings)) grand += optHoursOf(c);
         grandEl.textContent = String(grand);
     }
 
@@ -8518,12 +8627,17 @@ function wireEvents() {
 
     // Optimizer: column container (event delegation across all visible columns)
     const optColumns = document.getElementById('pp-opt-columns');
+    optColumns.addEventListener('input', (e) => {
+        const inp = e.target.closest('input[data-action="staged-hours"]');
+        if (inp) scheduleOptHoursSave(inp.dataset.castingNumber, inp.dataset.department, parseInt(inp.dataset.day, 10), inp.value);
+    });
 
     optColumns.addEventListener('click', (e) => {
         const msBtn = e.target.closest('button[data-action="toggle-final-hours"]');
         if (msBtn) { toggleFinalHours(msBtn.dataset.castingId); return; }
         const readyBtn = e.target.closest('button[data-action="toggle-ready"]');
         if (readyBtn) { toggleReady(readyBtn.dataset.castingId); return; }
+        if (e.target.closest('[data-action="goto-staging"]')) { setActiveTab('staging'); activateStagingTab(); return; }
         // Copy hours
         const copyBtn = e.target.closest('button[data-action="copy-hours"]');
         if (copyBtn) {
@@ -8686,6 +8800,8 @@ function wireEvents() {
             scheduleStagingGridSave(ta.dataset.castingNumber, ta.dataset.department, parseInt(ta.dataset.day, 10), ta.value);
         });
         stgColumns.addEventListener('change', (e) => {
+            const task = e.target.closest('select[data-action="grid-task"]');
+            if (task) { handleSaveStagingTask(task.dataset.castingNumber, task.dataset.department, parseInt(task.dataset.day, 10), task.value); return; }
             const sel = e.target.closest('select[data-action="add-dept"]');
             if (!sel) return;
             const dept = sel.value;
@@ -13597,6 +13713,10 @@ function buildOptPrintPage(casting, phases, projectNumber, projectName) {
     const projectLabel = [projectNumber, projectName].filter(Boolean).map(s => escapeHtml(s)).join(' — ');
     const castLabel = phaseName ? `${escapeHtml(phaseName)} &middot; Cast ${escapeHtml(num)}` : `Cast ${escapeHtml(num)}`;
 
+    const stagedCells = optStagedCells(String(num)).filter(c => c.hours != null || c.taskName);
+    if (stagedCells.some(c => Number(c.hours) > 0)) {
+        phases = stagedCells.map(c => ({ phase_name: `${c.department} · Day ${c.day}${c.taskName ? ' · ' + c.taskName.toLowerCase() : ''}`, hours: Number(c.hours) || 0, description: c.description }));
+    }
     const total = phases.reduce((s, p) => s + (typeof p.hours === 'number' ? p.hours : 0), 0);
 
     const rows = phases.length === 0

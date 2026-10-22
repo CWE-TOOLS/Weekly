@@ -72,6 +72,28 @@ export function tasksForDept(dept) {
     return TASK_CODES.filter(code => TASKS[code].includes(dept));
 }
 
+/** A staging / weekly department name -> the scheduler's team ("FormOut", "Form Out", "Mill", "Load" … are free text). */
+export function teamOfDepartment(name) {
+    const n = String(name || '').toLowerCase().replace(/[^a-z]/g, '');
+    if (!n) return null;
+    if (n === 'cnc') return 'CNC';
+    if (n === 'parts' || n === 'mill') return 'Parts';
+    if (n === 'formout' || n === 'fo') return 'FO';
+    if (n === 'cast') return 'Cast';
+    if (n === 'demold' || n === 'dm') return 'DM';
+    if (n === 'finish' || n === 'f') return 'F';
+    if (n === 'seal') return 'Seal';
+    if (n === 'crating' || n === 'crate') return 'Crate';
+    if (n === 'special' || n === 'spec') return 'Spec';
+    if (n === 'ship' || n === 'load' || n === 'shipping') return 'Ship';
+    return null;
+}
+/** The tasks a staging department may carry (by its team); [] for departments outside the plant teams. */
+export function tasksForDepartment(name) {
+    const team = teamOfDepartment(name);
+    return team ? tasksForDept(team) : [];
+}
+
 /**
  * Optimizer Hours phase name -> task code. Phase names are free text ("Seal Coat 1 & 2", "Strips
  * Remove Azek", "wash 2"), so this is keyword matching, first rule wins. Unknown names land in

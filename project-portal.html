@@ -825,7 +825,8 @@
                         <div class="pp-opt-wrap">
                             <div class="pp-opt-header">
                                 <h2 class="pp-opt-title">Optimizer Hours</h2>
-                                <p class="pp-muted pp-opt-sub">Designate manhours per task for each casting. Tasks are shared across the project; hours are per casting.</p>
+                                <p class="pp-muted pp-opt-sub">The days and tasks come from the Staging tab; enter the hours for each day here. The Plant Scheduler uses both.</p>
+                                <div id="pp-opt-migration" class="pp-castings-hint" hidden>The task-and-hours columns are not in the database yet — run <code>migration/staging-task-hours.sql</code> in Supabase. Until then the previous task list is used.</div>
                             </div>
 
                             <div class="pp-tab-notes" id="pp-optimizer-notes-wrap">

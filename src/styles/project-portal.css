@@ -6712,3 +6712,17 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
 /* job view: Back to list + return to the Plant Scheduler side by side (2026-10-22) */
 .pp-form-nav { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .pp-sched-return { text-decoration: none; }
+
+/* Staging: Task box per day; Optimizer Hours: staged days with hours (2026-10-22) */
+.pp-stg-day-cell { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
+.pp-stg-task { align-self: flex-start; font-size: 12px; font-weight: 700; padding: 3px 6px; border: 1px solid #93c5fd; border-radius: 6px; background: #eff6ff; color: #1e3a8a; text-transform: lowercase; }
+.pp-stg-task.pp-stg-task-missing { border-color: #f59e0b; background: #fffbeb; color: #92400e; }
+.pp-stg-task-fixed { font-size: 12px; font-weight: 700; color: #1e3a8a; }
+.pp-opt-stg-row { display: grid; grid-template-columns: 52px 1fr 70px auto; gap: 8px; align-items: center; padding: 4px 0; border-bottom: 1px dotted #e5e7eb; }
+.pp-opt-stg-task { font-weight: 700; color: #1e3a8a; text-transform: lowercase; }
+.pp-opt-stg-task-missing { color: #92400e; font-weight: 600; font-size: 12px; }
+.pp-opt-stg-dept-total { margin-left: auto; font-size: 12px; font-weight: 700; color: #374151; }
+.pp-opt-staged-empty { padding: 10px 12px; border: 1px dashed #d1d5db; border-radius: 8px; color: #6b7280; font-size: 13px; margin: 8px 0; }
+.pp-opt-legacy { margin-top: 10px; }
+.pp-opt-legacy > summary { cursor: pointer; font-size: 12px; color: #6b7280; }
+.pp-opt-cards-legacy { opacity: .85; pointer-events: none; }
