@@ -198,7 +198,7 @@ function renderWhen() {
 function renderMap() {
     const map = $('pm-map');
     const { byCol, shipped } = partition();
-    const shown = [SCHEDULED, ...MAP_DEPARTMENTS.filter(d => ALWAYS_SHOWN.has(d) || byCol.get(d).length)];
+    const shown = MAP_DEPARTMENTS.filter(d => ALWAYS_SHOWN.has(d) || byCol.get(d).length);   // the view's arrows replace a Scheduled column
     if (map.dataset.cols !== shown.join('|')) {
         map.dataset.cols = shown.join('|');
         map.style.setProperty('--pm-cols', String(shown.length));
@@ -221,7 +221,7 @@ function renderMap() {
         if (n) n.textContent = String(list.length);
     }
     $('fm-shipped-count').textContent = String(shipped.length);
-    $('pm-sub').textContent = `${onFloor} on the floor ${S.view === 'week' ? 'this week' : 'that day'} · ${byCol.get(SCHEDULED).length} scheduled`;
+    $('pm-sub').textContent = `${onFloor} on the floor ${S.view === 'week' ? 'this week' : 'that day'}`;
     renderWhen();
     markOverflow();
     renderPopover();
