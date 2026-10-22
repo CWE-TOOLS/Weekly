@@ -261,7 +261,19 @@ function planCasting(casting, anchorIso, stage) {
         const last = blocks[blocks.length - 1];
         if (last && last.dept === m.dept) last.phases.push(m); else blocks.push({ dept: m.dept, phases: [m] });
     }
-    for (const bl of blocks) { bl.staged = bl.phases.every(m => m.staged); bl.days = bl.staged ? bl.phases.length : stagedDaysOf(stage, bl.dept); }
+    for (const bl of blocks) { bl.staged = bl.phases.every(m => m.staged); bl.days = bl.staged ? bl.phases.length : Math.max(stagedDaysOf(stage, bl.dept), bl.phases.length); }
+    // previous task list: a team's staged days are shared out between its tasks (one task per day — at least a day
+    // each, the rest by hours), the same way the portal's "Pull hours from the previous task list" does it
+    const allocDays = (bl) => {
+        const total = bl.phases.reduce((n, m) => n + (Number(m.phase.hours) || 0), 0) || 1;
+        const alloc = bl.phases.map(() => 1);
+        for (let left = bl.days - bl.phases.length; left > 0; left--) {
+            let best = 0, bestGap = -Infinity;
+            bl.phases.forEach((m, i) => { const gap = (Number(m.phase.hours) || 0) / total * bl.days - alloc[i]; if (gap > bestGap) { bestGap = gap; best = i; } });
+            alloc[best] += 1;
+        }
+        return alloc;
+    };
     const anchor = workingOrNext(anchorIso);
     const out = [];
     const push = (m, date, hours) => out.push({
@@ -286,10 +298,11 @@ function planCasting(casting, anchorIso, stage) {
         if (bl.staged) {
             bl.phases.forEach((m, k) => push(m, dates[k], Number(m.phase.hours) || 0));   // one staged day = one scheduled day, hours as entered
         } else {
-            for (const m of bl.phases) {
-                const split = evenSplit(Number(m.phase.hours) || 0, bl.days);
-                dates.forEach((d, k) => { if (split[k] > 0) push(m, d, split[k]); });
-            }
+            const alloc = allocDays(bl);
+            let k = 0;
+            bl.phases.forEach((m, i) => {
+                for (const h of evenSplit(Number(m.phase.hours) || 0, alloc[i])) { if (h > 0) push(m, dates[k], h); k++; }
+            });
         }
         return dir > 0 ? dates[dates.length - 1] : dates[0];
     };
