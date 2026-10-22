@@ -293,9 +293,10 @@ async function shiftCasting(castingId, n) {
 function visibleCastings() {
     const days = new Set(windowDays());
     const q = S.search.trim().toLowerCase();
+    // only castings with days scheduled in this month (user 2026-10-22); what is waiting lives in "Not yet scheduled"
     const withRows = new Set(S.rows.filter(r => days.has(r.date)).map(r => r.casting_id));
     return S.castings.filter(c => {
-        if (!withRows.has(c.id) && !S.pinned.has(c.id) && !(c.casting_date && days.has(c.casting_date))) return false;
+        if (!withRows.has(c.id)) return false;
         if (!q) return true;
         const p = S.projectByNumber.get(c.project_number);
         return c.project_number.toLowerCase().includes(q) || (p && (p.project_name || '').toLowerCase().includes(q));
