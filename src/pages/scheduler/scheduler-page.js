@@ -190,20 +190,37 @@ function lockOk(report) { return report.every(r => Math.abs(r.scheduled - r.opti
 // ---------------------------------------------------------------------------
 // spreading (the default schedule from the Optimizer Hours tab)
 // ---------------------------------------------------------------------------
+/** A staging / weekly department name -> the scheduler's team (names are free text: "FormOut", "Form Out", "Mill", "Load" …). */
+function teamOfStagingDept(name) {
+    const n = String(name || '').toLowerCase().replace(/[^a-z]/g, '');
+    if (!n) return null;
+    if (n === 'cnc') return 'CNC';
+    if (n === 'parts' || n === 'mill') return 'Parts';
+    if (n === 'formout' || n === 'fo') return 'FO';
+    if (n === 'cast') return 'Cast';
+    if (n === 'demold' || n === 'dm') return 'DM';
+    if (n === 'finish' || n === 'f') return 'F';
+    if (n === 'seal') return 'Seal';
+    if (n === 'crating' || n === 'crate') return 'Crate';
+    if (n === 'special' || n === 'spec') return 'Spec';
+    if (n === 'ship' || n === 'load' || n === 'shipping') return 'Ship';
+    return null;
+}
 /** How many days each team gets for a casting = the day rows on the portal's Staging tab (task_descriptions,
- *  max day_number per weekly department). A team with no staged days gets 1. */
+ *  max day_number per department, departments mapped onto the teams). Map team -> days; a team not listed gets 1. */
 async function stagingDaysFor(casting) {
     const notes = await stagingFor(casting.project_number);
     const days = new Map();
     for (const key of notes.keys()) {
-        const [cast, wd, day] = key.split('|');
+        const [cast, sd, day] = key.split('|');
         if (cast !== String(casting.casting_number)) continue;
+        const team = teamOfStagingDept(sd);
         const n = parseInt(day, 10) || 0;
-        if (n > (days.get(wd) || 0)) days.set(wd, n);
+        if (team && n > (days.get(team) || 0)) days.set(team, n);
     }
     return days;
 }
-function stagedDaysOf(stage, dept) { return Math.max(1, (stage && stage.get(weeklyDeptOf(dept))) || 1); }
+function stagedDaysOf(stage, dept) { return Math.max(1, (stage && stage.get(dept)) || 1); }
 
 /** Split hours evenly over n days (the last day takes the rounding so the total is exact). */
 function evenSplit(hours, n) {
@@ -693,8 +710,12 @@ async function fillStagingSection(cid, dept, date, td) {
     try {
         const [notes, day] = await Promise.all([stagingFor(c.project_number), stagingDayOf(cid, dept, date)]);
         if (!$('sc-stg') || !editorCtx || editorCtx.cid !== cid || editorCtx.date !== date) return;
-        const wd = weeklyDeptOf(dept);
-        const key = `${c.casting_number}|${wd}|${day}`;
+        let wd = weeklyDeptOf(dept);
+        let key = `${c.casting_number}|${wd}|${day}`;
+        if (!notes.has(key)) {   // the Staging tab may have used another spelling for this team ("FormOut", "Mill", "Load" …)
+            const alt = [...notes.keys()].find(k => { const [cast, sd, d] = k.split('|'); return cast === String(c.casting_number) && String(d) === String(day) && teamOfStagingDept(sd) === dept; });
+            if (alt) { key = alt; wd = alt.split('|')[1]; }
+        }
         const cur = (notes.get(key) || {}).description || '';
         const where = `${esc(wd)} day ${day} of ${esc(castLabelShort(c))}`;
         box.innerHTML = `<div class="sc-stg-title">Staging note <small>(${where})</small></div>
@@ -1187,7 +1208,7 @@ async function openScheduleDialog(castingId, { replace = false } = {}) {
     // what the Staging tab says: days per team for this casting
     const teamsUsed = [...new Set(mappedPhases(castingId).map(m => m.dept))];
     const stagedLine = teamsUsed.map(d => `${deptLabel(d)} ${stagedDaysOf(stage, d)}`).join(' · ');
-    const noStaging = teamsUsed.filter(d => !stage.get(weeklyDeptOf(d)));
+    const noStaging = teamsUsed.filter(d => !stage.get(d));
     const own = c.casting_date || '';
     const box = $('sc-sched');
     box.innerHTML = `<div class="sc-panel sc-panel-sm" role="dialog" aria-modal="true">
