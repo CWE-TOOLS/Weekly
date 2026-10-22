@@ -222,10 +222,15 @@ async function stagingDaysFor(casting) {
 }
 function stagedDaysOf(stage, dept) { return Math.max(1, (stage && stage.get(dept)) || 1); }
 
-/** Split hours evenly over n days (the last day takes the rounding so the total is exact). */
+/** Split hours over n days in WHOLE hours, the first day(s) carrying the extra (user rule 2026-10-22):
+ *  5 h over 3 days = 2, 2, 1 · 26 h over 4 = 7, 7, 6, 6 · 1 h over 2 = 1, 0. A fractional total keeps its fraction on day 1. */
 function evenSplit(hours, n) {
-    const even = Math.round((hours / n) * 100) / 100;
-    return Array.from({ length: n }, (_, k) => k === n - 1 ? Math.round((hours - even * (n - 1)) * 100) / 100 : even);
+    if (n <= 1) return [hours];
+    const whole = Math.floor(hours), extra = Math.round((hours - whole) * 100) / 100;
+    const base = Math.floor(whole / n), rem = whole - base * n;
+    const out = Array.from({ length: n }, (_, k) => base + (k < rem ? 1 : 0));
+    out[0] = Math.round((out[0] + extra) * 100) / 100;
+    return out;
 }
 
 /**
@@ -265,7 +270,7 @@ function planCasting(casting, anchorIso, stage) {
         if (dir < 0) dates.reverse();                    // day 1 is the earliest date either way
         for (const m of bl.phases) {
             const split = evenSplit(Number(m.phase.hours) || 0, bl.days);
-            dates.forEach((d, k) => push(m, d, split[k]));
+            dates.forEach((d, k) => { if (split[k] > 0) push(m, d, split[k]); });
         }
         return dir > 0 ? dates[dates.length - 1] : dates[0];
     };
