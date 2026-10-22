@@ -88,6 +88,8 @@ export function teamOfDepartment(name) {
     if (n === 'ship' || n === 'load' || n === 'shipping') return 'Ship';
     return null;
 }
+/** The Staging tab's department name for each team (used when a team has no staging department yet). */
+export const STAGING_NAME_OF_TEAM = { CNC: 'CNC', Parts: 'Parts', FO: 'Form Out', Cast: 'Cast', DM: 'Demold', F: 'Finish', Seal: 'Seal', Crate: 'Crating', Spec: 'Special', Ship: 'Ship' };
 /** The tasks a staging department may carry (by its team); [] for departments outside the plant teams. */
 export function tasksForDepartment(name) {
     const team = teamOfDepartment(name);

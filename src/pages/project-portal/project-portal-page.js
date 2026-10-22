@@ -133,7 +133,7 @@ import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MA
 import { loadMilestonesForProject, saveMilestone, isMilestonesMigrationPending, loadLayoutConditions, LAYOUT_CONDITION_PREFIX, layoutConditionNote, parseLayoutCondition, sideWords } from '../../services/milestones-service.js';
 import { loadJigListsForProject as loadJigListsForScrim, scrimForInventory } from '../../services/jig-list-service.js';
 import { loadReadyFlags, setReadyFlag } from '../../services/schedule-service.js?v=20261021-1';
-import { tasksForDepartment, teamOfDepartment } from '../../config/scheduler-config.js?v=20261022-2';
+import { tasksForDepartment, teamOfDepartment, taskForPhase, STAGING_NAME_OF_TEAM } from '../../config/scheduler-config.js?v=20261022-3';
 import { loadMilestonesForProject, saveMilestone, isMilestonesMigrationPending, loadLayoutConditions, LAYOUT_CONDITION_PREFIX } from '../../services/milestones-service.js';
 import {
     loadLayoutPositions,
@@ -2788,6 +2788,88 @@ function scheduleOptHoursSave(castNum, dept, day, value) {
         catch (err) { logger.error('[project-portal] save optimizer hours failed:', err); showToast('Save hours failed: ' + (err.message || err), 'error'); }
     }, 500));
 }
+/** Whole-number split, first day heavier (same rule as the scheduler). */
+function optWholeSplit(hours, n) {
+    if (n <= 1) return [hours];
+    const whole = Math.floor(hours), extra = Math.round((hours - whole) * 100) / 100;
+    const base = Math.floor(whole / n), rem = whole - base * n;
+    const out = Array.from({ length: n }, (_, k) => base + (k < rem ? 1 : 0));
+    out[0] = Math.round((out[0] + extra) * 100) / 100;
+    return out;
+}
+/**
+ * Pull the previous task list's hours into the staged days (2026-10-22): each old task goes to its team's
+ * staging department; the team's days are shared out between its tasks (a task gets at least one day; more
+ * days than tasks are split by hours), the task name and the hours land on those days. Days already carrying
+ * hours are left alone. Returns { filled, skipped }.
+ */
+async function optPullLegacyHours(casting) {
+    const castNum = String(casting.casting_number || '');
+    const phases = getPhasesFor(casting.id).filter(p => Number(p.hours) > 0);
+    if (!phases.length) return { filled: 0, skipped: 'no previous hours' };
+    let scaffold = currentStagingScaffold.get(castNum);
+    if (!scaffold) { scaffold = []; currentStagingScaffold.set(castNum, scaffold); }
+    // old tasks by team, in their order
+    const groups = new Map();
+    const sealIdx = phases.findIndex(p => taskForPhase(p.phase_name).code === 'SEAL');
+    phases.forEach((p, i) => {
+        const m = taskForPhase(p.phase_name, { afterSeal: sealIdx >= 0 && i > sealIdx });
+        if (!groups.has(m.dept)) groups.set(m.dept, []);
+        groups.get(m.dept).push({ code: m.code, hours: Number(p.hours) || 0 });
+    });
+    let filled = 0;
+    const skippedTeams = [];
+    for (const [team, tasks] of groups) {
+        let sec = scaffold.find(s => teamOfDepartment(s.department) === team);
+        if (!sec) { sec = { department: STAGING_NAME_OF_TEAM[team] || team, days: 0 }; scaffold.push(sec); }
+        const hasHours = Array.from({ length: sec.days }, (_, i) => currentStagingDescriptions.get(`${castNum}|${sec.department}|${i + 1}`)).some(e => e && e.hours != null && e.hours !== '');
+        if (hasHours) { skippedTeams.push(sec.department); continue; }
+        if (sec.days < tasks.length) sec.days = tasks.length;
+        // share the team's days between its tasks: at least one each, the rest by hours
+        const total = tasks.reduce((n, t) => n + t.hours, 0) || 1;
+        const alloc = tasks.map(() => 1);
+        for (let left = sec.days - tasks.length; left > 0; left--) {
+            let best = 0, bestGap = -Infinity;
+            tasks.forEach((t, i) => { const gap = t.hours / total * sec.days - alloc[i]; if (gap > bestGap) { bestGap = gap; best = i; } });
+            alloc[best] += 1;
+        }
+        let day = 1;
+        for (let i = 0; i < tasks.length; i++) {
+            const split = optWholeSplit(tasks[i].hours, alloc[i]);
+            for (const h of split) {
+                const key = `${castNum}|${sec.department}|${day}`;
+                const cur = currentStagingDescriptions.get(key) || { description: '', castingSide: null };
+                await upsertTaskDescription({ projectNumber: currentProjectNumber, castingNumber: castNum, department: sec.department, dayNumber: String(day), taskName: tasks[i].code, hours: h });
+                currentStagingDescriptions.set(key, { ...cur, taskName: tasks[i].code, hours: h });
+                filled++; day++;
+            }
+        }
+    }
+    scaffold.sort((a, b) => { const i = DEPARTMENT_ORDER.indexOf(a.department), j = DEPARTMENT_ORDER.indexOf(b.department); return (i === -1 ? 999 : i) - (j === -1 ? 999 : j); });
+    return { filled, skipped: skippedTeams.length ? `${skippedTeams.join(', ')} already had hours` : '' };
+}
+async function handlePullLegacyHours(castingId) {
+    const c = currentCastings.find(x => x.id === castingId);
+    if (!c) return;
+    if (isStagingTaskHoursMigrationPending()) { showToast('Run migration/staging-task-hours.sql first — the hours columns are not in the database yet.', 'error'); return; }
+    try {
+        const r = await optPullLegacyHours(c);
+        renderOptimizer();
+        showToast(r.filled ? `Cast ${c.casting_number}: ${r.filled} day${r.filled === 1 ? '' : 's'} filled from the previous task list${r.skipped ? ' (' + r.skipped + ')' : ''}` : `Cast ${c.casting_number}: nothing to pull${r.skipped ? ' — ' + r.skipped : ''}`);
+    } catch (err) { showToast('Pull failed: ' + (err.message || err), 'error'); }
+}
+async function handlePullLegacyHoursAll() {
+    if (isStagingTaskHoursMigrationPending()) { showToast('Run migration/staging-task-hours.sql first — the hours columns are not in the database yet.', 'error'); return; }
+    const list = getCastingsForActivePhase().filter(c => optStagedHours(String(c.casting_number || '')) <= 0 && getPhasesFor(c.id).some(p => Number(p.hours) > 0));
+    if (!list.length) { showToast('Every casting already has hours on its staged days.'); return; }
+    if (!window.confirm(`Pull the previous task list hours into the staged days of ${list.length} casting${list.length === 1 ? '' : 's'}? Days that already have hours are left alone.`)) return;
+    let filled = 0;
+    try { for (const c of list) filled += (await optPullLegacyHours(c)).filled; }
+    catch (err) { showToast('Pull failed: ' + (err.message || err), 'error'); }
+    renderOptimizer();
+    showToast(`${filled} day${filled === 1 ? '' : 's'} filled across ${list.length} casting${list.length === 1 ? '' : 's'}`);
+}
+
 function renderOptStagedGrid(casting) {
     const castNum = String(casting.casting_number || '');
     const scaffold = currentStagingScaffold.get(castNum) || [];
@@ -3718,7 +3800,8 @@ function renderOptReadyBar() {
     const list = getCastingsForActivePhase();
     if (!list.length) { bar.innerHTML = ''; return; }
     const n = list.filter(c => optReady.has(c.id)).length;
-    bar.innerHTML = `<span class="pp-opt-ready-count"><strong>${n} of ${list.length}</strong> casting${list.length === 1 ? '' : 's'} ready for scheduling</span>
+    const pullable = list.filter(c => optStagedHours(String(c.casting_number || '')) <= 0 && getPhasesFor(c.id).some(p => Number(p.hours) > 0)).length;
+    bar.innerHTML = `${pullable ? `<button type="button" class="pp-opt-pull pp-opt-pull-all" data-action="pull-legacy-all" title="Put every casting's previous task list hours onto its staged days">&#8681; Pull previous hours into ${pullable} casting${pullable === 1 ? '' : 's'}</button>` : ''}<span class="pp-opt-ready-count"><strong>${n} of ${list.length}</strong> casting${list.length === 1 ? '' : 's'} ready for scheduling</span>
         ${n < list.length ? '<button type="button" class="pp-opt-ready-all" data-action="ready-all">Mark all castings ready for scheduling</button>' : '<span class="pp-opt-ready-done">&#10003; all ready</span>'}`;
 }
 async function toggleReady(castingId) {
@@ -3854,6 +3937,7 @@ function renderOptColumn(casting) {
                 ${optReadyHtml(casting.id)}
             </div>
             ${renderOptStagedGrid(casting)}
+            ${phases.some(p => Number(p.hours) > 0) && optStagedHours(String(casting.casting_number || '')) <= 0 ? `<button type="button" class="pp-opt-pull" data-action="pull-legacy" data-casting-id="${escapeAttr(casting.id)}" title="Put the previous task list's hours onto this casting's staged days, team by team">&#8681; Pull hours from the previous task list</button>` : ''}
             ${phases.length ? `<details class="pp-opt-legacy"><summary>Previous task list (${phases.length} task${phases.length === 1 ? '' : 's'} · ${phases.reduce((s, p) => s + (typeof p.hours === 'number' ? p.hours : 0), 0)} hrs) — read only</summary>
             <div class="pp-opt-cards pp-opt-cards-legacy" data-casting-id="${escapeAttr(casting.id)}">
                 ${cardsHtml}
@@ -8623,7 +8707,7 @@ function wireEvents() {
         if (cell) { await toggleApproval(cell.dataset.castingId, cell.dataset.milestone); renderApprovals(); }
     });
 
-    document.getElementById('pp-opt-ready-bar')?.addEventListener('click', (e) => { if (e.target.closest('[data-action="ready-all"]')) markAllReady(); });
+    document.getElementById('pp-opt-ready-bar')?.addEventListener('click', (e) => { if (e.target.closest('[data-action="ready-all"]')) markAllReady(); else if (e.target.closest('[data-action="pull-legacy-all"]')) handlePullLegacyHoursAll(); });
 
     // Optimizer: column container (event delegation across all visible columns)
     const optColumns = document.getElementById('pp-opt-columns');
@@ -8638,6 +8722,8 @@ function wireEvents() {
         const readyBtn = e.target.closest('button[data-action="toggle-ready"]');
         if (readyBtn) { toggleReady(readyBtn.dataset.castingId); return; }
         if (e.target.closest('[data-action="goto-staging"]')) { setActiveTab('staging'); activateStagingTab(); return; }
+        const pull = e.target.closest('button[data-action="pull-legacy"]');
+        if (pull) { handlePullLegacyHours(pull.dataset.castingId); return; }
         // Copy hours
         const copyBtn = e.target.closest('button[data-action="copy-hours"]');
         if (copyBtn) {
