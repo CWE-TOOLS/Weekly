@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="src/styles/base.css">
     <link rel="stylesheet" href="src/styles/buttons.css">
     <link rel="stylesheet" href="src/styles/finishing-map.css?v=20261022-10">
-    <link rel="stylesheet" href="src/styles/project-map.css?v=20261022-2">
+    <link rel="stylesheet" href="src/styles/project-map.css?v=20261023-3">
 </head>
 <body class="pm-body">
     <div id="fm-app" class="fm-app pm-app">
@@ -27,6 +27,8 @@
                 <div class="pm-view" role="group" aria-label="View">
                     <button type="button" class="pm-view-btn pm-view-on" data-view="day">Day</button>
                     <button type="button" class="pm-view-btn" data-view="week">Week</button>
+                    <button type="button" class="pm-view-btn" data-view="month4">4 weeks</button>
+                    <button type="button" class="pm-view-btn" data-view="month">Month</button>
                 </div>
                 <button type="button" class="fm-nav-btn pm-arrow" id="pm-prev" title="Earlier">&lsaquo;</button>
                 <span class="pm-when-label" id="pm-when-label"></span>
@@ -35,6 +37,13 @@
             </div>
             <div class="fm-header-right">
                 <span class="pm-sub" id="pm-sub"></span>
+                <div class="pm-dept-dropdown" id="pm-dept-dropdown">
+                    <button type="button" class="fm-nav-btn pm-dept-btn" id="pm-dept-btn" aria-haspopup="listbox"><span id="pm-dept-label">All departments</span> &#9662;</button>
+                    <div class="pm-dept-panel">
+                        <div class="pm-dept-actions"><button type="button" class="fm-mini-btn" id="pm-dept-all">Show all</button><button type="button" class="fm-mini-btn" id="pm-dept-none">Show none</button></div>
+                        <ul class="pm-dept-list" id="pm-dept-list"></ul>
+                    </div>
+                </div>
                 <input type="search" id="fm-search" class="fm-search" placeholder="Find a job or cast&hellip;" autocomplete="off">
                 <button type="button" id="fm-shipped-btn" class="fm-nav-btn fm-btn-shipped" title="Castings shipped in the last 60 days">Shipped <span class="fm-area-count" id="fm-shipped-count">0</span></button>
                 <button type="button" id="fm-refresh" class="fm-nav-btn" title="Reload the weekly">Refresh</button>
@@ -60,6 +69,6 @@
         </div>
     </div>
 
-    <script type="module" src="src/pages/project-map/project-map-page.js?v=20261022-3"></script>
+    <script type="module" src="src/pages/project-map/project-map-page.js?v=20261023-2"></script>
 </body>
 </html>

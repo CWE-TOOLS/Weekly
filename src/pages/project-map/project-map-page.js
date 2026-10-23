@@ -1,52 +1,91 @@
 /**
  * Project Map — the weekly by department, one screen. Read-only.
  *
- * Day view: every casting that has a weekly day on the chosen date, in that day's department (a casting with two
- * departments that day shows in both). Week view: every casting with a day in the chosen week (Mon–Sat), in every
- * department it visits that week, with the weekdays listed. The Scheduled column lists castings whose first weekly
- * day is still ahead of the view. Shipped castings (last Ship day before the view, or job Shipped / Closed Out) sit
- * in the Shipped pop-up for SHIPPED_WINDOW_DAYS. Cards are collapsed; click one for the full card with the casting's
- * trail through the departments; a full column's title opens the whole list.
+ * Views: Day (one date), Week (Mon–Sat, each column broken into weekdays), 4 weeks (broken into Week 1–7, 8–14, 15–21,
+ * 22–28 blocks), Month (the weeks that belong to a calendar month, numbered Week 1, 2, 3… like the Releasability Board).
+ * A casting appears in a department's column in every break where it has a weekly day in that department.
+ * Shipped castings (last Ship day before the view, or job Shipped / Closed Out) sit in the Shipped pop-up for
+ * SHIPPED_WINDOW_DAYS. Cards are collapsed; click one for the full card with the casting's trail through the
+ * departments (the department it was opened from in bold); a full column's title opens the whole list.
+ * The Departments picker (like the weekly's) chooses which columns are shown; the choice is remembered per browser.
  */
 import { fetchAllTasks } from '../../services/data-service.js';
 import { loadAllProjects } from '../../services/projects-service.js';
 import { initializeSupabase, registerRefreshHandler, isPortalChange, signalInfo } from '../../services/supabase-service.js';
-import { MAP_DEPARTMENTS, ALWAYS_SHOWN, SHIPPING_DEPARTMENTS, SHIPPED_STATUSES, SHIPPED_WINDOW_DAYS, SCHEDULED_LOOKAHEAD_DAYS } from '../../config/project-map-config.js';
+import { MAP_DEPARTMENTS, ALWAYS_SHOWN, SHIPPING_DEPARTMENTS, SHIPPED_STATUSES, SHIPPED_WINDOW_DAYS } from '../../config/project-map-config.js';
 import { DEPARTMENT_COLORS, normalizeDepartmentClass } from '../../config/department-config.js';
-import { parseDate, getLocalDateString, getMonday } from '../../utils/date-utils.js';
+import { parseDate, getLocalDateString, getMonday, getWeekMonth } from '../../utils/date-utils.js';
 import { escapeHtml } from '../../utils/security-utils.js';
 import { logger } from '../../utils/logger.js';
 
-const SCHEDULED = '__scheduled';
 const WEEKDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const DEPTS_KEY = 'projectMapDepartments';
 
 const S = {
     castings: new Map(),     // key -> summary
     projects: new Map(),     // project_number -> { project_name, status, pm }
-    view: 'day',             // 'day' | 'week'
-    anchor: null,            // 'YYYY-MM-DD' the day shown, or any day of the week shown
+    view: 'day',             // 'day' | 'week' | 'month4' | 'month'
+    anchor: null,            // 'YYYY-MM-DD': the day shown, a day of the week shown, or a day in the month shown
+    depts: null,             // Set of departments to show (null = all)
     search: '',
     loading: false,
-    expandedKey: null,       // chip opened to the full card: `${key}@${column}`
+    expandedKey: null,       // chip opened to the full card: `${key}@${column}@${sectionIndex}`
     modal: null,             // { kind: 'column'|'shipped', column?, filter, expandedKey }
 };
 
 const $ = (id) => document.getElementById(id);
 const today = () => getLocalDateString(new Date());
-const addDays = (iso, n) => { const d = parseIso(iso); d.setDate(d.getDate() + n); return getLocalDateString(d); };
 const parseIso = (iso) => { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d); };
+const addDays = (iso, n) => { const d = parseIso(iso); d.setDate(d.getDate() + n); return getLocalDateString(d); };
 const fmtDate = (iso) => { if (!iso) return ''; const [y, m, d] = iso.split('-'); return `${Number(m)}/${Number(d)}/${y}`; };
 const fmtShort = (iso) => { const [, m, d] = iso.split('-'); return `${Number(m)}/${Number(d)}`; };
 const weekdayOf = (iso) => WEEKDAY[parseIso(iso).getDay()];
+const mondayOf = (iso) => getLocalDateString(getMonday(parseIso(iso)));
 const deptRank = (d) => MAP_DEPARTMENTS.indexOf(d);
 
-/** Mon..Sat of the week that holds `iso`. */
-function weekRange(iso) {
-    const mon = getLocalDateString(getMonday(parseIso(iso)));
-    return { start: mon, end: addDays(mon, 5) };
+// ---------------------------------------------------------------- the view: its range and its breaks ("sections")
+
+/** The weeks (Mondays) that belong to a calendar month, the way the Releasability Board counts them. */
+function monthWeeks(year, month) {
+    const out = [];
+    let m = getMonday(new Date(year, month, 1));
+    for (let i = 0; i < 7; i++) {
+        const wm = getWeekMonth(m);
+        const wy = m.getFullYear() + (wm < m.getMonth() ? 1 : 0);   // a late-December Monday whose week belongs to January
+        if (wm === month && (m.getFullYear() === year || wy === year)) out.push(getLocalDateString(m));
+        else if (out.length) break;
+        m = new Date(m.getFullYear(), m.getMonth(), m.getDate() + 7);
+    }
+    return out;
 }
-function viewRange() {
-    return S.view === 'week' ? weekRange(S.anchor) : { start: S.anchor, end: S.anchor };
+
+/** { start, end, sections: [{ label, sub, start, end }], title } for the current view. */
+function viewSpec() {
+    const a = S.anchor;
+    if (S.view === 'day') {
+        return { start: a, end: a, sections: [{ label: '', sub: '', start: a, end: a }], title: `${weekdayOf(a)} ${fmtDate(a)}${a === today() ? ' (today)' : ''}` };
+    }
+    if (S.view === 'week') {
+        const mon = mondayOf(a);
+        const sections = [0, 1, 2, 3, 4, 5].map(i => { const d = addDays(mon, i); return { label: weekdayOf(d), sub: fmtShort(d), start: d, end: d }; });
+        return { start: mon, end: addDays(mon, 5), sections, title: `Week of ${fmtShort(mon)} – ${fmtShort(addDays(mon, 5))}${mon === mondayOf(today()) ? ' (this week)' : ''}` };
+    }
+    if (S.view === 'month4') {
+        const mon = mondayOf(a);
+        const sections = [0, 1, 2, 3].map(i => { const s = addDays(mon, 7 * i); return { label: `Week ${7 * i + 1}–${7 * i + 7}`, sub: `${fmtShort(s)} – ${fmtShort(addDays(s, 5))}`, start: s, end: addDays(s, 6) }; });
+        return { start: mon, end: addDays(mon, 27), sections, title: `4 weeks: ${fmtShort(mon)} – ${fmtShort(addDays(mon, 26))}${mon === mondayOf(today()) ? ' (from this week)' : ''}` };
+    }
+    // month: the weeks that belong to the month holding the anchor (by the board's rule)
+    const d = parseIso(a);
+    const wm = getWeekMonth(getMonday(d));
+    let year = d.getFullYear();
+    if (wm === 0 && d.getMonth() === 11) year += 1;
+    if (wm === 11 && d.getMonth() === 0) year -= 1;
+    const weeks = monthWeeks(year, wm);
+    const sections = weeks.map((s, i) => ({ label: `Week ${i + 1}`, sub: `${fmtShort(s)} – ${fmtShort(addDays(s, 5))}`, start: s, end: addDays(s, 6) }));
+    const thisMonth = weeks.includes(mondayOf(today()));
+    return { start: weeks[0], end: addDays(weeks[weeks.length - 1], 6), sections, title: `${MONTHS[wm]} ${year}${thisMonth ? ' (this month)' : ''}`, month: wm, year };
 }
 
 // ---------------------------------------------------------------- data
@@ -74,7 +113,7 @@ function summarise(tasks) {
         if (!c.lastDate || iso > c.lastDate) c.lastDate = iso;
         if (!c.firstDate || iso < c.firstDate) c.firstDate = iso;
     }
-    for (const c of out.values()) for (const list of c.days.values()) { list.sort(); }
+    for (const c of out.values()) for (const list of c.days.values()) list.sort();
     return out;
 }
 
@@ -95,74 +134,67 @@ function matchesSearch(c, q = S.search) {
     return !q || `${jobName(c)} ${c.sheetName} ${c.projectNumber} cast ${c.castingNumber} ${(projectOf(c.projectNumber) || {}).pm || ''}`.toLowerCase().includes(q);
 }
 
-/** Entries per column for the current view: { c, dept, days: [iso…], dayIndex, dayTotal }. */
+/**
+ * For the current view: byCol = Map(dept -> sections[] of entries), shipped[].
+ * entry = { c, dept, days: [iso in that section], firstIdx, dayIndex, dayTotal }
+ */
 function partition() {
-    const { start, end } = viewRange();
-    const byCol = new Map([[SCHEDULED, []], ...MAP_DEPARTMENTS.map(d => [d, []])]);
+    const spec = viewSpec();
+    const byCol = new Map(MAP_DEPARTMENTS.map(d => [d, spec.sections.map(() => [])]));
     const shipped = [];
     const cutoff = addDays(today(), -SHIPPED_WINDOW_DAYS);
-    const lookahead = addDays(end, SCHEDULED_LOOKAHEAD_DAYS);
     const byName = (a, b) => jobName(a).localeCompare(jobName(b)) || String(a.castingNumber).localeCompare(String(b.castingNumber), undefined, { numeric: true });
     for (const c of S.castings.values()) {
-        const s = shippedOn(c, start);
+        const s = shippedOn(c, spec.start);
         if (s) { if (s >= cutoff) shipped.push({ c, shippedOn: s }); continue; }
-        if (c.firstDate > end) {
-            if (c.firstDate <= lookahead) {
-                const firstDept = [...c.days.entries()].filter(([, l]) => l[0] === c.firstDate).sort((a, b) => deptRank(a[0]) - deptRank(b[0]))[0]?.[0] || '';
-                byCol.get(SCHEDULED).push({ c, dept: firstDept, days: [c.firstDate], dayIndex: 0, dayTotal: 0 });
-            }
-            continue;
-        }
         for (const [dept, list] of c.days) {
             if (deptRank(dept) === -1) continue;                   // Batch / Layout / Samples / Facilities are not stops
-            const inView = list.filter(d => d >= start && d <= end);
-            if (!inView.length) continue;
-            const lastIdx = list.indexOf(inView[inView.length - 1]) + 1;
-            byCol.get(dept).push({ c, dept, days: inView, dayIndex: lastIdx, dayTotal: list.length, firstIdx: list.indexOf(inView[0]) + 1 });
+            spec.sections.forEach((sec, i) => {
+                const inSec = list.filter(d => d >= sec.start && d <= sec.end);
+                if (!inSec.length) return;
+                byCol.get(dept)[i].push({ c, dept, days: inSec, firstIdx: list.indexOf(inSec[0]) + 1, dayIndex: list.indexOf(inSec[inSec.length - 1]) + 1, dayTotal: list.length });
+            });
         }
     }
-    for (const [col, list] of byCol) {
-        if (col === SCHEDULED) list.sort((a, b) => a.days[0].localeCompare(b.days[0]) || byName(a.c, b.c));
-        else list.sort((a, b) => byName(a.c, b.c));
-    }
+    for (const sections of byCol.values()) for (const list of sections) list.sort((a, b) => byName(a.c, b.c));
     shipped.sort((a, b) => b.shippedOn.localeCompare(a.shippedOn) || byName(a.c, b.c));
-    return { byCol, shipped, start, end };
+    return { byCol, shipped, spec };
+}
+
+function shownDepartments(byCol) {
+    return MAP_DEPARTMENTS.filter(d => (!S.depts || S.depts.has(d)) && (ALWAYS_SHOWN.has(d) || byCol.get(d).some(l => l.length)));
 }
 
 // ---------------------------------------------------------------- cards
 
 function entryLine(e) {
-    if (e.dept && e.dayTotal === 0) return `starts ${weekdayOf(e.days[0])} ${fmtShort(e.days[0])}${e.dept ? ' · ' + e.dept : ''}`;
-    if (S.view === 'week') {
-        const wd = e.days.map(weekdayOf).join(' ');
-        const span = e.firstIdx === e.dayIndex ? `day ${e.dayIndex}` : `days ${e.firstIdx}–${e.dayIndex}`;
-        return `${wd} · ${span} of ${e.dayTotal}`;
-    }
-    return `day ${e.dayIndex} of ${e.dayTotal}`;
+    const span = e.firstIdx === e.dayIndex ? `day ${e.dayIndex}` : `days ${e.firstIdx}–${e.dayIndex}`;
+    if (S.view === 'day') return `${span} of ${e.dayTotal}`;
+    return `${e.days.map(weekdayOf).join(' ')} · ${span} of ${e.dayTotal}`;
 }
 
 function cardBodyHtml(c, e) {
     const p = projectOf(c.projectNumber);
-    const inv = c.inv ? `${c.inv.types} types · ${c.inv.pcs} pcs` : '';
-    // The trail through the departments; the department this card was opened from is bold.
+    const fmtN = (v) => (v == null || isNaN(v)) ? null : Number(v).toLocaleString('en-US', { maximumFractionDigits: 2 });
+    const inv = c.inv ? [`${c.inv.types} types`, `${c.inv.pcs} pcs`, fmtN(c.inv.cuFt) != null ? `${fmtN(c.inv.cuFt)} cu ft${c.inv.cuFtComplete === false ? ' (partial)' : ''}` : null, fmtN(c.inv.ff) != null ? `${fmtN(c.inv.ff)} ff sq ft${c.inv.ffComplete === false ? ' (partial)' : ''}` : null].filter(Boolean).join(' · ') : '';
     const trail = [...c.days.entries()].filter(([d]) => deptRank(d) !== -1).sort((a, b) => deptRank(a[0]) - deptRank(b[0]))
         .map(([d, list]) => {
             const text = escapeHtml(`${d} ${fmtShort(list[0])}${list.length > 1 ? `–${fmtShort(list[list.length - 1])}` : ''}`);
-            return e && e.dept === d && e.dayTotal ? `<b class="pm-trail-here">${text}</b>` : text;
+            return e && e.dept === d ? `<b class="pm-trail-here">${text}</b>` : text;
         }).join(' · ');
     return `<div class="fm-card-job">${escapeHtml(jobName(c))}</div>
         <div class="fm-card-cast">Cast ${escapeHtml(c.castingNumber)}<span class="fm-card-pn">${escapeHtml(c.projectNumber)}</span></div>
         ${p && p.pm ? `<div class="fm-card-meta">${escapeHtml(p.pm)}</div>` : ''}
         ${inv ? `<div class="fm-card-meta">${escapeHtml(inv)}</div>` : ''}
-        ${e ? `<div class="fm-card-meta fm-card-finish">${escapeHtml(e.dept && e.dayTotal ? e.dept + ': ' : '')}${escapeHtml(entryLine(e))}</div>` : ''}
+        ${e ? `<div class="fm-card-meta fm-card-finish">${escapeHtml(e.dept)}: ${escapeHtml(entryLine(e))}</div>` : ''}
         ${c.lastShip ? `<div class="fm-card-meta">Ship ${fmtDate(c.lastShip)}</div>` : ''}
         ${trail ? `<div class="fm-card-meta pm-trail">${trail}</div>` : ''}`;
 }
 
-function chipHtml(e, col) {
+function chipHtml(e, col, sec) {
     const c = e.c;
     const pcs = c.inv && c.inv.pcs != null ? `${c.inv.pcs} pcs` : '';
-    const id = `${c.key}@${col}`;
+    const id = `${c.key}@${col}@${sec}`;
     const cls = ['fm-chip', S.expandedKey === id ? 'fm-chip-open' : '', matchesSearch(c) ? '' : 'fm-card-dim'].filter(Boolean).join(' ');
     return `<div class="${cls}" data-key="${escapeHtml(id)}" title="${escapeHtml(c.sheetName || jobName(c))}">
         <span class="fm-chip-job">${escapeHtml(jobName(c))}</span>
@@ -177,7 +209,7 @@ function rowHtml(e, extra = '') {
     const pcs = c.inv && c.inv.pcs != null ? `${c.inv.pcs} pcs` : '';
     return `<div class="fm-mrow${open ? ' fm-mrow-open' : ''}" data-mrow="${escapeHtml(c.key)}">
         <div class="fm-mrow-text" data-expand="${escapeHtml(c.key)}" title="${open ? 'Click to close' : 'Click for the full card'}">
-            ${open ? cardBodyHtml(c, e.dept !== undefined ? e : null) : `<div class="fm-card-job">${escapeHtml(jobName(c))} <b>Cast ${escapeHtml(c.castingNumber)}</b> <span class="fm-card-pn">${escapeHtml(c.projectNumber)}</span> <span class="fm-card-meta">${escapeHtml([pcs, e.dept !== undefined ? entryLine(e) : ''].filter(Boolean).join(' · '))}${extra}</span></div>`}
+            ${open ? cardBodyHtml(c, e.dept ? e : null) : `<div class="fm-card-job">${escapeHtml(jobName(c))} <b>Cast ${escapeHtml(c.castingNumber)}</b> <span class="fm-card-pn">${escapeHtml(c.projectNumber)}</span> <span class="fm-card-meta">${escapeHtml([pcs, e.dept ? entryLine(e) : ''].filter(Boolean).join(' · '))}${extra}</span></div>`}
         </div>
     </div>`;
 }
@@ -185,48 +217,56 @@ function rowHtml(e, extra = '') {
 // ---------------------------------------------------------------- render
 
 function colStyle(col) {
-    if (col === SCHEDULED) return '--pm-col:#64748b;';
     const c = DEPARTMENT_COLORS[normalizeDepartmentClass(col)];
     return c ? `--pm-col:${c.background};` : '';
 }
-const colLabel = (col) => col === SCHEDULED ? 'Scheduled' : col;
 
-function renderWhen() {
-    const { start, end } = viewRange();
-    $('pm-when-label').textContent = S.view === 'week'
-        ? `Week of ${fmtShort(start)} – ${fmtShort(end)}${start === weekRange(today()).start ? ' (this week)' : ''}`
-        : `${weekdayOf(start)} ${fmtDate(start)}${start === today() ? ' (today)' : ''}`;
+function renderWhen(spec) {
+    $('pm-when-label').textContent = spec.title;
     for (const b of document.querySelectorAll('.pm-view-btn')) b.classList.toggle('pm-view-on', b.dataset.view === S.view);
 }
 
 function renderMap() {
     const map = $('pm-map');
-    const { byCol, shipped } = partition();
-    const shown = MAP_DEPARTMENTS.filter(d => ALWAYS_SHOWN.has(d) || byCol.get(d).length);   // the view's arrows replace a Scheduled column
-    if (map.dataset.cols !== shown.join('|')) {
-        map.dataset.cols = shown.join('|');
+    const { byCol, shipped, spec } = partition();
+    const shown = shownDepartments(byCol);
+    const layoutKey = `${S.view}|${spec.start}|${shown.join('|')}`;
+    if (map.dataset.layout !== layoutKey) {
+        map.dataset.layout = layoutKey;
         map.style.setProperty('--pm-cols', String(shown.length));
-        map.innerHTML = shown.map(col => `<section class="fm-area pm-col${col === SCHEDULED ? ' pm-col-scheduled' : ''}" data-area="${escapeHtml(col)}" style="${colStyle(col)}">
-            <button type="button" class="fm-area-head" data-open-col="${escapeHtml(col)}" title="See every job in ${escapeHtml(colLabel(col))}">
-                <span class="fm-area-label">${escapeHtml(colLabel(col))}</span>
+        map.innerHTML = shown.map(col => `<section class="fm-area pm-col" data-area="${escapeHtml(col)}" style="${colStyle(col)}">
+            <button type="button" class="fm-area-head" data-open-col="${escapeHtml(col)}" title="See every job in ${escapeHtml(col)}">
+                <span class="fm-area-label">${escapeHtml(col)}</span>
                 <span class="fm-area-more" data-more="${escapeHtml(col)}"></span>
                 <span class="fm-area-count" data-count="${escapeHtml(col)}">0</span>
             </button>
-            <div class="fm-cards" data-cards="${escapeHtml(col)}"></div>
+            <div class="pm-sections" data-col="${escapeHtml(col)}">${spec.sections.map((sec, i) => `
+                <div class="pm-section${sec.label ? '' : ' pm-section-plain'}" data-sec="${i}">
+                    ${sec.label ? `<div class="pm-section-head"><span>${escapeHtml(sec.label)}</span><span class="pm-section-sub">${escapeHtml(sec.sub)}</span><span class="pm-section-n" data-secn="${escapeHtml(col)}|${i}"></span></div>` : ''}
+                    <div class="fm-cards" data-cards="${escapeHtml(col)}|${i}"></div>
+                </div>`).join('')}</div>
         </section>`).join('');
     }
     let onFloor = 0;
     for (const col of shown) {
-        const list = byCol.get(col);
-        if (col !== SCHEDULED) onFloor += list.length;
-        const box = map.querySelector(`[data-cards="${CSS.escape(col)}"]`);
-        if (box) box.innerHTML = list.map(e => chipHtml(e, col)).join('');
+        const sections = byCol.get(col);
+        let total = 0;
+        sections.forEach((list, i) => {
+            total += list.length;
+            const box = map.querySelector(`[data-cards="${CSS.escape(col + '|' + i)}"]`);
+            if (box) box.innerHTML = list.map(e => chipHtml(e, col, i)).join('');
+            const n = map.querySelector(`[data-secn="${CSS.escape(col + '|' + i)}"]`);
+            if (n) n.textContent = list.length ? String(list.length) : '';
+        });
+        onFloor += total;
         const n = map.querySelector(`[data-count="${CSS.escape(col)}"]`);
-        if (n) n.textContent = String(list.length);
+        if (n) n.textContent = String(total);
     }
     $('fm-shipped-count').textContent = String(shipped.length);
-    $('pm-sub').textContent = `${onFloor} on the floor ${S.view === 'week' ? 'this week' : 'that day'}`;
-    renderWhen();
+    const unit = { day: 'that day', week: 'that week', month4: 'in those 4 weeks', month: 'that month' }[S.view];
+    $('pm-sub').textContent = `${onFloor} on the floor ${unit}`;
+    renderWhen(spec);
+    renderDeptPicker();
     markOverflow();
     renderPopover();
     if (S.modal) renderModalBody();
@@ -234,11 +274,11 @@ function renderMap() {
 
 function markOverflow() {
     for (const area of document.querySelectorAll('.pm-col')) {
-        const box = area.querySelector('.fm-cards');
+        const box = area.querySelector('.pm-sections');
         const more = area.querySelector('.fm-area-more');
         const bottom = box.getBoundingClientRect().bottom;
         let hidden = 0;
-        for (const chip of box.children) if (chip.getBoundingClientRect().bottom > bottom + 2) hidden++;
+        for (const chip of box.querySelectorAll('.fm-chip')) if (chip.getBoundingClientRect().bottom > bottom + 2) hidden++;
         area.classList.toggle('fm-area-overflow', hidden > 0);
         more.textContent = hidden > 0 ? `+${hidden} more — expand to see all` : '';
     }
@@ -248,10 +288,10 @@ function renderPopover() {
     let pop = $('fm-popover');
     const id = S.expandedKey;
     const chip = id ? $('pm-map').querySelector(`.fm-chip[data-key="${CSS.escape(id)}"]`) : null;
-    const [key, col] = id ? id.split('@') : [];
+    const [key, col, sec] = id ? id.split('@') : [];
     const c = key ? S.castings.get(key) : null;
     if (!chip || !c) { if (pop) pop.remove(); if (id) S.expandedKey = null; return; }
-    const e = (partition().byCol.get(col) || []).find(x => x.c.key === key) || null;
+    const e = ((partition().byCol.get(col) || [])[Number(sec)] || []).find(x => x.c.key === key) || null;
     if (!pop) { pop = document.createElement('div'); pop.id = 'fm-popover'; $('fm-app').appendChild(pop); }
     pop.innerHTML = `<div class="fm-card fm-chip-expanded" data-key="${escapeHtml(id)}" data-expanded="1" title="Click to close">${cardBodyHtml(c, e)}</div>`;
     const r = chip.getBoundingClientRect();
@@ -261,6 +301,22 @@ function renderPopover() {
     pop.style.top = Math.max(4, Math.min(r.top, window.innerHeight - h - 8)) + 'px';
     pop.style.minWidth = r.width + 'px';
     pop.onmouseleave = () => { if (S.expandedKey === id) { S.expandedKey = null; renderMap(); } };
+}
+
+// ---------------------------------------------------------------- department picker (like the weekly's)
+
+function renderDeptPicker() {
+    const list = $('pm-dept-list');
+    if (!list) return;
+    list.innerHTML = MAP_DEPARTMENTS.filter(d => ALWAYS_SHOWN.has(d) || d === 'Mill').map(d => `<li><label><input type="checkbox" data-dept="${escapeHtml(d)}"${!S.depts || S.depts.has(d) ? ' checked' : ''}> ${escapeHtml(d)}</label></li>`).join('');
+    const n = S.depts ? S.depts.size : null;
+    $('pm-dept-label').textContent = n === null ? 'All departments' : n === 0 ? 'No departments' : n === 1 ? [...S.depts][0] : `${n} departments`;
+}
+function saveDepts() {
+    try { localStorage.setItem(DEPTS_KEY, S.depts ? JSON.stringify([...S.depts]) : ''); } catch { /* ignore */ }
+}
+function loadDepts() {
+    try { const raw = localStorage.getItem(DEPTS_KEY); if (raw) S.depts = new Set(JSON.parse(raw)); } catch { S.depts = null; }
 }
 
 // ---------------------------------------------------------------- pop-ups
@@ -281,10 +337,19 @@ function renderModalBody() {
     const body = $('fm-modal-body');
     const q = S.modal.filter;
     if (S.modal.kind === 'column') {
-        const list = partition().byCol.get(S.modal.column) || [];
-        title.textContent = `${colLabel(S.modal.column)} — ${list.length} ${list.length === 1 ? 'job' : 'jobs'}`;
-        const rows = list.filter(e => matchesSearch(e.c, q));
-        body.innerHTML = rows.length ? rows.map(e => rowHtml(e)).join('') : `<div class="fm-empty">${list.length ? 'No jobs match.' : 'Nothing here.'}</div>`;
+        const { byCol, spec } = partition();
+        const sections = byCol.get(S.modal.column) || [];
+        const total = sections.reduce((a, l) => a + l.length, 0);
+        title.textContent = `${S.modal.column} — ${total} ${total === 1 ? 'job' : 'jobs'} · ${spec.title}`;
+        const parts = [];
+        sections.forEach((list, i) => {
+            const rows = list.filter(e => matchesSearch(e.c, q));
+            if (!rows.length) return;
+            const sec = spec.sections[i];
+            if (sec.label) parts.push(`<div class="fm-log-day">${escapeHtml(sec.label)} <span class="pm-section-sub">${escapeHtml(sec.sub)}</span></div>`);
+            parts.push(rows.map(e => rowHtml(e)).join(''));
+        });
+        body.innerHTML = parts.length ? parts.join('') : `<div class="fm-empty">${total ? 'No jobs match.' : 'Nothing here.'}</div>`;
     } else {
         const { shipped } = partition();
         title.textContent = `Shipped — last ${SHIPPED_WINDOW_DAYS} days (${shipped.length})`;
@@ -327,8 +392,16 @@ async function loadAll({ silent = false } = {}) {
 }
 
 function step(n) {
-    S.anchor = S.view === 'week' ? addDays(S.anchor, 7 * n) : addDays(S.anchor, n);
-    if (S.view === 'day') { while (parseIso(S.anchor).getDay() === 0) S.anchor = addDays(S.anchor, n > 0 ? 1 : -1); }   // skip Sundays
+    if (S.view === 'day') {
+        S.anchor = addDays(S.anchor, n);
+        while (parseIso(S.anchor).getDay() === 0) S.anchor = addDays(S.anchor, n > 0 ? 1 : -1);   // skip Sundays
+    } else if (S.view === 'week') S.anchor = addDays(S.anchor, 7 * n);
+    else if (S.view === 'month4') S.anchor = addDays(S.anchor, 28 * n);
+    else {
+        const spec = viewSpec();
+        const d = new Date(spec.year, spec.month + n, 15);                              // a safe day inside the next / previous month
+        S.anchor = getLocalDateString(d);
+    }
     S.expandedKey = null;
     renderMap();
 }
@@ -337,10 +410,24 @@ function wireEvents() {
     $('fm-app').addEventListener('click', (e) => {
         const view = e.target.closest('[data-view]');
         if (view) { S.view = view.dataset.view; S.expandedKey = null; renderMap(); return; }
+        if (e.target.closest('#pm-dept-btn')) { $('pm-dept-dropdown').classList.toggle('open'); return; }
+        if (e.target.closest('#pm-dept-all')) { S.depts = null; saveDepts(); renderMap(); return; }
+        if (e.target.closest('#pm-dept-none')) { S.depts = new Set(); saveDepts(); renderMap(); return; }
+        if (e.target.closest('#pm-dept-dropdown')) return;
+        $('pm-dept-dropdown')?.classList.remove('open');
         const head = e.target.closest('[data-open-col]');
         if (head) { S.expandedKey = null; renderMap(); openModal('column', { column: head.dataset.openCol }); return; }
         const card = e.target.closest('[data-key]');
         if (card) { S.expandedKey = S.expandedKey === card.dataset.key ? null : card.dataset.key; renderMap(); }
+    });
+    $('pm-dept-list').addEventListener('change', (e) => {
+        const box = e.target.closest('input[data-dept]');
+        if (!box) return;
+        const all = [...$('pm-dept-list').querySelectorAll('input[data-dept]')];
+        const chosen = all.filter(b => b.checked).map(b => b.dataset.dept);
+        S.depts = chosen.length === all.length ? null : new Set(chosen);
+        saveDepts();
+        renderMap();
     });
     $('pm-prev').addEventListener('click', () => step(-1));
     $('pm-next').addEventListener('click', () => step(1));
@@ -353,7 +440,7 @@ function wireEvents() {
     });
     $('fm-modal-search').addEventListener('input', (e) => { if (S.modal) { S.modal.filter = e.target.value.trim().toLowerCase(); renderModalBody(); } });
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') { if (S.modal) closeModal(); else if (S.expandedKey) { S.expandedKey = null; renderMap(); } }
+        if (e.key === 'Escape') { if (S.modal) closeModal(); else if (S.expandedKey) { S.expandedKey = null; renderMap(); } else $('pm-dept-dropdown')?.classList.remove('open'); }
         if (!S.modal && !e.target.closest('input')) { if (e.key === 'ArrowLeft') step(-1); if (e.key === 'ArrowRight') step(1); }
     });
     $('fm-search').addEventListener('input', (e) => { S.search = e.target.value.trim().toLowerCase(); renderMap(); });
@@ -370,12 +457,14 @@ function wireEvents() {
 (async function boot() {
     S.anchor = today();
     if (parseIso(S.anchor).getDay() === 0) S.anchor = addDays(S.anchor, 1);
+    loadDepts();
     if (document.getElementById('ro-test-count') || document.querySelector('[style*="99999"]')) document.body.classList.add('fm-has-test-bar');
     wireEvents();
-    renderWhen();
+    renderWhen(viewSpec());
+    renderDeptPicker();
     try { await initializeSupabase(); } catch (err) { logger.warn('[project-map] supabase init failed', err); }
     await loadAll();
     if (document.getElementById('ro-test-count')) document.body.classList.add('fm-has-test-bar');
 })();
 
-window.__projectMap = { state: S, partition, reload: loadAll };
+window.__projectMap = { state: S, partition, viewSpec, reload: loadAll };
