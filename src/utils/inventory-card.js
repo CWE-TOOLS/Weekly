@@ -37,7 +37,7 @@ export function invMissingText(task) {
 export function layoutConditionText(task) {
     const c = task && task.layoutCondition;
     if (!c || !c.name) return '';
-    return `SPECIAL CONDITION${c.side ? ' \u2014 SIDE ' + c.side : ''}: ${c.name}`;
+    return `SPECIAL CONDITION${c.side ? ' \u2014 SIDE ' + (c.side === 'AB' ? 'A + B' : c.side) : ''}: ${c.name}`;
 }
 
 /** 'Side A' / 'Side B' / 'Side A + B' for a stored casting side ('' otherwise). */
