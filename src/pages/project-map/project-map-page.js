@@ -243,7 +243,7 @@ function renderMap() {
     const hiddenEl = $('pm-hidden');
     if (hiddenEl) {
         hiddenEl.hidden = !hiddenEmpty.length;
-        hiddenEl.innerHTML = hiddenEmpty.length ? `<b>Hidden, nothing scheduled ${spec.title.includes('(today)') ? 'today' : 'that day'}:</b> ${hiddenEmpty.map(escapeHtml).join(' · ')}` : '';
+        hiddenEl.innerHTML = hiddenEmpty.length ? `<span class="pm-hidden-why">Hidden, nothing scheduled ${spec.title.includes('(today)') ? 'today' : 'that day'}:</span> ${hiddenEmpty.map(d => `<span class="pm-hidden-dept" style="${colStyle(d)}">${escapeHtml(d)}</span>`).join('')}` : '';
     }
     if (!shown.length) { map.dataset.layout = ''; map.innerHTML = `<div class="fm-empty pm-none">Nothing scheduled ${S.view === 'day' ? 'that day' : 'in this view'} for the departments you have ticked.</div>`; $('pm-sub').textContent = '0 on the floor'; renderWhen(spec); renderDeptPicker(); renderPopover(); if (S.modal) renderModalBody(); return; }
     const layoutKey = `${S.view}|${spec.start}|${spec.sections.length}|${shown.join('|')}`;   // rebuild when the bands change too

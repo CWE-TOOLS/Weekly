@@ -5,6 +5,9 @@
 .pm-main { overflow: hidden; }
 .pm-hidden { flex: 0 0 auto; margin: 0.45rem 0.8rem 0; padding: 0.3rem 0.7rem; border-radius: 6px; font-size: 12px; background: #fef3c7; color: #78350f; border: 1px solid #fcd34d; }
 .pm-hidden[hidden] { display: none; }
+.pm-hidden { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+.pm-hidden-why { font-weight: 600; margin-right: 0.2rem; }
+.pm-hidden-dept { display: inline-block; padding: 0.1rem 0.6rem; border-radius: 999px; background: var(--pm-col, #334155); color: #fff; font-weight: 800; font-size: 12px; letter-spacing: 0.03em; }
 .pm-none { grid-column: 1 / -1; align-self: start; background: #fff; border-radius: 8px; padding: 1rem; font-size: 14px; color: #475569; }
 
 /* day / week switch and the date arrows, in the middle of the header */
