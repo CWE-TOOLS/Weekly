@@ -5209,7 +5209,7 @@ function renderCastingLayoutTab() {
         const cardA = document.createElement('div'); cardA.className = 'pp-clay-card-side';
         card.append(cardB, cardA);
         const quiet = document.createElement('div');
-        const hB = renderCastingLayout({ container: cardB, errorEl: quiet, components, title: `${title} — SIDE B`, area: 'B', offsetPerSide: clOffsetPerSide, gapBetween: clGapBetween, positions: clLayoutPositions, overflowLabel: 'CONTINUES ON SIDE A' });
+        const hB = renderCastingLayout({ container: cardB, errorEl: quiet, components, title: `${title} — SIDE B`, area: 'B', offsetPerSide: clOffsetPerSide, gapBetween: clGapBetween, positions: clLayoutPositions, overflowLabel: 'CONTINUE ON SIDE A', hideOverflow: true });
         const leftover = new Set((hB?.staged || []).map(r => r.componentId));
         const compsA = hB ? components.filter(c => leftover.has(c.id)) : [];
         const hA = compsA.length ? renderCastingLayout({ container: cardA, errorEl, components: compsA, title: `${title} — SIDE A`, area: 'A', offsetPerSide: clOffsetPerSide, gapBetween: clGapBetween, positions: clLayoutPositions }) : null;

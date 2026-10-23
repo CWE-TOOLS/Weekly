@@ -571,7 +571,7 @@ function legendRows(recs) {
  * @returns {Object|null} layout handle {mode, area, svg, transform, tableDefs,
  *        placed, unplaced}, or null when there is nothing to draw
  */
-export function renderCastingLayout({ container, errorEl, components, title, area = 'B', offsetPerSide = 4, gapBetween = 0, positions = null, overflowLabel = null }) {
+export function renderCastingLayout({ container, errorEl, components, title, area = 'B', offsetPerSide = 4, gapBetween = 0, positions = null, overflowLabel = null, hideOverflow = false }) {
   if (!container) return null;
   container.innerHTML = '';
   if (errorEl) errorEl.textContent = '';
@@ -616,9 +616,11 @@ export function renderCastingLayout({ container, errorEl, components, title, are
   const stagingStartY = contentMaxY + 34;
   let overallMaxX = contentMaxX;
   let overallMaxY = contentMaxY;
-  if (staged.length > 0) {
+  if (staged.length > 0 && !hideOverflow) {
     overallMaxY = layoutStaging(staged, contentMaxX, stagingStartY, gapBetween);
     for (const rec of staged) overallMaxX = Math.max(overallMaxX, rec.sx + rec.sw);
+  } else if (staged.length > 0) {
+    overallMaxY = stagingStartY;   // just the "continues on the other side" line below the tables
   }
 
   const availW = pageW - 40;
@@ -680,8 +682,8 @@ export function renderCastingLayout({ container, errorEl, components, title, are
   // draggable clay-mold in the same coordinate space as the tables. Drag one
   // onto a table to place it.
   if (staged.length > 0) {
-    svg.appendChild(svgText(NS, tx(overallMaxX / 2), ty(stagingLabelY), overflowLabel || 'OVERFLOW — drag a form onto a table to place it', fontSize * 1.05, overflowLabel ? '#1d4ed8' : '#dc2626', 'bold'));
-    for (const rec of staged) {
+    svg.appendChild(svgText(NS, tx(overallMaxX / 2), ty(stagingLabelY), (overflowLabel ? `${staged.length} ${staged.length === 1 ? 'FORM' : 'FORMS'} — ${overflowLabel}` : 'OVERFLOW — drag a form onto a table to place it'), fontSize * 1.05, overflowLabel ? '#1d4ed8' : '#dc2626', 'bold'));
+    if (!hideOverflow) for (const rec of staged) {
       svg.appendChild(buildMoldGroup(NS, rec, tx, ty, ts, fontSize, offsetPerSide));
     }
   }
@@ -709,7 +711,7 @@ export function renderCastingLayout({ container, errorEl, components, title, are
       ? `${totalMolds} molds — manual layout`
         + (staged.length > 0 ? ` — ${staged.length} not placed` : '')
       : `${totalMolds} molds — ${totalMolds - staged.length} on tables`
-        + (staged.length > 0 ? ` — ${staged.length} overflow` : ''))
+        + (staged.length > 0 ? (hideOverflow ? ` — ${staged.length} continue on the other side` : ` — ${staged.length} overflow`) : ''))
     + ` — +${frac(offsetPerSide)}/side mold offset`;
   svg.appendChild(svgText(NS, pageW / 2, 18, title || 'Casting Layout', fontSize * 1.5, '#222', 'bold'));
   svg.appendChild(svgText(NS, pageW / 2, 38, summaryStr, fontSize, staged.length > 0 ? '#dc2626' : '#555', 'normal'));
