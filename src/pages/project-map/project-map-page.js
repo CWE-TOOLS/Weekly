@@ -413,10 +413,17 @@ async function loadAll({ silent = false } = {}) {
     }
 }
 
+/** Does any casting have a weekly day on this date (any production department)? */
+function anythingOn(iso) {
+    for (const c of S.castings.values()) for (const [dept, list] of c.days) if (deptRank(dept) !== -1 && list.includes(iso)) return true;
+    return false;
+}
+
 function step(n) {
     if (S.view === 'day') {
         S.anchor = addDays(S.anchor, n);
-        while (!S.sundays && parseIso(S.anchor).getDay() === 0) S.anchor = addDays(S.anchor, n > 0 ? 1 : -1);   // skip Sundays unless they are wanted
+        // Skip a Sunday only when nothing at all is scheduled on it (or stop on every Sunday when "Include Sundays" is on).
+        while (!S.sundays && parseIso(S.anchor).getDay() === 0 && !anythingOn(S.anchor)) S.anchor = addDays(S.anchor, n > 0 ? 1 : -1);
     } else if (S.view === 'week') S.anchor = addDays(S.anchor, 7 * n);
     else if (S.view === 'month4') S.anchor = addDays(S.anchor, 28 * n);
     else {
