@@ -156,6 +156,20 @@ export const DEFAULT_HOLIDAYS = [
 /** Most castings a team takes on one day before the day header turns red (user rule 2026-10-20). Teams not listed: no limit. */
 export const TEAM_DAY_LIMITS = { Parts: 1, FO: 1, Cast: 1, DM: 1, F: 5, Seal: 5, Spec: 5 };
 
+/** The plant crew by team (user 2026-10-23). Editable on the scheduler's Settings; this is the seed. Mill = CNC + Parts. */
+export const DEFAULT_CREW = {
+    CNC:   { leader: 'Nick',    people: ['Raidel', 'Ryan'] },
+    Parts: { leader: 'Nick',    people: ['Raidel', 'Ryan'] },
+    FO:    { leader: 'Nick',    people: ['Raul', 'Sergio'] },
+    Cast:  { leader: 'Simche',  people: ['Juan', 'Manuel', 'Elmar', 'Gabriele', 'Luciano', 'Leodan', 'Raul', 'Shaquile'] },
+    DM:    { leader: 'Simche',  people: ['Tino', 'Arturo'] },
+    F:     { leader: 'Andres',  people: ['Luis', 'Oscar'] },
+    Seal:  { leader: 'Andres',  people: ['Florentino'] },
+    Crate: { leader: 'Arnulfo', people: ['Luis', 'Gabriele'] },
+    Spec:  { leader: 'Arnulfo', people: ['Lizandro', 'Tony'] },
+    Ship:  { leader: '',        people: [] }
+};
+
 /** Revenue per labor hour (the Optimizer's Rev tab). */
 export const REVENUE_PER_HOUR = 135;
 

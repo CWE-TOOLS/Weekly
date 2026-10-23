@@ -18,8 +18,8 @@ import {
     deleteCastingSchedule, loadScheduleSettings, saveScheduleSetting, isScheduleMigrationPending
 } from '../../services/schedule-service.js?v=20261021-1';
 import {
-    DEPARTMENTS, DEPT_KEYS, TASKS, tasksForDept, taskForPhase, SETTINGS_DEFAULTS, REVENUE_PER_HOUR, SCHEDULABLE_STATUSES, TEAM_DAY_LIMITS, teamOfDepartment
-} from '../../config/scheduler-config.js?v=20261022-3';
+    DEPARTMENTS, DEPT_KEYS, TASKS, tasksForDept, taskForPhase, SETTINGS_DEFAULTS, REVENUE_PER_HOUR, SCHEDULABLE_STATUSES, TEAM_DAY_LIMITS, teamOfDepartment, DEFAULT_CREW
+} from '../../config/scheduler-config.js?v=20261023-1';
 import { logger } from '../../utils/logger.js';
 import { fetchForProject as fetchStagingNotes, fetchForProjects as fetchStagingForProjects, upsertOne as saveStagingNote } from '../../services/task-descriptions-service.js?v=20261022-2';
 
@@ -625,7 +625,7 @@ function renderGrid() {
                 }
                 const attrs = `data-cid="${c.id}" data-date="${d}" data-dept="${dept}"`;
                 const drag = rows.length ? ' draggable="true" title="Drag to another day on this row to move it; click to edit"' : '';
-                taskTds += `<td class="${cls} sc-trow" ${attrs}${drag}><span class="sc-task">${esc(task)}</span></td>`;
+                taskTds += `<td class="${cls} sc-trow" ${attrs}${drag}><span class="sc-task">${esc(task)}</span>${crewBadge(rows)}</td>`;
                 hourTds += `<td class="${cls} sc-hrow" ${attrs}${drag}><span class="sc-h">${hrs}</span></td>`;
             });
         }
@@ -723,6 +723,7 @@ function openEditor(td) {
         html += `<div class="sc-ed-move">Move these to <input type="date" id="sc-ed-move-date" value="${date}"><button type="button" class="btn-secondary" id="sc-ed-move">Move</button></div>`;
         html += `<label class="sc-ed-cascade"><input type="checkbox" id="sc-ed-cascade"${S.cascade ? ' checked' : ''}${nLater ? '' : ' disabled'}> Cascade: also move every task after this one (${nLater}) by the same number of working days</label>`;
     }
+    if (rows.length) html += crewSectionHtml(dept, rows);
     if (rows.length) html += `<div class="sc-stg" id="sc-stg"><div class="sc-stg-title">Staging note</div><div class="sc-hint">Loading the portal's staging note…</div></div>`;
     html += `<div class="sc-ed-actions"><button type="button" class="btn-secondary" id="sc-ed-cancel">Close</button><div class="right">${canEdit && rows.length ? '<button type="button" class="btn-primary" id="sc-ed-save">Save</button>' : ''}</div></div>`;
     ed.innerHTML = html;
@@ -730,6 +731,40 @@ function openEditor(td) {
     refreshAddForm();
     placeEditor(td);
     if (rows.length) fillStagingSection(cid, dept, date, td);
+}
+
+// ---- crew: who works this day (plant_schedule.crew, migration/plant-schedule-crew.sql)
+function crewSectionHtml(dept, rows) {
+    const c = crewOf(dept);
+    const picked = new Set(rows.flatMap(r => Array.isArray(r.crew) ? r.crew : []));
+    const team = [...(c.leader ? [c.leader] : []), ...c.people.filter(p => p !== c.leader)];
+    const others = everyone().filter(n => !team.includes(n));
+    const box = (name, isLead) => `<label class="sc-crew-pick${picked.has(name) ? ' on' : ''}"><input type="checkbox" data-crew-name="${esc(name)}"${picked.has(name) ? ' checked' : ''}> ${esc(name)}${isLead ? ' <small>(leader)</small>' : ''}</label>`;
+    const extra = [...picked].filter(n => !team.includes(n));
+    return `<div class="sc-crew" id="sc-crew-sec"><div class="sc-stg-title">Crew <small>(${esc(deptLabel(dept))} team)</small></div>
+        <div class="sc-crew-picks">${team.map(n => box(n, n === c.leader)).join('')}${extra.map(n => box(n, false)).join('')}</div>
+        <div class="sc-crew-add">Borrow: <select id="sc-crew-borrow"><option value="">— someone from another team —</option>${others.filter(n => !picked.has(n)).map(n => `<option>${esc(n)}</option>`).join('')}</select></div>
+        <div class="sc-hint">Ticks save straight away and show as initials on the day.</div></div>`;
+}
+async function saveCrewFromEditor() {
+    if (!editorCtx) return;
+    const sec = $('sc-crew-sec'); if (!sec) return;
+    const names = [...sec.querySelectorAll('input[data-crew-name]:checked')].map(i => i.dataset.crewName);
+    const rows = S.rows.filter(r => r.casting_id === editorCtx.cid && r.date === editorCtx.date && r.department === editorCtx.dept);
+    try {
+        for (const r of rows) { await updateScheduleRow(r.id, { crew: names }); r.crew = names; }
+        render();
+        const td = document.querySelector(`tr.sc-cast-top td.sc-cell[data-cid="${editorCtx.cid}"][data-date="${editorCtx.date}"][data-dept="${editorCtx.dept}"]`);
+        if (td) openEditor(td);
+    } catch (err) {
+        toast(/crew/.test(String(err.message || '')) ? 'The crew column is not in the database yet — run migration/plant-schedule-crew.sql first.' : 'Could not save the crew: ' + (err.message || err), 'error');
+    }
+}
+function crewBadge(rows) {
+    const names = [...new Set(rows.flatMap(r => Array.isArray(r.crew) ? r.crew : []))];
+    if (!names.length) return '';
+    const txt = names.length <= 2 ? names.map(n => n.slice(0, 2)).join('') : names.length;
+    return `<span class="sc-crew-badge" title="${esc(names.join(', '))}">${esc(String(txt))}</span>`;
 }
 
 // ---- staging note (the portal's Staging tab, task_descriptions): casting + weekly department + the day's index in that team
@@ -873,7 +908,7 @@ async function saveRollover(rowId, todayH) {
     try {
         await updateScheduleRow(row.id, { hours: todayH });
         if (nextRow) await updateScheduleRow(nextRow.id, { hours: nextH });
-        else await insertScheduleRows([{ project_number: row.project_number, casting_id: row.casting_id, phase_id: row.phase_id, date: next, department: row.department, task: row.task, hours: nextH, weekend_ok: false, note: row.phase_id ? `Rolled over from ${shortDay(row.date)}` : row.note }]);
+        else await insertScheduleRows([{ project_number: row.project_number, casting_id: row.casting_id, phase_id: row.phase_id, date: next, department: row.department, task: row.task, hours: nextH, weekend_ok: false, note: row.phase_id ? `Rolled over from ${shortDay(row.date)}` : row.note, crew: Array.isArray(row.crew) ? row.crew : null }]);
         await histEnd(__h);
         await loadRows();
         render();
@@ -1310,16 +1345,24 @@ async function confirmScheduleDialog() {
 // ---------------------------------------------------------------------------
 // settings
 // ---------------------------------------------------------------------------
+function crewOf(team) { const c = (S.settings.crew || {})[team] || {}; return { leader: String(c.leader || '').trim(), people: (c.people || []).map(s => String(s).trim()).filter(Boolean) }; }
+function everyone() { const s = new Set(); for (const k of DEPT_KEYS) { const c = crewOf(k); if (c.leader) s.add(c.leader); c.people.forEach(p => s.add(p)); } return [...s].sort(); }
 function openSettings() {
     $('sc-holidays').value = (S.settings.holidays || []).join('\n');
+    const box = $('sc-crew');
+    if (box) box.innerHTML = DEPARTMENTS.map(d => { const c = crewOf(d.key); return `<div class="sc-crew-row"><span class="sc-crew-team">${d.label}</span><input data-crew-leader="${d.key}" value="${esc(c.leader)}" placeholder="leader"><input data-crew-people="${d.key}" value="${esc(c.people.join(', '))}" placeholder="people, comma separated"></div>`; }).join('');
     $('sc-settings').hidden = false;
 }
 async function saveSettings() {
     const holidays = $('sc-holidays').value.split(/\r?\n/).map(s => s.trim()).filter(s => /^\d{4}-\d{2}-\d{2}$/.test(s)).sort();
+    const crew = {};
+    for (const d of DEPT_KEYS) crew[d] = { leader: ($('sc-crew').querySelector(`[data-crew-leader="${d}"]`)?.value || '').trim(), people: ($('sc-crew').querySelector(`[data-crew-people="${d}"]`)?.value || '').split(',').map(s => s.trim()).filter(Boolean) };
     setBusy(true);
     try {
         await saveScheduleSetting('holidays', holidays);
+        await saveScheduleSetting('crew', crew);
         S.settings.holidays = holidays;
+        S.settings.crew = crew;
         $('sc-settings').hidden = true;
         render();
         toast('Settings saved for everyone.');
@@ -1411,6 +1454,15 @@ function wire() {
     $('sc-cascade').addEventListener('change', (e) => setCascade(e.target.checked));
     $('sc-editor').addEventListener('change', (e) => { if (e.target.id === 'sc-ed-cascade') setCascade(e.target.checked); });
     $('sc-editor').addEventListener('change', (e) => { if (e.target.id === 'sc-ed-add-phase') { const h = $('sc-ed-add-hours'); if (h) delete h.dataset.touched; refreshAddForm(); } });
+    $('sc-editor').addEventListener('change', async (e) => {
+        if (S.busy) return;
+        if (e.target.matches('input[data-crew-name]')) { await saveCrewFromEditor(); return; }
+        if (e.target.id === 'sc-crew-borrow' && e.target.value) {
+            const sec = $('sc-crew-sec'); const name = e.target.value;
+            sec.querySelector('.sc-crew-picks').insertAdjacentHTML('beforeend', `<label class="sc-crew-pick on"><input type="checkbox" data-crew-name="${esc(name)}" checked> ${esc(name)}</label>`);
+            await saveCrewFromEditor();
+        }
+    });
     $('sc-editor').addEventListener('input', (e) => {
         if (e.target.id === 'sc-ed-add-hours') e.target.dataset.touched = '1';
         const panel = e.target.closest('.sc-roll');
@@ -1526,6 +1578,7 @@ async function init() {
         const saved = await loadScheduleSettings();
         if (Array.isArray(saved.holidays)) S.settings.holidays = saved.holidays;
         if (saved.costs && typeof saved.costs === 'object') S.settings.costs = saved.costs;
+        S.settings.crew = (saved.crew && typeof saved.crew === 'object') ? saved.crew : JSON.parse(JSON.stringify(DEFAULT_CREW));
         if (Number(saved.target) > 0) S.settings.target = Number(saved.target);
         S.ready = readyFromSettings(saved);
         await loadBase();
