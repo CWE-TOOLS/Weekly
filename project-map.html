@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="src/styles/base.css">
     <link rel="stylesheet" href="src/styles/buttons.css">
     <link rel="stylesheet" href="src/styles/finishing-map.css?v=20261022-10">
-    <link rel="stylesheet" href="src/styles/project-map.css?v=20261023-9">
+    <link rel="stylesheet" href="src/styles/project-map.css?v=20261023-10">
 </head>
 <body class="pm-body">
     <div id="fm-app" class="fm-app pm-app">
@@ -24,17 +24,19 @@
             </div>
             <h1 class="fm-title">Project Map</h1>
             <div class="pm-when">
-                <div class="pm-view" role="group" aria-label="View">
-                    <button type="button" class="pm-view-btn pm-view-on" data-view="day">Day</button>
-                    <button type="button" class="pm-view-btn" data-view="week">Week</button>
-                    <button type="button" class="pm-view-btn" data-view="month4">4 weeks</button>
-                    <button type="button" class="pm-view-btn" data-view="month">Month</button>
+                <div class="pm-view-stack">
+                    <div class="pm-view" role="group" aria-label="View">
+                        <button type="button" class="pm-view-btn pm-view-on" data-view="day">Day</button>
+                        <button type="button" class="pm-view-btn" data-view="week">Week</button>
+                        <button type="button" class="pm-view-btn" data-view="month4">4 weeks</button>
+                        <button type="button" class="pm-view-btn" data-view="month">Month</button>
+                    </div>
+                    <button type="button" class="pm-view-btn pm-sunday" id="pm-sunday" title="Show a Sunday band in the week view" aria-pressed="false" hidden>Include Sundays</button>
                 </div>
                 <button type="button" class="fm-nav-btn pm-arrow" id="pm-prev" title="Earlier">&lsaquo;</button>
                 <span class="pm-when-label" id="pm-when-label"></span>
                 <button type="button" class="fm-nav-btn pm-arrow" id="pm-next" title="Later">&rsaquo;</button>
                 <button type="button" class="fm-nav-btn" id="pm-today">Today</button>
-                <button type="button" class="pm-view-btn pm-sunday" id="pm-sunday" title="Show a Sunday band in the week view" aria-pressed="false" hidden>Include Sundays</button>
             </div>
             <div class="fm-header-right">
                 <span class="pm-sub" id="pm-sub"></span>
