@@ -234,19 +234,22 @@ function renderMap() {
     if (map.dataset.layout !== layoutKey) {
         map.dataset.layout = layoutKey;
         map.style.setProperty('--pm-cols', String(shown.length));
-        map.innerHTML = shown.map(col => `<section class="fm-area pm-col" data-area="${escapeHtml(col)}" style="${colStyle(col)}">
-            <button type="button" class="fm-area-head" data-open-col="${escapeHtml(col)}" title="See every job in ${escapeHtml(col)}">
+        const last = spec.sections.length - 1;
+        map.innerHTML = shown.map((col, k) => `<div class="pm-col" data-col="${escapeHtml(col)}" style="${colStyle(col)}">
+            <button type="button" class="fm-area-head pm-cell-head" style="grid-column:${k + 1};grid-row:1" data-open-col="${escapeHtml(col)}" title="See every job in ${escapeHtml(col)}">
                 <span class="fm-area-label">${escapeHtml(col)}</span>
                 <span class="fm-area-more" data-more="${escapeHtml(col)}"></span>
                 <span class="fm-area-count" data-count="${escapeHtml(col)}">0</span>
-            </button>
-            <div class="pm-sections" data-col="${escapeHtml(col)}">${spec.sections.map((sec, i) => `
-                <div class="pm-section${sec.label ? '' : ' pm-section-plain'}" data-sec="${i}">
-                    ${sec.label ? `<div class="pm-section-head"><span>${escapeHtml(sec.label)}</span><span class="pm-section-sub">${escapeHtml(sec.sub)}</span><span class="pm-section-n" data-secn="${escapeHtml(col)}|${i}"></span></div>` : ''}
-                    <div class="fm-cards" data-cards="${escapeHtml(col)}|${i}"></div>
-                </div>`).join('')}</div>
-        </section>`).join('');
+            </button>${spec.sections.map((sec, i) => `
+            <div class="pm-cell${i === last ? ' pm-cell-last' : ''}" style="grid-column:${k + 1};grid-row:${i + 2}" data-cellcol="${escapeHtml(col)}">
+                ${sec.label ? `<div class="pm-section-head" data-open-band="${escapeHtml(col)}|${i}" title="See every ${escapeHtml(col)} job in ${escapeHtml(sec.label)}"><span>${escapeHtml(sec.label)}</span><span class="pm-section-sub">${escapeHtml(sec.sub)}</span><span class="pm-section-n" data-secn="${escapeHtml(col)}|${i}"></span></div>` : ''}
+                <div class="fm-cards" data-cards="${escapeHtml(col)}|${i}"></div>
+            </div>`).join('')}
+        </div>`).join('');
     }
+    // Row heights: a band gets room in proportion to its busiest column, so bands stay aligned across departments.
+    const weights = spec.sections.map((_, i) => Math.max(1, ...shown.map(col => byCol.get(col)[i].length)));
+    map.style.gridTemplateRows = 'auto ' + weights.map(w => `minmax(${spec.sections.length > 1 ? '2.4rem' : '0'}, ${w}fr)`).join(' ');
     let onFloor = 0;
     for (const col of shown) {
         const sections = byCol.get(col);
@@ -273,14 +276,15 @@ function renderMap() {
 }
 
 function markOverflow() {
-    for (const area of document.querySelectorAll('.pm-col')) {
-        const box = area.querySelector('.pm-sections');
-        const more = area.querySelector('.fm-area-more');
-        const bottom = box.getBoundingClientRect().bottom;
+    for (const colEl of document.querySelectorAll('.pm-col')) {
         let hidden = 0;
-        for (const chip of box.querySelectorAll('.fm-chip')) if (chip.getBoundingClientRect().bottom > bottom + 2) hidden++;
-        area.classList.toggle('fm-area-overflow', hidden > 0);
-        more.textContent = hidden > 0 ? `+${hidden} more — expand to see all` : '';
+        for (const cell of colEl.querySelectorAll('.pm-cell')) {
+            const bottom = cell.getBoundingClientRect().bottom;
+            for (const chip of cell.querySelectorAll('.fm-chip')) if (chip.getBoundingClientRect().bottom > bottom + 2) hidden++;
+        }
+        const head = colEl.querySelector('.pm-cell-head');
+        head.classList.toggle('fm-area-overflow', hidden > 0);
+        head.querySelector('.fm-area-more').textContent = hidden > 0 ? `+${hidden} more — expand to see all` : '';
     }
 }
 
@@ -338,9 +342,11 @@ function renderModalBody() {
     const q = S.modal.filter;
     if (S.modal.kind === 'column') {
         const { byCol, spec } = partition();
-        const sections = byCol.get(S.modal.column) || [];
+        const only = S.modal.section;                                        // one band only, or every band of the view
+        const sections = (byCol.get(S.modal.column) || []).map((l, i) => only == null || i === only ? l : []);
         const total = sections.reduce((a, l) => a + l.length, 0);
-        title.textContent = `${S.modal.column} — ${total} ${total === 1 ? 'job' : 'jobs'} · ${spec.title}`;
+        const bandTitle = only != null && spec.sections[only] ? `${spec.sections[only].label} ${spec.sections[only].sub}` : spec.title;
+        title.textContent = `${S.modal.column} — ${total} ${total === 1 ? 'job' : 'jobs'} · ${bandTitle}`;
         const parts = [];
         sections.forEach((list, i) => {
             const rows = list.filter(e => matchesSearch(e.c, q));
@@ -417,6 +423,8 @@ function wireEvents() {
         $('pm-dept-dropdown')?.classList.remove('open');
         const head = e.target.closest('[data-open-col]');
         if (head) { S.expandedKey = null; renderMap(); openModal('column', { column: head.dataset.openCol }); return; }
+        const band = e.target.closest('[data-open-band]');
+        if (band) { const [column, i] = band.dataset.openBand.split('|'); S.expandedKey = null; renderMap(); openModal('column', { column, section: Number(i) }); return; }
         const card = e.target.closest('[data-key]');
         if (card) { S.expandedKey = S.expandedKey === card.dataset.key ? null : card.dataset.key; renderMap(); }
     });
