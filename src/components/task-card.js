@@ -252,6 +252,8 @@ export function createTaskCard(task, rowClass, isEditingUnlocked) {
         card.appendChild(deleteBtn);
     }
 
+    // Plant Scheduler crew preview — defined on the test site only (src/features/scheduler-crew-preview.js)
+    if (typeof window !== 'undefined' && typeof window.__crewDecorate === 'function') { try { window.__crewDecorate(card, task); } catch (_) { /* preview only */ } }
     return card;
 }
 
