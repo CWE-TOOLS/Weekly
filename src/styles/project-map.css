@@ -1,7 +1,7 @@
 /* Project Map — department columns in process order, one screen; shares the card look of finishing-map.css */
 
 .pm-sub { font-size: 12px; color: #475569; font-weight: 600; white-space: nowrap; }
-.pm-app { background: #cbd5e1; }   /* the page itself a shade darker than the Finishing Map */
+.pm-app { background: #9aa6b6; }   /* the page behind the bands: dark, so the band boxes and cards stand out (user, 2026-10-23) */
 .pm-main { overflow: hidden; }
 
 /* day / week switch and the date arrows, in the middle of the header */
@@ -37,7 +37,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: color-mix(in srgb, var(--pm-col, #1f2937) 22%, #e2e8f0);   /* darker behind the white cards so they stand out */
+  background: color-mix(in srgb, var(--pm-col, #1f2937) 7%, white);   /* light inside the band; the page behind the bands is the dark part */
   border-left: 2px solid var(--pm-col, #1f2937);
   border-right: 2px solid var(--pm-col, #1f2937);
 }
@@ -67,7 +67,7 @@
   padding: 0.12rem 0.4rem;
   font-size: 10.5px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase;
   color: #334155;
-  background: color-mix(in srgb, var(--pm-col, #1f2937) 36%, #e2e8f0);
+  background: color-mix(in srgb, var(--pm-col, #1f2937) 18%, white);
   border-top: 1px solid color-mix(in srgb, var(--pm-col, #1f2937) 40%, white);
 }
 .pm-cell:nth-child(2) .pm-section-head { border-top: none; }
