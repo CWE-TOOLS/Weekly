@@ -165,8 +165,12 @@ function partition() {
     return { byCol, shipped, spec };
 }
 
+/** Columns to draw. In Day view a ticked department with nothing scheduled that day is hidden too (and listed in a notice). */
 function shownDepartments(byCol) {
-    return MAP_DEPARTMENTS.filter(d => (!S.depts || S.depts.has(d)) && (ALWAYS_SHOWN.has(d) || byCol.get(d).some(l => l.length)));
+    const ticked = MAP_DEPARTMENTS.filter(d => (!S.depts || S.depts.has(d)) && (ALWAYS_SHOWN.has(d) || byCol.get(d).some(l => l.length)));
+    if (S.view !== 'day') return { shown: ticked, hiddenEmpty: [] };
+    const shown = ticked.filter(d => byCol.get(d).some(l => l.length));
+    return { shown, hiddenEmpty: ticked.filter(d => !shown.includes(d)) };
 }
 
 // ---------------------------------------------------------------- cards
@@ -235,7 +239,13 @@ function renderWhen(spec) {
 function renderMap() {
     const map = $('pm-map');
     const { byCol, shipped, spec } = partition();
-    const shown = shownDepartments(byCol);
+    const { shown, hiddenEmpty } = shownDepartments(byCol);
+    const hiddenEl = $('pm-hidden');
+    if (hiddenEl) {
+        hiddenEl.hidden = !hiddenEmpty.length;
+        hiddenEl.innerHTML = hiddenEmpty.length ? `<b>Hidden, nothing scheduled ${spec.title.includes('(today)') ? 'today' : 'that day'}:</b> ${hiddenEmpty.map(escapeHtml).join(' · ')}` : '';
+    }
+    if (!shown.length) { map.dataset.layout = ''; map.innerHTML = `<div class="fm-empty pm-none">Nothing scheduled ${S.view === 'day' ? 'that day' : 'in this view'} for the departments you have ticked.</div>`; $('pm-sub').textContent = '0 on the floor'; renderWhen(spec); renderDeptPicker(); renderPopover(); if (S.modal) renderModalBody(); return; }
     const layoutKey = `${S.view}|${spec.start}|${spec.sections.length}|${shown.join('|')}`;   // rebuild when the bands change too
     if (map.dataset.layout !== layoutKey) {
         map.dataset.layout = layoutKey;

@@ -3,6 +3,9 @@
 .pm-sub { font-size: 12px; color: #475569; font-weight: 600; white-space: nowrap; }
 .pm-app { background: #9aa6b6; }   /* the page behind the bands: dark, so the band boxes and cards stand out (user, 2026-10-23) */
 .pm-main { overflow: hidden; }
+.pm-hidden { flex: 0 0 auto; margin: 0.45rem 0.8rem 0; padding: 0.3rem 0.7rem; border-radius: 6px; font-size: 12px; background: #fef3c7; color: #78350f; border: 1px solid #fcd34d; }
+.pm-hidden[hidden] { display: none; }
+.pm-none { grid-column: 1 / -1; align-self: start; background: #fff; border-radius: 8px; padding: 1rem; font-size: 14px; color: #475569; }
 
 /* day / week switch and the date arrows, in the middle of the header */
 .pm-when { display: flex; align-items: center; gap: 0.35rem; }
