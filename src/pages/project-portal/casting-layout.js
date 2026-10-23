@@ -492,12 +492,12 @@ function labelModeFor(rec, ts, fontSize) {
   const mw = ts(rec.sw), mh = ts(rec.sh);
   const chars = Math.max(1, String(rec.mold.label || '').length);
   const need = (f) => chars * f * 0.85 * LABEL_CHAR_W;     // width of the label line at font f
-  const lines = (f) => f * 2.0;                             // label line + dimension line
+  const lines = (f) => f * 1.15;                            // one line: the label only (dims were dropped 2026-10-23)
   if (need(fontSize) <= mw - LABEL_PAD && lines(fontSize) <= mh) return { mode: 'h', font: fontSize };
   if (need(fontSize) <= mh - LABEL_PAD && lines(fontSize) <= mw) return { mode: 'v', font: fontSize };
   const horizontal = mw >= mh;
   const along = horizontal ? mw : mh, across = horizontal ? mh : mw;
-  const f = Math.min(fontSize, (along - LABEL_PAD) / (chars * 0.85 * LABEL_CHAR_W), across / 2.0);
+  const f = Math.min(fontSize, (along - LABEL_PAD) / (chars * 0.85 * LABEL_CHAR_W), across / 1.15);
   if (f >= LABEL_MIN_FONT) return { mode: horizontal ? 'h' : 'v', font: f };
   return { mode: 'n', font: Math.max(4, Math.min(fontSize, across * 0.8, (along - LABEL_PAD) / (String(rec.index || 0).length * 0.7))) };
 }
@@ -530,17 +530,13 @@ function buildMoldGroup(NS, rec, tx, ty, ts, fontSize, offsetPerSide) {
     return g;
   }
   const f = lm.font;
-  const t1 = svgText(NS, cx, cy - f * 0.4, rec.mold.label, f * 0.85, '#222', 'bold');
-  const t2 = svgText(NS, cx, cy + f * 0.4, dims, f * 0.65, '#444', 'normal');
-  if (lm.mode === 'v') {
-    t1.setAttribute('transform', `rotate(-90 ${cx} ${cy})`);
-    t2.setAttribute('transform', `rotate(-90 ${cx} ${cy})`);
-    // after rotation "up" is +x: keep the label line on the left of the dims line
-    t1.setAttribute('y', cy + f * 0.4); t2.setAttribute('y', cy - f * 0.4);
-    t1.setAttribute('x', cx); t2.setAttribute('x', cx);
-  }
+  // Label only — the size is on the inventory and in the legend; it only cluttered the molds (user, 2026-10-23).
+  const t1 = svgText(NS, cx, cy, rec.mold.label, f * 0.85, '#222', 'bold');
+  if (lm.mode === 'v') t1.setAttribute('transform', `rotate(-90 ${cx} ${cy})`);
+  const title = document.createElementNS(NS, 'title');
+  title.textContent = `${rec.mold.label} — ${dims}`;
+  g.appendChild(title);
   g.appendChild(t1);
-  g.appendChild(t2);
   return g;
 }
 
