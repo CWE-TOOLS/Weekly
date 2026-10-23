@@ -247,9 +247,9 @@ function renderMap() {
             </div>`).join('')}
         </div>`).join('');
     }
-    // Row heights: a band gets room in proportion to its busiest column, so bands stay aligned across departments.
-    const weights = spec.sections.map((_, i) => Math.max(1, ...shown.map(col => byCol.get(col)[i].length)));
-    map.style.gridTemplateRows = 'auto ' + weights.map(w => `minmax(${spec.sections.length > 1 ? '2.4rem' : '0'}, ${w}fr)`).join(' ');
+    // Row heights: every band the same height (user, 2026-10-23), so the bands read like a calendar.
+    map.style.gridTemplateRows = 'auto ' + spec.sections.map(() => 'minmax(0, 1fr)').join(' ');
+    map.classList.toggle('pm-banded', spec.sections.length > 1);
     let onFloor = 0;
     for (const col of shown) {
         const sections = byCol.get(col);
