@@ -604,6 +604,28 @@ export async function loadFromCacheOrFetch(forceRefresh = false, cacheKey = 'pri
     return result;
 }
 
+const backgroundRefreshes = new Map();   // cacheKey -> Promise while a refresh is running from this page
+/** Refresh the shared cache without blocking the caller: one attempt at the lock; if someone else holds it, they
+ *  are refreshing already and their broadcast reaches every open page. */
+function refreshCacheInBackground(fetchFunction, cacheKey = 'primary') {
+    if (backgroundRefreshes.has(cacheKey)) return backgroundRefreshes.get(cacheKey);
+    const p = (async () => {
+        try {
+            const lockAcquired = await acquireUpdateLock(cacheKey);
+            if (!lockAcquired) { logger.info(`[Cache:${cacheKey}] background refresh: someone else is refreshing`); return; }
+            const fresh = await fetchAndUpdateCache(fetchFunction, cacheKey);
+            if (Array.isArray(fresh)) writeLocalCache(cacheKey, fresh);
+            logger.info(`[Cache:${cacheKey}] background refresh done (${Array.isArray(fresh) ? fresh.length : 0} tasks)`);
+        } catch (err) {
+            logger.warn(`[Cache:${cacheKey}] background refresh failed (stale data stays on screen):`, err);
+        } finally {
+            backgroundRefreshes.delete(cacheKey);
+        }
+    })();
+    backgroundRefreshes.set(cacheKey, p);
+    return p;
+}
+
 async function _loadFromCacheOrFetchImpl(forceRefresh, cacheKey, fetchFunction) {
     const startTime = performance.now();
     logger.debug(`[Cache:${cacheKey}] loadFromCacheOrFetch() called (force: ${forceRefresh}, enabled: ${CACHE_CONFIG.ENABLE_CACHE})`);
@@ -625,6 +647,13 @@ async function _loadFromCacheOrFetchImpl(forceRefresh, cacheKey, fetchFunction) 
     try {
         // Get current cache
         const cache = await getCache(cacheKey);
+
+        // Stale but usable (older than the 5-min TTL, younger than MAX_STALE): show it NOW and refresh behind the
+        // scenes. Nobody waits for whoever is refreshing any more (that wait was up to 30 s). 2026-10-23
+        if (!forceRefresh && cache && Array.isArray(cache.tasks_data) && cache.tasks_data.length > 0 && !isCacheFresh(cache) && !isCacheTooStale(cache)) {
+            refreshCacheInBackground(fetchFunction, cacheKey);
+            return cache.tasks_data;
+        }
 
         // Check if cache is fresh and force refresh not requested
         if (!forceRefresh && cache && isCacheFresh(cache)) {

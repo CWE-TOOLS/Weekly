@@ -13,7 +13,7 @@ import { loadWeekIndex, loadWeekDate, removeState, STORAGE_KEYS } from './storag
 import { renderWeekGrid } from '../components/week-renderer.js';
 import { getMonday, parseDate, getLocalDateString, createWeekDates, clearParseDateCache } from '../utils/date-utils.js';
 import { equalizeAllCardHeights, setGridWidths, scrollToWeek } from '../utils/grid-layout-manager.js';
-import { emit, EVENTS } from './event-bus.js';
+import { emit, on, EVENTS } from './event-bus.js';
 import {
     canUseSmartUpdate,
     smartUpdateSchedule,
@@ -175,6 +175,40 @@ function resolveWeekIndex(allMondays, previousViewedMonday) {
  * @param {Date[]} allMondays - All available week start dates
  * @param {number} savedScrollTop - Vertical scroll position to restore
  */
+const LAZY_WEEK_RADIUS = 1;          // weeks drawn on each side of the one on screen
+let lazyRenderCtx = null;            // { allMondays, maxTasksPerDept, isEditingUnlocked } of the last full render
+
+function lazyWeekPlaceholder(mondayDate) {
+    const el = document.createElement('div');
+    el.className = 'schedule-grid schedule-grid-lazy';
+    el.dataset.lazyMonday = getLocalDateString(mondayDate);
+    return el;
+}
+
+/** Fill the empty frames around week `weekIndex` (called whenever the viewed week changes). */
+export function ensureWeeksRendered(weekIndex) {
+    const container = document.getElementById('schedule-container');
+    const wrapper = document.getElementById('schedule-wrapper');
+    if (!container || !wrapper || !lazyRenderCtx) return;
+    const grids = container.querySelectorAll('.schedule-grid');
+    let filled = 0;
+    for (let i = weekIndex - LAZY_WEEK_RADIUS; i <= weekIndex + LAZY_WEEK_RADIUS; i++) {
+        const grid = grids[i];
+        if (!grid || !grid.classList.contains('schedule-grid-lazy')) continue;
+        const monday = lazyRenderCtx.allMondays[i];
+        if (!monday) continue;
+        const real = renderWeekGrid(monday, lazyRenderCtx.maxTasksPerDept, lazyRenderCtx.isEditingUnlocked);
+        real.style.width = grid.style.width;
+        grid.replaceWith(real);
+        filled++;
+    }
+    if (filled) {
+        equalizeAllCardHeights();
+        emit(EVENTS.SCHEDULE_RENDERED);
+    }
+}
+on(EVENTS.WEEK_CHANGED, (e) => { if (e && typeof e.weekIndex === 'number') ensureWeeksRendered(e.weekIndex); });
+
 function scheduleLayoutAndScroll(container, wrapper, weekIndex, allMondays, savedScrollTop) {
     requestAnimationFrame(() => {
         setGridWidths(container, wrapper);
@@ -251,7 +285,8 @@ export async function render() {
                 }
             }
 
-            if (canUseSmartUpdate(container, previousFilteredTasks, filteredTasks)) {
+            // Weeks that are still empty frames cannot be patched card by card: redraw (cheap now, three weeks).
+            if (!container.querySelector('.schedule-grid-lazy') && canUseSmartUpdate(container, previousFilteredTasks, filteredTasks)) {
 
                 logger.info('🔄 Attempting smart update to preserve scroll position...');
 
@@ -310,15 +345,18 @@ export async function render() {
 
         // Build new content while old content is still visible (no blank flash)
         const isEditingUnlocked = getIsEditingUnlocked();
-        const fragment = document.createDocumentFragment();
-        allMondays.forEach(mondayDate => {
-            fragment.appendChild(renderWeekGrid(mondayDate, maxTasksPerDept, isEditingUnlocked));
-        });
-
-        // Atomic swap: removes old children and appends new in one operation
-        container.replaceChildren(fragment);
-
         const weekIndex = resolveWeekIndex(allMondays, previousViewedMonday);
+        // Only the week on screen and its two neighbours are drawn now; the other weeks are empty frames of the
+        // same width that get filled the moment someone moves to them (2026-10-23). Cuts the first draw from
+        // every week in memory (14+) to three.
+        lazyRenderCtx = { allMondays, maxTasksPerDept, isEditingUnlocked };
+        const fragment = document.createDocumentFragment();
+        allMondays.forEach((mondayDate, i) => {
+            fragment.appendChild(Math.abs(i - weekIndex) <= LAZY_WEEK_RADIUS
+                ? renderWeekGrid(mondayDate, maxTasksPerDept, isEditingUnlocked)
+                : lazyWeekPlaceholder(mondayDate));
+        });
+        container.replaceChildren(fragment);
         state.setCurrentViewedWeekIndex(weekIndex);
 
         scheduleLayoutAndScroll(container, wrapper, weekIndex, allMondays, savedScrollTop);
