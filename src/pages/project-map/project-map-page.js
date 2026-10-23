@@ -21,6 +21,7 @@ import { logger } from '../../utils/logger.js';
 const WEEKDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const DEPTS_KEY = 'projectMapDepartments';
+const SUNDAY_KEY = 'projectMapSundays';
 
 const S = {
     castings: new Map(),     // key -> summary
@@ -28,6 +29,7 @@ const S = {
     view: 'day',             // 'day' | 'week' | 'month4' | 'month'
     anchor: null,            // 'YYYY-MM-DD': the day shown, a day of the week shown, or a day in the month shown
     depts: null,             // Set of departments to show (null = all)
+    sundays: false,          // Week view: show a Sunday band too (the plant is usually closed)
     search: '',
     loading: false,
     expandedKey: null,       // chip opened to the full card: `${key}@${column}@${sectionIndex}`
@@ -68,8 +70,10 @@ function viewSpec() {
     }
     if (S.view === 'week') {
         const mon = mondayOf(a);
-        const sections = [0, 1, 2, 3, 4, 5].map(i => { const d = addDays(mon, i); return { label: weekdayOf(d), sub: fmtShort(d), start: d, end: d }; });
-        return { start: mon, end: addDays(mon, 5), sections, title: `Week of ${fmtShort(mon)} – ${fmtShort(addDays(mon, 5))}${mon === mondayOf(today()) ? ' (this week)' : ''}` };
+        const days = S.sundays ? [0, 1, 2, 3, 4, 5, 6] : [0, 1, 2, 3, 4, 5];
+        const sections = days.map(i => { const d = addDays(mon, i); return { label: weekdayOf(d), sub: fmtShort(d), start: d, end: d }; });
+        const last = addDays(mon, days[days.length - 1]);
+        return { start: mon, end: last, sections, title: `Week of ${fmtShort(mon)} – ${fmtShort(last)}${mon === mondayOf(today()) ? ' (this week)' : ''}` };
     }
     if (S.view === 'month4') {
         const mon = mondayOf(a);
@@ -224,13 +228,15 @@ function colStyle(col) {
 function renderWhen(spec) {
     $('pm-when-label').textContent = spec.title;
     for (const b of document.querySelectorAll('.pm-view-btn')) b.classList.toggle('pm-view-on', b.dataset.view === S.view);
+    const sun = $('pm-sunday');
+    if (sun) { sun.hidden = S.view !== 'week'; sun.classList.toggle('pm-view-on', S.sundays); sun.setAttribute('aria-pressed', String(S.sundays)); }
 }
 
 function renderMap() {
     const map = $('pm-map');
     const { byCol, shipped, spec } = partition();
     const shown = shownDepartments(byCol);
-    const layoutKey = `${S.view}|${spec.start}|${shown.join('|')}`;
+    const layoutKey = `${S.view}|${spec.start}|${spec.sections.length}|${shown.join('|')}`;   // rebuild when the bands change too
     if (map.dataset.layout !== layoutKey) {
         map.dataset.layout = layoutKey;
         map.style.setProperty('--pm-cols', String(shown.length));
@@ -400,7 +406,7 @@ async function loadAll({ silent = false } = {}) {
 function step(n) {
     if (S.view === 'day') {
         S.anchor = addDays(S.anchor, n);
-        while (parseIso(S.anchor).getDay() === 0) S.anchor = addDays(S.anchor, n > 0 ? 1 : -1);   // skip Sundays
+        while (!S.sundays && parseIso(S.anchor).getDay() === 0) S.anchor = addDays(S.anchor, n > 0 ? 1 : -1);   // skip Sundays unless they are wanted
     } else if (S.view === 'week') S.anchor = addDays(S.anchor, 7 * n);
     else if (S.view === 'month4') S.anchor = addDays(S.anchor, 28 * n);
     else {
@@ -416,6 +422,7 @@ function wireEvents() {
     $('fm-app').addEventListener('click', (e) => {
         const view = e.target.closest('[data-view]');
         if (view) { S.view = view.dataset.view; S.expandedKey = null; renderMap(); return; }
+        if (e.target.closest('#pm-sunday')) { S.sundays = !S.sundays; try { localStorage.setItem(SUNDAY_KEY, S.sundays ? '1' : ''); } catch { /* ignore */ } S.expandedKey = null; renderMap(); return; }
         if (e.target.closest('#pm-dept-btn')) { $('pm-dept-dropdown').classList.toggle('open'); return; }
         if (e.target.closest('#pm-dept-all')) { S.depts = null; saveDepts(); renderMap(); return; }
         if (e.target.closest('#pm-dept-none')) { S.depts = new Set(); saveDepts(); renderMap(); return; }
@@ -466,6 +473,7 @@ function wireEvents() {
     S.anchor = today();
     if (parseIso(S.anchor).getDay() === 0) S.anchor = addDays(S.anchor, 1);
     loadDepts();
+    try { S.sundays = !!localStorage.getItem(SUNDAY_KEY); } catch { /* ignore */ }
     if (document.getElementById('ro-test-count') || document.querySelector('[style*="99999"]')) document.body.classList.add('fm-has-test-bar');
     wireEvents();
     renderWhen(viewSpec());

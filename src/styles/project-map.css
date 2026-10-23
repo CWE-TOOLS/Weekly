@@ -1,6 +1,8 @@
 /* Project Map — department columns in process order, one screen; shares the card look of finishing-map.css */
 
 .pm-sub { font-size: 12px; color: #475569; font-weight: 600; white-space: nowrap; }
+.pm-app { background: #cbd5e1; }   /* the page itself a shade darker than the Finishing Map */
+.pm-main { overflow: hidden; }
 
 /* day / week switch and the date arrows, in the middle of the header */
 .pm-when { display: flex; align-items: center; gap: 0.35rem; }
@@ -8,6 +10,8 @@
 .pm-view-btn { font: inherit; font-size: 12px; font-weight: 700; padding: 4px 12px; border: none; background: #fff; color: #475569; cursor: pointer; }
 .pm-view-btn:hover { background: #f1f5f9; }
 .pm-view-on { background: #1d4ed8; color: #fff; }
+.pm-sunday { border: 1px solid #cbd5e1; border-radius: 999px; margin-left: 0.4rem; }
+.pm-sunday[hidden] { display: none; }
 .pm-arrow { font-size: 18px; line-height: 1; padding: 2px 10px; font-weight: 800; }
 .pm-when-label { font-weight: 800; font-size: 14px; min-width: 13rem; text-align: center; }
 
@@ -33,7 +37,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: color-mix(in srgb, var(--pm-col, #1f2937) 7%, white);
+  background: color-mix(in srgb, var(--pm-col, #1f2937) 22%, #e2e8f0);   /* darker behind the white cards so they stand out */
   border-left: 2px solid var(--pm-col, #1f2937);
   border-right: 2px solid var(--pm-col, #1f2937);
 }
@@ -44,7 +48,7 @@
 .pm-banded .pm-cell-head.fm-area-overflow { border-color: #78350f; }
 .pm-banded .pm-section-head { border-top: none; }
 .pm-cell .fm-cards { flex: 1; min-height: 0; overflow: hidden; flex-direction: column; flex-wrap: nowrap; padding: 0.3rem; gap: 0.3rem; }
-.pm-cell .fm-chip { flex: 0 0 auto; width: 100%; max-width: none; cursor: pointer; padding: 0.18rem 0.35rem; }
+.pm-cell .fm-chip { flex: 0 0 auto; width: 100%; max-width: none; cursor: pointer; padding: 0.18rem 0.35rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25); }
 .pm-chip-day { font-size: 10.5px; color: #6d28d9; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pm-col-scheduled .pm-chip-day { color: #475569; }
 .pm-trail { margin-top: 0.25rem; padding-top: 0.25rem; border-top: 1px dashed #e2e8f0; font-size: 11px; }
@@ -63,7 +67,7 @@
   padding: 0.12rem 0.4rem;
   font-size: 10.5px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase;
   color: #334155;
-  background: color-mix(in srgb, var(--pm-col, #1f2937) 16%, white);
+  background: color-mix(in srgb, var(--pm-col, #1f2937) 36%, #e2e8f0);
   border-top: 1px solid color-mix(in srgb, var(--pm-col, #1f2937) 40%, white);
 }
 .pm-cell:nth-child(2) .pm-section-head { border-top: none; }
