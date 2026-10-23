@@ -134,7 +134,6 @@ import { loadMilestonesForProject, saveMilestone, isMilestonesMigrationPending, 
 import { loadJigListsForProject as loadJigListsForScrim, scrimForInventory } from '../../services/jig-list-service.js';
 import { loadReadyFlags, setReadyFlag } from '../../services/schedule-service.js?v=20261021-1';
 import { tasksForDepartment, teamOfDepartment, taskForPhase, STAGING_NAME_OF_TEAM } from '../../config/scheduler-config.js?v=20261022-3';
-import { loadMilestonesForProject, saveMilestone, isMilestonesMigrationPending, loadLayoutConditions, LAYOUT_CONDITION_PREFIX } from '../../services/milestones-service.js';
 import {
     loadLayoutPositions,
     snapshotLayout,
