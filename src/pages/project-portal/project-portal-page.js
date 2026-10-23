@@ -129,7 +129,7 @@ import { renderCastingLayout } from './casting-layout.js?v=20261023-1';
 import { attachLayoutDrag } from './casting-layout-drag.js?v=20260701-01';
 import { activateJigListTab } from './jig-list.js?v=20261014-6';
 import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, APPROVALS_TAB_ITEMS } from '../../config/milestones-config.js?v=20261020-2';
-import { loadMilestonesForProject, saveMilestone, isMilestonesMigrationPending, loadLayoutConditions, LAYOUT_CONDITION_PREFIX, layoutConditionNote, parseLayoutCondition } from '../../services/milestones-service.js';
+import { loadMilestonesForProject, saveMilestone, isMilestonesMigrationPending, loadLayoutConditions, LAYOUT_CONDITION_PREFIX, layoutConditionNote, parseLayoutCondition, sideWords } from '../../services/milestones-service.js';
 import {
     loadLayoutPositions,
     snapshotLayout,
@@ -4596,6 +4596,7 @@ function layoutConditionHtml(castingId) {
         <select data-ms-layout-side="${escapeAttr(castingId)}" class="pp-ms-cond-select pp-ms-cond-side" title="Which side the condition applies to">
             <option value="A"${curSide === 'A' ? ' selected' : ''}>Side A</option>
             <option value="B"${curSide === 'B' ? ' selected' : ''}>Side B</option>
+            <option value="AB"${curSide === 'AB' ? ' selected' : ''}>Both — A and B</option>
         </select>
         <select data-ms-layout-cond="${escapeAttr(castingId)}" class="pp-ms-cond-select">
             <option value=""${cur ? '' : ' selected'}>— none —</option>
@@ -4606,15 +4607,16 @@ function layoutConditionHtml(castingId) {
 /** The side select changed: re-save the condition (if there is one) with the new side. */
 async function handleLayoutConditionSide(castingId, side) {
     const name = layoutConditionOf(castingId);
-    if (!castingId || !name || (side !== 'A' && side !== 'B')) return;
+    if (!castingId || !name || !['A', 'B', 'AB'].includes(side)) return;
     await msSet(castingId, 'Casting Layout', MS.GREEN, { note: layoutConditionNote(name, side), stamp: true });
     msFloatEl && (msFloatEl.dataset.key = '');
     updateMsFloat();
-    showToast(`Cast ${currentCastings.find(c => c.id === castingId)?.casting_number || ''}: special condition "${name}" now on Side ${side}.`);
+    showToast(`Cast ${currentCastings.find(c => c.id === castingId)?.casting_number || ''}: special condition "${name}" now on Side ${sideWords(side)}.`);
 }
 async function handleLayoutConditionPick(castingId, value) {
     if (!castingId) return;
-    const side = document.querySelector(`[data-ms-layout-side="${CSS.escape(castingId)}"]`)?.value === 'B' ? 'B' : 'A';
+    const picked = document.querySelector(`[data-ms-layout-side="${CSS.escape(castingId)}"]`)?.value;
+    const side = ['A', 'B', 'AB'].includes(picked) ? picked : 'A';
     let name = value;
     if (value === '__add__') {
         name = (window.prompt('Name the special layout condition (e.g. "vertical curing racks"). It will be offered on every job from now on.') || '').trim();
@@ -4632,7 +4634,7 @@ async function handleLayoutConditionPick(castingId, value) {
     await msSet(castingId, 'Casting Layout', MS.GREEN, { note: layoutConditionNote(name, side), stamp: true });
     msFloatEl && (msFloatEl.dataset.key = '');
     updateMsFloat();
-    showToast(`Cast ${currentCastings.find(c => c.id === castingId)?.casting_number || ''}: Casting Layout green — special condition "${name}" on Side ${side}.`);
+    showToast(`Cast ${currentCastings.find(c => c.id === castingId)?.casting_number || ''}: Casting Layout green — special condition "${name}" on Side ${sideWords(side)}.`);
 }
 /** One column for many castings: "Shop Folder Cover: ● Cast 1  ● Cast 2 …" */
 function msListChips(castings, milestone) {
@@ -5276,7 +5278,7 @@ async function printCastingLayout() {
     const cond = layoutConditionOf(clSelectedCastingId);
     if (cond) {
         const condSide = layoutConditionSideOf(clSelectedCastingId);
-        if (window.confirm(`This casting has no form layout — special condition: "${cond}"${condSide ? ' (Side ' + condSide + ')' : ''}.
+        if (window.confirm(`This casting has no form layout — special condition: "${cond}"${condSide ? ' (Side ' + sideWords(condSide) + ')' : ''}.
 
 Print a SPECIAL CONDITION NOTICE for the job folder instead?`)) printLayoutConditionNotice(clSelectedCastingId, cond);
         return;
@@ -5311,7 +5313,7 @@ function printLayoutConditionNotice(castingId, cond) {
       <div class="sub">NO FORM LAYOUT IS ISSUED FOR THIS CASTING &mdash; SEE THE CONDITION BELOW</div>
       <hr class="rule">
       <div class="meta"><div><b>Job</b> ${escapeHtml(job)}</div><div><b>Casting</b> ${escapeHtml(cast)}${casting?.description ? ' &mdash; ' + escapeHtml(casting.description) : ''}</div><div><b>Issued</b> ${escapeHtml(today)}</div></div>
-      <div class="cond"><div class="lab">SPECIAL LAYOUT CONDITION${layoutConditionSideOf(castingId) ? ' &mdash; SIDE ' + layoutConditionSideOf(castingId) : ''}</div><div class="name">${escapeHtml(cond)}</div></div>
+      <div class="cond"><div class="lab">SPECIAL LAYOUT CONDITION${layoutConditionSideOf(castingId) ? ' &mdash; SIDE ' + sideWords(layoutConditionSideOf(castingId)) : ''}</div><div class="name">${escapeHtml(cond)}</div></div>
       <p class="note">The casting layout step for this casting is complete under the condition above. The forms are handled as the condition describes and are not arranged on the shop-floor tables, so there is no form layout drawing to issue. This notice goes in the job folder so the layout step is not mistaken for forgotten.</p>
       <div class="foot"><span>Casting Layout &middot; ${escapeHtml(job)}</span><span>Cast ${escapeHtml(cast)} &middot; special condition notice</span></div>
     </body></html>`;

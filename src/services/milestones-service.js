@@ -107,11 +107,13 @@ export async function loadAllMilestones() {
 
 /** Prefix used in the note of a "Casting Layout" row that was marked green by a special condition. */
 export const LAYOUT_CONDITION_PREFIX = 'Special condition: ';
-const LAYOUT_SIDE_RE = /\s*\(Side ([AB])\)\s*$/;
+const LAYOUT_SIDE_RE = /\s*\(Side (A \+ B|AB|A|B)\)\s*$/;
+/** 'A' | 'B' | 'AB' → the words used in notes and on cards */
+export function sideWords(side) { return side === 'AB' ? 'A + B' : side; }
 
 /** Note text for a special layout condition: "Special condition: <name> (Side A)". */
 export function layoutConditionNote(name, side) {
-    const s = (side === 'A' || side === 'B') ? ` (Side ${side})` : '';
+    const s = (side === 'A' || side === 'B' || side === 'AB') ? ` (Side ${sideWords(side)})` : '';
     return LAYOUT_CONDITION_PREFIX + String(name || '').trim() + s;
 }
 /** { name, side } from a Casting Layout note, or null when it is not a special condition. side is 'A' | 'B' | null. */
@@ -120,7 +122,7 @@ export function parseLayoutCondition(note) {
     if (!n.startsWith(LAYOUT_CONDITION_PREFIX)) return null;
     let name = n.slice(LAYOUT_CONDITION_PREFIX.length).trim();
     const m = name.match(LAYOUT_SIDE_RE);
-    const side = m ? m[1] : null;
+    const side = m ? (m[1] === 'A + B' ? 'AB' : m[1]) : null;
     if (m) name = name.slice(0, m.index).trim();
     return name ? { name, side } : null;
 }
