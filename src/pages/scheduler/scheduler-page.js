@@ -19,7 +19,7 @@ import {
 } from '../../services/schedule-service.js?v=20261021-1';
 import {
     DEPARTMENTS, DEPT_KEYS, TASKS, tasksForDept, taskForPhase, SETTINGS_DEFAULTS, REVENUE_PER_HOUR, SCHEDULABLE_STATUSES, TEAM_DAY_LIMITS, teamOfDepartment, DEFAULT_CREW
-} from '../../config/scheduler-config.js?v=20261023-1';
+} from '../../config/scheduler-config.js?v=20261023-2';
 import { logger } from '../../utils/logger.js';
 import { fetchForProject as fetchStagingNotes, fetchForProjects as fetchStagingForProjects, upsertOne as saveStagingNote } from '../../services/task-descriptions-service.js?v=20261022-2';
 
