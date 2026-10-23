@@ -433,7 +433,8 @@ function wireEvents() {
         const band = e.target.closest('[data-open-band]');
         if (band) { const [column, i] = band.dataset.openBand.split('|'); S.expandedKey = null; renderMap(); openModal('column', { column, section: Number(i) }); return; }
         const card = e.target.closest('[data-key]');
-        if (card) { S.expandedKey = S.expandedKey === card.dataset.key ? null : card.dataset.key; renderMap(); }
+        if (card) { S.expandedKey = S.expandedKey === card.dataset.key ? null : card.dataset.key; renderMap(); return; }
+        if (S.expandedKey) { S.expandedKey = null; renderMap(); }   // tap anywhere else closes the open card (touch screens)
     });
     $('pm-dept-list').addEventListener('change', (e) => {
         const box = e.target.closest('input[data-dept]');

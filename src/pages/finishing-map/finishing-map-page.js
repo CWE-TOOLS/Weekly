@@ -560,7 +560,8 @@ function wireEvents() {
         }
         const zone = e.target.closest('[data-area]');
         if (zone && S.selectedKey) { moveTo(S.selectedKey, zone.dataset.area || null); return; }
-        if (S.selectedKey && !e.target.closest('.fm-header')) { S.selectedKey = null; renderMap(); }
+        if (S.selectedKey && !e.target.closest('.fm-header')) { S.selectedKey = null; renderMap(); return; }
+        if (S.expandedKey && !e.target.closest('#fm-popover')) { S.expandedKey = null; renderMap(); }   // tap anywhere else closes the open card (touch screens)
     });
 
     // Pop-up: Move dropdown, Shipped / Put back, close
