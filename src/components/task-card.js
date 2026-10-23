@@ -5,7 +5,7 @@
  */
 
 import { getIsEditingUnlocked } from '../core/state.js';
-import { invSummaryLine, invSummaryTitle, batchPrintText, invMissingText, layoutConditionText, INV_TYPES_COLLAPSE_AT } from '../utils/inventory-card.js';
+import { invSummaryLine, invSummaryTitle, batchPrintText, invMissingText, layoutConditionText, castingSideText, INV_TYPES_COLLAPSE_AT } from '../utils/inventory-card.js';
 import { getActualHours } from './modals/actual-hours-modal.js';
 import { RENDERING } from '../config/rendering-constants.js';
 import { normalizeDepartmentClass } from '../config/department-config.js';
@@ -78,10 +78,10 @@ export function createTaskCard(task, rowClass, isEditingUnlocked) {
 
     // Casting side (A/B) — Cast-department only, rendered when a side has been
     // selected for this task. Stored in task_descriptions.casting_side.
-    if (task.castingSide === 'A' || task.castingSide === 'B') {
+    if (castingSideText(task.castingSide)) {
         const sideDiv = document.createElement('div');
         sideDiv.className = 'task-casting-side';
-        sideDiv.textContent = `Side ${task.castingSide}`;
+        sideDiv.textContent = castingSideText(task.castingSide);
         card.appendChild(sideDiv);
     }
     // Special layout condition from the portal's Casting Layout tab (Cast cards; 2026-10-22).

@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="src/styles/variables.css">
     <link rel="stylesheet" href="src/styles/base.css">
     <link rel="stylesheet" href="src/styles/buttons.css">
-    <link rel="stylesheet" href="src/styles/project-portal.css?v=20261020-3">
+    <link rel="stylesheet" href="src/styles/project-portal.css?v=20261023-1">
 
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 </head>
@@ -518,16 +518,10 @@
                                 <label class="pp-clay-ctrl" title="Side A / Side B of this casting — the weekly's Cast cards show and edit the same value">
                                     <span>Casting side</span>
                                     <select id="pp-clay-side" class="pp-clay-select">
-                                        <option value="">— none —</option>
+                                        <option value="">— not set (shows Side B) —</option>
                                         <option value="A">Side A</option>
                                         <option value="B">Side B</option>
-                                    </select>
-                                </label>
-                                <label class="pp-clay-ctrl">
-                                    <span>Casting area</span>
-                                    <select id="pp-clay-area" class="pp-clay-select">
-                                        <option value="B">Casting Area B</option>
-                                        <option value="A">Casting Area A</option>
+                                        <option value="AB">Both — A and B</option>
                                     </select>
                                 </label>
                                 <label class="pp-clay-ctrl">
@@ -1270,7 +1264,7 @@
         <div id="pp-toast" class="pp-toast" hidden></div>
     </div>
 
-    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20261022-2"></script>
+    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20261023-1"></script>
     <script type="module" src="src/utils/auto-update.js?v=20261023-1"></script>
 </body>
 </html>

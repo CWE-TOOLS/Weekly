@@ -303,6 +303,7 @@ function buildMolds(components, offsetPerSide) {
     }
     molds.push({
       componentId: c.id || null,
+      type: (c.type || '').trim(),
       label: (c.panel_id || c.type || `Panel ${i + 1}`).trim(),
       color: colorByType.get(typeKey),
       concreteW: w,
@@ -478,6 +479,29 @@ function layoutStaging(staged, maxWidth, startY, gapBetween = 0) {
  * concrete panel itself. The dimension label shows the concrete dims —
  * the mold offset is constant and reported once in the summary text.
  */
+// ---- Labels that fit (2026-10-23) ----
+// A label is drawn horizontally when it fits, turned along the mold's long side when that is the only way,
+// shrunk down to LABEL_MIN_FONT when it still does not fit, and replaced by a small index number (with a
+// legend under the tables) when even that is too big. Narrow Fairfield-style pieces used to overprint each other.
+const LABEL_MIN_FONT = 5.5;
+const LABEL_CHAR_W = 0.62;   // average glyph width as a fraction of the font size (bold sans)
+const LABEL_PAD = 2;
+
+/** Decide how the label of a placed mold is drawn: { mode: 'h' | 'v' | 'n', font } */
+function labelModeFor(rec, ts, fontSize) {
+  const mw = ts(rec.sw), mh = ts(rec.sh);
+  const chars = Math.max(1, String(rec.mold.label || '').length);
+  const need = (f) => chars * f * 0.85 * LABEL_CHAR_W;     // width of the label line at font f
+  const lines = (f) => f * 2.0;                             // label line + dimension line
+  if (need(fontSize) <= mw - LABEL_PAD && lines(fontSize) <= mh) return { mode: 'h', font: fontSize };
+  if (need(fontSize) <= mh - LABEL_PAD && lines(fontSize) <= mw) return { mode: 'v', font: fontSize };
+  const horizontal = mw >= mh;
+  const along = horizontal ? mw : mh, across = horizontal ? mh : mw;
+  const f = Math.min(fontSize, (along - LABEL_PAD) / (chars * 0.85 * LABEL_CHAR_W), across / 2.0);
+  if (f >= LABEL_MIN_FONT) return { mode: horizontal ? 'h' : 'v', font: f };
+  return { mode: 'n', font: Math.max(4, Math.min(fontSize, across * 0.8, (along - LABEL_PAD) / (String(rec.index || 0).length * 0.7))) };
+}
+
 function buildMoldGroup(NS, rec, tx, ty, ts, fontSize, offsetPerSide) {
   const g = document.createElementNS(NS, 'g');
   g.setAttribute('class', rec.staged ? 'clay-mold clay-mold-overflow' : 'clay-mold');
@@ -494,9 +518,42 @@ function buildMoldGroup(NS, rec, tx, ty, ts, fontSize, offsetPerSide) {
     g.appendChild(innerRect);
   }
 
-  g.appendChild(svgText(NS, mx + mw / 2, my + mh / 2 - fontSize * 0.4, rec.mold.label, fontSize * 0.85, '#222', 'bold'));
-  g.appendChild(svgText(NS, mx + mw / 2, my + mh / 2 + fontSize * 0.4, `${frac(rec.mold.concreteW)} x ${frac(rec.mold.concreteL)}`, fontSize * 0.65, '#444', 'normal'));
+  const lm = rec.labelMode || labelModeFor(rec, ts, fontSize);
+  const cx = mx + mw / 2, cy = my + mh / 2;
+  const dims = `${frac(rec.mold.concreteW)} x ${frac(rec.mold.concreteL)}`;
+  if (lm.mode === 'n') {
+    // index only — the legend below the tables says what it is
+    g.appendChild(svgText(NS, cx, cy, String(rec.index || ''), lm.font, '#111', 'bold'));
+    const title = document.createElementNS(NS, 'title');
+    title.textContent = `${rec.index}: ${rec.mold.label} — ${dims}`;
+    g.appendChild(title);
+    return g;
+  }
+  const f = lm.font;
+  const t1 = svgText(NS, cx, cy - f * 0.4, rec.mold.label, f * 0.85, '#222', 'bold');
+  const t2 = svgText(NS, cx, cy + f * 0.4, dims, f * 0.65, '#444', 'normal');
+  if (lm.mode === 'v') {
+    t1.setAttribute('transform', `rotate(-90 ${cx} ${cy})`);
+    t2.setAttribute('transform', `rotate(-90 ${cx} ${cy})`);
+    // after rotation "up" is +x: keep the label line on the left of the dims line
+    t1.setAttribute('y', cy + f * 0.4); t2.setAttribute('y', cy - f * 0.4);
+    t1.setAttribute('x', cx); t2.setAttribute('x', cx);
+  }
+  g.appendChild(t1);
+  g.appendChild(t2);
   return g;
+}
+
+/** Legend rows for index-only molds: consecutive indices of the same type + size share one row. */
+function legendRows(recs) {
+  const rows = [];
+  for (const rec of recs) {
+    const key = `${rec.mold.type || rec.mold.label}|${rec.mold.concreteW}|${rec.mold.concreteL}`;
+    const last = rows[rows.length - 1];
+    if (last && last.key === key && last.to === rec.index - 1) { last.to = rec.index; last.n++; continue; }
+    rows.push({ key, from: rec.index, to: rec.index, n: 1, type: rec.mold.type || rec.mold.label, dims: `${frac(rec.mold.concreteW)} x ${frac(rec.mold.concreteL)}`, first: rec.mold.label });
+  }
+  return rows;
 }
 
 /**
@@ -514,7 +571,7 @@ function buildMoldGroup(NS, rec, tx, ty, ts, fontSize, offsetPerSide) {
  * @returns {Object|null} layout handle {mode, area, svg, transform, tableDefs,
  *        placed, unplaced}, or null when there is nothing to draw
  */
-export function renderCastingLayout({ container, errorEl, components, title, area = 'B', offsetPerSide = 4, gapBetween = 0, positions = null }) {
+export function renderCastingLayout({ container, errorEl, components, title, area = 'B', offsetPerSide = 4, gapBetween = 0, positions = null, overflowLabel = null }) {
   if (!container) return null;
   container.innerHTML = '';
   if (errorEl) errorEl.textContent = '';
@@ -565,17 +622,33 @@ export function renderCastingLayout({ container, errorEl, components, title, are
   }
 
   const availW = pageW - 40;
-  const availH = pageH - headerH - 40;
-  const scale = Math.min(availW / overallMaxX, availH / overallMaxY);
+  const fontSize = 9;
+  // Number every mold (placed first, then overflow) so index-only labels and the legend agree.
+  const allRecs = [...placed, ...staged];
+  allRecs.forEach((rec, i) => { rec.index = i + 1; });
+  // The legend takes room at the foot of the page; its height depends on how many labels end up as numbers,
+  // which depends on the scale — so settle it in a couple of passes.
+  const LEGEND_ROW_H = 11, LEGEND_COLS_MAX = 3;
+  let legendH = 0, scale = 1, numbered = [], rows = [], legendCols = 1;
+  for (let pass = 0; pass < 3; pass++) {
+    const availH = pageH - headerH - 40 - legendH;
+    scale = Math.min(availW / overallMaxX, availH / overallMaxY);
+    const tsP = (v) => v * scale;
+    for (const rec of allRecs) rec.labelMode = labelModeFor(rec, tsP, fontSize);
+    numbered = allRecs.filter(r => r.labelMode.mode === 'n');
+    rows = legendRows(numbered);
+    legendCols = Math.min(LEGEND_COLS_MAX, Math.max(1, Math.ceil(rows.length / 12)));
+    const wantH = rows.length ? Math.ceil(rows.length / legendCols) * LEGEND_ROW_H + 26 : 0;
+    if (wantH === legendH) break;
+    legendH = wantH;
+  }
+  const availH = pageH - headerH - 40 - legendH;
   const offsetX = (pageW - overallMaxX * scale) / 2;
   const offsetY = headerH + (availH - overallMaxY * scale) / 2;
-
   const NS = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(NS, 'svg');
   svg.setAttribute('viewBox', `0 0 ${pageW} ${pageH}`);
   svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-
-  const fontSize = 9;
   const tableColor = '#e5e7eb';
   const tableBorder = '#9ca3af';
 
@@ -607,13 +680,30 @@ export function renderCastingLayout({ container, errorEl, components, title, are
   // draggable clay-mold in the same coordinate space as the tables. Drag one
   // onto a table to place it.
   if (staged.length > 0) {
-    svg.appendChild(svgText(NS, tx(overallMaxX / 2), ty(stagingLabelY), 'OVERFLOW — drag a form onto a table to place it', fontSize * 1.05, '#dc2626', 'bold'));
+    svg.appendChild(svgText(NS, tx(overallMaxX / 2), ty(stagingLabelY), overflowLabel || 'OVERFLOW — drag a form onto a table to place it', fontSize * 1.05, overflowLabel ? '#1d4ed8' : '#dc2626', 'bold'));
     for (const rec of staged) {
       svg.appendChild(buildMoldGroup(NS, rec, tx, ty, ts, fontSize, offsetPerSide));
     }
   }
 
   // Title + summary
+  if (rows.length) {
+    // Legend for the numbered molds, at the foot of the page, in up to three columns.
+    const top = pageH - legendH - 10;
+    const colW = (pageW - 40) / legendCols;
+    const perCol = Math.ceil(rows.length / legendCols);
+    const head = svgText(NS, 20, top + 8, `NUMBERED FORMS — ${numbered.length} too small for a label`, fontSize, '#222', 'bold');
+    head.setAttribute('text-anchor', 'start');
+    svg.appendChild(head);
+    rows.forEach((r, i) => {
+      const col = Math.floor(i / perCol), rowI = i % perCol;
+      const x = 20 + col * colW, y = top + 26 + rowI * LEGEND_ROW_H;
+      const range = r.from === r.to ? String(r.from) : `${r.from}–${r.to}`;
+      const t = svgText(NS, x, y, `${range}:  ${r.type}  ${r.dims}${r.n > 1 ? `  (${r.n})` : ''}${r.n === 1 && r.first !== r.type ? `  ${r.first}` : ''}`, fontSize * 0.85, '#222', 'normal');
+      t.setAttribute('text-anchor', 'start');
+      svg.appendChild(t);
+    });
+  }
   const totalMolds = molds.length;
   const summaryStr = (mode === 'manual'
       ? `${totalMolds} molds — manual layout`

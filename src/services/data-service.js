@@ -482,7 +482,7 @@ export async function enrichTasksWithPieces(tasks) {
         for (const c of castings) {
             const key = `${String(c.project_number || '').trim()}|${String(c.casting_number || '').trim()}`;
             if (c.id) idByKey.set(key, c.id);
-            if (c.id && (c.casting_side === 'A' || c.casting_side === 'B')) sideById.set(c.id, c.casting_side);
+            if (c.id && ['A', 'B', 'AB'].includes(c.casting_side)) sideById.set(c.id, c.casting_side);
         }
 
         // Only fetch inventory for castings actually referenced by a task in view.

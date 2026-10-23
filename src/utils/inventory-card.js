@@ -40,6 +40,13 @@ export function layoutConditionText(task) {
     return `SPECIAL CONDITION${c.side ? ' \u2014 SIDE ' + c.side : ''}: ${c.name}`;
 }
 
+/** 'Side A' / 'Side B' / 'Side A + B' for a stored casting side ('' otherwise). */
+export function castingSideText(side) {
+    if (side === 'A' || side === 'B') return `Side ${side}`;
+    if (side === 'AB') return 'Side A + B';
+    return '';
+}
+
 export function batchPrintText(state) {
     if (state === 'unprinted') return 'BATCH TICKETS NOT PRINTED YET';
     if (state === 'reprint') return 'BATCH TICKETS CHANGED — PRINT AGAIN';

@@ -4,7 +4,7 @@
  */
 
 import { REVENUE } from '../../config/business-constants.js';
-import { invSummaryLine, batchPrintText, invMissingText, layoutConditionText, INV_TYPES_COLLAPSE_AT } from '../../utils/inventory-card.js';
+import { invSummaryLine, batchPrintText, invMissingText, layoutConditionText, castingSideText, INV_TYPES_COLLAPSE_AT } from '../../utils/inventory-card.js';
 import { escapeHtml } from '../../utils/security-utils.js';
 import { PRINT_LAYOUT } from '../../config/layout-constants.js';
 
@@ -133,8 +133,8 @@ function createPrintTaskCard(task, departmentClass) {
 
     // Casting side (Cast department only) renders as a dedicated row beneath
     // the title so Side A/B is unmissable on a printed schedule.
-    const castingSideHtml = (task.castingSide === 'A' || task.castingSide === 'B')
-        ? `<div class="print-task-casting-side">Side ${task.castingSide}</div>`
+    const castingSideHtml = castingSideText(task.castingSide)
+        ? `<div class="print-task-casting-side">${escapeHtml(castingSideText(task.castingSide))}</div>`
         : '';
 
     // Cast-department cards linked to a portal casting show explicit "Missing …"

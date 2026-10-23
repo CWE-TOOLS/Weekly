@@ -125,7 +125,7 @@ import {
     deleteClassroomTask,
     setClassroomTasksOrder
 } from '../../services/classroom-tasks-service.js';
-import { renderCastingLayout } from './casting-layout.js?v=20260701-01';
+import { renderCastingLayout } from './casting-layout.js?v=20261023-1';
 import { attachLayoutDrag } from './casting-layout-drag.js?v=20260701-01';
 import { activateJigListTab } from './jig-list.js?v=20261014-6';
 import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, APPROVALS_TAB_ITEMS } from '../../config/milestones-config.js?v=20261020-2';
@@ -5108,10 +5108,11 @@ function castingLayoutLabel(c) {
 
 /** The Casting Layout tab's "Casting side" select shows the selected casting's own Side A/B (shared with the weekly). */
 function syncClaySideSelect() {
-    const el = document.getElementById('pp-clay-side');
-    if (!el) return;
     const casting = currentCastings.find(c => c.id === clSelectedCastingId);
-    el.value = (casting?.casting_side === 'A' || casting?.casting_side === 'B') ? casting.casting_side : '';
+    const side = ['A', 'B', 'AB'].includes(casting?.casting_side) ? casting.casting_side : '';
+    clSelectedArea = side || 'B';   // the layout draws the casting's side; nothing stored = Side B, as before
+    const el = document.getElementById('pp-clay-side');
+    if (el) el.value = side;
 }
 async function activateCastingLayoutTab() {
     const needsSave = document.getElementById('pp-clay-needs-save');
@@ -5164,8 +5165,6 @@ async function activateCastingLayoutTab() {
         }
         sel.value = clSelectedCastingId;
     }
-    const areaSel = document.getElementById('pp-clay-area');
-    if (areaSel) areaSel.value = clSelectedArea;
     syncClaySideSelect();
     const offsetInput = document.getElementById('pp-clay-offset');
     if (offsetInput) offsetInput.value = clOffsetPerSide;
@@ -5201,28 +5200,45 @@ function renderCastingLayoutTab() {
         ? `${currentProjectNumber} — ${castingLayoutLabel(casting)}`
         : 'Casting Layout';
 
-    const handle = renderCastingLayout({
-        container: card,
-        errorEl,
-        components,
-        title,
-        area: clSelectedArea,
-        offsetPerSide: clOffsetPerSide,
-        gapBetween: clGapBetween,
-        positions: clLayoutPositions
-    });
-
-    if (handle) {
+    const handles = [];
+    if (clSelectedArea === 'AB') {
+        // Both sides (2026-10-23): Side B is packed first, whatever does not fit continues onto Side A.
+        // Each side is its own diagram with its own saved positions, drawn one above the other.
+        card.innerHTML = '';
+        const cardB = document.createElement('div'); cardB.className = 'pp-clay-card-side';
+        const cardA = document.createElement('div'); cardA.className = 'pp-clay-card-side';
+        card.append(cardB, cardA);
+        const quiet = document.createElement('div');
+        const hB = renderCastingLayout({ container: cardB, errorEl: quiet, components, title: `${title} — SIDE B`, area: 'B', offsetPerSide: clOffsetPerSide, gapBetween: clGapBetween, positions: clLayoutPositions, overflowLabel: 'CONTINUES ON SIDE A' });
+        const leftover = new Set((hB?.staged || []).map(r => r.componentId));
+        const compsA = hB ? components.filter(c => leftover.has(c.id)) : [];
+        const hA = compsA.length ? renderCastingLayout({ container: cardA, errorEl, components: compsA, title: `${title} — SIDE A`, area: 'A', offsetPerSide: clOffsetPerSide, gapBetween: clGapBetween, positions: clLayoutPositions }) : null;
+        if (!compsA.length) { cardA.innerHTML = '<p class="pp-clay-empty">Side A: nothing left over — every form fits on Side B.</p>'; if (errorEl) errorEl.textContent = ''; }
+        if (hB) handles.push(hB);
+        if (hA) handles.push(hA);
+    } else {
+        const h = renderCastingLayout({
+            container: card,
+            errorEl,
+            components,
+            title,
+            area: clSelectedArea,
+            offsetPerSide: clOffsetPerSide,
+            gapBetween: clGapBetween,
+            positions: clLayoutPositions
+        });
+        if (h) handles.push(h);
+    }
+    for (const handle of handles) {
         attachLayoutDrag(handle, {
             castingId: clSelectedCastingId,
-            area: clSelectedArea,
+            area: handle.area,
             onCommit: commitLayoutPositions
         });
     }
-
     // The reset button only makes sense once a layout has been customized.
     const resetBtn = document.getElementById('pp-clay-reset-btn');
-    if (resetBtn) resetBtn.hidden = !handle || handle.mode !== 'manual';
+    if (resetBtn) resetBtn.hidden = !handles.some(h => h.mode === 'manual');
 }
 
 /**
@@ -5246,7 +5262,7 @@ async function resetCastingLayout() {
     if (!clSelectedCastingId) return;
     if (!confirm('Discard the manual layout for this casting area and return to automatic packing?')) return;
     try {
-        await clearLayoutPositions(clSelectedCastingId, clSelectedArea);
+        for (const area of (clSelectedArea === 'AB' ? ['A', 'B'] : [clSelectedArea])) await clearLayoutPositions(clSelectedCastingId, area);
         await loadLayoutPositionsForSelected();
     } catch (e) {
         logger.error('[project-portal] resetCastingLayout failed:', e);
@@ -5307,22 +5323,22 @@ function printLayoutConditionNotice(castingId, cond) {
     msSet(castingId, 'Casting Layout', MS.GREEN, { note: LAYOUT_CONDITION_PREFIX + cond, stamp: true });
 }
 function printCastingLayoutNow() {
-    const svgEl = document.querySelector('#pp-clay-card svg');
-    if (!svgEl) { alert('No layout to print yet.'); return false; }
-    // Print on 11x17 (tabloid) portrait so the layout scales up and stays
-    // readable. Crop the printed SVG to the actual drawn content — the on-screen
-    // SVG has a fixed 750x1000 page with empty margins around narrow layouts, so
-    // cropping lets the drawing fill the sheet instead of floating small in the
-    // middle with wasted space around it.
-    const printSvg = svgEl.cloneNode(true);
-    try {
-        const bb = svgEl.getBBox();
-        if (bb && bb.width > 0 && bb.height > 0) {
-            const pad = 16;
-            printSvg.setAttribute('viewBox', `${bb.x - pad} ${bb.y - pad} ${bb.width + pad * 2} ${bb.height + pad * 2}`);
-            printSvg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-        }
-    } catch (e) { /* keep the original viewBox if getBBox is unavailable */ }
+    const svgEls = [...document.querySelectorAll('#pp-clay-card svg')];   // one per side when the casting is on both
+    if (!svgEls.length) { alert('No layout to print yet.'); return false; }
+    // Print on 11x17 (tabloid) portrait so the layout scales up and stays readable; each SVG is cropped to
+    // its drawn content and gets its own page.
+    const pages = svgEls.map(svgEl => {
+        const printSvg = svgEl.cloneNode(true);
+        try {
+            const bb = svgEl.getBBox();
+            if (bb && bb.width > 0 && bb.height > 0) {
+                const pad = 16;
+                printSvg.setAttribute('viewBox', `${bb.x - pad} ${bb.y - pad} ${bb.width + pad * 2} ${bb.height + pad * 2}`);
+                printSvg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+            }
+        } catch (e) { /* keep the original viewBox if getBBox is unavailable */ }
+        return printSvg.outerHTML;
+    });
     const w = window.open('', '_blank');
     if (!w) return;
     w.document.write(`<!DOCTYPE html>
@@ -5330,9 +5346,11 @@ function printCastingLayoutNow() {
 <style>
   @page { size: 11in 17in; margin: 0.5in; }
   html, body { margin: 0; padding: 0; }
+  .page { page-break-after: always; }
+  .page:last-child { page-break-after: auto; }
   svg { width: 10in; height: 16in; display: block; margin: 0 auto; }
 </style></head>
-<body>${printSvg.outerHTML}</body></html>`);
+<body>${pages.map(p => `<div class="page">${p}</div>`).join('')}</body></html>`);
     w.document.close();
     w.focus();
     w.print();
@@ -8208,23 +8226,20 @@ function wireEvents() {
         await loadLayoutPositionsForSelected();
         renderCastingLayoutTab();
     });
-    document.getElementById('pp-clay-area')?.addEventListener('change', (e) => {
-        clSelectedArea = e.target.value;
-        renderCastingLayoutTab();
-    });
     document.getElementById('pp-clay-side')?.addEventListener('change', async (e) => {
-        const side = (e.target.value === 'A' || e.target.value === 'B') ? e.target.value : null;
+        const side = ['A', 'B', 'AB'].includes(e.target.value) ? e.target.value : null;
         const casting = currentCastings.find(c => c.id === clSelectedCastingId);
         if (!casting) return;
         try {
             await updateCasting(casting.id, { casting_side: side });
             casting.casting_side = side;
-            showToast(`Cast ${casting.casting_number}: ${side ? 'Side ' + side : 'no side'} — the weekly's Cast cards follow on their next refresh.`);
+            showToast(`Cast ${casting.casting_number}: ${side === 'AB' ? 'both sides (A + B)' : side ? 'Side ' + side : 'no side'} — the weekly's Cast cards follow on their next refresh.`);
         } catch (err) {
             logger.error('[project-portal] casting side save failed:', err);
-            showToast('Side not saved — run migration/casting-side.sql in Supabase first', 'error');
-            syncClaySideSelect();
+            showToast(side === 'AB' ? 'Not saved — run migration/casting-side-both.sql in Supabase first' : 'Side not saved — run migration/casting-side.sql in Supabase first', 'error');
         }
+        syncClaySideSelect();
+        renderCastingLayoutTab();
     });
     document.getElementById('pp-clay-offset')?.addEventListener('input', (e) => {
         const v = parseFloat(e.target.value);

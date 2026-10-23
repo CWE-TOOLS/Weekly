@@ -5,7 +5,7 @@
  */
 
 import { normalizeDepartmentClass } from '../../utils/ui-utils.js';
-import { invSummaryLine, invSummaryTitle, batchPrintText, invMissingText, layoutConditionText, INV_TYPES_COLLAPSE_AT } from '../../utils/inventory-card.js';
+import { invSummaryLine, invSummaryTitle, batchPrintText, invMissingText, layoutConditionText, castingSideText, INV_TYPES_COLLAPSE_AT } from '../../utils/inventory-card.js';
 import { parseDate } from '../../utils/date-utils.js';
 import { ANIMATION_CONFIG } from '../../config/visual-constants.js';
 import { escapeHtml, sanitizeDescription } from '../../utils/security-utils.js';
@@ -87,7 +87,7 @@ export function renderTaskCard(task, index) {
              title="Click for options">
             <div class="task-title">${escapeHtml(task.project)}</div>
             <div class="project-description">${escapeHtml(task.projectDescription || '')}</div>
-            ${(task.castingSide === 'A' || task.castingSide === 'B') ? `<div class="task-casting-side">Side ${task.castingSide}</div>` : ''}
+            ${castingSideText(task.castingSide) ? `<div class="task-casting-side">${escapeHtml(castingSideText(task.castingSide))}</div>` : ''}
             ${task.department === 'Cast' && layoutConditionText(task) ? `<div class="task-layout-cond">${escapeHtml(layoutConditionText(task))}</div>` : ''}
             <div class="task-day-counter">${escapeHtml(task.dayCounter || '')}</div>
             ${piecesHtml}

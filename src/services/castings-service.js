@@ -158,7 +158,7 @@ export async function updateCasting(id, fields) {
     if (fields.casting_number !== undefined) payload.casting_number = fields.casting_number.trim();
     if (fields.description !== undefined) payload.description = fields.description ? fields.description.trim() : null;
     if (fields.casting_date !== undefined) payload.casting_date = fields.casting_date || null;
-    if (fields.casting_side !== undefined) payload.casting_side = (fields.casting_side === 'A' || fields.casting_side === 'B') ? fields.casting_side : null;
+    if (fields.casting_side !== undefined) payload.casting_side = ['A', 'B', 'AB'].includes(fields.casting_side) ? fields.casting_side : null;
 
     const { data, error } = await client
         .from(CASTINGS_TABLE)

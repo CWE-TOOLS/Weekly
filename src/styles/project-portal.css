@@ -6648,3 +6648,10 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
 .pp-bt-updating { background: #fffbeb; border: 3px solid #f59e0b; border-radius: 8px; padding: 12px 14px; color: #78350f; display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
 .pp-bt-updating-title { font-size: 18px; font-weight: 900; letter-spacing: 0.04em; color: #b45309; }
 .pp-bt-updating-text { font-size: 13px; font-weight: 600; }
+
+/* Casting Layout — "Both" sides: Side B then Side A, one diagram each (2026-10-23) */
+.pp-clay-card-side + .pp-clay-card-side {
+  margin-top: 1rem;
+  border-top: 2px dashed #cbd5e1;
+  padding-top: 1rem;
+}
