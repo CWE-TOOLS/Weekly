@@ -402,3 +402,7 @@ button.fm-area-head:hover { background: #1f2937; }
   .fm-log-row { grid-template-columns: 4.5rem 1fr; }
   .fm-log-who { text-align: left; }
 }
+
+/* Project Map: rows with no job / cast number (2026-10-26) */
+.pm-missing { display: inline-block; margin-left: 0.35rem; padding: 0 0.35rem; border-radius: 999px; background: #fee2e2; color: #b91c1c; font-weight: 700; font-size: 10.5px; }
+.fm-chip .pm-missing { display: block; margin: 2px 0 1px; width: fit-content; }

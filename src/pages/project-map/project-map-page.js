@@ -100,14 +100,19 @@ function summarise(tasks) {
     for (const t of tasks || []) {
         const pn = String(t.projectNumber || '').trim();
         const cn = String(t.castingNumber || '').trim();
-        if (!pn || !cn || t.isSynthetic || !t.department) continue;
+        if (t.isSynthetic || !t.department) continue;
         const d = parseDate(t.date);
         if (!d) continue;
+        const sheetName = String(t.project || '').trim();
+        if (!pn && !cn && !sheetName) continue;
         const iso = getLocalDateString(d);
-        const key = `${pn}|${cn}`;
+        // Rows with no job number / cast number (a sample typed straight into the Optimizer, a manual weekly card)
+        // still belong on the map — they are on the weekly — grouped by their sheet name and flagged (2026-10-26).
+        const missing = [!pn ? 'project #' : null, !cn ? 'cast #' : null].filter(Boolean);
+        const key = missing.length ? `?|${sheetName.toLowerCase()}|${pn}|${cn}` : `${pn}|${cn}`;
         let c = out.get(key);
         if (!c) {
-            c = { key, projectNumber: pn, castingNumber: cn, sheetName: String(t.project || '').trim(), days: new Map(), inv: null, lastShip: null, lastDate: null, firstDate: null };
+            c = { key, projectNumber: pn, castingNumber: cn, sheetName, missing, days: new Map(), inv: null, lastShip: null, lastDate: null, firstDate: null };
             out.set(key, c);
         }
         if (t.invSummary && !c.inv) c.inv = t.invSummary;
@@ -121,7 +126,11 @@ function summarise(tasks) {
     return out;
 }
 
-function projectOf(pn) { return S.projects.get(pn) || null; }
+function projectOf(pn) { return pn ? (S.projects.get(pn) || null) : null; }
+/** "Cast 3", or "Cast ?" when the row has no cast number. */
+function castLabel(c) { return c.castingNumber ? `Cast ${c.castingNumber}` : 'Cast ?'; }
+/** Red "Missing: project #, cast #" note for rows that lack their numbers ('' otherwise). */
+function missingHtml(c) { return c.missing && c.missing.length ? `<span class="pm-missing" title="Add the ${c.missing.join(' and ')} to this row in the Optimizer so it can link to the portal">Missing: ${escapeHtml(c.missing.join(', '))}</span>` : ''; }
 function jobName(c) {
     const p = projectOf(c.projectNumber);
     if (p && p.project_name) return p.project_name;
@@ -191,7 +200,7 @@ function cardBodyHtml(c, e) {
             return e && e.dept === d ? `<b class="pm-trail-here">${text}</b>` : text;
         }).join(' · ');
     return `<div class="fm-card-job">${escapeHtml(jobName(c))}</div>
-        <div class="fm-card-cast">Cast ${escapeHtml(c.castingNumber)}<span class="fm-card-pn">${escapeHtml(c.projectNumber)}</span></div>
+        <div class="fm-card-cast">${escapeHtml(castLabel(c))}<span class="fm-card-pn">${escapeHtml(c.projectNumber)}</span>${missingHtml(c)}</div>
         ${p && p.pm ? `<div class="fm-card-meta">${escapeHtml(p.pm)}</div>` : ''}
         ${inv ? `<div class="fm-card-meta">${escapeHtml(inv)}</div>` : ''}
         ${e ? `<div class="fm-card-meta fm-card-finish">${escapeHtml(e.dept)}: ${escapeHtml(entryLine(e))}</div>` : ''}
@@ -206,7 +215,8 @@ function chipHtml(e, col, sec) {
     const cls = ['fm-chip', S.expandedKey === id ? 'fm-chip-open' : '', matchesSearch(c) ? '' : 'fm-card-dim'].filter(Boolean).join(' ');
     return `<div class="${cls}" data-key="${escapeHtml(id)}" title="${escapeHtml(c.sheetName || jobName(c))}">
         <span class="fm-chip-job">${escapeHtml(jobName(c))}</span>
-        <span class="fm-chip-line"><b>Cast ${escapeHtml(c.castingNumber)}</b><span>${escapeHtml(c.projectNumber)}</span><span>${escapeHtml(pcs)}</span></span>
+        <span class="fm-chip-line"><b>${escapeHtml(castLabel(c))}</b><span>${escapeHtml(c.projectNumber)}</span><span>${escapeHtml(pcs)}</span></span>
+        ${missingHtml(c)}
         <span class="pm-chip-day">${escapeHtml(entryLine(e))}</span>
     </div>`;
 }
@@ -217,7 +227,7 @@ function rowHtml(e, extra = '') {
     const pcs = c.inv && c.inv.pcs != null ? `${c.inv.pcs} pcs` : '';
     return `<div class="fm-mrow${open ? ' fm-mrow-open' : ''}" data-mrow="${escapeHtml(c.key)}">
         <div class="fm-mrow-text" data-expand="${escapeHtml(c.key)}" title="${open ? 'Click to close' : 'Click for the full card'}">
-            ${open ? cardBodyHtml(c, e.dept ? e : null) : `<div class="fm-card-job">${escapeHtml(jobName(c))} <b>Cast ${escapeHtml(c.castingNumber)}</b> <span class="fm-card-pn">${escapeHtml(c.projectNumber)}</span> <span class="fm-card-meta">${escapeHtml([pcs, e.dept ? entryLine(e) : ''].filter(Boolean).join(' · '))}${extra}</span></div>`}
+            ${open ? cardBodyHtml(c, e.dept ? e : null) : `<div class="fm-card-job">${escapeHtml(jobName(c))} <b>${escapeHtml(castLabel(c))}</b> <span class="fm-card-pn">${escapeHtml(c.projectNumber)}</span> ${missingHtml(c)} <span class="fm-card-meta">${escapeHtml([pcs, e.dept ? entryLine(e) : ''].filter(Boolean).join(' · '))}${extra}</span></div>`}
         </div>
     </div>`;
 }
