@@ -161,3 +161,88 @@ export async function saveJigListForCasting(projectNumber, castingId, state) {
     }
     return true;
 }
+
+
+// ---------------------------------------------------------------------------
+// Scrim (2026-10-26) — the takeoff rule (Material_Takeoff_Workflow_Rules.md §8): total sq ft = finished-face sq ft
+// × scrim layers × pieces; a roll is 300 ft × 3.3 ft = 990 sq ft; rolls = total / 990 (two decimals, never rounded
+// to quarters); linear feet of roll = total / 3.3 (one decimal). Layers come from the casting's jig-list
+// cross-section; never assumed when they are not set.
+// ---------------------------------------------------------------------------
+export const SCRIM_ROLL_SQ_FT = 990;
+export const SCRIM_ROLL_WIDTH_FT = 3.3;
+
+/** Scrim layer count(s) from a saved jig-list state: { layers, perThickness:[{thickness, layers}] } or null when no cross-section is set. */
+export function scrimLayersFromJigData(data) {
+    if (!data || typeof data !== 'object') return null;
+    const sections = Array.isArray(data.sections) && data.sections.length ? data.sections : (data.xsec && Array.isArray(data.xsec.heights) ? [data.xsec] : []);
+    const perThickness = sections.map(sec => {
+        const heights = Array.isArray(sec.heights) ? sec.heights : [];
+        const checks = Array.isArray(sec.kinds) ? sec.kinds.filter(k => k === 'check').length : 0;
+        return { thickness: String(sec.thickness || '').trim(), layers: Math.max(0, heights.length - checks) };
+    });
+    if (!perThickness.length) return null;
+    const distinct = [...new Set(perThickness.map(p => p.layers))];
+    return { layers: distinct.length === 1 ? distinct[0] : null, perThickness };
+}
+
+/** Scrim layers for one inventory type when a casting has several thicknesses: the jig-list panel whose label is the
+ *  type (or starts with it — labels carry the size when a type comes in several sizes) names its thickness section. */
+function layersForType(type, data, perThickness) {
+    const t = String(type || '').trim().toLowerCase();
+    if (!t) return null;
+    const panels = Array.isArray(data?.panels) ? data.panels : [];
+    const p = panels.find(x => String(x.label || '').trim().toLowerCase() === t) || panels.find(x => String(x.label || '').trim().toLowerCase().startsWith(t + ' '));
+    if (!p) return null;
+    const sec = perThickness[p.sec || 0] || perThickness[0];
+    return sec ? sec.layers : null;
+}
+
+/** Scrim figures for a casting's inventory rows (quantity, extras, ff_sq_ft, type): { text, warn }.
+ *  One layer count for the whole casting when its thicknesses agree; per type via the jig-list panels when they differ. */
+export function scrimForInventory(rows, data) {
+    const list = Array.isArray(rows) ? rows : [];
+    if (!list.length) return { text: '', warn: false };
+    const has = (v) => v !== null && v !== undefined && v !== '';
+    const units = (r) => (parseInt(r.quantity, 10) || 0) + (parseInt(r.extras, 10) || 0);
+    const partial = !list.every(r => has(r.ff_sq_ft));
+    const face = list.reduce((sum, r) => sum + (Number(r.ff_sq_ft) || 0) * units(r), 0);
+    const info = scrimLayersFromJigData(data);
+    if (!info) return { text: 'Scrim: layers not set — add the cross-section on the Jig List tab (never assumed).', warn: true };
+    if (info.layers != null) return scrimSummary(face, !partial, info);
+    // thicknesses disagree: layers per type
+    let total = 0; const unmapped = new Set();
+    for (const r of list) {
+        const L = layersForType(r.type, data, info.perThickness);
+        if (L == null) { unmapped.add(String(r.type || '').trim() || '(no type)'); continue; }
+        total += (Number(r.ff_sq_ft) || 0) * units(r) * L;
+    }
+    const f2 = (v) => v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const f1 = (v) => v.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    const per = info.perThickness.map(p => `${p.thickness || '?'}″: ${p.layers}`).join(', ');
+    const rolls = total / SCRIM_ROLL_SQ_FT, linFt = total / SCRIM_ROLL_WIDTH_FT;
+    let text = `Scrim — layers per thickness (${per}): ${f2(face)} ff sq ft → ${f2(total)} sq ft = ${f2(rolls)} ${rolls === 1 ? 'roll' : 'rolls'} = ${f1(linFt)} lin ft of roll`;
+    if (unmapped.size) text += ` — not counted, type not on the Jig List: ${[...unmapped].join(', ')}`;
+    if (partial) text += ' (some inventory rows have no ff sq ft — partial)';
+    return { text, warn: unmapped.size > 0 || partial };
+}
+
+/** One line of scrim figures for a casting: { text, warn } — warn = true when the layers are not known. */
+export function scrimSummary(faceSqFt, ffComplete, layerInfo) {
+    const face = Number(faceSqFt) || 0;
+    if (!layerInfo) return { text: 'Scrim: layers not set — add the cross-section on the Jig List tab (never assumed).', warn: true };
+    if (layerInfo.layers == null) {
+        const parts = layerInfo.perThickness.map(p => `${p.thickness || '?'}″: ${p.layers}`).join(', ');
+        return { text: `Scrim: layers differ per thickness (${parts}) — not computed; set the same count or ask engineering.`, warn: true };
+    }
+    const layers = layerInfo.layers;
+    const total = face * layers;
+    const rolls = total / SCRIM_ROLL_SQ_FT;
+    const linFt = total / SCRIM_ROLL_WIDTH_FT;
+    const f2 = (v) => v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const f1 = (v) => v.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    const text = layers === 0
+        ? 'Scrim: no scrim layers on the Jig List cross-section (0 layers).'
+        : `Scrim — ${layers} ${layers === 1 ? 'layer' : 'layers'}: ${f2(face)} ff sq ft × ${layers} = ${f2(total)} sq ft = ${f2(rolls)} ${rolls === 1 ? 'roll' : 'rolls'} = ${f1(linFt)} lin ft of roll${ffComplete === false ? ' (some inventory rows have no ff sq ft — partial)' : ''}`;
+    return { text, warn: ffComplete === false };
+}

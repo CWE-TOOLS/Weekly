@@ -48,6 +48,8 @@ button, select, input, textarea { font: inherit; }
 .totals-note-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-bottom: 4px; }
 .totals-note-body { font-size: 13px; line-height: 1.4; white-space: pre-wrap; }
 .totals-note-body.empty { color: #94a3b8; font-style: italic; }
+.totals-scrim { margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--line); font-size: 13px; font-weight: 700; }
+.totals-scrim.warn { color: #b45309; }
 @media (max-width: 700px) { .totals-notes { grid-template-columns: 1fr; } }
 .note { background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: 10px 12px; font-size: 13px; margin-bottom: 14px; }
 .pills { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
@@ -612,11 +614,11 @@ function describeSizes(plan) {
 // Data loading — via the portal's own service modules
 // ======================================================================
 async function loadData() {
-    const [ps, cs, cl, bt, tr, inv] = await Promise.all(
-        ['projects-service.js', 'castings-service.js', 'color-log-service.js', 'batch-ticket-service.js', 'tracking-service.js', 'inventory-service.js']
+    const [ps, cs, cl, bt, tr, inv, jig] = await Promise.all(
+        ['projects-service.js', 'castings-service.js', 'color-log-service.js', 'batch-ticket-service.js', 'tracking-service.js', 'inventory-service.js', 'jig-list-service.js']
             .map(f => import(SERVICES + f))
     );
-    S.svc = { ps, bt, inv };
+    S.svc = { ps, bt, inv, jig };
     if (!S.sizingLoaded) {
         S.sizingLoaded = true;
         const cfg = await import(SITE + 'src/config/special-batching.js').then(m => m.getSpecialBatching(PROJECT_NUMBER)).catch(() => undefined);
@@ -630,11 +632,13 @@ async function loadData() {
             S.sizing = { ...DEFAULT_SIZING };
         }
     }
-    const [project, castings, logs] = await Promise.all([
+    const [project, castings, logs, jigLists] = await Promise.all([
         ps.loadProject(PROJECT_NUMBER),
         cs.loadCastings(PROJECT_NUMBER),
-        cl.loadColorLogsForProject(PROJECT_NUMBER)
+        cl.loadColorLogsForProject(PROJECT_NUMBER),
+        jig.loadJigListsForProject(PROJECT_NUMBER).catch(() => ({ byCasting: new Map() }))
     ]);
+    S.jigs = jigLists?.byCasting || new Map();
     if (!project) throw new Error('Project ' + PROJECT_NUMBER + ' was not found.');
     const ids = (castings || []).map(c => c.id);
     const [saved, comps, inventory] = await Promise.all([
@@ -1002,7 +1006,15 @@ function ticketPagesHtml(casting, tickets, printedOn = null) {
 // ======================================================================
 // Mix Day Totals — ported from the portal's renderBatchTotals()
 // ======================================================================
-function renderTotals(entries) {
+/** Scrim line under Mix Day Totals: face sq ft of the casting's whole inventory × the Jig List's scrim layers. */
+function scrimLineHtml(castingId) {
+    const rows = S.inv.get(castingId) || [];
+    if (!rows.length || !S.svc?.jig) return '';
+    const { text, warn } = S.svc.jig.scrimForInventory(rows, (S.jigs || new Map()).get(castingId));
+    if (!text) return '';
+    return `<div class="totals-scrim${warn ? ' warn' : ''}" title="Takeoff rule: ff sq ft × layers = sq ft; a roll is 300 ft × 3.3 ft = 990 sq ft; lin ft = sq ft ÷ 3.3">${esc(text)}</div>`;
+}
+function renderTotals(entries, castingId = null) {
     entries = entries.filter(e => e.plan?.batches?.length && e.log);
     if (!entries.length) return '';
     const totals = {};
@@ -1084,7 +1096,7 @@ function renderTotals(entries) {
         return `<div class="totals-notes">${noteBlock('Color Log finishing notes' + suffix, String(log.finishingNotes || '').trim())}${noteBlock('Color Log sealing notes' + suffix, String(log.sealingNotes || '').trim())}</div>`;
     }).join('');
     return `<div class="card"><h2>Mix Day Totals — ${entries.length > 1 ? 'all colors &amp; batches' : 'all batches'}</h2>
-        <table class="tbl"><thead><tr><th>Material</th><th class="num">Total Qty</th><th>Unit</th></tr></thead><tbody>${rows}</tbody></table>${notesHtml}</div>`;
+        <table class="tbl"><thead><tr><th>Material</th><th class="num">Total Qty</th><th>Unit</th></tr></thead><tbody>${rows}</tbody></table>${notesHtml}${castingId ? scrimLineHtml(castingId) : ''}</div>`;
 }
 
 // ======================================================================
@@ -1431,7 +1443,7 @@ function renderPreview(casting, ticket) {
         <div class="two">
             <div class="card"><h2>Batch types (change if needed)${plan.manualApplied ? ' <span class="chip warn">manually set</span> <button class="btn btn-small" data-types-reset>Back to automatic</button>' : ''}</h2>
                 <table class="tbl"><thead><tr><th>#</th><th class="num">Sand</th><th class="num">Cu Ft</th><th>Type</th></tr></thead><tbody>${assignRows}</tbody></table></div>
-            <div>${renderTotals(entries)}</div>
+            <div>${renderTotals(entries, casting.id)}</div>
         </div>
         <div class="tickets">${ticketPagesHtml(casting, [ticket])}</div>`;
     reportHeight();

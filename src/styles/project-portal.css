@@ -6684,3 +6684,16 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
     font-style: italic;
 }
 @media (max-width: 700px) { .pp-bt-totals-notes { grid-template-columns: 1fr; } }
+
+/* Mix Day Totals — scrim line (2026-10-26) */
+.pp-bt-totals-scrim {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px dashed #e2e8f0;
+    font-size: 13px;
+    font-weight: 700;
+    color: #0f172a;
+}
+.pp-bt-totals-scrim-warn {
+    color: #b45309;
+}
