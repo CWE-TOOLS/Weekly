@@ -10298,6 +10298,15 @@ function renderBatchTotals(entries) {
     if (!rows) return '';
 
     const title = entries.length > 1 ? 'Mix Day Totals — All Colors & Batches' : 'Mix Day Totals — All Batches';
+    // Color Log finishing / sealing notes under the totals (2026-10-26): one pair per colour log on the casting,
+    // so the mix-day sheet carries what the finishing and sealing crews need to know.
+    const logs = [];
+    for (const e of entries) if (e.log && !logs.some(l => l.id === e.log.id)) logs.push(e.log);
+    const noteBlock = (label, text) => `<div class="pp-bt-totals-note"><div class="pp-bt-totals-note-title">${escapeHtml(label)}</div><div class="pp-bt-totals-note-body${text ? '' : ' pp-bt-totals-note-empty'}">${text ? escapeHtml(text) : 'none on the color log'}</div></div>`;
+    const notesHtml = logs.map(log => {
+        const suffix = logs.length > 1 && log.name ? ` — ${log.name}` : '';
+        return `<div class="pp-bt-totals-notes">${noteBlock('Color Log finishing notes' + suffix, String(log.finishingNotes || '').trim())}${noteBlock('Color Log sealing notes' + suffix, String(log.sealingNotes || '').trim())}</div>`;
+    }).join('');
     return `
         <div class="pp-bt-totals-panel">
             <div class="pp-bt-totals-title">${title}</div>
@@ -10305,6 +10314,7 @@ function renderBatchTotals(entries) {
                 <thead><tr><th>Material</th><th class="pp-bt-totals-num">Total Qty</th><th>Unit</th></tr></thead>
                 <tbody>${rows}</tbody>
             </table>
+            ${notesHtml}
         </div>
     `;
 }
