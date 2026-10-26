@@ -31,6 +31,32 @@ export const PORTAL_MANUAL_MILESTONES = ['Final Optimizer HRS', 'Approved SDs', 
  *  although they can also be ticked on the portal's Class Rooms tab). */
 export const BOARD_TAG_OVERRIDE = { 'Classroom #1': 'MANUAL', 'Classroom #2': 'MANUAL', 'Classroom #3': 'MANUAL' };
 
+/** One plain sentence per board column saying what sets it — shown on hover over the header and the cells (2026-10-26). */
+export const MILESTONE_HOW = {
+    'Classroom #1': 'Click the cell here for one casting, or use the Class Rooms tab in the portal to mark the classroom held for every casting in the phase (green = all held, orange = some).',
+    'Classroom #2': 'Click the cell here for one casting, or use the Class Rooms tab in the portal to mark the classroom held for every casting in the phase (green = all held, orange = some).',
+    'Classroom #3': 'Click the cell here for one casting, or use the Class Rooms tab in the portal to mark the classroom held for every casting in the phase (green = all held, orange = some).',
+    'Shop Folder Built': 'Goes green the moment Print Cover (Project Info tab) is printed for the castings in view: a printed cover means a physical folder exists.',
+    'Approved SDs': "Click the cell here, or tick it on the portal's Releasability Approvals tab; both write the same record.",
+    'Sample Approval': "Click the cell here, or tick it on the portal's Releasability Approvals tab; both write the same record.",
+    'Color Log': 'Orange once a colour is picked on any Casting Inventory row of the casting; green when Print Color Log is printed for it.',
+    'Final Optimizer HRS': "Click the cell here, or the FINAL HRS cell on the portal's Optimizer Hours tab, when the hours are final.",
+    'Rebar/Drilling Layout': 'Click the cell to change it (nothing in the portal sets it yet).',
+    'Casting Inventory': 'Red = nothing entered. Orange = being entered, or the PM pressed Ready for engineering. Green = engineering pressed Casting Inventory ready (the inventory is locked). Make changes reopens it and it goes orange again.',
+    'Labels': "Green when the labels are printed from the Tracking tab. Orange if they were printed before the inventory was final, or the inventory's types, sizes or quantities changed after: print them again.",
+    'Final Tracking': 'Green when the Final Tracking sheet is printed from the Tracking tab. Orange if it was printed before the inventory was final, or the inventory changed after: print it again.',
+    'Batching Sheets': 'Green when the batch tickets are printed (Batch Tickets tab or the Jane Street page). Orange while the inventory is being changed, or if it changed after printing. When engineering marks the inventory ready, the portal checks whether the tickets really change and turns this back to green if they do not.',
+    'Casting Layout': 'Orange once forms are laid out on the Casting Layout tab. Green when the layout is printed, or when a special condition is set for the casting.',
+    'Shop Folder Cover': 'Orange when Print Cover is printed (step 1). Green when Print Shop Folder Cover is printed for that casting (step 2).',
+    'Mitti QC Template': 'Click the cell to change it (nothing in the portal sets it yet).',
+    'Inflow Sales Ticket': 'Click the cell to change it (nothing in the portal sets it yet).',
+    '3D Drawings/Parts List': 'Click the cell to change it (nothing in the portal sets it yet).',
+    'Toolpath Program': 'Click the cell to change it (nothing in the portal sets it yet).',
+    'Jig List': 'Orange when the jig list is imported from the Casting Inventory on the Jig List tab. Green when it is printed. Grey N/A when the casting has no jigs (condition set on the tab).',
+    'Staging': 'Red = no staging notes. Orange = some days have a note. Green = every day of every department has a note, entered on the Staging tab or on the weekly cards.',
+    'Green Sticker': 'Board only: the DOP clicks it at final folder QC.'
+};
+
 /** Printouts built from the Casting Inventory: warned/blocked until the inventory is final, and
  *  knocked back to orange whenever the inventory changes after they were printed. */
 export const CI_DEPENDENT = ['Batching Sheets', 'Labels', 'Final Tracking', 'Casting Layout', 'Jig List'];

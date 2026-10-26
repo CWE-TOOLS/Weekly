@@ -10,7 +10,7 @@
 import { getMonday, getWeekMonth, getWeekOfMonth } from '../../utils/date-utils.js';
 import { TRACKING_ITEMS, TRACKING_ITEM_LABELS, STATUS, STATUS_DISPLAY } from '../../config/releasability-config.js?v=20260807-2';
 import { isWeekCollapsed } from './releasability-state.js';
-import { AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, BOARD_TAG_OVERRIDE, MS_TO_BOARD, milestonesApply } from '../../config/milestones-config.js';
+import { AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, BOARD_TAG_OVERRIDE, MS_TO_BOARD, milestonesApply, MILESTONE_HOW } from '../../config/milestones-config.js';
 
 // Portal-driven milestones (2026-10-15): "<project#>#<CAST#>" and "<project#>#<CAST#>@<phaseId>" -> Map(milestone -> row)
 let milestoneLookup = new Map();
@@ -167,9 +167,10 @@ function createHeaderRow() {
     tag.className = 'tracking-mode-tag ' + (tagText === 'AUTO' ? 'tracking-mode-auto' : tagText === 'P. MANUAL' ? 'tracking-mode-pmanual' : 'tracking-mode-manual');
     tag.textContent = tagText;
     headerCell.appendChild(tag);
-    headerCell.title = label + (auto ? ' — AUTO: set by the portal (prints, ticks, the inventory lock)'
+    headerCell.title = label + (auto ? ' — AUTO: set by the portal'
         : pman ? ' — P. MANUAL: tick it here or on the portal tab, both stay in step'
-        : ' — MANUAL: click the cell'); // Tooltip with full name
+        : ' — MANUAL: click the cell')
+        + (MILESTONE_HOW[item] ? '\n\nHow: ' + MILESTONE_HOW[item] : ''); // Tooltip with full name + how it is set
     headerCell.dataset.trackingIndex = index; // Add index for individual targeting
     cells.push(headerCell);
   });
@@ -594,7 +595,7 @@ function createStatusCell(project, trackingItem) {
     // Portal-manual: clickable here (red <-> green) and on the portal tab; both write the portal's row.
     cell.dataset.pmanual = '1';
     const when = msRow?.stamped_at ? new Date(msRow.stamped_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : '';
-    cell.title = `${project.project} - ${TRACKING_ITEM_LABELS[trackingItem] || trackingItem}: ${statusConfig.label} (P. MANUAL — click here or tick it on the portal)`
+    cell.title = `${project.project} - ${TRACKING_ITEM_LABELS[trackingItem] || trackingItem}: ${statusConfig.label} (P. MANUAL — click here or tick it on the portal)` + (MILESTONE_HOW[trackingItem] ? `\n\nHow: ${MILESTONE_HOW[trackingItem]}` : '')
       + (msRow?.note ? `\n${String(msRow.note).replace(/\s*\[inv:[^\]]+\]$/, '')}` : '') + (when ? `\nSince ${when}` : '');
     const icon = document.createElement('span');
     icon.className = 'status-icon';
@@ -605,7 +606,7 @@ function createStatusCell(project, trackingItem) {
   if (auto) {
     cell.dataset.auto = '1';
     const when = msRow?.stamped_at ? new Date(msRow.stamped_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : '';
-    cell.title = `${project.project} - ${TRACKING_ITEM_LABELS[trackingItem] || trackingItem}: ${statusConfig.label} (AUTO — set by the portal)`
+    cell.title = `${project.project} - ${TRACKING_ITEM_LABELS[trackingItem] || trackingItem}: ${statusConfig.label} (AUTO — set by the portal)` + (MILESTONE_HOW[trackingItem] ? `\n\nHow: ${MILESTONE_HOW[trackingItem]}` : '')
       + (msRow?.note ? `\n${String(msRow.note).replace(/\s*\[inv:[^\]]+\]$/, '')}` : '') + (when ? `\nSince ${when}` : '');
     const icon = document.createElement('span');
     icon.className = 'status-icon';
