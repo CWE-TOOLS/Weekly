@@ -108,7 +108,7 @@ import {
     roundSig,
     FROM_LBS
 } from '../../utils/batch-calc.js';
-import { getSpecialBatching } from '../../config/special-batching.js?v=20261020-3';
+import { getSpecialBatching } from '../../config/special-batching.js?v=20261026-1';
 import { fetchAllTasks } from '../../services/data-service.js';
 import { loadActualHoursForProject } from '../../services/actual-hours-service.js';
 import { parseDate } from '../../utils/date-utils.js';

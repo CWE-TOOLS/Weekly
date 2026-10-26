@@ -44,6 +44,11 @@ button, select, input, textarea { font: inherit; }
 .btn-small { padding: 3px 8px; font-size: 12px; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-bottom: 14px; overflow-x: auto; }
 .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin: 0 0 10px; }
+.totals-notes { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.totals-note-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-bottom: 4px; }
+.totals-note-body { font-size: 13px; line-height: 1.4; white-space: pre-wrap; }
+.totals-note-body.empty { color: #94a3b8; font-style: italic; }
+@media (max-width: 700px) { .totals-notes { grid-template-columns: 1fr; } }
 .note { background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: 10px 12px; font-size: 13px; margin-bottom: 14px; }
 .pills { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
 .pill { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 5px 12px; cursor: pointer; font-weight: 600; }
@@ -1070,8 +1075,16 @@ function renderTotals(entries) {
         for (const it of items) rows += `<tr><td>${esc(it.name)}</td><td class="num">${roundSig(it.total, 2)}</td><td>${esc(it.unit)}</td></tr>`;
     }
     if (!rows) return '';
+    // Color Log finishing / sealing notes under the totals (2026-10-26) — same as the portal's standard batching tab.
+    const logs = [];
+    for (const e of entries) if (e.log && !logs.some(l => l.id === e.log.id)) logs.push(e.log);
+    const noteBlock = (label, text) => `<div class="totals-note"><div class="totals-note-title">${esc(label)}</div><div class="totals-note-body${text ? '' : ' empty'}">${text ? esc(text) : 'none on the color log'}</div></div>`;
+    const notesHtml = logs.map(log => {
+        const suffix = logs.length > 1 && log.name ? ` — ${log.name}` : '';
+        return `<div class="totals-notes">${noteBlock('Color Log finishing notes' + suffix, String(log.finishingNotes || '').trim())}${noteBlock('Color Log sealing notes' + suffix, String(log.sealingNotes || '').trim())}</div>`;
+    }).join('');
     return `<div class="card"><h2>Mix Day Totals — ${entries.length > 1 ? 'all colors &amp; batches' : 'all batches'}</h2>
-        <table class="tbl"><thead><tr><th>Material</th><th class="num">Total Qty</th><th>Unit</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+        <table class="tbl"><thead><tr><th>Material</th><th class="num">Total Qty</th><th>Unit</th></tr></thead><tbody>${rows}</tbody></table>${notesHtml}</div>`;
 }
 
 // ======================================================================
