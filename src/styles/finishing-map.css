@@ -149,8 +149,8 @@ button.fm-area-head:hover { background: #1f2937; }
   /* the boxes keep the size they had; Outside takes whatever is left above the coop row */
   grid-template-rows: 11rem 11rem minmax(6rem, 1fr) 10rem;
   grid-template-areas:
-    "tent1 tent1 wetroom wetroom blacktop blacktop large"
-    "tent1 tent1 tent2 tent2 . . large"
+    "tent2 tent2 wetroom wetroom blacktop blacktop large"
+    "tent2 tent2 tent1 tent1 . . large"
     "outside outside outside outside outside outside outside"
     "cooplabel coop1 coop2 coop3 coop4 coop5 coop6";
 }
@@ -395,8 +395,8 @@ button.fm-area-head:hover { background: #1f2937; }
     grid-template-rows: none;
     grid-auto-rows: 9rem;
     grid-template-areas:
-      "tent1 wetroom blacktop"
-      "tent2 outside large"
+      "tent2 wetroom blacktop"
+      "tent1 outside large"
       "cooplabel cooplabel cooplabel"
       "coop1 coop2 coop3"
       "coop4 coop5 coop6";
