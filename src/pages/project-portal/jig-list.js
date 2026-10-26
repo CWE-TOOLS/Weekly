@@ -427,8 +427,9 @@ function secT16(o){ return parseInches(secOf(o).thickness); }
 /** "1″" — used to tag labels when a casting has more than one thickness. */
 function secTag(o){ const T = secT16(o); return T != null ? fmt16(T) + '″' : '?″'; }
 const multiSec = () => S.sections.length > 1;
-/** Layer type of layer i in a section: '' = scrim (default), 'check' = height check. */
-function layerKind(sec, i){ return (sec.kinds && sec.kinds[i] === 'check') ? 'check' : ''; }
+/** Layer type of layer i in a section: '' = scrim (default), 'check' = height check.
+ *  "No scrim" ticked on the thickness (2026-10-26) makes every layer a height check. */
+function layerKind(sec, i){ return (sec.noScrim || (sec.kinds && sec.kinds[i] === 'check')) ? 'check' : ''; }
 /** Which scrim a scrim layer is (1-based, counting scrim layers only) — 0 for a height check. */
 function scrimNo(sec, i){
   if (layerKind(sec, i) === 'check') return 0;
@@ -916,7 +917,10 @@ function buildXsecFields(si){
        <span class="u">inches</span></div>
      <div class="fld"><label># of layers</label>
        <input type="number" min="0" max="10" data-sec="xsec" data-si="${si}" data-field="count" value="${sec.heights.length}" style="width:80px">
-       <span class="u">layers</span></div>`;
+       <span class="u">layers</span></div>
+     <div class="fld"><label>Scrim</label>
+       <label class="xsec-noscrim" title="Tick when this thickness gets no scrim at all. Every layer becomes a height check, the cross-section says NO SCRIM, and the batching tickets' scrim line shows none.">
+         <input type="checkbox" data-sec="xsec" data-si="${si}" data-field="noscrim"${sec.noScrim ? ' checked' : ''}> No scrim</label></div>`;
   buildXsecHeights(si);
 }
 function buildXsecHeights(si){
@@ -924,8 +928,8 @@ function buildXsecHeights(si){
   if (!blk) return;
   blk.querySelector('[data-xsec-heights]').innerHTML = sec.heights.map((h,i)=>
     `<div class="fld"><label>Layer ${i+1}</label>
-       <select data-sec="xsec" data-si="${si}" data-field="kind" data-idx="${i}" class="xsec-kind">
-         <option value=""${layerKind(sec, i) === 'check' ? '' : ' selected'}>Scrim</option>
+       <select data-sec="xsec" data-si="${si}" data-field="kind" data-idx="${i}" class="xsec-kind"${sec.noScrim ? ' title="No scrim is ticked for this thickness — every layer is a height check"' : ''}>
+         <option value=""${layerKind(sec, i) === 'check' ? '' : ' selected'}${sec.noScrim ? ' disabled' : ''}>Scrim</option>
          <option value="check"${layerKind(sec, i) === 'check' ? ' selected' : ''}>Height check</option></select>
        <input data-sec="xsec" data-si="${si}" data-field="h" data-idx="${i}" value="${esc(h)}" style="width:110px" placeholder="1/4">
        <span class="u">from bottom</span></div>`).join('');
@@ -960,7 +964,8 @@ function xsecSVG(sec){
   let s = `<svg viewBox="0 0 ${vbW} 366" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Concrete panel cross-section with scrim layers">`;
   // concrete slab
   s += `<rect class="conc" x="${x1}" y="${top}" width="${x2-x1}" height="${H}"/>`;
-  s += `<text class="il" x="${(x1+x2)/2}" y="${bot+20}" text-anchor="middle">bottom of panel (face) — scrim heights measured from here</text>`;
+  if (sec.noScrim) s += `<text class="rlbl" x="${(x1+x2)/2}" y="${top-14}" text-anchor="middle" style="font-size:15px;font-weight:700;fill:#b91c1c">NO SCRIM — height checks only / SIN MALLA</text>`;
+  s += `<text class="il" x="${(x1+x2)/2}" y="${bot+20}" text-anchor="middle">bottom of panel (face) — ${sec.noScrim ? 'heights' : 'scrim heights'} measured from here</text>`;
   s += `<text class="il" x="${(x1+x2)/2}" y="${bot+34}" text-anchor="middle">fondo del panel (cara) — las alturas de malla se miden desde aquí</text>`;
   // overall thickness dimension (left)
   s += `<line class="de" x1="${x1-4}" y1="${top}" x2="${x1-40}" y2="${top}"/>`;
@@ -1032,8 +1037,8 @@ function xsecPrintHTML(si){
     : [];
   const thk = T != null ? fmt16(T) + '″' : '?';
   const hasScrim = xsecScrims(sec, T).some(o => o.kind !== 'check'), hasCheck = xsecScrims(sec, T).some(o => o.kind === 'check');
-  const kindEn = hasScrim ? (hasCheck ? 'Scrim & Height Check Layers' : 'Scrim Placement') : 'Height Check Layers';
-  const kindEs = hasScrim ? (hasCheck ? 'Capas de malla y verificación de altura' : 'Posición de la malla') : 'Niveles de verificación de altura';
+  const kindEn = sec.noScrim ? 'NO SCRIM — Height Check Layers' : hasScrim ? (hasCheck ? 'Scrim & Height Check Layers' : 'Scrim Placement') : 'Height Check Layers';
+  const kindEs = sec.noScrim ? 'SIN MALLA — Niveles de verificación de altura' : hasScrim ? (hasCheck ? 'Capas de malla y verificación de altura' : 'Posición de la malla') : 'Niveles de verificación de altura';
   return `
     <div class="titlerow"><h1>Panel Cross-Section${multiSec() ? ' — ' + thk : ''} — ${kindEn}${es(`Sección transversal del panel${multiSec() ? ' — ' + thk : ''} — ${kindEs}`)}</h1>
       <div class="meta"><b style="font-size:13px;color:#333">${esc(projTitle())}</b><br>${multiSec() ? `Thickness ${si + 1} of ${S.sections.length} · Espesor ${si + 1} de ${S.sections.length}<br>` : ''}${esc(S.date)}</div></div>
@@ -1375,6 +1380,12 @@ function onEditorInput(e){
     else if (el.dataset.field === 'kind'){
       xs.kinds = xs.kinds || [];
       xs.kinds[+el.dataset.idx] = el.value;
+    }
+    else if (el.dataset.field === 'noscrim'){
+      // No scrim for this thickness: every layer turns into a height check (and stays one until picked back).
+      xs.noScrim = !!el.checked;
+      if (xs.noScrim) xs.kinds = xs.heights.map(() => 'check');
+      buildXsecHeights(si);
     }
     // The cross-section owns the scrim foot depths — keep them in step.
     syncDepthsFromXsec(); buildDepthTable();

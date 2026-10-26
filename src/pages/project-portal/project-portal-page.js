@@ -127,7 +127,7 @@ import {
 } from '../../services/classroom-tasks-service.js';
 import { renderCastingLayout } from './casting-layout.js?v=20261023-2';
 import { attachLayoutDrag } from './casting-layout-drag.js?v=20260701-01';
-import { activateJigListTab } from './jig-list.js?v=20261014-6';
+import { activateJigListTab } from './jig-list.js?v=20261026-1';
 import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, APPROVALS_TAB_ITEMS } from '../../config/milestones-config.js?v=20261020-2';
 import { loadMilestonesForProject, saveMilestone, isMilestonesMigrationPending, loadLayoutConditions, LAYOUT_CONDITION_PREFIX, layoutConditionNote, parseLayoutCondition, sideWords } from '../../services/milestones-service.js';
 import { loadJigListsForProject as loadJigListsForScrim, scrimForInventory } from '../../services/jig-list-service.js';
@@ -9464,9 +9464,9 @@ function scrimLineHtml(casting) {
     if (!casting) return '';
     const rows = getInventoryFor(casting.id);
     if (!rows.length) return '';
-    const { text, warn } = scrimForInventory(rows, btJigLists.get(casting.id));
+    const { text, detail, warn } = scrimForInventory(rows, btJigLists.get(casting.id));
     if (!text) return '';
-    return `<div class="pp-bt-totals-scrim${warn ? ' pp-bt-totals-scrim-warn' : ''}" title="Takeoff rule: ff sq ft × layers = sq ft; a roll is 300 ft × 3.3 ft = 990 sq ft; lin ft = sq ft ÷ 3.3">${escapeHtml(text)}</div>`;
+    return `<div class="pp-bt-totals-scrim${warn ? ' pp-bt-totals-scrim-warn' : ''}" title="${escapeAttr(detail || '')}">${escapeHtml(text)}</div>`;
 }
 async function activateBatchTicketsTab() {
     if (currentProjectNumber) syncCastDatesWithWeekly();   // runs alongside; redraws when the weekly answers

@@ -1010,9 +1010,9 @@ function ticketPagesHtml(casting, tickets, printedOn = null) {
 function scrimLineHtml(castingId) {
     const rows = S.inv.get(castingId) || [];
     if (!rows.length || !S.svc?.jig) return '';
-    const { text, warn } = S.svc.jig.scrimForInventory(rows, (S.jigs || new Map()).get(castingId));
+    const { text, detail, warn } = S.svc.jig.scrimForInventory(rows, (S.jigs || new Map()).get(castingId));
     if (!text) return '';
-    return `<div class="totals-scrim${warn ? ' warn' : ''}" title="Takeoff rule: ff sq ft × layers = sq ft; a roll is 300 ft × 3.3 ft = 990 sq ft; lin ft = sq ft ÷ 3.3">${esc(text)}</div>`;
+    return `<div class="totals-scrim${warn ? ' warn' : ''}" title="${esc(detail || '')}">${esc(text)}</div>`;
 }
 function renderTotals(entries, castingId = null) {
     entries = entries.filter(e => e.plan?.batches?.length && e.log);
