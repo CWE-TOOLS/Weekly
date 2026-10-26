@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="src/styles/base.css">
     <link rel="stylesheet" href="src/styles/buttons.css">
     <link rel="stylesheet" href="src/styles/finishing-map.css?v=20261026-4">
-    <link rel="stylesheet" href="src/styles/project-map.css?v=20261026-2">
+    <link rel="stylesheet" href="src/styles/project-map.css?v=20261027-1">
 </head>
 <body class="pm-body">
     <div id="fm-app" class="fm-app pm-app">
@@ -37,6 +37,7 @@
                 <span class="pm-when-label" id="pm-when-label"></span>
                 <button type="button" class="fm-nav-btn pm-arrow" id="pm-next" title="Later">&rsaquo;</button>
                 <button type="button" class="fm-nav-btn" id="pm-today">Today</button>
+                <button type="button" class="pm-view-btn pm-dummy-toggle" id="pm-dummy-btn" title="What-if planning for the DOP: drag cards to other days, save as a named dummy">Dummy mode</button>
             </div>
             <div class="fm-header-right">
                 <span class="pm-sub" id="pm-sub"></span>
@@ -56,6 +57,22 @@
 
         <div id="fm-notice" class="fm-notice" hidden></div>
         <div id="pm-hidden" class="pm-hidden" hidden></div>
+        <div id="pm-dummy-bar" class="pm-dummy-bar" hidden>
+            <span class="pm-dummy-tag">DUMMY</span>
+            <b id="pm-dummy-name"></b>
+            <span class="pm-dummy-state" id="pm-dummy-state"></span>
+            <label class="pm-dummy-chain"><input type="checkbox" id="pm-dummy-chain" checked> Move chain with it</label>
+            <span class="pm-dummy-actions">
+                <button type="button" class="fm-mini-btn" id="pm-dummy-undo">Undo</button>
+                <button type="button" class="fm-mini-btn" id="pm-dummy-clear">Clear moves</button>
+                <button type="button" class="fm-mini-btn fm-bulk-go" id="pm-dummy-save">Save</button>
+                <button type="button" class="fm-mini-btn" id="pm-dummy-saveas">Save as&hellip;</button>
+                <button type="button" class="fm-mini-btn" id="pm-dummy-open">Open&hellip;</button>
+                <button type="button" class="fm-mini-btn" id="pm-dummy-rename">Rename</button>
+                <button type="button" class="fm-mini-btn" id="pm-dummy-final">Mark final</button>
+                <button type="button" class="fm-mini-btn pm-dummy-exit" id="pm-dummy-exit">Exit dummy mode</button>
+            </span>
+        </div>
 
         <main class="pm-main" id="pm-map" aria-label="Departments">
             <!-- department columns are rendered from project-map-config.js -->
@@ -73,7 +90,7 @@
         </div>
     </div>
 
-    <script type="module" src="src/pages/project-map/project-map-page.js?v=20261026-1"></script>
+    <script type="module" src="src/pages/project-map/project-map-page.js?v=20261027-1"></script>
     <script type="module" src="src/utils/auto-update.js?v=20261023-1"></script>
 </body>
 </html>
