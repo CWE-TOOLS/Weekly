@@ -6760,3 +6760,6 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
 .pp-opt-col-headerbar .pp-opt-ready { flex: 1 1 100%; width: auto; margin-top: 0; }
 .pp-opt-ready-blocked { opacity: .55; cursor: not-allowed; border-style: dashed; }
 .pp-opt-ready-locked { font-size: 12px; font-weight: 700; color: #92400e; background: #fef3c7; border-radius: 6px; padding: 3px 8px; }
+.pp-opt-legacy-band { margin-top: 6px; padding: 8px 10px; border-radius: 8px; background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; font-size: 13px; line-height: 1.4; }
+.pp-opt-legacy-off { margin-left: 8px; font-size: 12px; padding: 2px 8px; border: 1px solid #6ee7b7; border-radius: 6px; background: #fff; color: #065f46; cursor: pointer; }
+.pp-opt-legacy-off:hover { background: #d1fae5; }

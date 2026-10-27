@@ -85,7 +85,8 @@ export function teamOfDepartment(name) {
     if (n === 'seal') return 'Seal';
     if (n === 'crating' || n === 'crate') return 'Crate';
     if (n === 'special' || n === 'spec') return 'Spec';
-    if (n === 'ship' || n === 'load' || n === 'shipping') return 'Ship';
+    if (n === 'load') return 'Crate';          // the weekly's "Load" department: LOAD is a Crate-team task (user's list 2026-10-20)
+    if (n === 'ship' || n === 'shipping') return 'Ship';
     return null;
 }
 /** The Staging tab's department name for each team (used when a team has no staging department yet). */

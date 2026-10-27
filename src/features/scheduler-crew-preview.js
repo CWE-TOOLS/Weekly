@@ -11,7 +11,7 @@
  */
 
 import { initializeSupabase, getSupabaseClient } from '../services/supabase-service.js';
-import { teamOfDepartment } from '../config/scheduler-config.js?v=20261023-2';
+import { teamOfDepartment } from '../config/scheduler-config.js?v=20261027-1';
 
 if (typeof window !== 'undefined' && window.__SCHEDULER_CREW_PREVIEW) {
     const index = new Map();            // project|cast|team|dayIdx -> names[]

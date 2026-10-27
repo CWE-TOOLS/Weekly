@@ -133,7 +133,7 @@ import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MA
 import { loadMilestonesForProject, saveMilestone, isMilestonesMigrationPending, loadLayoutConditions, LAYOUT_CONDITION_PREFIX, layoutConditionNote, parseLayoutCondition, sideWords } from '../../services/milestones-service.js';
 import { loadJigListsForProject as loadJigListsForScrim, scrimForInventory } from '../../services/jig-list-service.js';
 import { loadReadyFlags, setReadyFlag, loadSettingRows, setSettingRow } from '../../services/schedule-service.js?v=20261027-1';
-import { tasksForDepartment, teamOfDepartment, taskForPhase, STAGING_NAME_OF_TEAM, REVENUE_PER_HOUR } from '../../config/scheduler-config.js?v=20261023-2';
+import { tasksForDepartment, teamOfDepartment, taskForPhase, STAGING_NAME_OF_TEAM, REVENUE_PER_HOUR } from '../../config/scheduler-config.js?v=20261027-1';
 import {
     loadLayoutPositions,
     snapshotLayout,
@@ -3790,6 +3790,7 @@ let optReady = new Map();   // castingId -> { project_number, at }
 function optCastingHours(castingId) { const c = currentCastings.find(x => x.id === castingId); return c ? optHoursOf(c) : 0; }
 /** Why the castings cannot be marked ready yet: the budgets must add up to exactly the job's Optimizer hours (null = fine). */
 function optReadyBlocker() {
+    if (optLegacy) return null;   // imported from the Optimizer: the hours are already on the castings
     const hours = optJobHours();
     if (!hours) return 'Enter the project value first: the castings\' budgets must add up to the job\'s Optimizer hours before they can be marked ready.';
     const alloc = optAllocated(getCastingsForActivePhase());
@@ -3810,12 +3811,15 @@ function optReadyHtml(castingId) {
 // hours the job has; each casting gets a budget; the budgets must add up to exactly those hours.
 let optValueItems = [];          // [{ name, value }]
 let optBudgets = new Map();      // castingId -> hours
+let optLegacy = null;            // { source, months, imported_at } when the job's schedule came from the Optimizer sheets — no project value needed
 const optValueSaveTimers = new Map();
 async function loadOptValue() {
-    optValueItems = []; optBudgets = new Map();
+    optValueItems = []; optBudgets = new Map(); optLegacy = null;
     if (!currentProjectNumber) return;
     try {
-        const rows = await loadSettingRows([`value:${currentProjectNumber}`, ...currentCastings.map(c => `budget:${c.id}`)]);
+        const rows = await loadSettingRows([`value:${currentProjectNumber}`, `legacy:${currentProjectNumber}`, ...currentCastings.map(c => `budget:${c.id}`)]);
+        const lg = rows.get(`legacy:${currentProjectNumber}`);
+        optLegacy = lg && typeof lg === 'object' ? lg : null;
         const v = rows.get(`value:${currentProjectNumber}`);
         if (v && Array.isArray(v.items)) optValueItems = v.items.map(it => ({ name: String(it.name || ''), value: Number(it.value) || 0 }));
         for (const c of currentCastings) { const b = rows.get(`budget:${c.id}`); if (b != null && b !== '') optBudgets.set(c.id, Number(b) || 0); }
@@ -3832,6 +3836,13 @@ function renderOptValue() {
     const total = optTotalValue(), hours = optJobHours();
     const castings = getCastingsForActivePhase();
     const alloc = optAllocated(castings), left = Math.round((hours - alloc) * 10) / 10;
+    if (optLegacy) {
+        const months = Array.isArray(optLegacy.months) && optLegacy.months.length ? optLegacy.months.join(' / ') : 'the Optimizer';
+        box.innerHTML = `<div class="pp-opt-val-head"><strong>Project value &rarr; Optimizer hours</strong><span class="pp-opt-val-hint">legacy project</span></div>
+            <div class="pp-opt-legacy-band">&#128230; <strong>Legacy project</strong> &mdash; its schedule and hours were brought in from the ${escapeHtml(months)} Optimizer sheet${/\//.test(months) ? 's' : ''}. No project value is needed: the castings can be marked ready for scheduling as they are.
+            <button type="button" class="pp-opt-legacy-off" data-val-legacy-off title="Switch this job to the new way: enter its value, give every casting a budget">Enter a project value instead</button></div>`;
+        return;
+    }
     const rows = optValueItems.map((it, i) => `<div class="pp-opt-val-row"><input type="text" data-val-name="${i}" value="${escapeAttr(it.name)}" placeholder="${i === 0 ? 'Contract value' : 'Change order #' + i}"><span class="pp-opt-val-cur">$</span><input type="number" min="0" step="1" data-val-amount="${i}" value="${it.value ? escapeAttr(String(it.value)) : ''}" placeholder="0"><button type="button" class="pp-opt-val-del" data-val-del="${i}" title="Remove">&times;</button></div>`).join('');
     box.innerHTML = `<div class="pp-opt-val-head"><strong>Project value &rarr; Optimizer hours</strong><span class="pp-opt-val-hint">value &divide; $${REVENUE_PER_HOUR}/h</span></div>
         <div class="pp-opt-val-rows">${rows || '<div class="pp-opt-val-empty">No value entered yet.</div>'}</div>
@@ -8821,6 +8832,12 @@ function wireEvents() {
     });
     const optValue = document.getElementById('pp-opt-value');
     if (optValue) {
+        optValue.addEventListener('click', async (e) => {
+            if (!e.target.closest('[data-val-legacy-off]') || !currentProjectNumber) return;
+            if (!window.confirm('Switch this job to the project-value way? From then on the castings\' budgets must add up to the job\'s Optimizer hours before they can be marked ready.')) return;
+            try { await setSettingRow(`legacy:${currentProjectNumber}`, null); optLegacy = null; renderOptimizer(); showToast('Legacy flag removed — enter the project value.'); }
+            catch (err) { showToast('Could not save: ' + (err.message || err), 'error'); }
+        });
         optValue.addEventListener('input', (e) => {
             const n = e.target.closest('[data-val-name]'), a = e.target.closest('[data-val-amount]');
             if (n) optValueItems[Number(n.dataset.valName)].name = n.value;

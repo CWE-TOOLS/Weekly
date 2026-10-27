@@ -19,7 +19,7 @@ import {
 } from '../../services/schedule-service.js?v=20261027-1';
 import {
     DEPARTMENTS, DEPT_KEYS, TASKS, tasksForDept, taskForPhase, SETTINGS_DEFAULTS, REVENUE_PER_HOUR, SCHEDULABLE_STATUSES, TEAM_DAY_LIMITS, teamOfDepartment, DEFAULT_CREW
-} from '../../config/scheduler-config.js?v=20261023-2';
+} from '../../config/scheduler-config.js?v=20261027-1';
 import { logger } from '../../utils/logger.js';
 import { fetchForProject as fetchStagingNotes, fetchForProjects as fetchStagingForProjects, upsertOne as saveStagingNote } from '../../services/task-descriptions-service.js?v=20261022-2';
 
@@ -162,7 +162,7 @@ async function loadRows() {
 // per-casting helpers
 function phasesOf(castingId) { return (S.phasesByCasting.get(castingId) || []).slice().sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)); }
 /** The "unit" a scheduled row belongs to: a casting_phases id (previous task list) or 'unit:<cast>|<dept>|<day>' (a staged day). */
-function unitOf(r) { return r.phase_id || (String(r.note || '').startsWith('unit:') ? String(r.note).split(' ')[0] : null); }
+function unitOf(r) { const n = String(r.note || '').trim(); return r.phase_id || (n.startsWith('unit:') ? n.split(' — ')[0] : null); }
 /** A casting's staged days with hours (Staging tab task + Optimizer Hours per day), one unit each, in team order. */
 function stagedUnits(castingId) {
     const c = S.castingById.get(castingId);
