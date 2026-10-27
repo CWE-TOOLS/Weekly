@@ -105,7 +105,10 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<'
 async function loadBase() {
     const client = getSupabaseClient();
     const all = await loadAllProjects();
-    S.projects = all.filter(p => SCHEDULABLE_STATUSES.includes(p.status));
+    // a job with days on the scheduler stays visible whatever its status (a Shipped job's imported history still counts in the month's revenue)
+    let withRows = new Set();
+    try { const { data } = await client.from('plant_schedule').select('project_number'); withRows = new Set((data || []).map(r => r.project_number)); } catch (_) { /* table missing: handled by loadRows */ }
+    S.projects = all.filter(p => SCHEDULABLE_STATUSES.includes(p.status) || withRows.has(p.project_number));
     S.projectByNumber = new Map(S.projects.map(p => [p.project_number, p]));
     const nums = S.projects.map(p => p.project_number);
     S.castings = [];
