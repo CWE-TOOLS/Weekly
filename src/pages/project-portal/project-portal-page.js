@@ -3829,20 +3829,23 @@ function renderOptValue() {
     const castings = getCastingsForActivePhase();
     const alloc = optAllocated(castings), left = Math.round((hours - alloc) * 10) / 10;
     const rows = optValueItems.map((it, i) => `<div class="pp-opt-val-row"><input type="text" data-val-name="${i}" value="${escapeAttr(it.name)}" placeholder="${i === 0 ? 'Contract value' : 'Change order #' + i}"><span class="pp-opt-val-cur">$</span><input type="number" min="0" step="1" data-val-amount="${i}" value="${it.value ? escapeAttr(String(it.value)) : ''}" placeholder="0"><button type="button" class="pp-opt-val-del" data-val-del="${i}" title="Remove">&times;</button></div>`).join('');
-    const state = !hours ? '' : alloc > hours + 0.01 ? 'pp-opt-val-over' : alloc < hours - 0.01 ? 'pp-opt-val-under' : 'pp-opt-val-ok';
-    const msg = !hours ? 'Enter the project value to get the hours.' : alloc > hours + 0.01 ? `Over by ${fmtHrs(alloc - hours)} h — lower a casting's budget.` : alloc < hours - 0.01 ? `${fmtHrs(left)} h still to put on castings.` : 'Every hour is on a casting.';
     box.innerHTML = `<div class="pp-opt-val-head"><strong>Project value &rarr; Optimizer hours</strong><span class="pp-opt-val-hint">value &divide; $${REVENUE_PER_HOUR}/h</span></div>
         <div class="pp-opt-val-rows">${rows || '<div class="pp-opt-val-empty">No value entered yet.</div>'}</div>
         <button type="button" class="pp-opt-val-add" data-val-add>+ Add value (change order, extra)</button>
-        <div class="pp-opt-val-totals"><span>Total value <strong>${money0(total)}</strong></span><span>Optimizer hours <strong>${fmtHrs(hours)} h</strong></span><span class="pp-opt-val-alloc ${state}">On castings <strong>${fmtHrs(alloc)} h</strong> · ${escapeHtml(msg)}</span></div>`;
+        ${optValueTotalsHtml()}`;
+}
+function optValueTotalsHtml() {
+    const total = optTotalValue(), hours = optJobHours();
+    const alloc = optAllocated(getCastingsForActivePhase()), left = Math.round((hours - alloc) * 10) / 10;
+    const state = !hours ? '' : alloc > hours + 0.01 ? 'pp-opt-val-over' : alloc < hours - 0.01 ? 'pp-opt-val-under' : 'pp-opt-val-ok';
+    const msg = !hours ? 'Enter the project value to get the hours.' : alloc > hours + 0.01 ? `Over by ${fmtHrs(alloc - hours)} h — lower a casting's budget.` : alloc < hours - 0.01 ? `${fmtHrs(left)} h still to put on castings.` : 'Every hour is on a casting.';
+    return `<div class="pp-opt-val-totals"><span>Total value <strong>${money0(total)}</strong></span><span>Optimizer hours <strong>${fmtHrs(hours)} h</strong></span><span class="pp-opt-val-alloc ${state}">On castings <strong>${fmtHrs(alloc)} h</strong> · ${escapeHtml(msg)}</span></div>`;
 }
 /** Re-draw only the totals line while a PM is typing a value (keeps the caret in the box). */
 function renderOptValueTotalsOnly() {
-    const box = document.getElementById('pp-opt-value'); if (!box) return;
-    const tmp = document.createElement('div'); const keep = box.innerHTML; renderOptValue(); tmp.innerHTML = box.innerHTML; box.innerHTML = keep;
-    const fresh = tmp.querySelector('.pp-opt-val-totals'), cur = box.querySelector('.pp-opt-val-totals');
-    if (fresh && cur) cur.replaceWith(fresh);
-    document.querySelectorAll('#pp-opt-columns .pp-opt-budget').forEach(el => { const id = el.querySelector('input')?.dataset.castingId; if (id) el.outerHTML = optBudgetHtml(id); });
+    const cur = document.querySelector('#pp-opt-value .pp-opt-val-totals');
+    if (cur) cur.outerHTML = optValueTotalsHtml();   // only the totals line — the box being typed in is left alone
+    document.querySelectorAll('#pp-opt-columns .pp-opt-budget').forEach(el => { const id = el.querySelector('input')?.dataset.castingId; if (id && document.activeElement !== el.querySelector('input')) el.outerHTML = optBudgetHtml(id); });
 }
 function fmtHrs(n) { const v = Math.round((Number(n) || 0) * 10) / 10; return Number.isInteger(v) ? String(v) : v.toFixed(1); }
 function scheduleOptValueSave() {
@@ -4087,8 +4090,8 @@ function renderOptColumn(casting) {
                 </div>
                 ${optMsCellHtml(casting.id)}
                 ${optReadyHtml(casting.id)}
-                ${optBudgetHtml(casting.id)}
             </div>
+            ${optBudgetHtml(casting.id)}
             <div class="pp-opt-staged" data-casting-id="${escapeAttr(casting.id)}">${renderOptStagedGrid(casting)}</div>
             ${phases.some(p => Number(p.hours) > 0) && optStagedHours(String(casting.casting_number || '')) <= 0 ? `<button type="button" class="pp-opt-pull" data-action="pull-legacy" data-casting-id="${escapeAttr(casting.id)}" title="Put the previous task list's hours onto this casting's staged days, team by team">&#8681; Pull hours from the previous task list</button>` : ''}
             ${phases.length ? `<details class="pp-opt-legacy"><summary>Previous task list (${phases.length} task${phases.length === 1 ? '' : 's'} · ${phases.reduce((s, p) => s + (typeof p.hours === 'number' ? p.hours : 0), 0)} hrs) — read only</summary>

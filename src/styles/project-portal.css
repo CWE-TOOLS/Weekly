@@ -6748,11 +6748,11 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
 .pp-opt-val-ok { background: #dcfce7; color: #14532d; }
 .pp-opt-val-under { background: #fef3c7; color: #92400e; }
 .pp-opt-val-over { background: #fee2e2; color: #991b1b; font-weight: 700; }
-.pp-opt-budget { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 12px; }
+.pp-opt-budget { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 6px 0 4px; padding: 6px 8px; font-size: 12px; background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 8px; }
 .pp-opt-budget-label { font-weight: 700; color: #3730a3; }
 .pp-opt-budget input { width: 64px; padding: 4px 6px; border: 1px solid #c7d2fe; border-radius: 6px; font-size: 13px; font-weight: 700; }
 .pp-opt-budget-entered { color: #6b7280; margin-left: auto; }
-.pp-opt-budget-over { background: #fee2e2; border-radius: 6px; padding: 2px 6px; }
+.pp-opt-budget-over { background: #fee2e2; border-color: #fca5a5; }
 .pp-opt-budget-over .pp-opt-budget-entered { color: #991b1b; font-weight: 700; }
 .pp-opt-stg-row-pct { grid-template-columns: 52px 1fr 70px 70px auto; }
 .pp-opt-pct { display: inline-flex; align-items: center; gap: 2px; font-size: 12px; color: #3730a3; font-weight: 700; }
