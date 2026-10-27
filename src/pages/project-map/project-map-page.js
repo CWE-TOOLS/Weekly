@@ -11,7 +11,8 @@
  * Loads (2026-10-27): a line that is one clear day (a Week day band, the column title in Day view) shows the finished-face
  * sq ft of its jobs (rounded up), green under SQFT_WARN, orange to SQFT_OVER, red from there; lines that span several days
  * (Month week bands, column titles in Week/Month views) show none — the user wants the load per day only.
- * Cast with more than CAST_PER_DAY_LIMIT castings on one day gets a red count and the words POTENTIAL RISK on every line.
+ * Cast with more than CAST_PER_DAY_LIMIT castings on one day gets a red count and the words POTENTIAL RISK on every band
+ * head and pop-up heading; the column title carries it only in Day view (user, 2026-10-27: not on the department otherwise).
  */
 import { fetchAllTasks } from '../../services/data-service.js';
 import { loadAllProjects } from '../../services/projects-service.js';
@@ -229,8 +230,8 @@ function castOverload(col, list) {
 }
 const overloadTitle = (ov) => `${ov.n} castings in Cast on ${fmtShort(ov.date)} — more than ${CAST_PER_DAY_LIMIT} a day`;
 /** Fill a count span in place: red with the words POTENTIAL RISK before it when Cast is over the day limit. */
-function fillCount(el, col, list) {
-    const ov = castOverload(col, list);
+function fillCount(el, col, list, warn = true) {
+    const ov = warn ? castOverload(col, list) : null;
     el.textContent = list.length ? String(list.length) : '';
     el.classList.toggle('pm-cast-over', !!ov);
     el.title = ov ? overloadTitle(ov) : '';
@@ -362,7 +363,7 @@ function renderMap() {
         onFloor += total;
         const all = sections.flat();
         const n = map.querySelector(`[data-count="${CSS.escape(col)}"]`);
-        if (n) { fillCount(n, col, all); n.textContent = String(total); }
+        if (n) { fillCount(n, col, all, S.view === 'day'); n.textContent = String(total); }
         const sq = map.querySelector(`[data-colsq="${CSS.escape(col)}"]`);
         if (sq) fillSqft(sq, all, 'pm-head-sq', S.view === 'day');
     }
