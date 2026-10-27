@@ -298,3 +298,6 @@ table.sc-grid { border-collapse: separate; border-spacing: 0; table-layout: fixe
 .sc-grid thead tr:nth-child(3) th { height: 36px; font-size: 22px; font-weight: 800; color: #000; line-height: 1; }
 .sc-grid thead tr:nth-child(3) th.sc-label { font-size: 14px; }
 .sc-grid thead tr:nth-child(4) th { top: 98px; }
+/* the dates stay black on over-limit, weekend, holiday and today columns too (the alert row above carries the warning) */
+.sc-grid thead tr:nth-child(3) th.sc-day, .sc-grid thead tr:nth-child(3) th.sc-day.sc-day-over, .sc-grid thead tr:nth-child(3) th.sc-day.sc-today,
+.sc-grid thead tr:nth-child(3) th.sc-day.sc-weekend, .sc-grid thead tr:nth-child(3) th.sc-day.sc-holiday { color: #000; }
