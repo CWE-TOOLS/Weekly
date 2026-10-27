@@ -293,3 +293,8 @@ table.sc-grid { border-collapse: separate; border-spacing: 0; table-layout: fixe
 .sc-grid td.sc-label[style*="--pc"] { background: hsl(var(--pc) 70% 91%); border-left: 8px solid hsl(var(--pc) 65% 45%); }
 .sc-grid tr.sc-project td.sc-label[style*="--pc"] { background: hsl(var(--pc) 70% 82%); }
 .sc-grid td.sc-label[style*="--pc"]:hover { background: hsl(var(--pc) 70% 85%); }
+
+/* 2026-10-27 (user): the day dates as big as the alert row, in black; the day row grows and the team row moves down with it */
+.sc-grid thead tr:nth-child(3) th { height: 36px; font-size: 22px; font-weight: 800; color: #000; line-height: 1; }
+.sc-grid thead tr:nth-child(3) th.sc-label { font-size: 14px; }
+.sc-grid thead tr:nth-child(4) th { top: 98px; }
