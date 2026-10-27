@@ -271,3 +271,13 @@ table.sc-grid { border-collapse: separate; border-spacing: 0; table-layout: fixe
     .sc-grid-wrap { overflow: visible; }
     .sc-grid th, .sc-grid td { position: static !important; }
 }
+
+/* 2026-10-27 (user): the Job · Casting column enlarged and every row 1.75× taller (190→333 px; cast rows 20→35 px, project rows 24→42 px) */
+.sc-grid th.sc-label, .sc-grid td.sc-label { width: 333px; min-width: 333px; max-width: 333px; font-size: 14px; padding: 0 10px; }
+.sc-grid td.sc-cell { height: 35px; }
+.sc-grid tr.sc-project td { height: 42px; font-size: 14px; }
+.sc-castnum { font-size: 15px; }
+.sc-castdate { font-size: 12px; }
+.sc-castinv { font-size: 12px; }
+.sc-grid td.sc-cell.sc-has .sc-task { font-size: 12px; }
+.sc-grid td.sc-cell.sc-has .sc-h { font-size: 14px; }
