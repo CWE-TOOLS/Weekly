@@ -389,7 +389,7 @@ function sheetOrderFrom(saved) {
 function inSheetOrder(list) {
     const order = S.sheetOrder[String(S.from).slice(0, 7)];
     if (!order || !order.length) return list;
-    const pos = new Map(order.map((k, i) => [k, i]));
+    const pos = new Map(); order.forEach((k, i) => { if (!pos.has(k)) pos.set(k, i); });   // a casting listed twice on the sheet sits where it first appears
     return list.map((c, i) => ({ c, i, p: pos.has(`${c.project_number}|${c.casting_number}`) ? pos.get(`${c.project_number}|${c.casting_number}`) : order.length + i }))
                .sort((a, b) => a.p - b.p || a.i - b.i).map(x => x.c);
 }
