@@ -3924,6 +3924,13 @@ async function handleCastingBudget(castingId, raw) {
         return;
     }
     if (val == null) optBudgets.delete(castingId); else optBudgets.set(castingId, val);
+    // redraw this column's days (the % boxes appear/disappear with the budget) and its percent line, not the budget box itself
+    const cc = currentCastings.find(x => x.id === castingId);
+    const wrap = document.querySelector(`.pp-opt-staged[data-casting-id="${CSS.escape(castingId)}"]`);
+    if (wrap && cc) wrap.innerHTML = renderOptStagedGrid(cc);
+    const line = document.querySelector(`.pp-opt-col[data-casting-id="${CSS.escape(castingId)}"] .pp-opt-pct-line`);
+    if (line) { if (val == null) line.remove(); else line.outerHTML = optPctLineHtml(castingId); }
+    else if (val != null) document.querySelector(`.pp-opt-col[data-casting-id="${CSS.escape(castingId)}"] .pp-opt-budget`)?.insertAdjacentHTML('afterend', optPctLineHtml(castingId));
     const c = currentCastings.find(x => x.id === castingId);
     if (c && optPcts.get(castingId)) {
         const hours = optHoursFromPcts(c) || new Map();
@@ -4082,7 +4089,7 @@ function renderOptColumn(casting) {
                 ${optReadyHtml(casting.id)}
                 ${optBudgetHtml(casting.id)}
             </div>
-            ${renderOptStagedGrid(casting)}
+            <div class="pp-opt-staged" data-casting-id="${escapeAttr(casting.id)}">${renderOptStagedGrid(casting)}</div>
             ${phases.some(p => Number(p.hours) > 0) && optStagedHours(String(casting.casting_number || '')) <= 0 ? `<button type="button" class="pp-opt-pull" data-action="pull-legacy" data-casting-id="${escapeAttr(casting.id)}" title="Put the previous task list's hours onto this casting's staged days, team by team">&#8681; Pull hours from the previous task list</button>` : ''}
             ${phases.length ? `<details class="pp-opt-legacy"><summary>Previous task list (${phases.length} task${phases.length === 1 ? '' : 's'} · ${phases.reduce((s, p) => s + (typeof p.hours === 'number' ? p.hours : 0), 0)} hrs) — read only</summary>
             <div class="pp-opt-cards pp-opt-cards-legacy" data-casting-id="${escapeAttr(casting.id)}">
