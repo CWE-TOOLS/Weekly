@@ -128,7 +128,7 @@ import {
 import { renderCastingLayout } from './casting-layout.js?v=20261023-2';
 import { attachLayoutDrag } from './casting-layout-drag.js?v=20260701-01';
 import { activateJigListTab } from './jig-list.js?v=20261026-1';
-import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, APPROVALS_TAB_ITEMS } from '../../config/milestones-config.js?v=20261020-2';
+import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, APPROVALS_TAB_ITEMS } from '../../config/milestones-config.js?v=20261027-1';
 import { loadMilestonesForProject, saveMilestone, isMilestonesMigrationPending, loadLayoutConditions, LAYOUT_CONDITION_PREFIX, layoutConditionNote, parseLayoutCondition, sideWords } from '../../services/milestones-service.js';
 import { loadJigListsForProject as loadJigListsForScrim, scrimForInventory } from '../../services/jig-list-service.js';
 import {
@@ -4225,7 +4225,8 @@ function stampPrinted(castingIds, milestone) {
     if (!msOn()) return;
     for (const id of (castingIds || []).filter(Boolean)) {
         const final = !CI_DEPENDENT.includes(milestone) || ciFinal(id);
-        msSet(id, milestone, final ? MS.GREEN : MS.ORANGE, { note: final ? null : 'Printed before Casting Inventory was final', stamp: true });
+        // A print made through the hold remembers the inventory it saw (2026-10-27): "Casting Inventory ready" settles it.
+        msSet(id, milestone, final ? MS.GREEN : MS.ORANGE, { note: final ? null : withInvMark(EARLY_PRINT_NOTE, invEarlyMarks(id, milestone)), stamp: true });
     }
 }
 function msFlushPendingStamp() { const p = msPendingStamp; msPendingStamp = null; if (p) stampPrinted(p.ids, p.milestone); }
@@ -4344,6 +4345,40 @@ function invBaselines(castingId) {
     return out;
 }
 function withInvMark(note, marks) { return `${note || ''} [inv:${marks}]`; }
+// ---- Prints made before the inventory was final (2026-10-27): the gated print stores its own fingerprint on its
+// milestone row. When engineering presses "Casting Inventory ready", a print whose fields are still as printed turns
+// green (its stamp stays); one whose fields moved stays orange and says so. Prints stamped before this existed carry
+// no marker and stay orange until printed again.
+const EARLY_PRINT_NOTE = 'Printed before Casting Inventory was final';
+const EARLY_CHANGED_NOTE = 'Printed before Casting Inventory was final and the inventory changed since — print it again';
+/** Marker body for one early print: its own fingerprint, plus the colour set for the batch tickets. */
+function invEarlyMarks(castingId, milestone) {
+    let m = (INV_MARK_KEYS[milestone] || 'x') + '=' + invFingerprint(castingId, milestone);
+    if (milestone === 'Batching Sheets') m += ';bc=' + invColourFingerprint(castingId);
+    return m;
+}
+/** Settle the early prints of a casting against the inventory as it is now: { same: [...], changed: [...] }. */
+function ciEarlyPrintsSettle(castingId) {
+    const same = [], changed = [];
+    for (const m of CI_DEPENDENT) {
+        const r = msRow(castingId, m);
+        if (!r || r.status !== MS.ORANGE || msNote(r) !== EARLY_PRINT_NOTE) continue;
+        const mk = String(r.note || '').match(INV_MARK_RE);
+        if (!mk) continue;   // an early print from before the marker existed: nothing to compare with
+        const parts = Object.fromEntries(mk[1].split(';').map(p => p.split('=')));
+        const key = INV_MARK_KEYS[m];
+        const asPrinted = !!parts[key] && parts[key] === invFingerprint(castingId, m)
+            && (m !== 'Batching Sheets' || (!!parts.bc && parts.bc === invColourFingerprint(castingId)));
+        if (asPrinted) { msSet(castingId, m, MS.GREEN, { note: null }); same.push(m); }
+        else { msSet(castingId, m, MS.ORANGE, { note: EARLY_CHANGED_NOTE }); changed.push(m); }
+    }
+    return { same, changed };
+}
+function ciEarlyPrintsReport(castingId, { same, changed }) {
+    const name = msCastName(castingId);
+    if (same.length) showToast(`${name}: printed before the inventory was final and still as printed — ${same.join(', ')} now green.`, 'success', 10000);
+    if (changed.length) showToast(`${name}: the inventory changed after these were printed — print them again: ${changed.join(', ')}.`, 'warning', 12000);
+}
 /** The marker body already stored on the Casting Inventory row (kept as-is through an unlock). */
 function invMarks0(castingId) { const m = String(msRow(castingId, 'Casting Inventory')?.note || '').match(INV_MARK_RE); return m ? m[1] : ''; }
 
@@ -4413,9 +4448,11 @@ async function ciPmReady(castingId) {
 async function ciAdvance(castingId) {
     if (ciStatus(castingId) !== MS.ORANGE) return;   // nothing entered yet, or already ready
     const reprint = await ciBatchReprintCheck(castingId);   // against the as-printed marks, before the new ones replace them
+    const early = ciEarlyPrintsSettle(castingId);           // prints made through the hold: as printed → green, moved → stays orange
     await msSet(castingId, 'Casting Inventory', MS.GREEN, { locked: true, note: withInvMark(CI_READY_NOTE, invMarks(castingId)), stamp: true });
     invEdits.clear();
     ciBatchReprintReport(castingId, reprint);
+    ciEarlyPrintsReport(castingId, early);
     renderCastings();
 }
 /** Batch tickets printed from this inventory went orange because of the edits: do their numbers really change?
