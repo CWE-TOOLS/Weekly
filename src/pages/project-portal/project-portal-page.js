@@ -129,7 +129,7 @@ import {
 import { renderCastingLayout } from './casting-layout.js?v=20261023-2';
 import { attachLayoutDrag } from './casting-layout-drag.js?v=20260701-01';
 import { activateJigListTab } from './jig-list.js?v=20261026-1';
-import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, APPROVALS_TAB_ITEMS } from '../../config/milestones-config.js?v=20261020-2';
+import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, APPROVALS_TAB_ITEMS } from '../../config/milestones-config.js?v=20261027-2';
 import { loadMilestonesForProject, saveMilestone, isMilestonesMigrationPending, loadLayoutConditions, LAYOUT_CONDITION_PREFIX, layoutConditionNote, parseLayoutCondition, sideWords } from '../../services/milestones-service.js';
 import { loadJigListsForProject as loadJigListsForScrim, scrimForInventory } from '../../services/jig-list-service.js';
 import { loadReadyFlags, setReadyFlag, loadSettingRows, setSettingRow } from '../../services/schedule-service.js?v=20261027-1';
@@ -831,14 +831,14 @@ function setActiveTab(tab) {
             if (tab === 'batch-tickets') printBtn.textContent = 'Print Batch Tickets';
             else if (tab === 'color-log') printBtn.textContent = 'Print Color Log';
             else if (tab === 'optimizer') printBtn.textContent = 'Print Optimizer';
-            else if (tab === 'info') printBtn.textContent = 'Print Cover';
+            else if (tab === 'info') printBtn.textContent = 'Print INITIAL Cover';   // was "Print Cover" (renamed 2026-10-27)
             else printBtn.textContent = 'Print';
         }
     }
-    // Print Label (folder labels) lives beside Print Cover — Info tab only.
+    // Print Label (folder labels) lives beside Print INITIAL Cover — Info tab only.
     const printLabelBtn = document.getElementById('pp-print-label-btn');
     if (printLabelBtn) printLabelBtn.hidden = (tab !== 'info');
-    // Print Shop Folder Cover (QC sticker cover) — Info tab only.
+    // Print FINAL Cover (QC sticker cover; was "Print Shop Folder Cover") — Info tab only.
     const printShopFolderBtn = document.getElementById('pp-print-shop-folder-btn');
     if (printShopFolderBtn) printShopFolderBtn.hidden = (tab !== 'info');
 
@@ -4579,7 +4579,8 @@ function stampPrinted(castingIds, milestone) {
     if (!msOn()) return;
     for (const id of (castingIds || []).filter(Boolean)) {
         const final = !CI_DEPENDENT.includes(milestone) || ciFinal(id);
-        msSet(id, milestone, final ? MS.GREEN : MS.ORANGE, { note: final ? null : 'Printed before Casting Inventory was final', stamp: true });
+        // A print made through the hold remembers the inventory it saw (2026-10-27): "Casting Inventory ready" settles it.
+        msSet(id, milestone, final ? MS.GREEN : MS.ORANGE, { note: final ? null : withInvMark(EARLY_PRINT_NOTE, invEarlyMarks(id, milestone)), stamp: true });
     }
 }
 function msFlushPendingStamp() { const p = msPendingStamp; msPendingStamp = null; if (p) stampPrinted(p.ids, p.milestone); }
@@ -4698,6 +4699,40 @@ function invBaselines(castingId) {
     return out;
 }
 function withInvMark(note, marks) { return `${note || ''} [inv:${marks}]`; }
+// ---- Prints made before the inventory was final (2026-10-27): the gated print stores its own fingerprint on its
+// milestone row. When engineering presses "Casting Inventory ready", a print whose fields are still as printed turns
+// green (its stamp stays); one whose fields moved stays orange and says so. Prints stamped before this existed carry
+// no marker and stay orange until printed again.
+const EARLY_PRINT_NOTE = 'Printed before Casting Inventory was final';
+const EARLY_CHANGED_NOTE = 'Printed before Casting Inventory was final and the inventory changed since — print it again';
+/** Marker body for one early print: its own fingerprint, plus the colour set for the batch tickets. */
+function invEarlyMarks(castingId, milestone) {
+    let m = (INV_MARK_KEYS[milestone] || 'x') + '=' + invFingerprint(castingId, milestone);
+    if (milestone === 'Batching Sheets') m += ';bc=' + invColourFingerprint(castingId);
+    return m;
+}
+/** Settle the early prints of a casting against the inventory as it is now: { same: [...], changed: [...] }. */
+function ciEarlyPrintsSettle(castingId) {
+    const same = [], changed = [];
+    for (const m of CI_DEPENDENT) {
+        const r = msRow(castingId, m);
+        if (!r || r.status !== MS.ORANGE || msNote(r) !== EARLY_PRINT_NOTE) continue;
+        const mk = String(r.note || '').match(INV_MARK_RE);
+        if (!mk) continue;   // an early print from before the marker existed: nothing to compare with
+        const parts = Object.fromEntries(mk[1].split(';').map(p => p.split('=')));
+        const key = INV_MARK_KEYS[m];
+        const asPrinted = !!parts[key] && parts[key] === invFingerprint(castingId, m)
+            && (m !== 'Batching Sheets' || (!!parts.bc && parts.bc === invColourFingerprint(castingId)));
+        if (asPrinted) { msSet(castingId, m, MS.GREEN, { note: null }); same.push(m); }
+        else { msSet(castingId, m, MS.ORANGE, { note: EARLY_CHANGED_NOTE }); changed.push(m); }
+    }
+    return { same, changed };
+}
+function ciEarlyPrintsReport(castingId, { same, changed }) {
+    const name = msCastName(castingId);
+    if (same.length) showToast(`${name}: printed before the inventory was final and still as printed — ${same.join(', ')} now green.`, 'success', 10000);
+    if (changed.length) showToast(`${name}: the inventory changed after these were printed — print them again: ${changed.join(', ')}.`, 'warning', 12000);
+}
 /** The marker body already stored on the Casting Inventory row (kept as-is through an unlock). */
 function invMarks0(castingId) { const m = String(msRow(castingId, 'Casting Inventory')?.note || '').match(INV_MARK_RE); return m ? m[1] : ''; }
 
@@ -4767,9 +4802,11 @@ async function ciPmReady(castingId) {
 async function ciAdvance(castingId) {
     if (ciStatus(castingId) !== MS.ORANGE) return;   // nothing entered yet, or already ready
     const reprint = await ciBatchReprintCheck(castingId);   // against the as-printed marks, before the new ones replace them
+    const early = ciEarlyPrintsSettle(castingId);           // prints made through the hold: as printed → green, moved → stays orange
     await msSet(castingId, 'Casting Inventory', MS.GREEN, { locked: true, note: withInvMark(CI_READY_NOTE, invMarks(castingId)), stamp: true });
     invEdits.clear();
     ciBatchReprintReport(castingId, reprint);
+    ciEarlyPrintsReport(castingId, early);
     renderCastings();
 }
 /** Batch tickets printed from this inventory went orange because of the edits: do their numbers really change?
@@ -4991,9 +5028,9 @@ async function handleLayoutConditionPick(castingId, value) {
     updateMsFloat();
     showToast(`Cast ${currentCastings.find(c => c.id === castingId)?.casting_number || ''}: Casting Layout green — special condition "${name}" on Side ${sideWords(side)}.`);
 }
-/** One column for many castings: "Shop Folder Cover: ● Cast 1  ● Cast 2 …" */
-function msListChips(castings, milestone) {
-    return `<div class="pp-ms-cast">${escapeHtml(milestone)}</div>` + castings.map(c => {
+/** One column for many castings: "Final Shop Folder Cover: ● Cast 1  ● Cast 2 …" (label = what the board calls it) */
+function msListChips(castings, milestone, label = milestone) {
+    return `<div class="pp-ms-cast">${escapeHtml(label)}</div>` + castings.map(c => {
         const r = msRow(c.id, milestone), when = msWhen(r);
         const tip = `${milestone}: ${r?.status || 'red'}${msNote(r) ? ' — ' + msNote(r) : ''}${when ? ' (since ' + when + ')' : ''}`;
         return `<span class="pp-ms-line" title="${escapeAttr(tip)}">${msDot(r?.status || MS.RED)}<span class="pp-ms-label">${escapeHtml(msCastName(c.id))}</span></span>`;
@@ -5029,7 +5066,7 @@ function updateMsFloat() {
             case 'optimizer': if (currentOptCastingId) html = msCastHead(currentOptCastingId) + msLine(currentOptCastingId, 'Final Optimizer HRS'); break;
             case 'staging': if (currentStagingCastingId) html = msCastHead(currentStagingCastingId) + msLine(currentStagingCastingId, 'Staging'); break;
             case 'color-log': html = msListChips(scoped, 'Color Log'); break;
-            case 'info': html = msListChips(scoped, 'Shop Folder Cover'); break;
+            case 'info': html = msListChips(scoped, 'Shop Folder Cover', 'Final Shop Folder Cover'); break;
             default: html = '';
         }
     }
@@ -8474,7 +8511,7 @@ function wireEvents() {
         openPrintLabelModal();
     });
 
-    // Print Shop Folder Cover (QC sticker cover) — Info tab.
+    // Print FINAL Cover (QC sticker cover; was "Print Shop Folder Cover") — Info tab.
     document.getElementById('pp-print-shop-folder-btn')?.addEventListener('click', (e) => {
         e.preventDefault();
         handlePrintShopFolderCover();
@@ -12907,10 +12944,10 @@ function handlePrintCoverPage() {
         showToast('Save the project first', 'error');
         return;
     }
-    // Step 1 of the shop folder: the cover. "Shop Folder Cover" goes orange for the castings in view
-    // (green comes with step 2, Print Shop Folder Cover). Never downgrades a green.
+    // Step 1 of the shop folder: the INITIAL cover. "Shop Folder Cover" goes orange for the castings in view
+    // (green comes with step 2, Print FINAL Cover). Never downgrades a green.
     const coverCastings = getCastingsForActivePhase().map(c => c.id);
-    for (const id of coverCastings) markWorking(id, 'Shop Folder Cover', 'Cover printed — shop folder cover still to print');
+    for (const id of coverCastings) markWorking(id, 'Shop Folder Cover', 'INITIAL cover printed — FINAL cover still to print');
     msArmStamp(coverCastings, 'Shop Folder Built');   // a printed cover goes on a physical folder: Shop Folder Built
     const fields = readCoverFields();
     const html = buildCoverPrintHtml(fields);
@@ -12957,7 +12994,7 @@ function handlePrintCoverPage() {
     doc.close();
 }
 
-// ---------- Print Shop Folder Cover (QC sticker cover) ----------
+// ---------- Print FINAL Cover (QC sticker cover; the button was "Print Shop Folder Cover" until 2026-10-27) ----------
 // Letter portrait. Same header as the project cover, then a grid of 1"
 // circles — one per active tracking-sheet column — for placing 1" round QC
 // stickers. Each circle is labelled "Post <column>" (e.g. Post Mill), in the
@@ -13145,8 +13182,8 @@ async function handlePrintShopFolderCover() {
     let ids = [];
     if (scoped.length) {
         ids = await openCastingPicker({
-            title: 'Print Shop Folder Cover',
-            hint: 'One cover prints per ticked casting. Those castings\' "Shop Folder Cover" turns green on the Releasability Board.',
+            title: 'Print FINAL Cover',
+            hint: 'One cover prints per ticked casting. Those castings\' "Final Shop Folder Cover" turns green on the Releasability Board.',
             rows: scoped.map(c => ({ id: c.id, label: formatStickerCasting(c.casting_number), sub: (c.description || '').trim(), checked: msStatus(c.id, 'Shop Folder Cover') !== MS.GREEN || !msOn() })),
             confirmLabel: 'Print covers'
         });
@@ -13165,7 +13202,7 @@ async function handlePrintShopFolderCover() {
         html = html.slice(0, a) + Array.from({ length: copies }, (_, i) => `<div style="${i < copies - 1 ? 'page-break-after:always' : ''}">${inner}</div>`).join('') + html.slice(b);
     }
     msArmStamp(ids, 'Shop Folder Cover');
-    printHtmlInIframe(html, 'pp-shop-folder-print-frame', 'print shop folder cover');
+    printHtmlInIframe(html, 'pp-shop-folder-print-frame', 'print final cover');
     showToast(`Printing ${copies} cover${copies === 1 ? '' : 's'}.`);
 }
 

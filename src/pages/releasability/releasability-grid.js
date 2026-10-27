@@ -8,7 +8,7 @@
  */
 
 import { getMonday, getWeekMonth, getWeekOfMonth } from '../../utils/date-utils.js';
-import { TRACKING_ITEMS, TRACKING_ITEM_LABELS, STATUS, STATUS_DISPLAY } from '../../config/releasability-config.js?v=20260807-2';
+import { TRACKING_ITEMS, TRACKING_ITEM_LABELS, STATUS, STATUS_DISPLAY } from '../../config/releasability-config.js?v=20261027-1';
 import { isWeekCollapsed } from './releasability-state.js';
 import { AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, BOARD_TAG_OVERRIDE, MS_TO_BOARD, milestonesApply, MILESTONE_HOW } from '../../config/milestones-config.js';
 
