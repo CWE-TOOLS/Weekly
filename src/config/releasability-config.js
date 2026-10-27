@@ -100,6 +100,7 @@ export const TRACKING_ITEMS = [
  * change what the column shows here instead.
  */
 export const TRACKING_ITEM_LABELS = {
+  'Shop Folder Cover': 'Final Shop Folder Cover',   // matches the portal's Print FINAL Cover button (2026-10-27)
   'Jig List': 'Jig List / Cross-Section',
   'Inflow Sales Ticket': 'Inflow Sales Quote',
   'Casting Layout': 'Casting Layout/Instructions'
@@ -130,7 +131,7 @@ export const TRACKING_ITEM_ABBREVIATIONS = {
   'Toolpath Program': 'Toolpath',
   'Mill 3D Staging': '3D Staging',
   'Casting Inventory': 'Cast Inv',
-  'Shop Folder Cover': 'Folder Cover',
+  'Shop Folder Cover': 'Final Cover',
   'Mitti QC Template': 'Mitti QC'
 };
 

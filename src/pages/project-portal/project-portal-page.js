@@ -4674,9 +4674,9 @@ async function handleLayoutConditionPick(castingId, value) {
     updateMsFloat();
     showToast(`Cast ${currentCastings.find(c => c.id === castingId)?.casting_number || ''}: Casting Layout green — special condition "${name}" on Side ${sideWords(side)}.`);
 }
-/** One column for many castings: "Shop Folder Cover: ● Cast 1  ● Cast 2 …" */
-function msListChips(castings, milestone) {
-    return `<div class="pp-ms-cast">${escapeHtml(milestone)}</div>` + castings.map(c => {
+/** One column for many castings: "Final Shop Folder Cover: ● Cast 1  ● Cast 2 …" (label = what the board calls it) */
+function msListChips(castings, milestone, label = milestone) {
+    return `<div class="pp-ms-cast">${escapeHtml(label)}</div>` + castings.map(c => {
         const r = msRow(c.id, milestone), when = msWhen(r);
         const tip = `${milestone}: ${r?.status || 'red'}${msNote(r) ? ' — ' + msNote(r) : ''}${when ? ' (since ' + when + ')' : ''}`;
         return `<span class="pp-ms-line" title="${escapeAttr(tip)}">${msDot(r?.status || MS.RED)}<span class="pp-ms-label">${escapeHtml(msCastName(c.id))}</span></span>`;
@@ -4712,7 +4712,7 @@ function updateMsFloat() {
             case 'optimizer': if (currentOptCastingId) html = msCastHead(currentOptCastingId) + msLine(currentOptCastingId, 'Final Optimizer HRS'); break;
             case 'staging': if (currentStagingCastingId) html = msCastHead(currentStagingCastingId) + msLine(currentStagingCastingId, 'Staging'); break;
             case 'color-log': html = msListChips(scoped, 'Color Log'); break;
-            case 'info': html = msListChips(scoped, 'Shop Folder Cover'); break;
+            case 'info': html = msListChips(scoped, 'Shop Folder Cover', 'Final Shop Folder Cover'); break;
             default: html = '';
         }
     }
@@ -12793,7 +12793,7 @@ async function handlePrintShopFolderCover() {
     if (scoped.length) {
         ids = await openCastingPicker({
             title: 'Print FINAL Cover',
-            hint: 'One cover prints per ticked casting. Those castings\' "Shop Folder Cover" turns green on the Releasability Board.',
+            hint: 'One cover prints per ticked casting. Those castings\' "Final Shop Folder Cover" turns green on the Releasability Board.',
             rows: scoped.map(c => ({ id: c.id, label: formatStickerCasting(c.casting_number), sub: (c.description || '').trim(), checked: msStatus(c.id, 'Shop Folder Cover') !== MS.GREEN || !msOn() })),
             confirmLabel: 'Print covers'
         });
