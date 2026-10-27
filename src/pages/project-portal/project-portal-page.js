@@ -2891,10 +2891,14 @@ function renderOptStagedGrid(casting) {
             const entry = currentStagingDescriptions.get(`${castNum}|${sec.department}|${d}`) || {};
             const task = entry.taskName || '';
             const hours = entry.hours == null ? '' : String(entry.hours);
-            rows.push(`<div class="pp-opt-stg-row">
+            const hasBudget = optBudgets.get(casting.id) != null;
+            const pct = optPctOf(casting.id, sec.department, d);
+            const byPct = hasBudget && pct != null;
+            rows.push(`<div class="pp-opt-stg-row${hasBudget ? ' pp-opt-stg-row-pct' : ''}">
                 <span class="pp-opt-day-label">Day ${d}</span>
                 <span class="pp-opt-stg-task${task ? '' : ' pp-opt-stg-task-missing'}" title="${task ? 'Task from the Staging tab' : 'No task picked on the Staging tab yet'}">${task ? escapeHtml(task.toLowerCase()) : '— no task —'}</span>
-                <input type="number" min="0" step="1" class="pp-opt-card-hours" data-action="staged-hours" data-casting-number="${escapeAttr(castNum)}" data-department="${escapeAttr(sec.department)}" data-day="${d}" value="${escapeAttr(hours)}" placeholder="0" title="${escapeAttr((entry.description || '').trim() || 'Hours for this day')}" />
+                ${hasBudget ? `<span class="pp-opt-pct"><input type="number" min="0" max="100" step="1" data-action="staged-pct" data-casting-id="${escapeAttr(casting.id)}" data-department="${escapeAttr(sec.department)}" data-day="${d}" value="${pct == null ? '' : escapeAttr(fmtHrs(pct))}" placeholder="%" title="Share of the casting's budget for this task">%</span>` : ''}
+                <input type="number" min="0" step="1" class="pp-opt-card-hours${byPct ? ' pp-opt-hours-derived' : ''}" data-action="staged-hours" data-casting-number="${escapeAttr(castNum)}" data-department="${escapeAttr(sec.department)}" data-day="${d}" value="${escapeAttr(hours)}" placeholder="0"${byPct ? ' readonly' : ''} title="${byPct ? 'Budget × percent — change the percent to change it' : escapeAttr((entry.description || '').trim() || 'Hours for this day')}" />
                 <span class="pp-opt-card-hours-label">hrs</span>
             </div>`);
         }
@@ -3801,12 +3805,15 @@ function optReadyHtml(castingId) {
 // hours the job has; each casting gets a budget; the budgets must add up to exactly those hours.
 let optValueItems = [];          // [{ name, value }]
 let optBudgets = new Map();      // castingId -> hours
+let optPcts = new Map();         // castingId -> { "dept|day": percent } — the casting's budget is split by these
 const optValueSaveTimers = new Map();
 async function loadOptValue() {
     optValueItems = []; optBudgets = new Map();
     if (!currentProjectNumber) return;
     try {
-        const rows = await loadSettingRows([`value:${currentProjectNumber}`, ...currentCastings.map(c => `budget:${c.id}`)]);
+        const rows = await loadSettingRows([`value:${currentProjectNumber}`, ...currentCastings.map(c => `budget:${c.id}`), ...currentCastings.map(c => `pct:${c.id}`)]);
+        optPcts = new Map();
+        for (const c of currentCastings) { const p = rows.get(`pct:${c.id}`); if (p && typeof p === 'object') optPcts.set(c.id, p); }
         const v = rows.get(`value:${currentProjectNumber}`);
         if (v && Array.isArray(v.items)) optValueItems = v.items.map(it => ({ name: String(it.name || ''), value: Number(it.value) || 0 }));
         for (const c of currentCastings) { const b = rows.get(`budget:${c.id}`); if (b != null && b !== '') optBudgets.set(c.id, Number(b) || 0); }
@@ -3848,6 +3855,51 @@ function scheduleOptValueSave() {
         try { await setSettingRow(key, { items: optValueItems }); } catch (err) { showToast('Could not save the project value: ' + (err.message || err), 'error'); }
     }, 500));
 }
+/** Percent of the casting's budget each staged day gets; the hours follow (whole hours, the first day takes the rounding). */
+function optPctOf(castingId, dept, day) { const p = optPcts.get(castingId) || {}; const v = p[`${dept}|${day}`]; return v == null || v === '' ? null : Number(v) || 0; }
+function optPctTotal(castingId) { return Object.values(optPcts.get(castingId) || {}).reduce((n, v) => n + (Number(v) || 0), 0); }
+function optHoursFromPcts(casting) {
+    const b = optBudgets.get(casting.id);
+    if (b == null) return null;
+    const castNum = String(casting.casting_number || '');
+    const cells = optStagedCells(castNum).map(c => ({ ...c, pct: optPctOf(casting.id, c.department, c.day) }));
+    const withPct = cells.filter(c => c.pct != null);
+    if (!withPct.length) return null;
+    const out = new Map();
+    let sum = 0;
+    for (const c of withPct) { const h = Math.floor(b * c.pct / 100); out.set(`${c.department}|${c.day}`, h); sum += h; }
+    // when the percentages reach 100 the hours must reach the budget exactly: the first day takes the rounding
+    if (Math.abs(optPctTotal(casting.id) - 100) < 0.01 && withPct.length) { const k = `${withPct[0].department}|${withPct[0].day}`; out.set(k, Math.round(((out.get(k) || 0) + (b - sum)) * 10) / 10); }
+    return out;
+}
+async function handleStagedPct(castingId, dept, day, raw) {
+    const c = currentCastings.find(x => x.id === castingId);
+    if (!c) return;
+    const val = raw === '' ? null : Math.max(0, Math.min(100, Number(raw) || 0));
+    const map = { ...(optPcts.get(castingId) || {}) };
+    const key = `${dept}|${day}`;
+    const others = Object.entries(map).filter(([k]) => k !== key).reduce((n, [, v]) => n + (Number(v) || 0), 0);
+    if (val != null && others + val > 100.01) {
+        showToast(`That makes ${fmtHrs(others + val)}% — the casting's tasks can only add up to 100%. Most this task can take: ${fmtHrs(100 - others)}%.`, 'error');
+        renderOptimizer();
+        return;
+    }
+    if (val == null) delete map[key]; else map[key] = val;
+    optPcts.set(castingId, map);
+    // the hours follow the percentages
+    const hours = optHoursFromPcts(c) || new Map();
+    const castNum = String(c.casting_number || '');
+    for (const cell of optStagedCells(castNum)) {
+        const k = `${cell.department}|${cell.day}`;
+        const want = hours.has(k) ? hours.get(k) : (optPctOf(castingId, cell.department, cell.day) == null ? cell.hours : null);
+        if ((want == null ? null : Number(want)) !== (cell.hours == null ? null : Number(cell.hours))) scheduleOptHoursSave(castNum, cell.department, cell.day, want == null ? '' : String(want));
+    }
+    renderOptimizer();
+    const skey = `pct:${castingId}`;
+    const prev = optValueSaveTimers.get(skey); if (prev) clearTimeout(prev);
+    optValueSaveTimers.set(skey, setTimeout(async () => { optValueSaveTimers.delete(skey); try { await setSettingRow(skey, map); } catch (err) { showToast('Could not save the percentages: ' + (err.message || err), 'error'); } }, 500));
+}
+
 function optBudgetHtml(castingId) {
     const b = optBudgets.get(castingId);
     const c = currentCastings.find(x => x.id === castingId);
@@ -3855,7 +3907,13 @@ function optBudgetHtml(castingId) {
     const over = b != null && entered > b + 0.01;
     return `<div class="pp-opt-budget${over ? ' pp-opt-budget-over' : ''}" title="Hours this casting gets out of the job's Optimizer hours; the hours entered on its days should not exceed it">
         <span class="pp-opt-budget-label">Budget</span><input type="number" min="0" step="0.5" data-action="casting-budget" data-casting-id="${escapeAttr(castingId)}" value="${b == null ? '' : escapeAttr(fmtHrs(b))}" placeholder="0"><span class="pp-opt-budget-unit">h</span>
-        <span class="pp-opt-budget-entered">entered ${fmtHrs(entered)} h${over ? ' &#9888;' : ''}</span></div>`;
+        <span class="pp-opt-budget-entered">entered ${fmtHrs(entered)} h${over ? ' &#9888;' : ''}</span></div>${b == null ? '' : optPctLineHtml(castingId)}`;
+}
+function optPctLineHtml(castingId) {
+    const t = Math.round(optPctTotal(castingId) * 10) / 10;
+    const cls = Math.abs(t - 100) < 0.01 ? 'ok' : t > 100 ? 'over' : 'under';
+    const msg = Math.abs(t - 100) < 0.01 ? 'tasks add up to 100%' : t > 100 ? `${fmtHrs(t)}% — over 100` : `${fmtHrs(t)}% assigned, ${fmtHrs(100 - t)}% left`;
+    return `<div class="pp-opt-pct-line pp-opt-pct-${cls}">${msg}</div>`;
 }
 async function handleCastingBudget(castingId, raw) {
     if (!currentProjectNumber) return;
@@ -3868,6 +3926,12 @@ async function handleCastingBudget(castingId, raw) {
         return;
     }
     if (val == null) optBudgets.delete(castingId); else optBudgets.set(castingId, val);
+    const c = currentCastings.find(x => x.id === castingId);
+    if (c && optPcts.get(castingId)) {
+        const hours = optHoursFromPcts(c) || new Map();
+        const castNum = String(c.casting_number || '');
+        for (const cell of optStagedCells(castNum)) { const k = `${cell.department}|${cell.day}`; if (hours.has(k) && Number(hours.get(k)) !== Number(cell.hours)) scheduleOptHoursSave(castNum, cell.department, cell.day, String(hours.get(k))); }
+    }
     renderOptValue();
     const key = `budget:${castingId}`;
     const prev = optValueSaveTimers.get(key); if (prev) clearTimeout(prev);
@@ -8799,7 +8863,9 @@ function wireEvents() {
         const inp = e.target.closest('input[data-action="staged-hours"]');
         if (inp) { scheduleOptHoursSave(inp.dataset.castingNumber, inp.dataset.department, parseInt(inp.dataset.day, 10), inp.value); return; }
         const bud = e.target.closest('input[data-action="casting-budget"]');
-        if (bud) handleCastingBudget(bud.dataset.castingId, bud.value);
+        if (bud) { handleCastingBudget(bud.dataset.castingId, bud.value); return; }
+        const pct = e.target.closest('input[data-action="staged-pct"]');
+        if (pct) handleStagedPct(pct.dataset.castingId, pct.dataset.department, parseInt(pct.dataset.day, 10), pct.value);
     });
     const optValue = document.getElementById('pp-opt-value');
     if (optValue) {
