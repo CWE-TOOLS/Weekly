@@ -611,8 +611,13 @@ function renderCalendar(byCol, shipped, spec, shown) {
             </div>`);
         }
         onFloor += dayN;
+        // work is scheduled around the castings: a viewed department with nothing that day is an "open … day" (user, 2026-10-27)
+        const openDepts = shown.filter(col => !byCol.get(col)[i].length);
+        const openHtml = !openDepts.length ? ''
+            : openDepts.length === shown.length ? '<span class="pm-cal-open" title="Nothing scheduled that day for any department you are viewing">open day</span>'
+            : `<span class="pm-cal-open" title="Nothing scheduled that day for ${escapeHtml(openDepts.join(', '))}">open ${escapeHtml(openDepts.join(', '))} day</span>`;
         parts.push(`<div class="pm-cell pm-cal-day${sec.start === tod ? ' pm-cal-today' : ''}${sec.label === 'Sun' ? ' pm-cal-sun' : ''}" style="grid-column:${sec.col + 2};grid-row:${sec.week + 2}" data-cellcol="*" data-sec="${i}" data-secstart="${escapeHtml(sec.start)}" data-seckind="day">
-            <div class="pm-cal-date" data-open-day="${i}" title="See every job on ${escapeHtml(sec.label)} ${escapeHtml(sec.sub)}"><b>${escapeHtml(sec.sub)}</b><span class="pm-cal-date-n">${dayN ? `${dayN} ${dayN === 1 ? 'job' : 'jobs'}` : ''}${S.dummy && dayHours ? ` · ${fmtH(dayHours)} h` : ''}</span></div>
+            <div class="pm-cal-date" data-open-day="${i}" title="See every job on ${escapeHtml(sec.label)} ${escapeHtml(sec.sub)}"><b>${escapeHtml(sec.sub)}</b>${openHtml}<span class="pm-cal-date-n">${dayN ? `${dayN} ${dayN === 1 ? 'job' : 'jobs'}` : ''}${S.dummy && dayHours ? ` · ${fmtH(dayHours)} h` : ''}</span></div>
             <div class="pm-cal-body">${groups.join('')}</div>
         </div>`);
     });
