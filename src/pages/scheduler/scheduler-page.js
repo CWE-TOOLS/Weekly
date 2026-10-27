@@ -398,8 +398,10 @@ function visibleCastings() {
     const q = S.search.trim().toLowerCase();
     // only castings with days scheduled in this month (user 2026-10-22); what is waiting lives in "Not yet scheduled"
     const withRows = new Set(S.rows.filter(r => days.has(r.date)).map(r => r.casting_id));
+    // castings the month's Optimizer sheet lists are shown even with nothing on their days (remakes carry no hours — user 2026-10-27)
+    const onSheet = new Set(S.sheetOrder[String(S.from).slice(0, 7)] || []);
     return inSheetOrder(S.castings.filter(c => {
-        if (!withRows.has(c.id)) return false;
+        if (!withRows.has(c.id) && !onSheet.has(`${c.project_number}|${c.casting_number}`)) return false;
         if (!q) return true;
         const p = S.projectByNumber.get(c.project_number);
         return c.project_number.toLowerCase().includes(q) || (p && (p.project_name || '').toLowerCase().includes(q));
