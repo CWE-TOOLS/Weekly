@@ -81,8 +81,10 @@ function addMonths(s, n) { const d = fromIso(s); return toIso(new Date(d.getFull
 function monthLabel(s) { return fromIso(s).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }); }
 /** A month on screen = every week whose MONDAY falls in that month (user rule 2026-10-20: "October is a 4-week month
  *  with week 1 starting on the 5th"). Weeks never belong to two months, so nothing is counted twice. */
-function windowStart() { let d = S.from; while (dow(d) !== 1) d = addDays(d, 1); return d; }
-function windowEnd() { let d = lastOfMonth(S.from); while (dow(d) !== 1) d = addDays(d, -1); return addDays(d, 6); }
+// A month is every week whose WEDNESDAY falls in it (user rule 2026-10-27, like the Optimizer sheet: November 2026 =
+// 4 weeks, Nov 2–28; the week of Mon Nov 30 belongs to December). Before: every week whose Monday fell in the month.
+function windowStart() { let w = S.from; while (dow(w) !== 3) w = addDays(w, 1); return addDays(w, -2); }
+function windowEnd() { let w = lastOfMonth(S.from); while (dow(w) !== 3) w = addDays(w, -1); return addDays(w, 4); }
 /** The days on screen: Monday to Saturday of every week (Saturday shaded grey as the week break); Sundays when switched on. */
 function windowDays() {
     const out = [];
@@ -477,7 +479,7 @@ function renderRevenue() {
     html += mrow('Sub', money2(mSub));
     html += mrow('Total COGS', money2(mCogs), 'sc-rv-mcogs');
     html += `<tr><td></td>${blanks}<td></td>${pctCell(mCogs, mTotal)}<td></td></tr>`;
-    html += `</tbody></table><p class="sc-hint">Revenue = scheduled hours × $${REVENUE_PER_HOUR}. Fabrication Revenue is every team except Ship; Net Revenue adds Ship. Type Labor, Material and Subcontractor costs straight into their cells, and the monthly target beside the Month Total (all saved for everyone). A month is every week whose Monday falls in it, so ${esc(monthLabel(S.from))} has ${weeks.length} weeks; the Month Total adds them up.</p></div>`;
+    html += `</tbody></table><p class="sc-hint">Revenue = scheduled hours × $${REVENUE_PER_HOUR}. Fabrication Revenue is every team except Ship; Net Revenue adds Ship. Type Labor, Material and Subcontractor costs straight into their cells, and the monthly target beside the Month Total (all saved for everyone). A month is every week whose Wednesday falls in it (the same cut as the Optimizer sheet), so ${esc(monthLabel(S.from))} has ${weeks.length} weeks; the Month Total adds them up.</p></div>`;
     wrap.innerHTML = html;
 }
 
