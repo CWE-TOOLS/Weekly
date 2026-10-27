@@ -28,6 +28,7 @@ import { fetchForProject as fetchStagingNotes, fetchForProjects as fetchStagingF
 // ---------------------------------------------------------------------------
 const S = {
     settings: { ...SETTINGS_DEFAULTS },
+    sheetOrder: {},               // 'YYYY-MM' -> ['<job>|<cast>', ...] the Optimizer sheet's row order for that month (written by the import)
     projects: [],                 // schedulable projects
     projectByNumber: new Map(),
     castings: [],                 // project_castings rows of those projects
@@ -377,17 +378,32 @@ async function shiftCasting(castingId, n) {
 // ---------------------------------------------------------------------------
 // rendering
 // ---------------------------------------------------------------------------
+/** sheet_order:<YYYY-MM> settings -> { 'YYYY-MM': [...] } */
+function sheetOrderFrom(saved) {
+    const out = {};
+    for (const [k, v] of Object.entries(saved || {})) if (k.startsWith('sheet_order:') && Array.isArray(v)) out[k.slice(12)] = v.map(String);
+    return out;
+}
+/** The rows in the same order as the month's Optimizer sheet (user 2026-10-27: "exact same position so I can visually verify");
+ *  castings the sheet does not list follow in the scheduler's own order. */
+function inSheetOrder(list) {
+    const order = S.sheetOrder[String(S.from).slice(0, 7)];
+    if (!order || !order.length) return list;
+    const pos = new Map(order.map((k, i) => [k, i]));
+    return list.map((c, i) => ({ c, i, p: pos.has(`${c.project_number}|${c.casting_number}`) ? pos.get(`${c.project_number}|${c.casting_number}`) : order.length + i }))
+               .sort((a, b) => a.p - b.p || a.i - b.i).map(x => x.c);
+}
 function visibleCastings() {
     const days = new Set(windowDays());
     const q = S.search.trim().toLowerCase();
     // only castings with days scheduled in this month (user 2026-10-22); what is waiting lives in "Not yet scheduled"
     const withRows = new Set(S.rows.filter(r => days.has(r.date)).map(r => r.casting_id));
-    return S.castings.filter(c => {
+    return inSheetOrder(S.castings.filter(c => {
         if (!withRows.has(c.id)) return false;
         if (!q) return true;
         const p = S.projectByNumber.get(c.project_number);
         return c.project_number.toLowerCase().includes(q) || (p && (p.project_name || '').toLowerCase().includes(q));
-    });
+    }));
 }
 
 function render() {
@@ -1562,7 +1578,7 @@ function wire() {
         }
         if (tables.has('task_descriptions')) { try { S.staging = await fetchStagingForProjects(S.projects.map(p => p.project_number)); } catch (err) { logger.warn('[scheduler] staging reload failed', err); } }
         if (tables.has('plant_schedule_settings')) {
-            try { const saved = await loadScheduleSettings(); S.ready = readyFromSettings(saved); if (Number(saved.target) > 0) S.settings.target = Number(saved.target); if (saved.costs) S.settings.costs = saved.costs; }
+            try { const saved = await loadScheduleSettings(); S.ready = readyFromSettings(saved); S.sheetOrder = sheetOrderFrom(saved); if (Number(saved.target) > 0) S.settings.target = Number(saved.target); if (saved.costs) S.settings.costs = saved.costs; }
             catch (err) { logger.warn('[scheduler] reload settings failed', err); }
         }
         if (tables.has('plant_schedule') || tables.has('plant_schedule_settings') || tables.has('casting_phases') || tables.has('project_castings') || tables.has('task_descriptions')) {
@@ -1586,6 +1602,7 @@ async function init() {
     try {
         await initializeSupabase();
         const saved = await loadScheduleSettings();
+        S.sheetOrder = sheetOrderFrom(saved);
         if (Array.isArray(saved.holidays)) S.settings.holidays = saved.holidays;
         if (saved.costs && typeof saved.costs === 'object') S.settings.costs = saved.costs;
         S.settings.crew = (saved.crew && typeof saved.crew === 'object') ? saved.crew : JSON.parse(JSON.stringify(DEFAULT_CREW));
