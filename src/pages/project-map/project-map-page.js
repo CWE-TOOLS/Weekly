@@ -612,7 +612,7 @@ function renderCalendar(byCol, shipped, spec, shown) {
         }
         onFloor += dayN;
         parts.push(`<div class="pm-cell pm-cal-day${sec.start === tod ? ' pm-cal-today' : ''}${sec.label === 'Sun' ? ' pm-cal-sun' : ''}" style="grid-column:${sec.col + 2};grid-row:${sec.week + 2}" data-cellcol="*" data-sec="${i}" data-secstart="${escapeHtml(sec.start)}" data-seckind="day">
-            <div class="pm-cal-date"><b>${escapeHtml(sec.sub)}</b><span class="pm-cal-date-n">${dayN ? `${dayN} ${dayN === 1 ? 'job' : 'jobs'}` : ''}${S.dummy && dayHours ? ` · ${fmtH(dayHours)} h` : ''}</span></div>
+            <div class="pm-cal-date" data-open-day="${i}" title="See every job on ${escapeHtml(sec.label)} ${escapeHtml(sec.sub)}"><b>${escapeHtml(sec.sub)}</b><span class="pm-cal-date-n">${dayN ? `${dayN} ${dayN === 1 ? 'job' : 'jobs'}` : ''}${S.dummy && dayHours ? ` · ${fmtH(dayHours)} h` : ''}</span></div>
             <div class="pm-cal-body">${groups.join('')}</div>
         </div>`);
     });
@@ -705,7 +705,26 @@ async function renderModalBody() {
         </div>`).join('') : '<div class="fm-empty">No saved dummies yet.</div>';
         return;
     }
-    if (S.modal.kind === 'column') {
+    if (S.modal.kind === 'day') {
+        const { byCol, spec } = partition();
+        const sec = spec.sections[S.modal.section];
+        if (!sec) { closeModal(); return; }
+        const { shown } = shownDepartments(byCol);
+        let total = 0, hoursAll = 0;
+        const parts = [];
+        for (const col of shown) {
+            const list = byCol.get(col)[S.modal.section] || [];
+            total += list.length;
+            const hours = list.reduce((a, e) => a + e.hours, 0);
+            hoursAll += hours;
+            const rows = list.filter(e => matchesSearch(e.c, q));
+            if (!rows.length) continue;
+            parts.push(`<div class="fm-log-day pm-day-dept" style="${colStyle(col)}"><span class="pm-hidden-dept">${escapeHtml(col)}</span><span class="pm-section-sub">${list.length} ${list.length === 1 ? 'job' : 'jobs'}${S.dummy && hours ? ` · ${fmtH(hours)} h` : ''}</span></div>`);
+            parts.push(rows.map(e => rowHtml(e)).join(''));
+        }
+        title.textContent = `${sec.label} ${sec.sub} — ${total} ${total === 1 ? 'job' : 'jobs'}${S.dummy && hoursAll ? ` · ${fmtH(hoursAll)} h` : ''}`;
+        body.innerHTML = parts.length ? parts.join('') : `<div class="fm-empty">${total ? 'No jobs match.' : 'Nothing scheduled that day.'}</div>`;
+    } else if (S.modal.kind === 'column') {
         const { byCol, spec } = partition();
         const only = S.modal.section;
         const sections = (byCol.get(S.modal.column) || []).map((l, i) => only == null || i === only ? l : []);
@@ -837,6 +856,8 @@ function wireEvents() {
         if (e.target.closest('input[data-move-date]')) return;
         const head = e.target.closest('[data-open-col]');
         if (head) { S.expandedKey = null; renderMap(); openModal('column', { column: head.dataset.openCol }); return; }
+        const day = e.target.closest('[data-open-day]');
+        if (day) { S.expandedKey = null; renderMap(); openModal('day', { section: Number(day.dataset.openDay) }); return; }
         const band = e.target.closest('[data-open-band]');
         if (band) { const [column, i] = band.dataset.openBand.split('|'); S.expandedKey = null; renderMap(); openModal('column', { column, section: Number(i) }); return; }
         const card = e.target.closest('[data-key]');
@@ -901,6 +922,8 @@ function wireEvents() {
     $('pm-today').addEventListener('click', () => { S.anchor = today(); S.expandedKey = null; renderMap(); });
     const modal = $('fm-modal');
     modal.addEventListener('click', (e) => {
+        const pick = e.target.closest('[data-pickup]');
+        if (pick) { const [key, dept] = pick.dataset.pickup.split("::"); closeModal(); startPick(key, dept); return; }
         const open = e.target.closest('[data-dummy-open]');
         if (open) { dummyOpen(open.dataset.dummyOpen); return; }
         const del = e.target.closest('[data-dummy-delete]');
