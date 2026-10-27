@@ -147,7 +147,8 @@ async function loadBase() {
 async function loadRows() {
     const inWindow = await loadScheduleRange(windowStart(), windowEnd());
     const seen = new Set(inWindow.map(r => r.id));
-    const extraIds = [...S.pinned];
+    // every casting on screen is loaded whole (its other months too): the lock check, cascades and undo see the full casting
+    const extraIds = [...new Set([...S.pinned, ...inWindow.map(r => r.casting_id)])];
     const extra = extraIds.length ? await loadScheduleForCastings(extraIds) : [];
     S.rows = inWindow.concat(extra.filter(r => !seen.has(r.id)));
     // which castings are on the scheduler at all, whatever month (so they never show as "not yet scheduled")
