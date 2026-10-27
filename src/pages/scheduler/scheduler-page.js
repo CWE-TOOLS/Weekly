@@ -663,7 +663,7 @@ function renderGrid() {
         h += `<tr class="sc-cast-top"><td class="sc-label"${pcStyle(c)} rowspan="2" data-cid="${c.id}" title="${esc(tip)}\n\nClick for options"><span class="sc-castnum">${esc(castingLabel(c))}</span><span class="sc-castdate">${c.casting_date ? 'cast ' + esc(shortDay(c.casting_date)) : 'no cast date'}</span>${bad ? '<span class="sc-lock" title="Scheduled hours differ from the Optimizer Hours tab"></span>' : ''}<span class="sc-castinv" title="From the Casting Inventory: types, pieces (qty + extras), finished-face sq ft">${esc(invSummaryText(c.id))}</span></td>${taskTds}</tr>`;
         h += `<tr class="sc-cast-bottom">${hourTds}</tr>`;
     }
-    h += '</tbody><tfoot><tr><td class="sc-label">Hours needed</td>';
+    h += '</tbody><tfoot><tr><td class="sc-label">Total optimizer hours</td>';
     for (const d of days) DEPT_KEYS.forEach((dept, i) => {
         const v = totals.get(`${d}|${dept}`) || 0;
         h += `<td class="${i === 0 ? 'sc-dept-first' : ''}${isWeekend(d) ? ' sc-weekend' : ''}">${v ? fmtH(v) : ''}</td>`;
