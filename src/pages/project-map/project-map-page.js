@@ -37,6 +37,7 @@ const DEPTS_KEY = 'projectMapDepartments';
 const SUNDAY_KEY = 'projectMapSundays';
 const WHO_KEY = 'projectMapDummyBy';
 const HOURS_LOOKBACK_DAYS = 56;
+const CAST_PER_DAY_LIMIT = 2;      // dummy mode: more castings than this in Cast on one day get a red "!" count (user, 2026-10-27); kept here, not in the config, so a cached config cannot break the import
 
 const S = {
     rawTasks: [],            // the weekly as fetched (never changed by a dummy)
@@ -249,6 +250,22 @@ function partition() {
     for (const sections of byCol.values()) for (const list of sections) list.sort((a, b) => byName(a.c, b.c));
     shipped.sort((a, b) => b.shippedOn.localeCompare(a.shippedOn) || byName(a.c, b.c));
     return { byCol, shipped, spec };
+}
+
+/** Dummy mode, Cast only: the busiest day inside a band has more castings than the limit → { n, date }, else null. */
+function castOverload(col, list) {
+    if (!S.dummy || col !== 'Cast' || !list || list.length <= CAST_PER_DAY_LIMIT) return null;
+    const perDay = new Map();
+    for (const e of list) for (const d of e.days) perDay.set(d, (perDay.get(d) || 0) + 1);
+    let best = null;
+    for (const [date, n] of perDay) if (!best || n > best.n) best = { n, date };
+    return best && best.n > CAST_PER_DAY_LIMIT ? best : null;
+}
+/** The count shown on a band / department head; red with "!" when Cast has too many castings on one day. */
+function countHtml(col, list) {
+    const ov = castOverload(col, list);
+    if (!ov) return `<span class="pm-section-n">${list.length ? list.length : ''}</span>`;
+    return `<span class="pm-cast-risk">potential risk</span><span class="pm-section-n pm-cast-over" title="${ov.n} castings in Cast on ${escapeHtml(fmtShort(ov.date))} — more than ${CAST_PER_DAY_LIMIT} a day">! ${list.length}</span>`;
 }
 
 function shownDepartments(byCol) {
@@ -550,7 +567,15 @@ function renderMap() {
             const box = map.querySelector(`[data-cards="${CSS.escape(col + '|' + i)}"]`);
             if (box) box.innerHTML = list.map(e => chipHtml(e, col, i)).join('');
             const n = map.querySelector(`[data-secn="${CSS.escape(col + '|' + i)}"]`);
-            if (n) n.textContent = list.length ? String(list.length) : '';
+            if (n) {
+                const ov = castOverload(col, list);
+                n.textContent = (ov ? '! ' : '') + (list.length ? String(list.length) : '');
+                n.classList.toggle('pm-cast-over', !!ov);
+                n.title = ov ? `${ov.n} castings in Cast on ${fmtShort(ov.date)} — more than ${CAST_PER_DAY_LIMIT} a day` : '';
+                let risk = n.parentElement.querySelector('.pm-cast-risk');
+                if (ov && !risk) { risk = document.createElement('span'); risk.className = 'pm-cast-risk'; risk.textContent = 'potential risk'; n.before(risk); }
+                else if (!ov && risk) risk.remove();
+            }
             const hEl = map.querySelector(`[data-sech="${CSS.escape(col + '|' + i)}"]`);
             const cell = hEl && hEl.closest('.pm-cell');
             if (hEl) {
@@ -606,7 +631,7 @@ function renderCalendar(byCol, shipped, spec, shown) {
             dayHours += hours; dayN += list.length;
             const hTitle = usual ? `Busiest real day for ${col} in the last 8 weeks: ${fmtH(usual)} h` : '';
             groups.push(`<div class="pm-cal-dept${over ? ' pm-cal-dept-over' : ''}" style="${colStyle(col)}">
-                <div class="pm-cal-dept-head" data-open-band="${escapeHtml(col)}|${i}" title="See every ${escapeHtml(col)} job on ${escapeHtml(sec.label)} ${escapeHtml(sec.sub)}"><span class="pm-cal-dept-name">${escapeHtml(col)}</span>${S.dummy && hours ? `<span class="pm-section-h${over ? ' pm-over' : ''}" title="${escapeHtml(hTitle)}">${fmtH(hours)} h</span>` : ''}<span class="pm-section-n">${list.length}</span></div>
+                <div class="pm-cal-dept-head" data-open-band="${escapeHtml(col)}|${i}" title="See every ${escapeHtml(col)} job on ${escapeHtml(sec.label)} ${escapeHtml(sec.sub)}"><span class="pm-cal-dept-name">${escapeHtml(col)}</span>${S.dummy && hours ? `<span class="pm-section-h${over ? ' pm-over' : ''}" title="${escapeHtml(hTitle)}">${fmtH(hours)} h</span>` : ''}${countHtml(col, list)}</div>
                 <div class="fm-cards" data-cards="${escapeHtml(col)}|${i}">${list.map(e => chipHtml(e, col, i)).join('')}</div>
             </div>`);
         }
@@ -724,7 +749,7 @@ async function renderModalBody() {
             hoursAll += hours;
             const rows = list.filter(e => matchesSearch(e.c, q));
             if (!rows.length) continue;
-            parts.push(`<div class="fm-log-day pm-day-dept" style="${colStyle(col)}"><span class="pm-hidden-dept">${escapeHtml(col)}</span><span class="pm-section-sub">${list.length} ${list.length === 1 ? 'job' : 'jobs'}${S.dummy && hours ? ` · ${fmtH(hours)} h` : ''}</span></div>`);
+            parts.push(`<div class="fm-log-day pm-day-dept" style="${colStyle(col)}"><span class="pm-hidden-dept">${escapeHtml(col)}</span><span class="pm-section-sub">${list.length} ${list.length === 1 ? 'job' : 'jobs'}${S.dummy && hours ? ` · ${fmtH(hours)} h` : ''}</span>${castOverload(col, list) ? countHtml(col, list) : ''}</div>`);
             parts.push(rows.map(e => rowHtml(e)).join(''));
         }
         title.textContent = `${sec.label} ${sec.sub} — ${total} ${total === 1 ? 'job' : 'jobs'}${S.dummy && hoursAll ? ` · ${fmtH(hoursAll)} h` : ''}`;

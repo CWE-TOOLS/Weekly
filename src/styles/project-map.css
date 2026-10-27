@@ -184,3 +184,9 @@ html { touch-action: manipulation; }   /* no double-tap zoom delay on touch disp
   .pm-dept-list li label { padding: 0.45rem 0.4rem; font-size: 14px; }
   .pm-movebox input { font-size: 14px; padding: 4px 6px; }
 }
+
+/* dummy mode: Cast with more than CAST_PER_DAY_LIMIT castings on one day — the count goes red with a "!" */
+.pm-section-n.pm-cast-over { background: #dc2626; color: #fff; border-radius: 4px; padding: 0 0.4rem; font-weight: 900; box-shadow: 0 0 0 1px #7f1d1d; white-space: nowrap; }
+.pm-day-dept .pm-cast-over { margin-left: 0.2rem; font-size: 11px; }
+.pm-cast-risk { margin-left: auto; color: #b91c1c; font-weight: 900; font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; }
+.pm-section-head .pm-cast-risk + .pm-section-n, .pm-cal-dept-head .pm-cast-risk + .pm-section-n { margin-left: 0.3rem; }
