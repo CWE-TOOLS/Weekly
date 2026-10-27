@@ -97,3 +97,20 @@
 .pm-dept-list { list-style: none; margin: 0; padding: 0; max-height: 60vh; overflow: auto; }
 .pm-dept-list li label { display: flex; align-items: center; gap: 0.4rem; padding: 0.2rem 0.3rem; font-size: 12.5px; cursor: pointer; border-radius: 4px; }
 .pm-dept-list li label:hover { background: #f1f5f9; }
+
+/* ---------- loads on a line (2026-10-27): finished-face sq ft and the cast warning ---------- */
+.pm-section-sq { font-weight: 800; font-size: 10.5px; text-transform: none; letter-spacing: 0; margin-left: 0.25rem; white-space: nowrap; }
+.pm-section-sq:empty { display: none; }
+.pm-sq-ok { color: #15803d; }     /* under 300 */
+.pm-sq-warn { color: #c2410c; }   /* 300 up to 350 */
+.pm-sq-over { color: #b91c1c; }   /* 350 and over */
+.pm-cast-risk { margin-left: auto; color: #b91c1c; font-weight: 900; font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; }
+.pm-cast-risk + .pm-section-n { margin-left: 0.3rem; }
+.pm-section-n.pm-cast-over { background: #dc2626; color: #fff; border-radius: 4px; padding: 0 0.4rem; font-weight: 900; box-shadow: 0 0 0 1px #7f1d1d; white-space: nowrap; }
+.pm-day-dept { display: flex; align-items: center; gap: 0.4rem; }
+.pm-day-dept .pm-section-sq { font-size: 11px; }
+/* the same on the dark column head: white pill for the sq ft, red pill for the warning */
+.pm-head-sq { background: #fff; border-radius: 999px; padding: 0.05rem 0.45rem; font-weight: 800; font-size: 0.68rem; white-space: nowrap; }
+.pm-head-sq:empty { display: none; }
+.pm-cell-head .pm-cast-risk { margin-left: 0; background: #dc2626; color: #fff; border-radius: 999px; padding: 0.05rem 0.45rem; font-size: 0.6rem; }
+.pm-cell-head .fm-area-count.pm-cast-over { background: #dc2626; color: #fff; box-shadow: 0 0 0 1px #fff; }
