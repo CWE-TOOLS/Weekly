@@ -95,6 +95,27 @@ export async function deleteCastingSchedule(castingId, all = false) {
 /** "Ready for scheduling" (set on the portal's Optimizer Hours tab): one settings row per casting, key "ready:<castingId>". */
 export const READY_PREFIX = 'ready:';
 
+/** Any settings rows by key (project value items `value:<project>`, casting budgets `budget:<castingId>` …). */
+export async function loadSettingRows(keys) {
+    const out = new Map();
+    const client = await getClient();
+    if (!client || !keys.length) return out;
+    for (let i = 0; i < keys.length; i += 80) {
+        const { data, error } = await client.from(SETTINGS_TABLE).select('key, value').in('key', keys.slice(i, i + 80));
+        if (error) { if (missingTable(error)) { migrationPending = true; return out; } logger.error('[schedule] loadSettingRows', error); return out; }
+        for (const r of data || []) out.set(r.key, r.value);
+    }
+    return out;
+}
+export async function setSettingRow(key, value) {
+    const client = await getClient();
+    if (!client || !key) return;
+    const { error } = value == null
+        ? await client.from(SETTINGS_TABLE).delete().eq('key', key)
+        : await client.from(SETTINGS_TABLE).upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+    if (error) { logger.error('[schedule] setSettingRow', error); throw error; }
+}
+
 /** castingId -> { project_number, at } for the given castings. */
 export async function loadReadyFlags(castingIds) {
     const out = new Map();

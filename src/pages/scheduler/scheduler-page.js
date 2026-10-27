@@ -16,7 +16,7 @@ import { loadAllCastingPhasesForProject } from '../../services/optimizer-hours-s
 import {
     loadScheduleRange, loadScheduleForCastings, insertScheduleRows, updateScheduleRow, deleteScheduleRow, readyFromSettings,
     deleteCastingSchedule, loadScheduleSettings, saveScheduleSetting, isScheduleMigrationPending
-} from '../../services/schedule-service.js?v=20261021-1';
+} from '../../services/schedule-service.js?v=20261027-1';
 import {
     DEPARTMENTS, DEPT_KEYS, TASKS, tasksForDept, taskForPhase, SETTINGS_DEFAULTS, REVENUE_PER_HOUR, SCHEDULABLE_STATUSES, TEAM_DAY_LIMITS, teamOfDepartment, DEFAULT_CREW
 } from '../../config/scheduler-config.js?v=20261023-2';
