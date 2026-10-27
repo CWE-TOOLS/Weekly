@@ -6754,15 +6754,9 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
 .pp-opt-budget-entered { color: #6b7280; margin-left: auto; }
 .pp-opt-budget-over { background: #fee2e2; border-color: #fca5a5; }
 .pp-opt-budget-over .pp-opt-budget-entered { color: #991b1b; font-weight: 700; }
-.pp-opt-stg-row-pct { grid-template-columns: 52px 1fr 70px 70px auto; }
-.pp-opt-pct { display: inline-flex; align-items: center; gap: 2px; font-size: 12px; color: #3730a3; font-weight: 700; }
-.pp-opt-pct input { width: 48px; padding: 4px 4px; border: 1px solid #c7d2fe; border-radius: 6px; font-size: 13px; }
-.pp-opt-hours-derived { background: #f3f4f6; color: #374151; }
-.pp-opt-pct-line { font-size: 11px; font-weight: 700; margin-top: 3px; padding: 1px 6px; border-radius: 6px; }
-.pp-opt-pct-ok { background: #dcfce7; color: #14532d; }
-.pp-opt-pct-under { background: #fef3c7; color: #92400e; }
-.pp-opt-pct-over { background: #fee2e2; color: #991b1b; }
 /* Optimizer column header: wrap instead of overlapping; the Ready button takes its own line (2026-10-27) */
 .pp-opt-col-headerbar { flex-wrap: wrap; row-gap: 6px; overflow: visible; }
 .pp-opt-col-headerbar .pp-opt-col-header { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .pp-opt-col-headerbar .pp-opt-ready { flex: 1 1 100%; width: auto; margin-top: 0; }
+.pp-opt-ready-blocked { opacity: .55; cursor: not-allowed; border-style: dashed; }
+.pp-opt-ready-locked { font-size: 12px; font-weight: 700; color: #92400e; background: #fef3c7; border-radius: 6px; padding: 3px 8px; }
