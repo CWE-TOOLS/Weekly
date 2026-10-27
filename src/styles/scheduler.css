@@ -288,3 +288,8 @@ table.sc-grid { border-collapse: separate; border-spacing: 0; table-layout: fixe
 .sc-grid-wrap::-webkit-scrollbar-track { background: #e5e7eb; border-top: 1px solid #cbd5e1; }
 .sc-grid-wrap::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 9px; border: 3px solid #e5e7eb; }
 .sc-grid-wrap::-webkit-scrollbar-thumb:hover { background: #1f2937; }
+
+/* 2026-10-27 (user): every job has its own colour on the Job · Casting column; all its castings share it */
+.sc-grid td.sc-label[style*="--pc"] { background: hsl(var(--pc) 70% 91%); border-left: 8px solid hsl(var(--pc) 65% 45%); }
+.sc-grid tr.sc-project td.sc-label[style*="--pc"] { background: hsl(var(--pc) 70% 82%); }
+.sc-grid td.sc-label[style*="--pc"]:hover { background: hsl(var(--pc) 70% 85%); }

@@ -629,10 +629,14 @@ function renderGrid() {
         h += `<tr><td class="sc-label">—</td><td colspan="${days.length * DEPT_KEYS.length}" style="padding:12px;color:#6b7280;text-align:left">Nothing scheduled in this window. Use "Not yet scheduled" on the left, or move the window.</td></tr>`;
     }
     let lastProject = null;
+    // one colour per job on the Job · Casting column (user 2026-10-27): hues spread by the golden angle so neighbours differ,
+    // numbered in the order the jobs appear this month; a job split across the sheet keeps the same colour
+    const hueOf = new Map(); for (const c of castings) if (!hueOf.has(c.project_number)) hueOf.set(c.project_number, Math.round((hueOf.size * 137.508) % 360));
+    const pcStyle = (c) => ` style="--pc:${hueOf.get(c.project_number)}"`;
     for (const c of castings) {
         if (c.project_number !== lastProject) {
             lastProject = c.project_number;
-            h += `<tr class="sc-project"><td class="sc-label" title="${esc(projectLabel(c.project_number))}">${esc(projectLabel(c.project_number))}</td><td colspan="${days.length * DEPT_KEYS.length}"></td></tr>`;
+            h += `<tr class="sc-project"><td class="sc-label"${pcStyle(c)} title="${esc(projectLabel(c.project_number))}">${esc(projectLabel(c.project_number))}</td><td colspan="${days.length * DEPT_KEYS.length}"></td></tr>`;
         }
         const report = lockReport(c.id);
         const has = rowsOfCasting(c.id).length > 0;
@@ -656,7 +660,7 @@ function renderGrid() {
                 hourTds += `<td class="${cls} sc-hrow" ${attrs}${drag}><span class="sc-h">${hrs}</span></td>`;
             });
         }
-        h += `<tr class="sc-cast-top"><td class="sc-label" rowspan="2" data-cid="${c.id}" title="${esc(tip)}\n\nClick for options"><span class="sc-castnum">${esc(castingLabel(c))}</span><span class="sc-castdate">${c.casting_date ? 'cast ' + esc(shortDay(c.casting_date)) : 'no cast date'}</span>${bad ? '<span class="sc-lock" title="Scheduled hours differ from the Optimizer Hours tab"></span>' : ''}<span class="sc-castinv" title="From the Casting Inventory: types, pieces (qty + extras), finished-face sq ft">${esc(invSummaryText(c.id))}</span></td>${taskTds}</tr>`;
+        h += `<tr class="sc-cast-top"><td class="sc-label"${pcStyle(c)} rowspan="2" data-cid="${c.id}" title="${esc(tip)}\n\nClick for options"><span class="sc-castnum">${esc(castingLabel(c))}</span><span class="sc-castdate">${c.casting_date ? 'cast ' + esc(shortDay(c.casting_date)) : 'no cast date'}</span>${bad ? '<span class="sc-lock" title="Scheduled hours differ from the Optimizer Hours tab"></span>' : ''}<span class="sc-castinv" title="From the Casting Inventory: types, pieces (qty + extras), finished-face sq ft">${esc(invSummaryText(c.id))}</span></td>${taskTds}</tr>`;
         h += `<tr class="sc-cast-bottom">${hourTds}</tr>`;
     }
     h += '</tbody><tfoot><tr><td class="sc-label">Hours needed</td>';
