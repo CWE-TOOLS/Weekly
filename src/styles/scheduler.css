@@ -281,3 +281,10 @@ table.sc-grid { border-collapse: separate; border-spacing: 0; table-layout: fixe
 .sc-castinv { font-size: 12px; }
 .sc-grid td.sc-cell.sc-has .sc-task { font-size: 12px; }
 .sc-grid td.sc-cell.sc-has .sc-h { font-size: 14px; }
+
+/* 2026-10-27 (user): a left-to-right scroll bar always visible at the bottom of the grid */
+.sc-grid-wrap { overflow-x: scroll; scrollbar-width: auto; scrollbar-color: #4b5563 #e5e7eb; }
+.sc-grid-wrap::-webkit-scrollbar { height: 18px; width: 14px; }
+.sc-grid-wrap::-webkit-scrollbar-track { background: #e5e7eb; border-top: 1px solid #cbd5e1; }
+.sc-grid-wrap::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 9px; border: 3px solid #e5e7eb; }
+.sc-grid-wrap::-webkit-scrollbar-thumb:hover { background: #1f2937; }
