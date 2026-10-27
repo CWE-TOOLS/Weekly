@@ -9448,7 +9448,7 @@ let btJigLists = new Map();      // castingId -> jig-list state (for the scrim l
 let btJigListsFor = null;        // project number the map belongs to
 async function ensureJigListsForScrim() {
     const pn = String(currentProjectNumber || '').trim();
-    if (!pn || btJigListsFor === pn) return;
+    if (!pn) return;   // re-read on every open (2026-10-27): a jig list saved after the tab was first opened must show
     try {
         const res = await loadJigListsForScrim(pn);
         btJigLists = res?.byCasting || new Map();
