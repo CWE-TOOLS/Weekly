@@ -159,3 +159,24 @@ body.pm-dragging .pm-cell:not(.pm-drop-ok) { opacity: 0.45; }
 .pm-cal-dept-over { box-shadow: inset 0 0 0 2px #dc2626; }
 .pm-cal-dept-over .pm-cal-dept-head { background: #fee2e2; }
 .pm-calendar .pm-cell .fm-cards { flex: 0 0 auto; overflow: visible; padding: 0.25rem; gap: 0.25rem; }
+
+/* ---------- touch: pick a card up with its Move button, tap the day; bigger targets on touch displays (2026-10-27) ---------- */
+.pm-pick-note { display: inline-flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; font-weight: 600; color: #701a75; }
+.pm-pick-note[hidden] { display: none; }
+.pm-pick-tag { background: #c026d3; color: #fff; font-weight: 900; letter-spacing: 0.08em; padding: 0.1rem 0.45rem; border-radius: 4px; font-size: 11px; }
+.pm-movebox { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.pm-pickup { padding: 0.3rem 0.8rem; }
+.pm-cell.pm-pick-ok { outline: 3px dashed #c026d3; outline-offset: -4px; cursor: pointer; animation: pm-pick-pulse 1.2s ease-in-out infinite; }
+.pm-cell.pm-pick-ok .pm-section-head[data-open-band], .pm-cell.pm-pick-ok .pm-cal-dept-head { pointer-events: none; }   /* while moving, a tap anywhere in the cell is the drop */
+body.pm-picking .pm-cell:not(.pm-pick-ok) { opacity: 0.45; }
+@keyframes pm-pick-pulse { 0%, 100% { outline-color: rgba(192, 38, 211, 0.9); } 50% { outline-color: rgba(192, 38, 211, 0.35); } }
+body.pm-dummy .fm-chip { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+html { touch-action: manipulation; }   /* no double-tap zoom delay on touch displays */
+@media (pointer: coarse) {
+  .fm-nav-btn, .pm-view-btn, .fm-mini-btn { min-height: 2.3rem; padding-left: 0.9rem; padding-right: 0.9rem; }
+  .pm-arrow { min-width: 2.6rem; }
+  .pm-cell .fm-chip { padding: 0.35rem 0.5rem; }
+  .pm-cal-dept-head, .pm-section-head { padding-top: 0.25rem; padding-bottom: 0.25rem; }
+  .pm-dept-list li label { padding: 0.45rem 0.4rem; font-size: 14px; }
+  .pm-movebox input { font-size: 14px; padding: 4px 6px; }
+}

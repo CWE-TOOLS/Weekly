@@ -17,6 +17,9 @@
  * Nothing real changes until a dummy is applied — Apply is a later phase, written with the DOP.
  * CALENDAR (dummy mode only, 2026-10-27): the month as the conference-room whiteboard — rows Week 1, 2, 3…, a cell per
  * day, the day's jobs grouped by department inside the cell; drag a card to any day.
+ * TOUCH (2026-10-27): finger drag-and-drop does not exist in browsers, so a card's full view has a "Move" button:
+ * tap it, then tap the day (or band) it should start on; Cancel / Esc / tapping anything else lets go. Works with a
+ * mouse too. "Full screen" in the header uses the whole display.
  */
 import { fetchAllTasks } from '../../services/data-service.js';
 import { loadAllProjects } from '../../services/projects-service.js';
@@ -50,6 +53,7 @@ const S = {
     dummy: null,             // { id, name, final, chain, moves: Map, dirty, undo: [] } while in Dummy mode
     hoursMax: { day: new Map(), week: new Map() },   // busiest real day / week per department in the look-back window
     dragging: null,          // { key, dept, first } while a card is being dragged (dummy mode)
+    picking: null,           // { key, dept, first } after "Move" was tapped on a card: the next tap on a cell drops it there
 };
 
 const $ = (id) => document.getElementById(id);
@@ -282,6 +286,31 @@ function dummyMoveBlock(key, dept, toFirstDate) {
     renderMap();
 }
 
+/** Touch-friendly move: remember the card, light up the cells it can land on; the next tap on one drops it there. */
+function startPick(key, dept) {
+    const c = S.castings.get(key);
+    if (!S.dummy || !c || !c.days.get(dept)) return;
+    S.picking = { key, dept, first: c.days.get(dept)[0] };
+    S.expandedKey = null;
+    renderMap();
+}
+function cancelPick() {
+    if (!S.picking) return;
+    S.picking = null;
+    renderPickState();
+}
+/** Highlights for a picked-up card (also re-applied after every render) and the note in the dummy bar. */
+function renderPickState() {
+    const p = S.picking;
+    document.body.classList.toggle('pm-picking', !!p);
+    for (const el of document.querySelectorAll('.pm-cell.pm-pick-ok')) el.classList.remove('pm-pick-ok');
+    if (p) for (const cell of document.querySelectorAll(`.pm-cell[data-cellcol="${CSS.escape(p.dept)}"], .pm-cell[data-cellcol="*"]`)) cell.classList.add('pm-pick-ok');
+    const note = $('pm-pick-note');
+    if (!note) return;
+    note.hidden = !p;
+    if (p) { const c = S.castings.get(p.key); $('pm-pick-what').textContent = c ? `${jobName(c)} ${castLabel(c)} · ${p.dept}` : ''; }
+}
+
 function dummyUndo() {
     if (!S.dummy || !S.dummy.undo.length) return;
     S.dummy.moves = S.dummy.undo.pop();
@@ -316,6 +345,7 @@ function exitDummy() {
     if (S.dummy.dirty && !window.confirm('Leave Dummy mode without saving? The unsaved moves are lost.')) return;
     S.dummy = null;
     S.expandedKey = null;
+    S.picking = null;
     if (S.view === 'calendar') S.view = 'month';
     S.castings = summarise(S.rawTasks);
     notice('');
@@ -408,7 +438,7 @@ function cardBodyHtml(c, e) {
             return e && e.dept === d ? `<b class="pm-trail-here">${text}</b>` : text;
         }).join(' · ');
     const origLine = e && e.moved ? `<div class="fm-card-meta pm-orig">Weekly has it: ${escapeHtml(e.days.map(d => fmtShort(c.orig.get(`${e.dept}|${d}`) || d)).join(', '))}</div>` : '';
-    const moveBox = S.dummy && e && !(c.missing && c.missing.length) ? `<div class="pm-movebox"><label>Move ${escapeHtml(e.dept)} block to <input type="date" data-move-date="${escapeHtml(c.key)}|${escapeHtml(e.dept)}" value="${escapeHtml(c.days.get(e.dept)[0])}"></label></div>` : '';
+    const moveBox = S.dummy && e && !(c.missing && c.missing.length) ? `<div class="pm-movebox"><button type="button" class="fm-mini-btn fm-bulk-go pm-pickup" data-pickup="${escapeHtml(c.key)}::${escapeHtml(e.dept)}" title="Then tap the day it should start on">Move ${escapeHtml(e.dept)} block&hellip;</button><label>or to <input type="date" data-move-date="${escapeHtml(c.key)}::${escapeHtml(e.dept)}" value="${escapeHtml(c.days.get(e.dept)[0])}"></label></div>` : '';
     return `<div class="fm-card-job">${escapeHtml(jobName(c))}</div>
         <div class="fm-card-cast">${escapeHtml(castLabel(c))}<span class="fm-card-pn">${escapeHtml(c.projectNumber)}</span>${missingHtml(c)}</div>
         ${p && p.pm ? `<div class="fm-card-meta">${escapeHtml(p.pm)}</div>` : ''}
@@ -545,6 +575,7 @@ function renderMap() {
     renderDeptPicker();
     markOverflow();
     renderPopover();
+    renderPickState();
     if (S.modal) renderModalBody();
 }
 
@@ -591,6 +622,7 @@ function renderCalendar(byCol, shipped, spec, shown) {
     renderWhen(spec);
     renderDeptPicker();
     renderPopover();
+    renderPickState();
     if (S.modal) renderModalBody();
 }
 
@@ -699,6 +731,19 @@ async function renderModalBody() {
     if (openRow && S.modal.kind !== 'dummies') openRow.addEventListener('mouseleave', () => { if (S.modal && S.modal.expandedKey === openRow.dataset.mrow && !openRow.querySelector(':focus')) { S.modal.expandedKey = null; renderModalBody(); } }, { once: true });
 }
 
+function fullscreenOn() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+function toggleFullscreen() {
+    const el = document.documentElement;
+    if (fullscreenOn()) { (document.exitFullscreen || document.webkitExitFullscreen || (() => {})).call(document); return; }
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (!req) { notice('This browser cannot go full screen from a button — press F11 instead.', 'warn'); return; }
+    try { const r = req.call(el); if (r && r.catch) r.catch(() => notice('Full screen was refused by the browser — press F11 instead.', 'warn')); } catch { notice('Full screen was refused by the browser — press F11 instead.', 'warn'); }
+}
+function renderFullscreenBtn() {
+    const b = $('pm-fullscreen');
+    if (b) { const on = fullscreenOn(); b.textContent = on ? 'Exit full screen' : 'Full screen'; b.classList.toggle('pm-view-on', on); }
+}
+
 function notice(text, kind = 'info') {
     const el = $('fm-notice');
     el.hidden = !text;
@@ -757,6 +802,20 @@ function dropTarget(cell, firstDay) {
 function wireEvents() {
     const app = $('fm-app');
     app.addEventListener('click', (e) => {
+        if (e.target.closest('#pm-fullscreen')) { toggleFullscreen(); return; }
+        const pick = e.target.closest('[data-pickup]');
+        if (pick) { const [key, dept] = pick.dataset.pickup.split("::"); startPick(key, dept); return; }
+        if (S.picking) {
+            if (e.target.closest('#pm-pick-cancel')) { cancelPick(); return; }
+            if (e.target.closest('#pm-dummy-bar') || e.target.closest('[data-view]') || e.target.closest('#pm-sunday') || e.target.closest('#pm-prev, #pm-next, #pm-today') || e.target.closest('#pm-dept-dropdown')) { /* keep the card picked while they change the view */ }
+            else {
+                const cell = e.target.closest('.pm-cell');
+                const p = S.picking;
+                S.picking = null;
+                if (cell && (cell.dataset.cellcol === p.dept || cell.dataset.cellcol === '*')) { dummyMoveBlock(p.key, p.dept, dropTarget(cell, p.first)); return; }
+                renderPickState();   // tapped something else: let go, then treat the tap as usual
+            }
+        }
         const view = e.target.closest('[data-view]');
         if (view) { if (view.disabled) return; S.view = view.dataset.view; S.expandedKey = null; renderMap(); return; }
         if (e.target.closest('#pm-sunday')) { S.sundays = !S.sundays; try { localStorage.setItem(SUNDAY_KEY, S.sundays ? '1' : ''); } catch { /* ignore */ } S.expandedKey = null; renderMap(); return; }
@@ -787,7 +846,7 @@ function wireEvents() {
     app.addEventListener('change', (e) => {
         if (e.target.id === 'pm-dummy-chain' && S.dummy) { S.dummy.chain = e.target.checked; S.dummy.dirty = true; renderDummyBar(); return; }
         const mv = e.target.closest('input[data-move-date]');
-        if (mv && S.dummy && mv.value) { const [key, dept] = mv.dataset.moveDate.split('|'); S.expandedKey = null; dummyMoveBlock(key, dept, mv.value); }
+        if (mv && S.dummy && mv.value) { const [key, dept] = mv.dataset.moveDate.split("::"); S.expandedKey = null; dummyMoveBlock(key, dept, mv.value); }
     });
 
     // Dummy mode drag: a card to another band of the same department
@@ -850,18 +909,19 @@ function wireEvents() {
     });
     modal.addEventListener('change', (e) => {
         const mv = e.target.closest('input[data-move-date]');
-        if (mv && S.dummy && mv.value) { const [key, dept] = mv.dataset.moveDate.split('|'); dummyMoveBlock(key, dept, mv.value); }
+        if (mv && S.dummy && mv.value) { const [key, dept] = mv.dataset.moveDate.split("::"); dummyMoveBlock(key, dept, mv.value); }
     });
     $('fm-modal-search').addEventListener('input', (e) => { if (S.modal) { S.modal.filter = e.target.value.trim().toLowerCase(); renderModalBody(); } });
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') { if (S.modal) closeModal(); else if (S.expandedKey) { S.expandedKey = null; renderMap(); } else $('pm-dept-dropdown')?.classList.remove('open'); }
-        if (!S.modal && !e.target.closest('input')) { if (e.key === 'ArrowLeft') step(-1); if (e.key === 'ArrowRight') step(1); }
-        if (S.dummy && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.target.closest('input')) { e.preventDefault(); dummyUndo(); }
+        if (e.key === 'Escape') { if (S.modal) closeModal(); else if (S.picking) cancelPick(); else if (S.expandedKey) { S.expandedKey = null; renderMap(); } else $('pm-dept-dropdown')?.classList.remove('open'); }
+        if (!S.modal && !(e.target.closest && e.target.closest('input'))) { if (e.key === 'ArrowLeft') step(-1); if (e.key === 'ArrowRight') step(1); }
+        if (S.dummy && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !(e.target.closest && e.target.closest('input'))) { e.preventDefault(); dummyUndo(); }
     });
     $('fm-search').addEventListener('input', (e) => { S.search = e.target.value.trim().toLowerCase(); renderMap(); });
     $('fm-refresh').addEventListener('click', () => loadAll());
     $('fm-shipped-btn').addEventListener('click', () => openModal('shipped'));
     window.addEventListener('resize', markOverflow);
+    for (const ev of ['fullscreenchange', 'webkitfullscreenchange']) document.addEventListener(ev, () => { renderFullscreenBtn(); setTimeout(markOverflow, 300); });
     window.addEventListener('beforeunload', (e) => { if (S.dummy && S.dummy.dirty) { e.preventDefault(); e.returnValue = ''; } });
     registerRefreshHandler(async (payload, payloads) => {
         const batch = Array.isArray(payloads) && payloads.length ? payloads : [payload];
@@ -879,6 +939,7 @@ function wireEvents() {
     try { S.sundays = !!localStorage.getItem(SUNDAY_KEY); } catch { /* ignore */ }
     if (document.getElementById('ro-test-count') || document.querySelector('[style*="99999"]')) document.body.classList.add('fm-has-test-bar');
     wireEvents();
+    renderFullscreenBtn();
     renderWhen(viewSpec());
     renderDeptPicker();
     try { await initializeSupabase(); } catch (err) { logger.warn('[project-map] supabase init failed', err); }
@@ -886,4 +947,4 @@ function wireEvents() {
     if (document.getElementById('ro-test-count')) document.body.classList.add('fm-has-test-bar');
 })();
 
-window.__projectMap = { state: S, partition, viewSpec, reload: loadAll, dummy: { enter: enterDummy, exit: exitDummy, move: dummyMoveBlock, save: dummySave, open: dummyOpen, undo: dummyUndo } };
+window.__projectMap = { state: S, partition, viewSpec, reload: loadAll, dummy: { enter: enterDummy, exit: exitDummy, move: dummyMoveBlock, save: dummySave, open: dummyOpen, undo: dummyUndo, pick: startPick, cancelPick } };
