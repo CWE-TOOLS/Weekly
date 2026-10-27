@@ -37,6 +37,8 @@ const DEPTS_KEY = 'projectMapDepartments';
 const SUNDAY_KEY = 'projectMapSundays';
 const WHO_KEY = 'projectMapDummyBy';
 const HOURS_LOOKBACK_DAYS = 56;
+const SQFT_WARN = 300;              // dummy mode sq ft colours: under 300 green, 300 up to 350 orange, 350 and over red (user, 2026-10-27)
+const SQFT_OVER = 350;
 const CAST_PER_DAY_LIMIT = 2;      // dummy mode: more castings than this in Cast on one day get a red count (user, 2026-10-27); kept here, not in the config, so a cached config cannot break the import
 
 const S = {
@@ -261,15 +263,27 @@ function castOverload(col, list) {
     for (const [date, n] of perDay) if (!best || n > best.n) best = { n, date };
     return best && best.n > CAST_PER_DAY_LIMIT ? best : null;
 }
-/** Finished-face sq ft of the jobs on a line, rounded up (null when none of them has an inventory). */
+/** Finished-face sq ft of the jobs on a line, rounded up (null when none of them has an inventory), and the busiest
+ *  single day inside the line (a week band's colour follows that day, a day line's follows its own total). */
 function sqftOf(list) {
     let t = 0, any = false;
-    for (const e of list) { const v = e.c.inv && e.c.inv.ff; if (v != null && !isNaN(v)) { t += Number(v); any = true; } }
-    return any ? Math.ceil(t) : null;
+    const perDay = new Map();
+    for (const e of list) {
+        const v = e.c.inv && e.c.inv.ff;
+        if (v == null || isNaN(v)) continue;
+        t += Number(v); any = true;
+        for (const d of e.days) perDay.set(d, (perDay.get(d) || 0) + Number(v));
+    }
+    if (!any) return null;
+    let busiest = null;
+    for (const [date, n] of perDay) if (!busiest || n > busiest.n) busiest = { date, n: Math.ceil(n) };
+    return { total: Math.ceil(t), busiest };
 }
-function sqftHtml(list, red) {
-    const n = sqftOf(list);
-    return S.dummy && n != null ? `<span class="pm-section-h pm-section-sq${red ? ' pm-over' : ''}">${n.toLocaleString('en-US')} sq ft</span>` : '';
+function sqftClass(n) { return n >= SQFT_OVER ? 'pm-sq-over' : n >= SQFT_WARN ? 'pm-sq-warn' : 'pm-sq-ok'; }
+function sqftTitle(sq) { return sq.busiest.n !== sq.total ? `Busiest day ${fmtShort(sq.busiest.date)}: ${sq.busiest.n.toLocaleString('en-US')} sq ft (green under ${SQFT_WARN}, orange to ${SQFT_OVER}, red from ${SQFT_OVER})` : `Green under ${SQFT_WARN} sq ft, orange ${SQFT_WARN}–${SQFT_OVER}, red ${SQFT_OVER} and over`; }
+function sqftHtml(list) {
+    const sq = sqftOf(list);
+    return S.dummy && sq ? `<span class="pm-section-h pm-section-sq ${sqftClass(sq.busiest.n)}" title="${escapeHtml(sqftTitle(sq))}">${sq.total.toLocaleString('en-US')} sq ft</span>` : '';
 }
 /** The count shown on a band / department head; red with "!" when Cast has too many castings on one day. */
 function countHtml(col, list) {
@@ -587,7 +601,12 @@ function renderMap() {
                 else if (!ov && risk) risk.remove();
             }
             const sqEl = map.querySelector(`[data-secsq="${CSS.escape(col + '|' + i)}"]`);
-            if (sqEl) { const sq = sqftOf(list); sqEl.textContent = S.dummy && sq != null ? `${sq.toLocaleString('en-US')} sq ft` : ''; sqEl.classList.toggle('pm-over', !!castOverload(col, list)); }
+            if (sqEl) {
+                const sq = sqftOf(list);
+                sqEl.textContent = S.dummy && sq ? `${sq.total.toLocaleString('en-US')} sq ft` : '';
+                sqEl.className = `pm-section-h pm-section-sq${S.dummy && sq ? ' ' + sqftClass(sq.busiest.n) : ''}`;
+                sqEl.title = S.dummy && sq ? sqftTitle(sq) : '';
+            }
             const hEl = map.querySelector(`[data-sech="${CSS.escape(col + '|' + i)}"]`);
             const cell = hEl && hEl.closest('.pm-cell');
             if (hEl) {
@@ -643,7 +662,7 @@ function renderCalendar(byCol, shipped, spec, shown) {
             dayHours += hours; dayN += list.length;
             const hTitle = usual ? `Busiest real day for ${col} in the last 8 weeks: ${fmtH(usual)} h` : '';
             groups.push(`<div class="pm-cal-dept${over ? ' pm-cal-dept-over' : ''}" style="${colStyle(col)}">
-                <div class="pm-cal-dept-head" data-open-band="${escapeHtml(col)}|${i}" title="See every ${escapeHtml(col)} job on ${escapeHtml(sec.label)} ${escapeHtml(sec.sub)}"><span class="pm-cal-dept-name">${escapeHtml(col)}</span>${S.dummy && hours ? `<span class="pm-section-h${over ? ' pm-over' : ''}" title="${escapeHtml(hTitle)}">${fmtH(hours)} h</span>` : ''}${sqftHtml(list, !!castOverload(col, list))}${countHtml(col, list)}</div>
+                <div class="pm-cal-dept-head" data-open-band="${escapeHtml(col)}|${i}" title="See every ${escapeHtml(col)} job on ${escapeHtml(sec.label)} ${escapeHtml(sec.sub)}"><span class="pm-cal-dept-name">${escapeHtml(col)}</span>${S.dummy && hours ? `<span class="pm-section-h${over ? ' pm-over' : ''}" title="${escapeHtml(hTitle)}">${fmtH(hours)} h</span>` : ''}${sqftHtml(list)}${countHtml(col, list)}</div>
                 <div class="fm-cards" data-cards="${escapeHtml(col)}|${i}">${list.map(e => chipHtml(e, col, i)).join('')}</div>
             </div>`);
         }
@@ -761,7 +780,7 @@ async function renderModalBody() {
             hoursAll += hours;
             const rows = list.filter(e => matchesSearch(e.c, q));
             if (!rows.length) continue;
-            parts.push(`<div class="fm-log-day pm-day-dept" style="${colStyle(col)}"><span class="pm-hidden-dept">${escapeHtml(col)}</span><span class="pm-section-sub">${list.length} ${list.length === 1 ? 'job' : 'jobs'}${S.dummy && hours ? ` · ${fmtH(hours)} h` : ''}</span>${sqftHtml(list, !!castOverload(col, list))}${castOverload(col, list) ? countHtml(col, list) : ''}</div>`);
+            parts.push(`<div class="fm-log-day pm-day-dept" style="${colStyle(col)}"><span class="pm-hidden-dept">${escapeHtml(col)}</span><span class="pm-section-sub">${list.length} ${list.length === 1 ? 'job' : 'jobs'}${S.dummy && hours ? ` · ${fmtH(hours)} h` : ''}</span>${sqftHtml(list)}${castOverload(col, list) ? countHtml(col, list) : ''}</div>`);
             parts.push(rows.map(e => rowHtml(e)).join(''));
         }
         title.textContent = `${sec.label} ${sec.sub} — ${total} ${total === 1 ? 'job' : 'jobs'}${S.dummy && hoursAll ? ` · ${fmtH(hoursAll)} h` : ''}`;

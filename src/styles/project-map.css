@@ -192,3 +192,7 @@ html { touch-action: manipulation; }   /* no double-tap zoom delay on touch disp
 .pm-day-dept .pm-cast-over { margin-left: 0.2rem; font-size: 11px; }
 .pm-cast-risk { margin-left: auto; color: #b91c1c; font-weight: 900; font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; }
 .pm-section-head .pm-cast-risk + .pm-section-n, .pm-cal-dept-head .pm-cast-risk + .pm-section-n { margin-left: 0.3rem; }
+/* dummy mode sq ft on a line: green under 300, orange 300–350, red 350 and over (its own scale, not tied to the cast warning) */
+.pm-section-sq.pm-sq-ok { color: #15803d; font-weight: 800; }
+.pm-section-sq.pm-sq-warn { color: #c2410c; font-weight: 800; }
+.pm-section-sq.pm-sq-over { color: #b91c1c; font-weight: 800; }
