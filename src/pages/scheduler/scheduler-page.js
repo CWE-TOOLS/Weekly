@@ -208,7 +208,10 @@ function projectLabel(num) { const p = S.projectByNumber.get(num); return p ? `$
 function lockReport(castingId) {
     const out = [];
     const rows = rowsOfCasting(castingId);
-    for (const m of mappedPhases(castingId)) {
+    const phases = mappedPhases(castingId);
+    // days brought in from the Optimizer sheet (unit notes) while the Staging tab carries no hours yet: nothing to compare against
+    if (phases.length && !phases[0].staged && rows.some(r => String(r.note || '').startsWith('unit:')) && !rows.some(r => r.phase_id)) return [];
+    for (const m of phases) {
         const sched = rows.filter(r => unitOf(r) === m.unit).reduce((n, r) => n + (Number(r.hours) || 0), 0);
         out.push({ phase: m.phase, code: m.code, dept: m.dept, unmapped: m.unmapped, optimizer: Number(m.phase.hours) || 0, scheduled: Math.round(sched * 100) / 100 });
     }
@@ -690,6 +693,7 @@ function openEditor(td) {
     const phaseLine = (r) => {
         if (!unitOf(r)) return '<div class="sc-ed-phase">typed by hand — not tied to the Optimizer Hours</div>';
         const ph = (mappedPhases(cid).find(m => m.unit === unitOf(r)) || {}).phase;
+        if (!ph && String(unitOf(r)).startsWith('unit:')) { const [, sd, dn] = String(unitOf(r)).slice(5).split('|'); return `<div class="sc-ed-phase">Brought in from the Optimizer sheet: ${esc(sd)} day ${esc(dn)}. The hours are locked here; they become editable on the portal's Optimizer Hours tab once the Staging tab carries them.</div>`; }
         const all = S.rows.filter(x => unitOf(x) === unitOf(r));
         const tot = all.reduce((n, x) => n + (Number(x.hours) || 0), 0);
         return `<div class="sc-ed-phase">Optimizer Hours: ${esc(ph?.phase_name || '?')} ${fmtH(ph?.hours)} h over ${all.length} day${all.length === 1 ? '' : 's'} (scheduled ${fmtH(tot)} h). Hours come from the portal and can't be changed here — use Roll over to split them with the next day.</div>`;
