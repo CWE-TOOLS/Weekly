@@ -858,7 +858,7 @@ function wireEvents() {
         if (e.target.closest('#pm-dummy-clear')) { dummyClear(); return; }
         if (e.target.closest('#pm-dummy-exit')) { exitDummy(); return; }
         if (e.target.closest('#pm-dummy-bar')) return;
-        if (e.target.closest('input[data-move-date]')) return;
+        if (e.target.closest('.pm-movebox')) return;   // the date box / its label: not a click on the card
         const head = e.target.closest('[data-open-col]');
         if (head) { S.expandedKey = null; renderMap(); openModal('column', { column: head.dataset.openCol }); return; }
         const day = e.target.closest('[data-open-day]');
@@ -933,6 +933,7 @@ function wireEvents() {
         if (open) { dummyOpen(open.dataset.dummyOpen); return; }
         const del = e.target.closest('[data-dummy-delete]');
         if (del) { dummyDelete(del.dataset.dummyDelete, del.dataset.dummyName); return; }
+        if (e.target.closest('.pm-movebox')) return;   // the date box in an open row: leave the row open so the picker can show
         const txt = e.target.closest('[data-expand]');
         if (txt && S.modal) { S.modal.expandedKey = S.modal.expandedKey === txt.dataset.expand ? null : txt.dataset.expand; renderModalBody(); return; }
         if (e.target === modal || e.target.closest('#fm-modal-close')) closeModal();
