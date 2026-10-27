@@ -37,7 +37,7 @@ const DEPTS_KEY = 'projectMapDepartments';
 const SUNDAY_KEY = 'projectMapSundays';
 const WHO_KEY = 'projectMapDummyBy';
 const HOURS_LOOKBACK_DAYS = 56;
-const CAST_PER_DAY_LIMIT = 2;      // dummy mode: more castings than this in Cast on one day get a red "!" count (user, 2026-10-27); kept here, not in the config, so a cached config cannot break the import
+const CAST_PER_DAY_LIMIT = 2;      // dummy mode: more castings than this in Cast on one day get a red count (user, 2026-10-27); kept here, not in the config, so a cached config cannot break the import
 
 const S = {
     rawTasks: [],            // the weekly as fetched (never changed by a dummy)
@@ -265,7 +265,7 @@ function castOverload(col, list) {
 function countHtml(col, list) {
     const ov = castOverload(col, list);
     if (!ov) return `<span class="pm-section-n">${list.length ? list.length : ''}</span>`;
-    return `<span class="pm-cast-risk">potential risk</span><span class="pm-section-n pm-cast-over" title="${ov.n} castings in Cast on ${escapeHtml(fmtShort(ov.date))} — more than ${CAST_PER_DAY_LIMIT} a day">! ${list.length}</span>`;
+    return `<span class="pm-cast-risk">potential risk</span><span class="pm-section-n pm-cast-over" title="${ov.n} castings in Cast on ${escapeHtml(fmtShort(ov.date))} — more than ${CAST_PER_DAY_LIMIT} a day">${list.length}</span>`;
 }
 
 function shownDepartments(byCol) {
@@ -569,7 +569,7 @@ function renderMap() {
             const n = map.querySelector(`[data-secn="${CSS.escape(col + '|' + i)}"]`);
             if (n) {
                 const ov = castOverload(col, list);
-                n.textContent = (ov ? '! ' : '') + (list.length ? String(list.length) : '');
+                n.textContent = list.length ? String(list.length) : "";
                 n.classList.toggle('pm-cast-over', !!ov);
                 n.title = ov ? `${ov.n} castings in Cast on ${fmtShort(ov.date)} — more than ${CAST_PER_DAY_LIMIT} a day` : '';
                 let risk = n.parentElement.querySelector('.pm-cast-risk');
