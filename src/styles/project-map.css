@@ -125,7 +125,9 @@ body.pm-dummy .fm-chip[draggable="true"]:active { cursor: grabbing; }
 .pm-section-h.pm-over { color: #b91c1c; }
 .pm-section-head-day { justify-content: flex-end; padding: 0.05rem 0.4rem; }
 .pm-section-head-day .pm-section-h:empty { display: none; }
-.pm-section-head-day:has(.pm-section-h:empty) { display: none; }
+.pm-section-head-day:not(:has(.pm-section-h:not(:empty))) { display: none; }
+.pm-section-sq:empty { display: none; }
+.pm-day-dept .pm-section-sq { margin-left: 0; }
 .pm-cell-over { box-shadow: inset 0 0 0 2px #dc2626; }
 .pm-cell-over .pm-section-head { background: #fee2e2; }
 .pm-drop-ok { outline: 2px dashed rgba(192, 38, 211, 0.6); outline-offset: -3px; }

@@ -261,6 +261,16 @@ function castOverload(col, list) {
     for (const [date, n] of perDay) if (!best || n > best.n) best = { n, date };
     return best && best.n > CAST_PER_DAY_LIMIT ? best : null;
 }
+/** Finished-face sq ft of the jobs on a line, rounded up (null when none of them has an inventory). */
+function sqftOf(list) {
+    let t = 0, any = false;
+    for (const e of list) { const v = e.c.inv && e.c.inv.ff; if (v != null && !isNaN(v)) { t += Number(v); any = true; } }
+    return any ? Math.ceil(t) : null;
+}
+function sqftHtml(list, red) {
+    const n = sqftOf(list);
+    return S.dummy && n != null ? `<span class="pm-section-h pm-section-sq${red ? ' pm-over' : ''}">${n.toLocaleString('en-US')} sq ft</span>` : '';
+}
 /** The count shown on a band / department head; red with "!" when Cast has too many castings on one day. */
 function countHtml(col, list) {
     const ov = castOverload(col, list);
@@ -551,7 +561,7 @@ function renderMap() {
                 <span class="fm-area-count" data-count="${escapeHtml(col)}">0</span>
             </button>${spec.sections.map((sec, i) => `
             <div class="pm-cell${i === last ? ' pm-cell-last' : ''}" style="grid-column:${k + 1};grid-row:${i + 2}" data-cellcol="${escapeHtml(col)}" data-sec="${i}" data-secstart="${escapeHtml(sec.start)}" data-seckind="${escapeHtml(sec.kind)}">
-                ${sec.label ? `<div class="pm-section-head" data-open-band="${escapeHtml(col)}|${i}" title="See every ${escapeHtml(col)} job in ${escapeHtml(sec.label)}"><span>${escapeHtml(sec.label)}</span><span class="pm-section-sub">${escapeHtml(sec.sub)}</span><span class="pm-section-h" data-sech="${escapeHtml(col)}|${i}"></span><span class="pm-section-n" data-secn="${escapeHtml(col)}|${i}"></span></div>` : `<div class="pm-section-head pm-section-head-day"><span class="pm-section-h" data-sech="${escapeHtml(col)}|${i}"></span></div>`}
+                ${sec.label ? `<div class="pm-section-head" data-open-band="${escapeHtml(col)}|${i}" title="See every ${escapeHtml(col)} job in ${escapeHtml(sec.label)}"><span>${escapeHtml(sec.label)}</span><span class="pm-section-sub">${escapeHtml(sec.sub)}</span><span class="pm-section-h" data-sech="${escapeHtml(col)}|${i}"></span><span class="pm-section-h pm-section-sq" data-secsq="${escapeHtml(col)}|${i}"></span><span class="pm-section-n" data-secn="${escapeHtml(col)}|${i}"></span></div>` : `<div class="pm-section-head pm-section-head-day"><span class="pm-section-h" data-sech="${escapeHtml(col)}|${i}"></span><span class="pm-section-h pm-section-sq" data-secsq="${escapeHtml(col)}|${i}"></span></div>`}
                 <div class="fm-cards" data-cards="${escapeHtml(col)}|${i}"></div>
             </div>`).join('')}
         </div>`).join('');
@@ -576,6 +586,8 @@ function renderMap() {
                 if (ov && !risk) { risk = document.createElement('span'); risk.className = 'pm-cast-risk'; risk.textContent = 'potential risk'; n.before(risk); }
                 else if (!ov && risk) risk.remove();
             }
+            const sqEl = map.querySelector(`[data-secsq="${CSS.escape(col + '|' + i)}"]`);
+            if (sqEl) { const sq = sqftOf(list); sqEl.textContent = S.dummy && sq != null ? `${sq.toLocaleString('en-US')} sq ft` : ''; sqEl.classList.toggle('pm-over', !!castOverload(col, list)); }
             const hEl = map.querySelector(`[data-sech="${CSS.escape(col + '|' + i)}"]`);
             const cell = hEl && hEl.closest('.pm-cell');
             if (hEl) {
@@ -631,7 +643,7 @@ function renderCalendar(byCol, shipped, spec, shown) {
             dayHours += hours; dayN += list.length;
             const hTitle = usual ? `Busiest real day for ${col} in the last 8 weeks: ${fmtH(usual)} h` : '';
             groups.push(`<div class="pm-cal-dept${over ? ' pm-cal-dept-over' : ''}" style="${colStyle(col)}">
-                <div class="pm-cal-dept-head" data-open-band="${escapeHtml(col)}|${i}" title="See every ${escapeHtml(col)} job on ${escapeHtml(sec.label)} ${escapeHtml(sec.sub)}"><span class="pm-cal-dept-name">${escapeHtml(col)}</span>${S.dummy && hours ? `<span class="pm-section-h${over ? ' pm-over' : ''}" title="${escapeHtml(hTitle)}">${fmtH(hours)} h</span>` : ''}${countHtml(col, list)}</div>
+                <div class="pm-cal-dept-head" data-open-band="${escapeHtml(col)}|${i}" title="See every ${escapeHtml(col)} job on ${escapeHtml(sec.label)} ${escapeHtml(sec.sub)}"><span class="pm-cal-dept-name">${escapeHtml(col)}</span>${S.dummy && hours ? `<span class="pm-section-h${over ? ' pm-over' : ''}" title="${escapeHtml(hTitle)}">${fmtH(hours)} h</span>` : ''}${sqftHtml(list, !!castOverload(col, list))}${countHtml(col, list)}</div>
                 <div class="fm-cards" data-cards="${escapeHtml(col)}|${i}">${list.map(e => chipHtml(e, col, i)).join('')}</div>
             </div>`);
         }
@@ -749,7 +761,7 @@ async function renderModalBody() {
             hoursAll += hours;
             const rows = list.filter(e => matchesSearch(e.c, q));
             if (!rows.length) continue;
-            parts.push(`<div class="fm-log-day pm-day-dept" style="${colStyle(col)}"><span class="pm-hidden-dept">${escapeHtml(col)}</span><span class="pm-section-sub">${list.length} ${list.length === 1 ? 'job' : 'jobs'}${S.dummy && hours ? ` · ${fmtH(hours)} h` : ''}</span>${castOverload(col, list) ? countHtml(col, list) : ''}</div>`);
+            parts.push(`<div class="fm-log-day pm-day-dept" style="${colStyle(col)}"><span class="pm-hidden-dept">${escapeHtml(col)}</span><span class="pm-section-sub">${list.length} ${list.length === 1 ? 'job' : 'jobs'}${S.dummy && hours ? ` · ${fmtH(hours)} h` : ''}</span>${sqftHtml(list, !!castOverload(col, list))}${castOverload(col, list) ? countHtml(col, list) : ''}</div>`);
             parts.push(rows.map(e => rowHtml(e)).join(''));
         }
         title.textContent = `${sec.label} ${sec.sub} — ${total} ${total === 1 ? 'job' : 'jobs'}${S.dummy && hoursAll ? ` · ${fmtH(hoursAll)} h` : ''}`;
