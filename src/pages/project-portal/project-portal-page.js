@@ -3882,7 +3882,8 @@ async function handleStagedPct(castingId, dept, day, raw) {
     const others = Object.entries(map).filter(([k]) => k !== key).reduce((n, [, v]) => n + (Number(v) || 0), 0);
     if (val != null && others + val > 100.01) {
         showToast(`That makes ${fmtHrs(others + val)}% — the casting's tasks can only add up to 100%. Most this task can take: ${fmtHrs(100 - others)}%.`, 'error');
-        renderOptimizer();
+        const box = document.querySelector(`input[data-action="staged-pct"][data-casting-id="${CSS.escape(castingId)}"][data-department="${CSS.escape(dept)}"][data-day="${day}"]`);
+        if (box) box.value = map[key] == null ? '' : fmtHrs(map[key]);   // put the old percent back, keep the cursor there
         return;
     }
     if (val == null) delete map[key]; else map[key] = val;
@@ -3895,10 +3896,37 @@ async function handleStagedPct(castingId, dept, day, raw) {
         const want = hours.has(k) ? hours.get(k) : (optPctOf(castingId, cell.department, cell.day) == null ? cell.hours : null);
         if ((want == null ? null : Number(want)) !== (cell.hours == null ? null : Number(cell.hours))) scheduleOptHoursSave(castNum, cell.department, cell.day, want == null ? '' : String(want));
     }
-    renderOptimizer();
+    refreshStagedColumn(castingId);   // in place — the % box being typed in is not replaced
     const skey = `pct:${castingId}`;
     const prev = optValueSaveTimers.get(skey); if (prev) clearTimeout(prev);
     optValueSaveTimers.set(skey, setTimeout(async () => { optValueSaveTimers.delete(skey); try { await setSettingRow(skey, map); } catch (err) { showToast('Could not save the percentages: ' + (err.message || err), 'error'); } }, 500));
+}
+
+/** Update a column's hours boxes, percent line, budget count and the value totals without redrawing the inputs. */
+function refreshStagedColumn(castingId) {
+    const c = currentCastings.find(x => x.id === castingId);
+    const col = document.querySelector(`.pp-opt-col[data-casting-id="${CSS.escape(castingId)}"]`);
+    if (!c || !col) return;
+    const castNum = String(c.casting_number || '');
+    const hasBudget = optBudgets.get(castingId) != null;
+    const derived = hasBudget ? (optHoursFromPcts(c) || new Map()) : new Map();
+    col.querySelectorAll('.pp-opt-stg-row').forEach(row => {
+        const h = row.querySelector('input[data-action="staged-hours"]');
+        if (!h) return;
+        const k = `${h.dataset.department}|${h.dataset.day}`;
+        const e = currentStagingDescriptions.get(`${castNum}|${k}`) || {};
+        const byPct = hasBudget && optPctOf(castingId, h.dataset.department, parseInt(h.dataset.day, 10)) != null;
+        if (document.activeElement !== h) h.value = e.hours == null ? '' : String(e.hours);
+        h.readOnly = byPct; h.classList.toggle('pp-opt-hours-derived', byPct);
+        h.title = byPct ? 'Budget × percent — change the percent to change it' : ((e.description || '').trim() || 'Hours for this day');
+    });
+    col.querySelectorAll('[data-dept-total]').forEach(el => { const [cn, dept] = el.getAttribute('data-dept-total').split('|'); const sec = (currentStagingScaffold.get(cn) || []).find(s => s.department === dept); const n = sec ? Array.from({ length: sec.days }, (_, i) => Number((currentStagingDescriptions.get(`${cn}|${dept}|${i + 1}`) || {}).hours) || 0).reduce((a, b) => a + b, 0) : 0; el.textContent = `${n} hrs`; });
+    const line = col.querySelector('.pp-opt-pct-line');
+    if (line && hasBudget) line.outerHTML = optPctLineHtml(castingId);
+    const ent = col.querySelector('.pp-opt-budget-entered');
+    if (ent) { const entered = optHoursOf(c), b = optBudgets.get(castingId), over = b != null && entered > b + 0.01; ent.innerHTML = `entered ${fmtHrs(entered)} h${over ? ' &#9888;' : ''}`; col.querySelector('.pp-opt-budget')?.classList.toggle('pp-opt-budget-over', over); }
+    renderOptTotals();
+    renderOptValueTotalsOnly();
 }
 
 function optBudgetHtml(castingId) {
