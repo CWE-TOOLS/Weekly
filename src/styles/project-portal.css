@@ -6762,3 +6762,7 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
 .pp-opt-pct-ok { background: #dcfce7; color: #14532d; }
 .pp-opt-pct-under { background: #fef3c7; color: #92400e; }
 .pp-opt-pct-over { background: #fee2e2; color: #991b1b; }
+/* Optimizer column header: wrap instead of overlapping; the Ready button takes its own line (2026-10-27) */
+.pp-opt-col-headerbar { flex-wrap: wrap; row-gap: 6px; overflow: visible; }
+.pp-opt-col-headerbar .pp-opt-col-header { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.pp-opt-col-headerbar .pp-opt-ready { flex: 1 1 100%; width: auto; margin-top: 0; }
