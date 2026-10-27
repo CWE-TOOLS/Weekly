@@ -863,11 +863,13 @@ function wireEvents() {
         document.body.classList.add('pm-dragging');
         for (const cell of document.querySelectorAll(`.pm-cell[data-cellcol="${CSS.escape(dept)}"], .pm-cell[data-cellcol="*"]`)) cell.classList.add('pm-drop-ok');
     });
-    app.addEventListener('dragend', () => {
+    // dragend fires on the dragged card — which a drop has already redrawn, so it never reaches us: clean up in drop too
+    const endDrag = () => {
         S.dragging = null;
         document.body.classList.remove('pm-dragging');
         for (const el of document.querySelectorAll('.pm-drop-ok, .fm-drop-hover, .fm-card-dragging')) el.classList.remove('pm-drop-ok', 'fm-drop-hover', 'fm-card-dragging');
-    });
+    };
+    app.addEventListener('dragend', endDrag);
     app.addEventListener('dragover', (e) => {
         const cell = e.target.closest('.pm-cell');
         if (!cell || !S.dragging || (cell.dataset.cellcol !== S.dragging.dept && cell.dataset.cellcol !== '*')) return;
@@ -881,7 +883,7 @@ function wireEvents() {
         if (!cell || !S.dragging || (cell.dataset.cellcol !== S.dragging.dept && cell.dataset.cellcol !== '*')) return;
         e.preventDefault();
         const { key, dept, first } = S.dragging;
-        S.dragging = null;
+        endDrag();
         dummyMoveBlock(key, dept, dropTarget(cell, first));
     });
 
