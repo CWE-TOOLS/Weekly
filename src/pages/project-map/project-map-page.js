@@ -8,9 +8,10 @@
  * SHIPPED_WINDOW_DAYS. Cards are collapsed; click one for the full card with the casting's trail through the
  * departments (the department it was opened from in bold); a full column's title opens the whole list.
  * The Departments picker (like the weekly's) chooses which columns are shown; the choice is remembered per browser.
- * Loads (2026-10-27): every band head and column head shows the finished-face sq ft of its jobs (rounded up), green
- * under SQFT_WARN, orange to SQFT_OVER, red from there (a band of several days is coloured by its busiest day);
- * Cast with more than CAST_PER_DAY_LIMIT castings on one day gets a red count and the words POTENTIAL RISK.
+ * Loads (2026-10-27): a line that is one clear day (a Week day band, the column title in Day view) shows the finished-face
+ * sq ft of its jobs (rounded up), green under SQFT_WARN, orange to SQFT_OVER, red from there; lines that span several days
+ * (Month week bands, column titles in Week/Month views) show none — the user wants the load per day only.
+ * Cast with more than CAST_PER_DAY_LIMIT castings on one day gets a red count and the words POTENTIAL RISK on every line.
  */
 import { fetchAllTasks } from '../../services/data-service.js';
 import { loadAllProjects } from '../../services/projects-service.js';
@@ -204,15 +205,17 @@ function sqftTitle(sq) {
         ? `Busiest day ${fmtShort(sq.busiest.date)}: ${sq.busiest.n.toLocaleString('en-US')} sq ft (green under ${SQFT_WARN}, orange to ${SQFT_OVER}, red from ${SQFT_OVER})`
         : `Finished-face sq ft — green under ${SQFT_WARN}, orange ${SQFT_WARN}–${SQFT_OVER}, red ${SQFT_OVER} and over`;
 }
-/** Fill a sq ft span in place (text, colour class, tooltip); empty when the jobs have no inventory. */
-function fillSqft(el, list, base) {
-    const sq = sqftOf(list);
+/** True when a section is one clear day (the only lines that carry a sq ft load). */
+const oneDay = (sec) => !!sec && sec.start === sec.end;
+/** Fill a sq ft span in place (text, colour class, tooltip); empty when the line spans days or the jobs have no inventory. */
+function fillSqft(el, list, base, single) {
+    const sq = single ? sqftOf(list) : null;
     el.textContent = sq ? `${sq.total.toLocaleString('en-US')} sq ft` : '';
     el.className = `${base}${sq ? ' ' + sqftClass(sq.busiest.n) : ''}`;
     el.title = sq ? sqftTitle(sq) : '';
 }
-function sqftHtml(list, base) {
-    const sq = sqftOf(list);
+function sqftHtml(list, base, single) {
+    const sq = single ? sqftOf(list) : null;
     return sq ? `<span class="${base} ${sqftClass(sq.busiest.n)}" title="${escapeHtml(sqftTitle(sq))}">${sq.total.toLocaleString('en-US')} sq ft</span>` : '';
 }
 /** Cast only: the busiest day inside a line has more castings than the limit → { n, date }, else null. */
@@ -354,14 +357,14 @@ function renderMap() {
             const n = map.querySelector(`[data-secn="${CSS.escape(col + '|' + i)}"]`);
             if (n) fillCount(n, col, list);
             const sq = map.querySelector(`[data-secsq="${CSS.escape(col + '|' + i)}"]`);
-            if (sq) fillSqft(sq, list, 'pm-section-sq');
+            if (sq) fillSqft(sq, list, 'pm-section-sq', oneDay(spec.sections[i]));
         });
         onFloor += total;
         const all = sections.flat();
         const n = map.querySelector(`[data-count="${CSS.escape(col)}"]`);
         if (n) { fillCount(n, col, all); n.textContent = String(total); }
         const sq = map.querySelector(`[data-colsq="${CSS.escape(col)}"]`);
-        if (sq) fillSqft(sq, all, 'pm-head-sq');
+        if (sq) fillSqft(sq, all, 'pm-head-sq', S.view === 'day');
     }
     $('fm-shipped-count').textContent = String(shipped.length);
     const unit = { day: 'that day', week: 'that week', month4: 'in those 4 weeks', month: 'that month' }[S.view];
@@ -450,7 +453,7 @@ function renderModalBody() {
             const rows = list.filter(e => matchesSearch(e.c, q));
             if (!rows.length) return;
             const sec = spec.sections[i];
-            if (sec.label) parts.push(`<div class="fm-log-day pm-day-dept">${escapeHtml(sec.label)} <span class="pm-section-sub">${escapeHtml(sec.sub)}</span>${sqftHtml(list, 'pm-section-sq')}${riskHtml(S.modal.column, list)}</div>`);
+            if (sec.label) parts.push(`<div class="fm-log-day pm-day-dept">${escapeHtml(sec.label)} <span class="pm-section-sub">${escapeHtml(sec.sub)}</span>${sqftHtml(list, 'pm-section-sq', oneDay(sec))}${riskHtml(S.modal.column, list)}</div>`);
             parts.push(rows.map(e => rowHtml(e)).join(''));
         });
         body.innerHTML = parts.length ? parts.join('') : `<div class="fm-empty">${total ? 'No jobs match.' : 'Nothing here.'}</div>`;
