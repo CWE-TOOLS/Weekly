@@ -15,6 +15,8 @@
  * staging notes keyed by them) travel with the card. Each band shows its hours; a band above the busiest real day or
  * week seen in the last 8 weeks is flagged. Save / Open / Rename / Delete / Final live in project_map_dummies (+ moves).
  * Nothing real changes until a dummy is applied — Apply is a later phase, written with the DOP.
+ * CALENDAR (dummy mode only, 2026-10-27): the month as the conference-room whiteboard — rows Week 1, 2, 3…, a cell per
+ * day, the day's jobs grouped by department inside the cell; drag a card to any day.
  */
 import { fetchAllTasks } from '../../services/data-service.js';
 import { loadAllProjects } from '../../services/projects-service.js';
@@ -37,7 +39,7 @@ const S = {
     rawTasks: [],            // the weekly as fetched (never changed by a dummy)
     castings: new Map(),     // key -> summary (with the dummy's moves applied when one is open)
     projects: new Map(),     // project_number -> { project_name, status, pm }
-    view: 'day',             // 'day' | 'week' | 'month4' | 'month'
+    view: 'day',             // 'day' | 'week' | 'month4' | 'month' | 'calendar' (dummy mode: the month as a day-by-day calendar)
     anchor: null,            // 'YYYY-MM-DD'
     depts: null,             // Set of departments to show (null = all)
     sundays: false,          // Week view: show a Sunday band too
@@ -119,9 +121,18 @@ function viewSpec() {
     if (wm === 0 && d.getMonth() === 11) year += 1;
     if (wm === 11 && d.getMonth() === 0) year -= 1;
     const weeks = monthWeeks(year, wm);
-    const sections = weeks.map((s, i) => ({ label: `Week ${i + 1}`, sub: `${fmtShort(s)} – ${fmtShort(addDays(s, 5))}`, start: s, end: addDays(s, 6), kind: 'week' }));
     const thisMonth = weeks.includes(mondayOf(today()));
-    return { start: weeks[0], end: addDays(weeks[weeks.length - 1], 6), sections, title: `${MONTHS[wm]} ${year}${thisMonth ? ' (this month)' : ''}`, month: wm, year };
+    const title = `${MONTHS[wm]} ${year}${thisMonth ? ' (this month)' : ''}`;
+    const weekRows = weeks.map((s, i) => ({ label: `Week ${i + 1}`, sub: `${fmtShort(s)} – ${fmtShort(addDays(s, 5))}`, start: s, end: addDays(s, 6) }));
+    if (S.view === 'calendar') {
+        // the same weeks, but every day is its own break: a cell in the calendar grid (row = week, column = weekday)
+        const dayIdx = S.sundays ? [0, 1, 2, 3, 4, 5, 6] : [0, 1, 2, 3, 4, 5];
+        const sections = [];
+        weeks.forEach((s, w) => dayIdx.forEach((i, col) => { const dd = addDays(s, i); sections.push({ label: weekdayOf(dd), sub: fmtShort(dd), start: dd, end: dd, kind: 'day', week: w, col }); }));
+        return { start: weeks[0], end: addDays(weeks[weeks.length - 1], 6), sections, title, month: wm, year, calendar: true, weekRows, dayNames: dayIdx.map(i => WEEKDAY[(i + 1) % 7]) };
+    }
+    const sections = weekRows.map(w => ({ ...w, kind: 'week' }));
+    return { start: weeks[0], end: addDays(weeks[weeks.length - 1], 6), sections, title, month: wm, year };
 }
 
 // ---------------------------------------------------------------- data
@@ -293,7 +304,7 @@ async function enterDummy() {
     if (S.dummy) return;
     if (!window.confirm('Dummy mode is for the DOP.\n\nUnless the DOP has asked you to work in it, press Cancel.\n\nNothing real changes in Dummy mode: moves are saved as a named dummy only.')) return;
     S.dummy = { id: null, name: '', final: false, chain: true, moves: new Map(), dirty: false, undo: [] };
-    if (S.view === 'day') S.view = 'week';
+    if (S.view === 'day') S.view = 'calendar';
     S.expandedKey = null;
     renderMap();
     try { await listDummies(); } catch { /* the notice below covers a missing table */ }
@@ -305,6 +316,7 @@ function exitDummy() {
     if (S.dummy.dirty && !window.confirm('Leave Dummy mode without saving? The unsaved moves are lost.')) return;
     S.dummy = null;
     S.expandedKey = null;
+    if (S.view === 'calendar') S.view = 'month';
     S.castings = summarise(S.rawTasks);
     notice('');
     renderMap();
@@ -381,7 +393,7 @@ const who = () => { try { return (localStorage.getItem(WHO_KEY) || '').trim(); }
 
 function entryLine(e) {
     const span = e.firstIdx === e.dayIndex ? `day ${e.dayIndex}` : `days ${e.firstIdx}–${e.dayIndex}`;
-    if (S.view === 'day') return `${span} of ${e.dayTotal}`;
+    if (S.view === 'day' || S.view === 'calendar') return `${span} of ${e.dayTotal}`;
     return `${e.days.map(weekdayOf).join(' ')} · ${span} of ${e.dayTotal}`;
 }
 
@@ -443,7 +455,9 @@ function renderWhen(spec) {
     $('pm-when-label').textContent = spec.title;
     for (const b of document.querySelectorAll('.pm-view-btn[data-view]')) b.classList.toggle('pm-view-on', b.dataset.view === S.view);
     const sun = $('pm-sunday');
-    if (sun) { sun.hidden = S.view !== 'week'; sun.classList.toggle('pm-view-on', S.sundays); sun.setAttribute('aria-pressed', String(S.sundays)); }
+    if (sun) { sun.hidden = S.view !== 'week' && S.view !== 'calendar'; sun.classList.toggle('pm-view-on', S.sundays); sun.setAttribute('aria-pressed', String(S.sundays)); }
+    const calBtn = document.querySelector('.pm-view-btn[data-view="calendar"]');
+    if (calBtn) calBtn.hidden = !S.dummy;   // the whiteboard calendar belongs to Dummy mode
     const dayBtn = document.querySelector('.pm-view-btn[data-view="day"]');
     if (dayBtn) { dayBtn.disabled = !!S.dummy; dayBtn.title = S.dummy ? 'Day view has no other day to drag to — use Week, 4 weeks or Month' : ''; }
 }
@@ -474,10 +488,13 @@ function renderMap() {
         hiddenEl.innerHTML = hiddenEmpty.length ? `<span class="pm-hidden-why">Hidden, nothing scheduled ${spec.title.includes('(today)') ? 'today' : 'that day'}:</span> ${hiddenEmpty.map(d => `<span class="pm-hidden-dept" style="${colStyle(d)}">${escapeHtml(d)}</span>`).join('')}` : '';
     }
     renderDummyBar();
-    if (!shown.length) { map.dataset.layout = ''; map.innerHTML = `<div class="fm-empty pm-none">Nothing scheduled ${S.view === 'day' ? 'that day' : 'in this view'} for the departments you have ticked.</div>`; $('pm-sub').textContent = '0 on the floor'; renderWhen(spec); renderDeptPicker(); renderPopover(); if (S.modal) renderModalBody(); return; }
+    if (!shown.length) { map.dataset.layout = ''; map.classList.remove('pm-calendar'); map.style.gridTemplateColumns = ''; map.innerHTML = `<div class="fm-empty pm-none">Nothing scheduled ${S.view === 'day' ? 'that day' : 'in this view'} for the departments you have ticked.</div>`; $('pm-sub').textContent = '0 on the floor'; renderWhen(spec); renderDeptPicker(); renderPopover(); if (S.modal) renderModalBody(); return; }
+    if (spec.calendar) { renderCalendar(byCol, shipped, spec, shown); return; }
     const layoutKey = `${S.view}|${spec.start}|${spec.sections.length}|${shown.join('|')}|${S.dummy ? 'd' : 'r'}`;
     if (map.dataset.layout !== layoutKey) {
         map.dataset.layout = layoutKey;
+        map.classList.remove('pm-calendar');
+        map.style.gridTemplateColumns = '';
         map.style.setProperty('--pm-cols', String(shown.length));
         const last = spec.sections.length - 1;
         map.innerHTML = shown.map((col, k) => `<div class="pm-col" data-col="${escapeHtml(col)}" style="${colStyle(col)}">
@@ -522,11 +539,57 @@ function renderMap() {
         if (n) n.textContent = String(total);
     }
     $('fm-shipped-count').textContent = String(shipped.length);
-    const unit = { day: 'that day', week: 'that week', month4: 'in those 4 weeks', month: 'that month' }[S.view];
+    const unit = { day: 'that day', week: 'that week', month4: 'in those 4 weeks', month: 'that month', calendar: 'that month' }[S.view];
     $('pm-sub').textContent = `${onFloor} on the floor ${unit}`;
     renderWhen(spec);
     renderDeptPicker();
     markOverflow();
+    renderPopover();
+    if (S.modal) renderModalBody();
+}
+
+/** Dummy mode's whiteboard: rows = the month's weeks (Week 1, 2, 3…), columns = weekdays, a cell per day with that
+ *  day's jobs grouped by department. Every day cell is a drop target (data-cellcol="*"): the dragged card's department
+ *  block lands on that date. */
+function renderCalendar(byCol, shipped, spec, shown) {
+    const map = $('pm-map');
+    map.dataset.layout = `calendar|${spec.start}|${spec.sections.length}`;
+    map.classList.add('pm-calendar');
+    map.classList.remove('pm-banded');
+    map.style.gridTemplateColumns = `5.4rem repeat(${spec.dayNames.length}, minmax(0, 1fr))`;
+    map.style.gridTemplateRows = 'auto ' + spec.weekRows.map(() => 'minmax(0, 1fr)').join(' ');
+    const tod = today();
+    let onFloor = 0;
+    const parts = ['<div class="pm-cal-corner" style="grid-column:1;grid-row:1"></div>'];
+    spec.dayNames.forEach((n, j) => parts.push(`<div class="pm-cal-dow${n === 'Sun' ? ' pm-cal-sun' : ''}" style="grid-column:${j + 2};grid-row:1">${n}</div>`));
+    spec.weekRows.forEach((w, r) => parts.push(`<div class="pm-cal-week" style="grid-column:1;grid-row:${r + 2}"><span>${escapeHtml(w.label)}</span><span class="pm-section-sub">${escapeHtml(w.sub)}</span></div>`));
+    spec.sections.forEach((sec, i) => {
+        const groups = [];
+        let dayHours = 0, dayN = 0;
+        for (const col of shown) {
+            const list = byCol.get(col)[i];
+            if (!list.length) continue;
+            const hours = list.reduce((a, e) => a + e.hours, 0);
+            const usual = S.hoursMax.day.get(col) || 0;
+            const over = S.dummy && usual > 0 && hours > usual + 0.01;
+            dayHours += hours; dayN += list.length;
+            const hTitle = usual ? `Busiest real day for ${col} in the last 8 weeks: ${fmtH(usual)} h` : '';
+            groups.push(`<div class="pm-cal-dept${over ? ' pm-cal-dept-over' : ''}" style="${colStyle(col)}">
+                <div class="pm-cal-dept-head" data-open-band="${escapeHtml(col)}|${i}" title="See every ${escapeHtml(col)} job on ${escapeHtml(sec.label)} ${escapeHtml(sec.sub)}"><span class="pm-cal-dept-name">${escapeHtml(col)}</span>${S.dummy && hours ? `<span class="pm-section-h${over ? ' pm-over' : ''}" title="${escapeHtml(hTitle)}">${fmtH(hours)} h</span>` : ''}<span class="pm-section-n">${list.length}</span></div>
+                <div class="fm-cards" data-cards="${escapeHtml(col)}|${i}">${list.map(e => chipHtml(e, col, i)).join('')}</div>
+            </div>`);
+        }
+        onFloor += dayN;
+        parts.push(`<div class="pm-cell pm-cal-day${sec.start === tod ? ' pm-cal-today' : ''}${sec.label === 'Sun' ? ' pm-cal-sun' : ''}" style="grid-column:${sec.col + 2};grid-row:${sec.week + 2}" data-cellcol="*" data-sec="${i}" data-secstart="${escapeHtml(sec.start)}" data-seckind="day">
+            <div class="pm-cal-date"><b>${escapeHtml(sec.sub)}</b><span class="pm-cal-date-n">${dayN ? `${dayN} ${dayN === 1 ? 'job' : 'jobs'}` : ''}${S.dummy && dayHours ? ` · ${fmtH(dayHours)} h` : ''}</span></div>
+            <div class="pm-cal-body">${groups.join('')}</div>
+        </div>`);
+    });
+    map.innerHTML = parts.join('');
+    $('fm-shipped-count').textContent = String(shipped.length);
+    $('pm-sub').textContent = `${onFloor} on the floor that month`;
+    renderWhen(spec);
+    renderDeptPicker();
     renderPopover();
     if (S.modal) renderModalBody();
 }
@@ -739,7 +802,7 @@ function wireEvents() {
         e.dataTransfer.effectAllowed = 'move';
         chip.classList.add('fm-card-dragging');
         document.body.classList.add('pm-dragging');
-        for (const cell of document.querySelectorAll(`.pm-cell[data-cellcol="${CSS.escape(dept)}"]`)) cell.classList.add('pm-drop-ok');
+        for (const cell of document.querySelectorAll(`.pm-cell[data-cellcol="${CSS.escape(dept)}"], .pm-cell[data-cellcol="*"]`)) cell.classList.add('pm-drop-ok');
     });
     app.addEventListener('dragend', () => {
         S.dragging = null;
@@ -748,7 +811,7 @@ function wireEvents() {
     });
     app.addEventListener('dragover', (e) => {
         const cell = e.target.closest('.pm-cell');
-        if (!cell || !S.dragging || cell.dataset.cellcol !== S.dragging.dept) return;
+        if (!cell || !S.dragging || (cell.dataset.cellcol !== S.dragging.dept && cell.dataset.cellcol !== '*')) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
         cell.classList.add('fm-drop-hover');
@@ -756,7 +819,7 @@ function wireEvents() {
     app.addEventListener('dragleave', (e) => { e.target.closest?.('.pm-cell')?.classList.remove('fm-drop-hover'); });
     app.addEventListener('drop', (e) => {
         const cell = e.target.closest('.pm-cell');
-        if (!cell || !S.dragging || cell.dataset.cellcol !== S.dragging.dept) return;
+        if (!cell || !S.dragging || (cell.dataset.cellcol !== S.dragging.dept && cell.dataset.cellcol !== '*')) return;
         e.preventDefault();
         const { key, dept, first } = S.dragging;
         S.dragging = null;
