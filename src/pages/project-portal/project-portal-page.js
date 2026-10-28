@@ -132,7 +132,7 @@ import { activateJigListTab } from './jig-list.js?v=20261026-1';
 import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, APPROVALS_TAB_ITEMS } from '../../config/milestones-config.js?v=20261027-2';
 import { loadMilestonesForProject, saveMilestone, isMilestonesMigrationPending, loadLayoutConditions, LAYOUT_CONDITION_PREFIX, layoutConditionNote, parseLayoutCondition, sideWords } from '../../services/milestones-service.js';
 import { loadJigListsForProject as loadJigListsForScrim, scrimForInventory } from '../../services/jig-list-service.js';
-import { loadReadyFlags, setReadyFlag, loadSettingRows, setSettingRow } from '../../services/schedule-service.js?v=20261027-1';
+import { loadReadyFlags, setReadyFlag, loadSettingRows, setSettingRow, loadScheduleForCastings } from '../../services/schedule-service.js?v=20261027-1';
 import { tasksForDepartment, teamOfDepartment, taskForPhase, STAGING_NAME_OF_TEAM, REVENUE_PER_HOUR } from '../../config/scheduler-config.js?v=20261027-1';
 import {
     loadLayoutPositions,
@@ -1045,19 +1045,29 @@ function populateForm(project) {
 
 // ---- Project Info: the project value lines, read-only — they are entered on the Optimizer Hours tab (2026-10-28) ----
 let infoValueFor = null;
-function renderInfoValue(items, legacy) {
+function renderInfoValue(items, legacy, castName) {
     const box = document.getElementById('pp-info-value');
     if (!box) return;
     const list = normalizeOptValueItems(items);
-    const total = list.reduce((n, it) => n + (Number(it.value) || 0), 0);
-    const hours = Math.round(total / REVENUE_PER_HOUR * 10) / 10;
-    const line = (name, v, cls = '') => `<div class="pp-info-val-row${cls}"><span class="pp-info-val-name">${escapeHtml(name)}</span><span class="pp-info-val-amt">${money0(v)}</span></div>`;
-    const rows = list.map((it, i) => i < OPT_FIXED_VALUES.length
-        ? line(it.name, it.value)
-        : line(it.name || `Change Order #${i - OPT_FIXED_VALUES.length + 1}`, it.value, ' pp-info-val-co'));
+    const fixed = list.slice(0, OPT_FIXED_VALUES.length), cos = list.slice(OPT_FIXED_VALUES.length);
+    const initial = fixed.reduce((n, it) => n + (Number(it.value) || 0), 0);
+    const coSum = cos.reduce((n, it) => n + (Number(it.value) || 0), 0);
+    const total = initial + coSum;
+    const h = (v) => fmtHrs(Math.round(v / REVENUE_PER_HOUR * 10) / 10);
+    const names = castName || new Map(currentCastings.map(c => [c.id, String(c.casting_number || '')]));
+    const line = (name, v, cls = '', extra = '') => `<div class="pp-info-val-row${cls}"><span class="pp-info-val-name">${escapeHtml(name)}${extra}</span><span class="pp-info-val-amt">${money0(v)}</span></div>`;
+    const rows = fixed.map(it => line(it.name, it.value));
+    rows.push(line('Initial Value', initial, ' pp-info-val-sub', ` <small>= ${h(initial)} h</small>`));
+    cos.forEach((it, k) => {
+        const cast = it.castingId ? (names.get(it.castingId) ? `Cast ${names.get(it.castingId)}` : 'cast') : null;
+        const tag = (Number(it.value) || 0) > 0 ? (cast ? ` <small>&rarr; ${escapeHtml(cast)}</small>` : ' <small class="pp-info-val-warn">&rarr; cast not picked</small>') : '';
+        rows.push(line(it.name || `Change Order #${k + 1}`, it.value, ' pp-info-val-co', tag));
+    });
+    if (cos.length) rows.push(line('Change Orders', coSum, ' pp-info-val-sub', ` <small>= ${h(coSum)} h</small>`));
+    rows.push(line('Total Project Value', total, ' pp-info-val-total'));
     const note = legacy && !total ? '<div class="pp-info-val-note">Legacy project &mdash; its hours came from the Optimizer sheets; no project value was entered.</div>' : '';
-    box.innerHTML = `<div class="pp-info-val-grid">${rows.join('')}${line('Total Project Value', total, ' pp-info-val-total')}</div>
-        <div class="pp-info-val-foot">= ${fmtHrs(hours)} Optimizer hours at $${REVENUE_PER_HOUR}/h &middot; entered on the Optimizer Hours tab</div>${note}`;
+    box.innerHTML = `<div class="pp-info-val-grid">${rows.join('')}</div>
+        <div class="pp-info-val-foot">= ${h(total)} Optimizer hours at $${REVENUE_PER_HOUR}/h${cos.length ? ` (initial ${h(initial)} h + change orders ${h(coSum)} h)` : ''} &middot; entered on the Optimizer Hours tab</div>${note}`;
 }
 async function refreshInfoValue(projectNumber) {
     const pn = String(projectNumber || '').trim();
@@ -1069,7 +1079,10 @@ async function refreshInfoValue(projectNumber) {
         const rows = await loadSettingRows([`value:${pn}`, `legacy:${pn}`]);
         if (infoValueFor !== pn) return;   // another job was opened meanwhile
         const v = rows.get(`value:${pn}`), lg = rows.get(`legacy:${pn}`);
-        renderInfoValue(v && Array.isArray(v.items) ? v.items : [], !!(lg && typeof lg === 'object'));
+        let names = null;
+        try { const cs = (currentCastings.length && currentCastings[0].project_number === pn) ? currentCastings : await loadCastings(pn); names = new Map((cs || []).map(c => [c.id, String(c.casting_number || '')])); } catch (e) { /* names stay generic */ }
+        if (infoValueFor !== pn) return;
+        renderInfoValue(v && Array.isArray(v.items) ? v.items : [], !!(lg && typeof lg === 'object'), names);
     } catch (e) { box.innerHTML = '<span class="pp-muted">Project value could not be loaded.</span>'; }
 }
 
@@ -3822,11 +3835,13 @@ function optCastingHours(castingId) { const c = currentCastings.find(x => x.id =
 /** Why the castings cannot be marked ready yet: the budgets must add up to exactly the job's Optimizer hours (null = fine). */
 function optReadyBlocker() {
     if (optLegacy) return null;   // imported from the Optimizer: the hours are already on the castings
-    const hours = optJobHours();
-    if (!hours) return 'Enter the project value first: the castings\' budgets must add up to the job\'s Optimizer hours before they can be marked ready.';
+    const hours = optInitialHours();
+    if (!hours) return 'Enter the project value first: the castings\' allocated hours must add up to the job\'s Optimizer hours before they can be marked ready.';
     const alloc = optAllocated(getCastingsForActivePhase());
-    if (alloc > hours + 0.01) return `The castings' budgets add up to ${fmtHrs(alloc)} h but the job only has ${fmtHrs(hours)} h: lower a budget by ${fmtHrs(alloc - hours)} h first.`;
-    if (alloc < hours - 0.01) return `The castings' budgets add up to ${fmtHrs(alloc)} h but the job has ${fmtHrs(hours)} h: ${fmtHrs(hours - alloc)} h still have to go on a casting first.`;
+    if (alloc > hours + 0.01) return `The allocated hours add up to ${fmtHrs(alloc)} h but the initial value only gives ${fmtHrs(hours)} h: lower a casting's allocated hours by ${fmtHrs(alloc - hours)} h first.`;
+    if (alloc < hours - 0.01) return `The allocated hours add up to ${fmtHrs(alloc)} h but the initial value gives ${fmtHrs(hours)} h: ${fmtHrs(hours - alloc)} h still have to be allocated to a casting first.`;
+    const un = optUnassignedChangeOrders();
+    if (un.length) return `Pick the cast each change order applies to (${un.length} change order${un.length === 1 ? '' : 's'} without a cast).`;
     return null;
 }
 function optReadyHtml(castingId) {
@@ -3851,9 +3866,27 @@ function normalizeOptValueItems(items) {
         const i = OPT_FIXED_VALUES.findIndex(n => n.toLowerCase() === name.toLowerCase());
         if (i >= 0) fixed[i].value += value;
         else if (/^contract value$/i.test(name)) fixed[0].value += value;
-        else extras.push({ name, value });
+        else extras.push({ name, value, castingId: it?.castingId ? String(it.castingId) : null });
     }
     return [...fixed, ...extras];
+}
+// Initial value = the three fixed lines; change orders are summed separately and each one is tied to the cast that does the extra work.
+function optInitialValue() { return optValueItems.slice(0, OPT_FIXED_VALUES.length).reduce((n, it) => n + (Number(it.value) || 0), 0); }
+function optChangeOrders() { return optValueItems.slice(OPT_FIXED_VALUES.length); }
+function optChangeOrderValue() { return optChangeOrders().reduce((n, it) => n + (Number(it.value) || 0), 0); }
+function optInitialHours() { return Math.round(optInitialValue() / REVENUE_PER_HOUR * 10) / 10; }
+function optChangeOrderHours() { return Math.round(optChangeOrderValue() / REVENUE_PER_HOUR * 10) / 10; }
+/** Change-order hours tied to one cast (they go on that cast's upcoming tasks only). */
+function optCoHoursOf(castingId) { return Math.round(optChangeOrders().filter(it => it.castingId === castingId).reduce((n, it) => n + (Number(it.value) || 0), 0) / REVENUE_PER_HOUR * 10) / 10; }
+function optCoNamesOf(castingId) { return optChangeOrders().map((it, k) => ({ it, k })).filter(({ it }) => it.castingId === castingId && (Number(it.value) || 0) > 0).map(({ it, k }) => it.name || `Change Order #${k + 1}`); }
+function optUnassignedChangeOrders() { return optChangeOrders().filter(it => (Number(it.value) || 0) > 0 && !it.castingId); }
+let optCastDone = new Map();     // castingId -> last scheduled date (ISO) when every scheduled day of the cast is already past
+function optCastOptionsHtml(selected) {
+    const list = [...currentCastings].sort((a, b) => String(a.casting_number || '').localeCompare(String(b.casting_number || ''), undefined, { numeric: true }));
+    return `<option value="">&mdash; Pick cast &mdash;</option>` + list.map(c => {
+        const done = optCastDone.get(c.id);
+        return `<option value="${escapeAttr(c.id)}"${c.id === selected ? ' selected' : ''}${done && c.id !== selected ? ' disabled' : ''}>Cast ${escapeHtml(String(c.casting_number || ''))}${done ? ' — work already done' : ''}</option>`;
+    }).join('');
 }
 let optBudgets = new Map();      // castingId -> hours
 let optLegacy = null;            // { source, months, imported_at } when the job's schedule came from the Optimizer sheets — no project value needed
@@ -3868,6 +3901,13 @@ async function loadOptValue() {
         const v = rows.get(`value:${currentProjectNumber}`);
         optValueItems = normalizeOptValueItems(v && Array.isArray(v.items) ? v.items : []);
         for (const c of currentCastings) { const b = rows.get(`budget:${c.id}`); if (b != null && b !== '') optBudgets.set(c.id, Number(b) || 0); }
+        optCastDone = new Map();
+        try {
+            const today = new Date(); const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+            const last = new Map();
+            for (const r of await loadScheduleForCastings(currentCastings.map(c => c.id))) { const d = String(r.date || '').slice(0, 10); if (d && (!last.has(r.casting_id) || d > last.get(r.casting_id))) last.set(r.casting_id, d); }
+            for (const [id, d] of last) if (d < iso) optCastDone.set(id, d);   // every scheduled day is behind us: a change order cannot land on tasks that already happened
+        } catch (e) { /* no scheduler rows readable — every cast stays pickable */ }
     } catch (e) { logger.warn('[project-portal] loadOptValue failed', e); }
 }
 function optTotalValue() { return optValueItems.reduce((n, it) => n + (Number(it.value) || 0), 0); }
@@ -3885,25 +3925,29 @@ function renderOptValue() {
         const months = Array.isArray(optLegacy.months) && optLegacy.months.length ? optLegacy.months.join(' / ') : 'the Optimizer';
         box.innerHTML = `<div class="pp-opt-val-head"><strong>Project value &rarr; Optimizer hours</strong><span class="pp-opt-val-hint">legacy project</span></div>
             <div class="pp-opt-legacy-band">&#128230; <strong>Legacy project</strong> &mdash; its schedule and hours were brought in from the ${escapeHtml(months)} Optimizer sheet${/\//.test(months) ? 's' : ''}. No project value is needed: the castings can be marked ready for scheduling as they are.
-            <button type="button" class="pp-opt-legacy-off" data-val-legacy-off title="Switch this job to the new way: enter its value, give every casting a budget">Enter a project value instead</button></div>`;
+            <button type="button" class="pp-opt-legacy-off" data-val-legacy-off title="Switch this job to the new way: enter its value, allocate hours to every casting">Enter a project value instead</button></div>`;
         return;
     }
     if (optValueItems.length < OPT_FIXED_VALUES.length) optValueItems = normalizeOptValueItems(optValueItems);
     const amount = (it, i) => `<span class="pp-opt-val-cur">$</span><input type="number" min="0" step="1" id="pp-opt-val-${i}" data-val-amount="${i}" value="${it.value ? escapeAttr(String(it.value)) : ''}" placeholder="0">`;
     const rows = optValueItems.map((it, i) => i < OPT_FIXED_VALUES.length
-        ? `<div class="pp-opt-val-row pp-opt-val-fixed"><label for="pp-opt-val-${i}">${escapeHtml(it.name)} =</label>${amount(it, i)}<span></span></div>`
-        : `<div class="pp-opt-val-row pp-opt-val-co"><span class="pp-opt-val-co-wrap"><input type="text" data-val-name="${i}" value="${escapeAttr(it.name)}" placeholder="Change Order #${i - OPT_FIXED_VALUES.length + 1} — type a name" title="Name this change order"><span class="pp-opt-val-eq">=</span></span>${amount(it, i)}<button type="button" class="pp-opt-val-del" data-val-del="${i}" title="Remove this change order">&times;</button></div>`).join('');
+        ? `<div class="pp-opt-val-row pp-opt-val-fixed"><label for="pp-opt-val-${i}">${escapeHtml(it.name)} =</label>${amount(it, i)}<span></span><span></span></div>`
+        : `<div class="pp-opt-val-row pp-opt-val-co"><span class="pp-opt-val-co-wrap"><input type="text" data-val-name="${i}" value="${escapeAttr(it.name)}" placeholder="Change Order #${i - OPT_FIXED_VALUES.length + 1} — type a name" title="Name this change order"><span class="pp-opt-val-eq">=</span></span>${amount(it, i)}<select data-val-cast="${i}" class="pp-opt-val-cast${(Number(it.value) || 0) > 0 && !it.castingId ? ' pp-opt-val-cast-missing' : ''}" title="The cast this change order applies to — its hours go on that cast's upcoming tasks only">${optCastOptionsHtml(it.castingId)}</select><button type="button" class="pp-opt-val-del" data-val-del="${i}" title="Remove this change order">&times;</button></div>`).join('');
     box.innerHTML = `<div class="pp-opt-val-head"><strong>Project value &rarr; Optimizer hours</strong><span class="pp-opt-val-hint">value &divide; $${REVENUE_PER_HOUR}/h</span></div>
         <div class="pp-opt-val-rows">${rows}</div>
         <button type="button" class="pp-opt-val-add" data-val-add>+ Add Change Order value</button>
         ${optValueTotalsHtml()}`;
 }
 function optValueTotalsHtml() {
-    const total = optTotalValue(), hours = optJobHours();
+    const initial = optInitialValue(), co = optChangeOrderValue(), total = optTotalValue();
+    const hours = optInitialHours(), coHours = optChangeOrderHours(), allHours = optJobHours();
     const alloc = optAllocated(getCastingsForActivePhase()), left = Math.round((hours - alloc) * 10) / 10;
+    const un = optUnassignedChangeOrders().length;
     const state = !hours ? '' : alloc > hours + 0.01 ? 'pp-opt-val-over' : alloc < hours - 0.01 ? 'pp-opt-val-under' : 'pp-opt-val-ok';
-    const msg = !hours ? 'Enter the project value to get the hours.' : alloc > hours + 0.01 ? `Over by ${fmtHrs(alloc - hours)} h — lower a casting's budget.` : alloc < hours - 0.01 ? `${fmtHrs(left)} h still to put on castings.` : 'Every hour is on a casting.';
-    return `<div class="pp-opt-val-totals"><span>Total value <strong>${money0(total)}</strong></span><span>Optimizer hours <strong>${fmtHrs(hours)} h</strong></span><span class="pp-opt-val-alloc ${state}">On castings <strong>${fmtHrs(alloc)} h</strong> · ${escapeHtml(msg)}</span></div>`;
+    const msg = !hours ? 'Enter the initial value to get the hours.' : alloc > hours + 0.01 ? `Over by ${fmtHrs(alloc - hours)} h — lower a casting's allocated hours.` : alloc < hours - 0.01 ? `${fmtHrs(left)} h still to allocate to castings.` : 'Every hour is allocated to a casting.';
+    return `<div class="pp-opt-val-totals">
+        <div class="pp-opt-val-sum"><span>Initial value <strong>${money0(initial)}</strong> = ${fmtHrs(hours)} h</span><span>Change orders <strong>${money0(co)}</strong> = ${fmtHrs(coHours)} h${un ? ` <em class="pp-opt-val-warn">${un} without a cast</em>` : ''}</span><span>Total value <strong>${money0(total)}</strong> = ${fmtHrs(allHours)} h</span></div>
+        <div class="pp-opt-val-sum"><span class="pp-opt-val-alloc ${state}">Allocated hours <strong>${fmtHrs(alloc)} h</strong> of ${fmtHrs(hours)} h (initial value) · ${escapeHtml(msg)}</span><span class="pp-opt-val-hint">Change-order hours go on the picked cast's upcoming tasks only — never on work that already happened.</span></div></div>`;
 }
 /** Re-draw only the totals line while a PM is typing a value (keeps the caret in the box). */
 function renderOptValueTotalsOnly() {
@@ -3926,18 +3970,21 @@ function optBudgetHtml(castingId) {
     const b = optBudgets.get(castingId);
     const c = currentCastings.find(x => x.id === castingId);
     const entered = c ? optHoursOf(c) : 0;
-    const over = b != null && entered > b + 0.01;
-    return `<div class="pp-opt-budget${over ? ' pp-opt-budget-over' : ''}" title="Hours this casting gets out of the job's Optimizer hours; the hours entered on its days should not exceed it">
-        <span class="pp-opt-budget-label">Budget</span><input type="number" min="0" step="0.5" data-action="casting-budget" data-casting-id="${escapeAttr(castingId)}" value="${b == null ? '' : escapeAttr(fmtHrs(b))}" placeholder="0"><span class="pp-opt-budget-unit">h</span>
+    const co = optCoHoursOf(castingId);
+    const limit = b == null && !co ? null : (b || 0) + co;
+    const over = limit != null && entered > limit + 0.01;
+    const coLine = co ? `<span class="pp-opt-budget-co" title="${escapeAttr(optCoNamesOf(castingId).join(', '))}">+ ${fmtHrs(co)} h change order = <strong>${fmtHrs(limit)} h</strong></span>` : '';
+    return `<div class="pp-opt-budget${over ? ' pp-opt-budget-over' : ''}" title="Hours allocated to this casting out of the initial value's Optimizer hours${co ? ', plus its change-order hours' : ''}; the hours entered on its days should not exceed them">
+        <span class="pp-opt-budget-label">Allocated hours</span><input type="number" min="0" step="0.5" data-action="casting-budget" data-casting-id="${escapeAttr(castingId)}" value="${b == null ? '' : escapeAttr(fmtHrs(b))}" placeholder="0"><span class="pp-opt-budget-unit">h</span>${coLine}
         <span class="pp-opt-budget-entered">entered ${fmtHrs(entered)} h${over ? ' &#9888;' : ''}</span></div>`;
 }
 async function handleCastingBudget(castingId, raw) {
     if (!currentProjectNumber) return;
     const val = raw === '' ? null : Math.max(0, Number(raw) || 0);
-    const hours = optJobHours();
+    const hours = optInitialHours();
     const others = optAllocated(getCastingsForActivePhase().filter(c => c.id !== castingId));
     if (val != null && hours > 0 && others + val > hours + 0.01) {
-        showToast(`That would put ${fmtHrs(others + val)} h on castings but the job only has ${fmtHrs(hours)} h. Most you can give this casting: ${fmtHrs(hours - others)} h.`, 'error');
+        showToast(`That would allocate ${fmtHrs(others + val)} h but the initial value only gives ${fmtHrs(hours)} h. Most you can allocate to this casting: ${fmtHrs(hours - others)} h.`, 'error');
         renderOptimizer();
         return;
     }
@@ -3947,7 +3994,7 @@ async function handleCastingBudget(castingId, raw) {
     const prev = optValueSaveTimers.get(key); if (prev) clearTimeout(prev);
     optValueSaveTimers.set(key, setTimeout(async () => {
         optValueSaveTimers.delete(key);
-        try { await setSettingRow(key, val); } catch (err) { showToast('Could not save the budget: ' + (err.message || err), 'error'); }
+        try { await setSettingRow(key, val); } catch (err) { showToast('Could not save the allocated hours: ' + (err.message || err), 'error'); }
     }, 500));
 }
 
@@ -8920,9 +8967,19 @@ function wireEvents() {
     if (optValue) {
         optValue.addEventListener('click', async (e) => {
             if (!e.target.closest('[data-val-legacy-off]') || !currentProjectNumber) return;
-            if (!window.confirm('Switch this job to the project-value way? From then on the castings\' budgets must add up to the job\'s Optimizer hours before they can be marked ready.')) return;
+            if (!window.confirm('Switch this job to the project-value way? From then on the castings\' allocated hours must add up to the job\'s Optimizer hours before they can be marked ready.')) return;
             try { await setSettingRow(`legacy:${currentProjectNumber}`, null); optLegacy = null; renderOptimizer(); showToast('Legacy flag removed — enter the project value.'); }
             catch (err) { showToast('Could not save: ' + (err.message || err), 'error'); }
+        });
+        optValue.addEventListener('change', (e) => {
+            const s = e.target.closest('select[data-val-cast]');
+            if (!s) return;
+            const it = optValueItems[Number(s.dataset.valCast)];
+            if (!it) return;
+            it.castingId = s.value || null;
+            s.classList.toggle('pp-opt-val-cast-missing', (Number(it.value) || 0) > 0 && !it.castingId);
+            scheduleOptValueSave();
+            renderOptValueTotalsOnly();
         });
         optValue.addEventListener('input', (e) => {
             const n = e.target.closest('[data-val-name]'), a = e.target.closest('[data-val-amount]');
