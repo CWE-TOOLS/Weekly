@@ -3809,7 +3809,21 @@ function optReadyHtml(castingId) {
 }
 // ---- Project value → Optimizer hours (2026-10-27): PMs enter the job's value (base + change orders); ÷ $135 = the
 // hours the job has; each casting gets a budget; the budgets must add up to exactly those hours.
-let optValueItems = [];          // [{ name, value }]
+let optValueItems = [];          // [{ name, value }] — the first three are the fixed lines, the rest are change orders
+const OPT_FIXED_VALUES = ['Fabrication Value', 'Crating Value', 'Loading Value'];
+/** Three fixed lines first (filled from a saved list by name; an old "Contract value" lands on Fabrication), change orders after. */
+function normalizeOptValueItems(items) {
+    const fixed = OPT_FIXED_VALUES.map(name => ({ name, value: 0 }));
+    const extras = [];
+    for (const it of Array.isArray(items) ? items : []) {
+        const name = String(it?.name || '').trim(), value = Number(it?.value) || 0;
+        const i = OPT_FIXED_VALUES.findIndex(n => n.toLowerCase() === name.toLowerCase());
+        if (i >= 0) fixed[i].value += value;
+        else if (/^contract value$/i.test(name)) fixed[0].value += value;
+        else extras.push({ name, value });
+    }
+    return [...fixed, ...extras];
+}
 let optBudgets = new Map();      // castingId -> hours
 let optLegacy = null;            // { source, months, imported_at } when the job's schedule came from the Optimizer sheets — no project value needed
 const optValueSaveTimers = new Map();
@@ -3821,7 +3835,7 @@ async function loadOptValue() {
         const lg = rows.get(`legacy:${currentProjectNumber}`);
         optLegacy = lg && typeof lg === 'object' ? lg : null;
         const v = rows.get(`value:${currentProjectNumber}`);
-        if (v && Array.isArray(v.items)) optValueItems = v.items.map(it => ({ name: String(it.name || ''), value: Number(it.value) || 0 }));
+        optValueItems = normalizeOptValueItems(v && Array.isArray(v.items) ? v.items : []);
         for (const c of currentCastings) { const b = rows.get(`budget:${c.id}`); if (b != null && b !== '') optBudgets.set(c.id, Number(b) || 0); }
     } catch (e) { logger.warn('[project-portal] loadOptValue failed', e); }
 }
@@ -3843,10 +3857,14 @@ function renderOptValue() {
             <button type="button" class="pp-opt-legacy-off" data-val-legacy-off title="Switch this job to the new way: enter its value, give every casting a budget">Enter a project value instead</button></div>`;
         return;
     }
-    const rows = optValueItems.map((it, i) => `<div class="pp-opt-val-row"><input type="text" data-val-name="${i}" value="${escapeAttr(it.name)}" placeholder="${i === 0 ? 'Contract value' : 'Change order #' + i}"><span class="pp-opt-val-cur">$</span><input type="number" min="0" step="1" data-val-amount="${i}" value="${it.value ? escapeAttr(String(it.value)) : ''}" placeholder="0"><button type="button" class="pp-opt-val-del" data-val-del="${i}" title="Remove">&times;</button></div>`).join('');
+    if (optValueItems.length < OPT_FIXED_VALUES.length) optValueItems = normalizeOptValueItems(optValueItems);
+    const amount = (it, i) => `<span class="pp-opt-val-cur">$</span><input type="number" min="0" step="1" id="pp-opt-val-${i}" data-val-amount="${i}" value="${it.value ? escapeAttr(String(it.value)) : ''}" placeholder="0">`;
+    const rows = optValueItems.map((it, i) => i < OPT_FIXED_VALUES.length
+        ? `<div class="pp-opt-val-row pp-opt-val-fixed"><label for="pp-opt-val-${i}">${escapeHtml(it.name)} =</label>${amount(it, i)}<span></span></div>`
+        : `<div class="pp-opt-val-row"><input type="text" data-val-name="${i}" value="${escapeAttr(it.name)}" placeholder="Change Order #${i - OPT_FIXED_VALUES.length + 1}">${amount(it, i)}<button type="button" class="pp-opt-val-del" data-val-del="${i}" title="Remove this change order">&times;</button></div>`).join('');
     box.innerHTML = `<div class="pp-opt-val-head"><strong>Project value &rarr; Optimizer hours</strong><span class="pp-opt-val-hint">value &divide; $${REVENUE_PER_HOUR}/h</span></div>
-        <div class="pp-opt-val-rows">${rows || '<div class="pp-opt-val-empty">No value entered yet.</div>'}</div>
-        <button type="button" class="pp-opt-val-add" data-val-add>+ Add value (change order, extra)</button>
+        <div class="pp-opt-val-rows">${rows}</div>
+        <button type="button" class="pp-opt-val-add" data-val-add>+ Add Change Order value</button>
         ${optValueTotalsHtml()}`;
 }
 function optValueTotalsHtml() {
@@ -8882,9 +8900,9 @@ function wireEvents() {
             if (n || a) { scheduleOptValueSave(); const box = optValue.querySelector('.pp-opt-val-totals'); if (box) { renderOptValueTotalsOnly(); } }
         });
         optValue.addEventListener('click', async (e) => {
-            if (e.target.closest('[data-val-add]')) { optValueItems.push({ name: optValueItems.length ? `Change order #${optValueItems.length}` : 'Contract value', value: 0 }); renderOptValue(); optValue.querySelector(`[data-val-amount="${optValueItems.length - 1}"]`)?.focus(); scheduleOptValueSave(); return; }
+            if (e.target.closest('[data-val-add]')) { optValueItems.push({ name: `Change Order #${optValueItems.length - OPT_FIXED_VALUES.length + 1}`, value: 0 }); renderOptValue(); optValue.querySelector(`[data-val-amount="${optValueItems.length - 1}"]`)?.focus(); scheduleOptValueSave(); return; }
             const del = e.target.closest('[data-val-del]');
-            if (del) { const it = optValueItems[Number(del.dataset.valDel)]; if (it && (it.value || it.name) && !window.confirm(`Remove "${it.name || 'this value'}" (${money0(it.value)})?`)) return; optValueItems.splice(Number(del.dataset.valDel), 1); renderOptimizer(); scheduleOptValueSave(); }
+            if (del) { const i = Number(del.dataset.valDel); if (i < OPT_FIXED_VALUES.length) return; const it = optValueItems[i]; if (it && it.value && !window.confirm(`Remove "${it.name || 'this change order'}" (${money0(it.value)})?`)) return; optValueItems.splice(i, 1); renderOptimizer(); scheduleOptValueSave(); }
         });
     }
 
