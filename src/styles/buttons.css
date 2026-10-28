@@ -342,5 +342,10 @@
 .schedule-source.schedule-source-scheduler { color: #14532d; background: #dcfce7; border-color: #86efac; }
 .schedule-source.schedule-source-override { outline: 2px dashed #f59e0b; outline-offset: 1px; }
 @media print { .schedule-source { display: none; } }
+/* 2026-10-28: button link from the weekly to the Plant Scheduler (same look as the toolbar buttons) */
+.action-group .scheduler-link { display: inline-flex; align-items: center; padding: 0.625rem 1rem; border-radius: var(--border-radius-md); font-size: 0.875rem; font-weight: 600; text-decoration: none; white-space: nowrap; background-color: var(--background-secondary); color: var(--text-primary); border: 1px solid var(--border-secondary); transition: all 0.2s ease-in-out; }
+.action-group .scheduler-link:hover { background-color: #F3F4F6; }
+.action-group .scheduler-link:focus-visible { outline: 2px solid transparent; box-shadow: 0 0 0 2px var(--accent-primary); }
+@media print { .scheduler-link { display: none; } }
 .data-freshness.aging { color: #b26a00; }
 .data-freshness.stale { color: #c62828; }
