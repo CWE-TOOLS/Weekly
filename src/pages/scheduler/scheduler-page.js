@@ -57,6 +57,9 @@ const pad = (n) => String(n).padStart(2, '0');
 function toIso(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
 function fromIso(s) { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); }
 function todayIso() { return toIso(new Date()); }
+/** A day before today: its tasks already happened — they cannot be moved, re-timed or deleted any more (user rule 2026-10-28). */
+function isPast(iso) { return !!iso && iso < todayIso(); }
+const PAST_MSG = 'That task already happened — only today and later days can be changed.';
 function addDays(s, n) { const d = fromIso(s); d.setDate(d.getDate() + n); return toIso(d); }
 function dow(s) { return fromIso(s).getDay(); }
 function isWeekend(s) { const w = dow(s); return w === 0 || w === 6; }
@@ -329,6 +332,7 @@ function planCasting(casting, anchorIso, stage) {
 async function scheduleCasting(castingId, anchorIso, { replace = false, stage = null } = {}) {
     const c = S.castingById.get(castingId);
     if (!c) return;
+    if (replace && rowsOfCasting(castingId).some(r => isPast(r.date))) { toast('Some of this casting\'s days have already happened, so the schedule cannot be regenerated. Move or shift the remaining days instead.', 'error'); return; }
     if (!stage) { try { stage = await stagingDaysFor(c); } catch (_) { stage = new Map(); } }
     const plan = planCasting(c, anchorIso, stage);
     if (!plan.length) { toast('This casting has no Optimizer Hours with hours > 0.', 'error'); return; }
@@ -352,8 +356,12 @@ async function scheduleCasting(castingId, anchorIso, { replace = false, stage = 
 
 /** Shift every row of a casting by n working days (sign = direction). Weekend-allowed rows keep their allowance but still move to working days. */
 async function shiftCasting(castingId, n) {
-    const rows = rowsOfCasting(castingId);
-    if (!rows.length || !n) return;
+    const all = rowsOfCasting(castingId);
+    const rows = all.filter(r => !isPast(r.date));   // days that already happened stay where they are
+    if (!n) return;
+    if (!rows.length) { toast(all.length ? 'Every scheduled day of this casting has already happened — nothing can be shifted.' : 'Nothing scheduled.', 'error'); return; }
+    if (n < 0 && rows.some(r => { let d = r.date; for (let i = 0; i < Math.abs(n); i++) d = nextWorking(d, -1); return isPast(d); })) { toast('That shift would move tasks into days that have passed.', 'error'); return; }
+    const kept = all.length - rows.length;
     // team limits: where would the casting land? over-scheduling is allowed after a confirm
     const moved = rows.map(r => { let d = r.date; for (let i = 0; i < Math.abs(n); i++) d = nextWorking(d, Math.sign(n)); return { ...r, date: d }; });
     const span = moved.map(r => r.date).sort();
@@ -370,7 +378,7 @@ async function shiftCasting(castingId, n) {
         await histEnd(__h);
         await loadRows();
         render();
-        toast(`Moved ${rows.length} day${rows.length === 1 ? '' : 's'} by ${n > 0 ? '+' : ''}${n} working day${Math.abs(n) === 1 ? '' : 's'}`);
+        toast(`Moved ${rows.length} day${rows.length === 1 ? '' : 's'} by ${n > 0 ? '+' : ''}${n} working day${Math.abs(n) === 1 ? '' : 's'}${kept ? ` — ${kept} day${kept === 1 ? '' : 's'} that already happened stayed put` : ''}`);
     } catch (err) { toast('Move failed: ' + (err.message || err), 'error'); }
     finally { setBusy(false); }
 }
@@ -647,15 +655,16 @@ function renderGrid() {
         for (const d of days) {
             DEPT_KEYS.forEach((dept, i) => {
                 const rows = cellMap.get(`${c.id}|${d}|${dept}`) || [];
-                const cls = ['sc-cell', i === 0 ? 'sc-dept-first' : '', rows.length ? 'sc-has' : '', isWeekend(d) ? 'sc-weekend' : '', isHoliday(d) ? 'sc-holiday' : '', d === today ? 'sc-today' : '',
+                const cls = ['sc-cell', i === 0 ? 'sc-dept-first' : '', rows.length ? 'sc-has' : '', isWeekend(d) ? 'sc-weekend' : '', isHoliday(d) ? 'sc-holiday' : '', d === today ? 'sc-today' : '', d < today && rows.length ? 'sc-past' : '',
                     rows.some(r => /Unmapped/.test(r.note || '')) ? 'sc-unmapped' : '', rows.some(r => r.weekend_ok) ? 'sc-wkok' : ''].filter(Boolean).join(' ');
                 let task = '', hrs = '';
                 if (rows.length) {
                     task = [...new Set(rows.map(r => r.task))].join('+').toLowerCase();
                     hrs = fmtH(rows.reduce((n, r) => n + (Number(r.hours) || 0), 0));
                 }
+                const past = d < today;
                 const attrs = `data-cid="${c.id}" data-date="${d}" data-dept="${dept}"`;
-                const drag = rows.length ? ' draggable="true" title="Drag to another day on this row to move it; click to edit"' : '';
+                const drag = rows.length ? (past ? ' title="Already happened — locked. Only today and later days can be moved or changed."' : ' draggable="true" title="Drag to another day on this row to move it; click to edit"') : '';
                 taskTds += `<td class="${cls} sc-trow" ${attrs}${drag}><span class="sc-task">${esc(task)}</span>${crewBadge(rows)}</td>`;
                 hourTds += `<td class="${cls} sc-hrow" ${attrs}${drag}><span class="sc-h">${hrs}</span></td>`;
             });
@@ -740,19 +749,21 @@ function openEditor(td) {
             <button type="button" class="btn-primary" data-roll-save>Save roll-over</button>
         </div>`;
     };
-    let html = `<h4>${rows.length ? 'Task mover' : 'Add a day'}</h4><div class="sc-sub">${esc(projectLabel(c.project_number))} — ${esc(castingLabel(c))} · ${esc(shortDay(date))} · ${esc(DEPARTMENTS.find(d => d.key === dept)?.label || dept)}</div>`;
-    if (holiday) html += '<div class="sc-ed-alert">Holiday — nothing can be scheduled on this day. Change the holiday list in Settings if that is wrong.</div>';
+    const past = isPast(date);
+    let html = `<h4>${rows.length ? (past ? 'Task (already happened)' : 'Task mover') : 'Add a day'}</h4><div class="sc-sub">${esc(projectLabel(c.project_number))} — ${esc(castingLabel(c))} · ${esc(shortDay(date))} · ${esc(DEPARTMENTS.find(d => d.key === dept)?.label || dept)}</div>`;
+    if (past) html += `<div class="sc-ed-alert sc-ed-past">&#128274; This day has passed. ${rows.length ? 'Its task and hours are locked — it can no longer be moved, changed or removed.' : 'Nothing can be added to a day that has passed.'} Only today and later days can be adjusted.</div>`;
+    else if (holiday) html += '<div class="sc-ed-alert">Holiday — nothing can be scheduled on this day. Change the holiday list in Settings if that is wrong.</div>';
     else if (weekend && !weekendAllowed) html += `<div class="sc-ed-alert">Weekend. Work is only scheduled here if someone allows it.<br><button type="button" class="btn-secondary" id="sc-ed-allow">Allow this weekend day for this casting</button></div>`;
     for (const r of rows) {
-        const lockedH = unitOf(r) ? ' readonly class="sc-ed-locked" title="Locked to the Optimizer Hours tab in the portal"' : '';
-        const rollBtn = unitOf(r) && !holiday ? `<button type="button" class="btn-secondary sc-roll-open" data-roll-open="${r.id}" title="The task did not finish today: carry part of its hours to the next working day">Roll over to next day &#9656;</button>` : '';
-        html += `<div class="sc-ed-row" data-id="${r.id}"><select data-task>${opts.map(o => `<option${o === r.task ? ' selected' : ''}>${o}</option>`).join('')}${opts.includes(r.task) ? '' : `<option selected>${esc(r.task)}</option>`}</select><input type="number" step="0.5" min="0" data-hours value="${fmtH(r.hours)}"${lockedH}><button type="button" class="sc-del" data-del title="Remove">&times;</button>${phaseLine(r)}${rollBtn}${rollPanel(r)}</div>`;
+        const lockedH = past ? ' readonly class="sc-ed-locked" title="This day has passed — locked"' : unitOf(r) ? ' readonly class="sc-ed-locked" title="Locked to the Optimizer Hours tab in the portal"' : '';
+        const rollBtn = unitOf(r) && !holiday && !past ? `<button type="button" class="btn-secondary sc-roll-open" data-roll-open="${r.id}" title="The task did not finish today: carry part of its hours to the next working day">Roll over to next day &#9656;</button>` : '';
+        html += `<div class="sc-ed-row" data-id="${r.id}"><select data-task${past ? ' disabled' : ''}>${opts.map(o => `<option${o === r.task ? ' selected' : ''}>${o}</option>`).join('')}${opts.includes(r.task) ? '' : `<option selected>${esc(r.task)}</option>`}</select><input type="number" step="0.5" min="0" data-hours value="${fmtH(r.hours)}"${lockedH}>${past ? '' : '<button type="button" class="sc-del" data-del title="Remove">&times;</button>'}${phaseLine(r)}${rollBtn}${past ? '' : rollPanel(r)}</div>`;
     }
-    const canEdit = !holiday && (!weekend || weekendAllowed);
+    const canEdit = !past && !holiday && (!weekend || weekendAllowed);
     if (canEdit && !rows.length) html += addFormHtml(cid, dept, date);   // adding a day = click an empty cell
-    if (rows.length) {
+    if (rows.length && !past) {
         const nLater = S.rows.filter(r => r.casting_id === cid && r.date > date).length;
-        html += `<div class="sc-ed-move">Move these to <input type="date" id="sc-ed-move-date" value="${date}"><button type="button" class="btn-secondary" id="sc-ed-move">Move</button></div>`;
+        html += `<div class="sc-ed-move">Move these to <input type="date" id="sc-ed-move-date" value="${date}" min="${todayIso()}"><button type="button" class="btn-secondary" id="sc-ed-move">Move</button></div>`;
         html += `<label class="sc-ed-cascade"><input type="checkbox" id="sc-ed-cascade"${S.cascade ? ' checked' : ''}${nLater ? '' : ' disabled'}> Cascade: also move every task after this one (${nLater}) by the same number of working days</label>`;
     }
     if (rows.length) html += crewSectionHtml(dept, rows);
@@ -874,8 +885,9 @@ function closeEditor() { $('sc-editor').hidden = true; editorCtx = null; }
 async function changePhaseDayHours(row, newHours) {
     const delta = Math.round((newHours - (Number(row.hours) || 0)) * 100) / 100;
     if (!delta) return null;
-    const others = S.rows.filter(x => unitOf(x) === unitOf(row) && x.id !== row.id).sort((a, b) => b.date.localeCompare(a.date));
-    if (!others.length) return 'This phase has only this one day, so its hours are locked to the Optimizer Hours tab. Add another day for the phase first, or change the hours on the Optimizer Hours tab.';
+    if (isPast(row.date)) return PAST_MSG;
+    const others = S.rows.filter(x => unitOf(x) === unitOf(row) && x.id !== row.id && !isPast(x.date)).sort((a, b) => b.date.localeCompare(a.date));   // days that already happened keep their hours
+    if (!others.length) return 'This phase has no other day from today on, so its hours are locked to the Optimizer Hours tab. Add another day for the phase first, or change the hours on the Optimizer Hours tab.';
     if (delta > 0) {
         // take hours away from the other days, latest first
         let need = delta;
@@ -904,7 +916,7 @@ async function saveEditor() {
     try {
         for (const line of ed.querySelectorAll('.sc-ed-row')) {
             const row = S.rows.find(r => r.id === line.dataset.id);
-            if (!row) continue;
+            if (!row || isPast(row.date)) continue;   // a day that already happened is never rewritten
             const task = line.querySelector('[data-task]').value;
             const hours = Math.max(0, Number(line.querySelector('[data-hours]').value) || 0);
             if (task !== row.task) await updateScheduleRow(row.id, { task, note: /Unmapped/.test(row.note || '') ? null : row.note });
@@ -925,6 +937,7 @@ async function saveEditor() {
 async function saveRollover(rowId, todayH) {
     const row = S.rows.find(r => r.id === rowId);
     if (!row || !unitOf(row)) return;
+    if (isPast(row.date)) { toast(PAST_MSG, 'error'); return; }
     const next = nextWorking(row.date, 1);
     const nextRow = S.rows.find(x => unitOf(x) === unitOf(row) && x.date === next && x.department === row.department);
     const total = Math.round(((Number(row.hours) || 0) + (nextRow ? Number(nextRow.hours) || 0 : 0)) * 100) / 100;
@@ -989,10 +1002,11 @@ async function addEditorEntry() {
     const sel = $('sc-ed-add-phase');
     if (!sel) return;
     const cid = editorCtx.cid, date = editorCtx.date, dept = editorCtx.dept;
+    if (isPast(date)) { toast('Nothing can be added to a day that has passed.', 'error'); return; }
     const m = mappedPhases(cid).find(x => x.unit === sel.value);
     if (!m) { toast('Pick a task first.', 'error'); return; }
     const total = Math.round((Number(m.phase.hours) || 0) * 100) / 100;
-    const days = S.rows.filter(r => unitOf(r) === m.unit);
+    const days = S.rows.filter(r => unitOf(r) === m.unit && !isPast(r.date));   // past days keep their hours; only today-and-later days give some up
     if (days.some(r => r.date === date && r.department === dept)) { toast('This task is already on this day — use Roll over or Move instead.', 'error'); return; }
     let hours = days.length ? Math.round((Number($('sc-ed-add-hours').value) || 0) * 100) / 100 : total;
     if (days.length && (hours <= 0 || hours >= total)) { toast(`Enter between 0 and ${fmtH(total)} h — the other day${days.length === 1 ? '' : 's'} must keep some hours.`, 'error'); return; }
@@ -1068,12 +1082,15 @@ function stepWorking(d, n) { for (let i = 0; i < Math.abs(n); i++) d = nextWorki
  *  cascade: every task of that casting dated after the moved one moves by the same number of working days. */
 async function moveCellEntries(cid, fromDate, dept, to, cascade = false) {
     if (!to || to === fromDate) return false;
+    if (isPast(fromDate)) { toast(PAST_MSG, 'error'); return false; }
+    if (isPast(to)) { toast(`${shortDay(to)} has passed — a task cannot be moved to a day that already happened.`, 'error'); return false; }
     if (isHoliday(to)) { toast(`${shortDay(to)} is a holiday — nothing can be scheduled there.`, 'error'); return false; }
     if (isWeekend(to) && !window.confirm(`${shortDay(to)} is a weekend. Allow it for these entries?`)) return false;
     const rows = S.rows.filter(r => r.casting_id === cid && r.date === fromDate && r.department === dept);
     if (!rows.length) return false;
     const n = workingOffset(fromDate, to);
     const later = cascade ? S.rows.filter(r => r.casting_id === cid && r.date > fromDate).map(r => ({ row: r, date: stepWorking(r.date, n) })) : [];
+    if (later.some(x => isPast(x.date))) { toast('That cascade would push later tasks into days that have passed.', 'error'); return false; }
     // a cascade that pushes tasks over a weekend asks whether any of them should land on that Saturday instead
     const satChoices = saturdayChoices(later);
     if (satChoices.length) {
@@ -1170,7 +1187,7 @@ function markDrop(td) {
 function wireDrag(wrap) {
     wrap.addEventListener('dragstart', (e) => {
         const td = e.target.closest && e.target.closest('td.sc-cell.sc-has');
-        if (!td || S.busy) { e.preventDefault(); return; }
+        if (!td || S.busy || isPast(td.dataset.date)) { e.preventDefault(); if (td && isPast(td.dataset.date)) toast(PAST_MSG, 'error'); return; }
         dragCtx = { cid: td.dataset.cid, date: td.dataset.date, dept: td.dataset.dept };
         closeEditor();
         e.dataTransfer.effectAllowed = 'move';
@@ -1179,7 +1196,7 @@ function wireDrag(wrap) {
     });
     wrap.addEventListener('dragover', (e) => {
         const td = e.target.closest && e.target.closest('td.sc-cell');
-        if (!dragCtx || !td || td.dataset.cid !== dragCtx.cid) return;   // only the same casting's row accepts the drop
+        if (!dragCtx || !td || td.dataset.cid !== dragCtx.cid || isPast(td.dataset.date)) return;   // only the same casting's row, today or later, accepts the drop
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
         markDrop(td);
@@ -1205,6 +1222,7 @@ function wireDrag(wrap) {
 async function deleteEditorEntry(id) {
     const row = S.rows.find(r => r.id === id);
     if (!row) return;
+    if (isPast(row.date)) { toast(PAST_MSG, 'error'); return; }
     if (unitOf(row)) {
         const others = S.rows.filter(x => unitOf(x) === unitOf(row) && x.id !== id).sort((a, b) => b.date.localeCompare(a.date));
         if (!others.length) { toast('This is the phase\'s only day — its hours are locked to the Optimizer Hours tab. Move it instead, or remove the whole casting from the row menu.', 'error'); return; }
@@ -1421,8 +1439,10 @@ async function histEnd(h) {
     updateHistButtons();
 }
 async function restoreRows(ids, rows) {
-    for (const id of ids) await deleteCastingSchedule(id, true);
-    const clean = rows.map(({ id, created_at, updated_at, ...rest }) => rest);
+    // only today-and-later days are restored: days that already happened are never rewritten
+    const current = await loadScheduleForCastings(ids);
+    for (const r of current) if (!isPast(r.date)) await deleteScheduleRow(r.id);
+    const clean = rows.filter(r => !isPast(r.date)).map(({ id, created_at, updated_at, ...rest }) => rest);
     if (clean.length) await insertScheduleRows(clean);
     for (const id of ids) if (rows.some(r => r.casting_id === id)) S.pinned.add(id);
 }
@@ -1559,9 +1579,11 @@ function wire() {
         if (t.id === 'sc-m-shift-btn') { const n = Math.trunc(Number($('sc-m-shift').value) || 0); const cid = editorCtx.cid; closeEditor(); await shiftCasting(cid, n); return; }
         if (t.id === 'sc-m-remove') {
             const c = S.castingById.get(editorCtx.cid);
-            if (!window.confirm(`Remove every scheduled day of ${castingLabel(c)} (${projectLabel(c.project_number)})?`)) return;
+            const pastRows = rowsOfCasting(c.id).filter(r => isPast(r.date)), futureRows = rowsOfCasting(c.id).filter(r => !isPast(r.date));
+            if (!futureRows.length) { toast('Every scheduled day of this casting has already happened — nothing can be removed.', 'error'); return; }
+            if (!window.confirm(`Remove every scheduled day of ${castingLabel(c)} (${projectLabel(c.project_number)}) from today on?${pastRows.length ? ` The ${pastRows.length} day${pastRows.length === 1 ? '' : 's'} that already happened stay.` : ''}`)) return;
             setBusy(true);
-            try { const __h = await histBegin('remove ' + castingLabel(c), [c.id]); await deleteCastingSchedule(c.id, true); await histEnd(__h); S.pinned.delete(c.id); await loadRows(); render(); closeEditor(); toast('Removed from the schedule.'); }
+            try { const __h = await histBegin('remove ' + castingLabel(c), [c.id]); if (pastRows.length) { for (const r of futureRows) await deleteScheduleRow(r.id); } else await deleteCastingSchedule(c.id, true); await histEnd(__h); if (!pastRows.length) S.pinned.delete(c.id); await loadRows(); render(); closeEditor(); toast(pastRows.length ? 'Removed the remaining days from the schedule.' : 'Removed from the schedule.'); }
             catch (err) { toast('Remove failed: ' + (err.message || err), 'error'); }
             finally { setBusy(false); }
         }

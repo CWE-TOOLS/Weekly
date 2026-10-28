@@ -301,3 +301,7 @@ table.sc-grid { border-collapse: separate; border-spacing: 0; table-layout: fixe
 /* the dates stay black on over-limit, weekend, holiday and today columns too (the alert row above carries the warning) */
 .sc-grid thead tr:nth-child(3) th.sc-day, .sc-grid thead tr:nth-child(3) th.sc-day.sc-day-over, .sc-grid thead tr:nth-child(3) th.sc-day.sc-today,
 .sc-grid thead tr:nth-child(3) th.sc-day.sc-weekend, .sc-grid thead tr:nth-child(3) th.sc-day.sc-holiday { color: #000; }
+/* days that already happened: locked (user rule 2026-10-28) */
+.sc-grid td.sc-cell.sc-past { cursor: default; background-image: repeating-linear-gradient(135deg, rgba(0,0,0,.05) 0 3px, transparent 3px 7px); }
+.sc-grid td.sc-cell.sc-past .sc-task, .sc-grid td.sc-cell.sc-past .sc-h { color: #4b5563; }
+.sc-ed-past { background: #f3f4f6; border-color: #9ca3af; color: #374151; }

@@ -2936,10 +2936,12 @@ function renderOptStagedGrid(casting) {
             const entry = currentStagingDescriptions.get(`${castNum}|${sec.department}|${d}`) || {};
             const task = entry.taskName || '';
             const hours = entry.hours == null ? '' : String(entry.hours);
-            rows.push(`<div class="pp-opt-stg-row">
-                <span class="pp-opt-day-label">Day ${d}</span>
-                <span class="pp-opt-stg-task${task ? '' : ' pp-opt-stg-task-missing'}" title="${task ? 'Task from the Staging tab' : 'No task picked on the Staging tab yet'}">${task ? escapeHtml(task.toLowerCase()) : '— no task —'}</span>
-                <input type="number" min="0" step="1" class="pp-opt-card-hours" data-action="staged-hours" data-casting-number="${escapeAttr(castNum)}" data-department="${escapeAttr(sec.department)}" data-day="${d}" value="${escapeAttr(hours)}" placeholder="0" title="${escapeAttr((entry.description || '').trim() || 'Hours for this day')}" />
+            const pastOn = optPastDays.get(`${castNum}|${sec.department}|${d}`);
+            const lockTip = pastOn ? `Scheduled on ${pastOn} — already happened. Hours can only be changed for today and later days.` : '';
+            rows.push(`<div class="pp-opt-stg-row${pastOn ? ' pp-opt-stg-row-past' : ''}"${pastOn ? ` title="${escapeAttr(lockTip)}"` : ''}>
+                <span class="pp-opt-day-label">Day ${d}${pastOn ? ' <span class="pp-opt-past-lock" aria-label="locked">&#128274;</span>' : ''}</span>
+                <span class="pp-opt-stg-task${task ? '' : ' pp-opt-stg-task-missing'}" title="${pastOn ? escapeAttr(lockTip) : task ? 'Task from the Staging tab' : 'No task picked on the Staging tab yet'}">${task ? escapeHtml(task.toLowerCase()) : '— no task —'}</span>
+                <input type="number" min="0" step="1" class="pp-opt-card-hours${pastOn ? ' pp-opt-card-hours-past' : ''}" data-action="staged-hours" data-casting-number="${escapeAttr(castNum)}" data-department="${escapeAttr(sec.department)}" data-day="${d}" value="${escapeAttr(hours)}" placeholder="0"${pastOn ? ' readonly data-past="1"' : ''} title="${escapeAttr(pastOn ? lockTip : (entry.description || '').trim() || 'Hours for this day')}" />
                 <span class="pp-opt-card-hours-label">hrs</span>
             </div>`);
         }
@@ -3892,6 +3894,7 @@ function optCoNamesOf(castingId) { return optChangeOrders().map((it, k) => ({ it
 /** Change orders with money whose split does not add up to their hours yet. */
 function optUnassignedChangeOrders() { return optChangeOrders().filter(it => (Number(it.value) || 0) > 0 && Math.abs(optCoAssigned(it) - optCoHours(it)) > 0.05); }
 let optCastDone = new Map();     // castingId -> last scheduled date (ISO) when every scheduled day of the cast is already past
+let optPastDays = new Map();     // "cast|department|day" -> first scheduled date that already happened: that staged day's hours are locked
 function optSortedCastings() { return [...currentCastings].sort((a, b) => String(a.casting_number || '').localeCompare(String(b.casting_number || ''), undefined, { numeric: true })); }
 function optCoSplitSumHtml(it) {
     const hours = optCoHours(it), got = optCoAssigned(it), d = Math.round((hours - got) * 10) / 10;
@@ -3934,11 +3937,15 @@ async function loadOptValue() {
         const v = rows.get(`value:${currentProjectNumber}`);
         optValueItems = normalizeOptValueItems(v && Array.isArray(v.items) ? v.items : []);
         for (const c of currentCastings) { const b = rows.get(`budget:${c.id}`); if (b != null && b !== '') optBudgets.set(c.id, Number(b) || 0); }
-        optCastDone = new Map();
+        optCastDone = new Map(); optPastDays = new Map();
         try {
             const today = new Date(); const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
             const last = new Map();
-            for (const r of await loadScheduleForCastings(currentCastings.map(c => c.id))) { const d = String(r.date || '').slice(0, 10); if (d && (!last.has(r.casting_id) || d > last.get(r.casting_id))) last.set(r.casting_id, d); }
+            for (const r of await loadScheduleForCastings(currentCastings.map(c => c.id))) {
+                const d = String(r.date || '').slice(0, 10); if (d && (!last.has(r.casting_id) || d > last.get(r.casting_id))) last.set(r.casting_id, d);
+                const note = String(r.note || '').trim();
+                if (d && d < iso && note.startsWith('unit:')) { const k = note.slice(5).split(' — ')[0]; if (!optPastDays.has(k) || d < optPastDays.get(k)) optPastDays.set(k, d); }   // a task that already happened (user rule 2026-10-28)
+            }
             for (const [id, d] of last) if (d < iso) optCastDone.set(id, d);   // every scheduled day is behind us: a change order cannot land on tasks that already happened
         } catch (e) { /* no scheduler rows readable — every cast stays pickable */ }
     } catch (e) { logger.warn('[project-portal] loadOptValue failed', e); }
@@ -8992,6 +8999,7 @@ function wireEvents() {
     const optColumns = document.getElementById('pp-opt-columns');
     optColumns.addEventListener('input', (e) => {
         const inp = e.target.closest('input[data-action="staged-hours"]');
+        if (inp && inp.dataset.past) { const cur = currentStagingDescriptions.get(`${inp.dataset.castingNumber}|${inp.dataset.department}|${inp.dataset.day}`); inp.value = cur && cur.hours != null ? String(cur.hours) : ''; showToast('That day already happened on the Plant Scheduler — its hours are locked. Only today and later days can be changed.', 'error'); return; }
         if (inp) { scheduleOptHoursSave(inp.dataset.castingNumber, inp.dataset.department, parseInt(inp.dataset.day, 10), inp.value); return; }
         const bud = e.target.closest('input[data-action="casting-budget"]');
         if (bud) handleCastingBudget(bud.dataset.castingId, bud.value);
