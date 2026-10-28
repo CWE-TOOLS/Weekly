@@ -9,6 +9,8 @@ import { GOOGLE_SHEETS } from '../config/api-config.js';
 import { normalizeDepartment, normalizeProjectName } from '../utils/ui-utils.js';
 import { loadTasksFromCacheOrFetch, loadStagingFromCacheOrFetch, clearCache } from './sheets-cache-service.js';
 import { saveTaskDescriptions } from './supabase-service.js';
+import { getWeeklySource, SOURCE_SCHEDULER, updateSourceBadge } from './weekly-source-service.js';
+import { fetchTasksFromScheduler } from './scheduler-tasks-service.js';
 
 import { logger } from '../utils/logger.js';
 const { API_KEY, SPREADSHEET_ID, SHEET_NAME, STAGING_SHEET_NAME } = GOOGLE_SHEETS;
@@ -65,6 +67,11 @@ export const departmentDayMapping = {
  * // Returns: [{id: 'task-1', project: 'A', department: 'Mill', ...}, ...]
  */
 export async function fetchTasks() {
+    // 2026-10-28: the weekly can read the Plant Scheduler instead of the Google Sheet. One shared setting
+    // (weekly-source-service) decides; the sheet stays the default until it is switched.
+    const source = await getWeeklySource();
+    updateSourceBadge(source);
+    if (source === SOURCE_SCHEDULER) return await fetchTasksFromScheduler();
     return await loadTasksFromCacheOrFetch(fetchTasksDirect);
 }
 

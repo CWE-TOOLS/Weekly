@@ -246,6 +246,9 @@ function computeCastingDayMap(tasks) {
         groups.get(key).push(t);
     }
     const dayByTask = new Map();
+    // Tasks from the Plant Scheduler carry the Staging-tab day they were imported from (numbered over the
+    // whole live list); that day wins over a recount, which would start at 1 with the scheduler's first row.
+    for (const t of tasks) if (!t.isManual && t.stagingDayNumber) dayByTask.set(t, String(t.stagingDayNumber));
     for (const list of groups.values()) {
         list.sort((a, b) => {
             const da = Date.parse(a.date) || 0;
@@ -255,7 +258,7 @@ function computeCastingDayMap(tasks) {
             const bi = parseInt((b.id || '').replace('task-', ''), 10) || 0;
             return ai - bi;
         });
-        list.forEach((t, idx) => dayByTask.set(t, String(idx + 1)));
+        list.forEach((t, idx) => { if (!dayByTask.has(t)) dayByTask.set(t, String(idx + 1)); });
     }
     return dayByTask;
 }

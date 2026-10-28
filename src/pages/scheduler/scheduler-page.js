@@ -21,6 +21,7 @@ import {
     DEPARTMENTS, DEPT_KEYS, TASKS, tasksForDept, taskForPhase, SETTINGS_DEFAULTS, REVENUE_PER_HOUR, SCHEDULABLE_STATUSES, TEAM_DAY_LIMITS, teamOfDepartment, DEFAULT_CREW
 } from '../../config/scheduler-config.js?v=20261027-1';
 import { logger } from '../../utils/logger.js';
+import { getWeeklySource, setWeeklySource, resetWeeklySourceMemo, SOURCE_SCHEDULER, sourceLabel } from '../../services/weekly-source-service.js';
 import { fetchForProject as fetchStagingNotes, fetchForProjects as fetchStagingForProjects, upsertOne as saveStagingNote } from '../../services/task-descriptions-service.js?v=20261022-2';
 
 // ---------------------------------------------------------------------------
@@ -1397,7 +1398,24 @@ async function confirmScheduleDialog() {
 // ---------------------------------------------------------------------------
 function crewOf(team) { const c = (S.settings.crew || {})[team] || {}; return { leader: String(c.leader || '').trim(), people: (c.people || []).map(s => String(s).trim()).filter(Boolean) }; }
 function everyone() { const s = new Set(); for (const k of DEPT_KEYS) { const c = crewOf(k); if (c.leader) s.add(c.leader); c.people.forEach(p => s.add(p)); } return [...s].sort(); }
+/** Header badge + Settings radios: which schedule the weekly reads right now. */
+async function refreshSourceBadge() {
+    let source = 'sheet';
+    try { source = await getWeeklySource({ fresh: true }); } catch (_) { /* default */ }
+    S.weeklySource = source;
+    const b = $('sc-badge');
+    if (b) {
+        const live = source === SOURCE_SCHEDULER;
+        b.textContent = live ? 'LIVE — the weekly board reads this schedule' : 'PREVIEW — the weekly still reads the Google Sheet Optimizers';
+        b.classList.toggle('sc-badge-live', live);
+        b.title = live ? 'Every change here shows on the weekly within seconds. Settings switches back to the Google Sheet.' : 'Settings switches the weekly board to this schedule.';
+    }
+    return source;
+}
 function openSettings() {
+    for (const r of document.querySelectorAll('input[name="sc-source"]')) r.checked = r.value === (S.weeklySource || 'sheet');
+    const note = $('sc-source-note');
+    if (note) note.textContent = `Now: ${sourceLabel(S.weeklySource)}.`;
     $('sc-holidays').value = (S.settings.holidays || []).join('\n');
     const box = $('sc-crew');
     if (box) box.innerHTML = DEPARTMENTS.map(d => { const c = crewOf(d.key); return `<div class="sc-crew-row"><span class="sc-crew-team">${d.label}</span><input data-crew-leader="${d.key}" value="${esc(c.leader)}" placeholder="leader"><input data-crew-people="${d.key}" value="${esc(c.people.join(', '))}" placeholder="people, comma separated"></div>`; }).join('');
@@ -1407,15 +1425,24 @@ async function saveSettings() {
     const holidays = $('sc-holidays').value.split(/\r?\n/).map(s => s.trim()).filter(s => /^\d{4}-\d{2}-\d{2}$/.test(s)).sort();
     const crew = {};
     for (const d of DEPT_KEYS) crew[d] = { leader: ($('sc-crew').querySelector(`[data-crew-leader="${d}"]`)?.value || '').trim(), people: ($('sc-crew').querySelector(`[data-crew-people="${d}"]`)?.value || '').split(',').map(s => s.trim()).filter(Boolean) };
+    const pickedSource = document.querySelector('input[name="sc-source"]:checked')?.value || S.weeklySource || 'sheet';
+    const sourceChanged = pickedSource !== (S.weeklySource || 'sheet');
+    if (sourceChanged) {
+        const msg = pickedSource === SOURCE_SCHEDULER
+            ? 'Switch the weekly board to the Plant Scheduler?\n\nEvery open weekly and Releasability Board reloads from this schedule within seconds. The Google Sheet Optimizers are no longer read (they are not changed). Switching back is the same click.'
+            : 'Switch the weekly board back to the Google Sheet Optimizers?\n\nEvery open weekly reloads from the sheet within seconds.';
+        if (!window.confirm(msg)) return;
+    }
     setBusy(true);
     try {
         await saveScheduleSetting('holidays', holidays);
         await saveScheduleSetting('crew', crew);
         S.settings.holidays = holidays;
         S.settings.crew = crew;
+        if (sourceChanged) { await setWeeklySource(pickedSource); resetWeeklySourceMemo(); await refreshSourceBadge(); }
         $('sc-settings').hidden = true;
         render();
-        toast('Settings saved for everyone.');
+        toast(sourceChanged ? `Saved. The weekly board now reads the ${sourceLabel(pickedSource)}.` : 'Settings saved for everyone.');
     } catch (err) { toast('Could not save settings: ' + (err.message || err), 'error'); }
     finally { setBusy(false); }
 }
@@ -1606,6 +1633,7 @@ function wire() {
         }
         if (tables.has('task_descriptions')) { try { S.staging = await fetchStagingForProjects(S.projects.map(p => p.project_number)); } catch (err) { logger.warn('[scheduler] staging reload failed', err); } }
         if (tables.has('plant_schedule_settings')) {
+            resetWeeklySourceMemo(); refreshSourceBadge().catch(() => {});
             try { const saved = await loadScheduleSettings(); S.ready = readyFromSettings(saved); S.sheetOrder = sheetOrderFrom(saved); if (Number(saved.target) > 0) S.settings.target = Number(saved.target); if (saved.costs) S.settings.costs = saved.costs; }
             catch (err) { logger.warn('[scheduler] reload settings failed', err); }
         }
@@ -1626,6 +1654,7 @@ async function init() {
     wire();
     S.from = firstOfMonth(todayIso());
     try { S.settings.showWeekends = localStorage.getItem('sc-weekends') === '1'; $('sc-show-weekends').checked = S.settings.showWeekends; } catch (_) { /* ignore */ }
+    refreshSourceBadge().catch(() => {});
     try { setCascade(localStorage.getItem('sc-cascade') === '1'); } catch (_) { /* ignore */ }
     try {
         await initializeSupabase();

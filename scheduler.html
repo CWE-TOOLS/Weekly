@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="src/styles/variables.css">
     <link rel="stylesheet" href="src/styles/base.css">
     <link rel="stylesheet" href="src/styles/buttons.css">
-    <link rel="stylesheet" href="src/styles/scheduler.css?v=20261028-1">
+    <link rel="stylesheet" href="src/styles/scheduler.css?v=20261028-2">
 </head>
 <body>
 <div id="sc-app">
@@ -17,7 +17,7 @@
             <a href="index.html" class="sc-nav">&larr; Weekly Schedule</a>
             <a href="project-portal.html" class="sc-nav">Project Portal</a>
             <a href="releasability.html" class="sc-nav">Releasability Board</a>
-            <h1 class="sc-title">Plant Scheduler <span class="sc-badge">PREVIEW — not linked to the weekly yet</span></h1>
+            <h1 class="sc-title">Plant Scheduler <span class="sc-badge" id="sc-badge">PREVIEW — the weekly still reads the Google Sheet Optimizers</span></h1>
         </div>
         <div class="sc-top-right">
             <input type="search" id="sc-search" placeholder="Search job # or name…" autocomplete="off">
@@ -66,6 +66,13 @@
         <div class="sc-panel" role="dialog" aria-modal="true" aria-labelledby="sc-settings-title">
             <div class="sc-panel-head"><h2 id="sc-settings-title">Scheduler settings</h2><button type="button" class="sc-x" data-close>&times;</button></div>
             <div class="sc-panel-body">
+                <h3>Weekly board reads from</h3>
+                <p class="sc-hint">Which schedule the weekly board (and the Releasability Board) shows. Switching takes effect on every open screen within seconds; switching back is the same click.</p>
+                <div class="sc-source-pick">
+                    <label><input type="radio" name="sc-source" value="sheet"> <b>Google Sheet Optimizers</b> <small>— the Excel/Sheet chain as today (Primary Live List 2)</small></label>
+                    <label><input type="radio" name="sc-source" value="scheduler"> <b>Plant Scheduler</b> <small>— this page's schedule; the Sheet Optimizers are no longer read</small></label>
+                </div>
+                <p class="sc-hint" id="sc-source-note"></p>
                 <h3>Crew by team</h3>
                 <p class="sc-hint">Leader and people of each team. The Task mover offers these names; anyone can be borrowed by another team for a day.</p>
                 <div id="sc-crew" class="sc-crew-table"></div>
@@ -85,6 +92,6 @@
 
     <div id="sc-toast" class="sc-toast" hidden></div>
 </div>
-<script type="module" src="src/pages/scheduler/scheduler-page.js?v=20261028-1"></script>
+<script type="module" src="src/pages/scheduler/scheduler-page.js?v=20261028-2"></script>
 </body>
 </html>
