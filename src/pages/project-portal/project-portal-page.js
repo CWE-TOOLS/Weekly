@@ -1059,8 +1059,11 @@ function renderInfoValue(items, legacy, castName) {
     const rows = fixed.map(it => line(it.name, it.value));
     rows.push(line('Initial Value', initial, ' pp-info-val-sub', ` <small>= ${h(initial)} h</small>`));
     cos.forEach((it, k) => {
-        const cast = it.castingId ? (names.get(it.castingId) ? `Cast ${names.get(it.castingId)}` : 'cast') : null;
-        const tag = (Number(it.value) || 0) > 0 ? (cast ? ` <small>&rarr; ${escapeHtml(cast)}</small>` : ' <small class="pp-info-val-warn">&rarr; cast not picked</small>') : '';
+        const parts = Object.entries(it.splits || {}).filter(([, v]) => Number(v) > 0).map(([id, v]) => `Cast ${names.get(id) || '?'} ${fmtHrs(v)} h`);
+        const hrs = optCoHours(it), got = optCoAssigned(it), gap = Math.round((hrs - got) * 10) / 10;
+        const tag = (Number(it.value) || 0) > 0
+            ? (parts.length ? ` <small>&rarr; ${escapeHtml(parts.join(', '))}${Math.abs(gap) > 0.05 ? ` <span class="pp-info-val-warn">(${gap > 0 ? fmtHrs(gap) + ' h not split yet' : fmtHrs(-gap) + ' h over'})</span>` : ''}</small>` : ' <small class="pp-info-val-warn">&rarr; hours not split between casts yet</small>')
+            : '';
         rows.push(line(it.name || `Change Order #${k + 1}`, it.value, ' pp-info-val-co', tag));
     });
     if (cos.length) rows.push(line('Change Orders', coSum, ' pp-info-val-sub', ` <small>= ${h(coSum)} h</small>`));
@@ -3841,7 +3844,7 @@ function optReadyBlocker() {
     if (alloc > hours + 0.01) return `The allocated hours add up to ${fmtHrs(alloc)} h but the initial value only gives ${fmtHrs(hours)} h: lower a casting's allocated hours by ${fmtHrs(alloc - hours)} h first.`;
     if (alloc < hours - 0.01) return `The allocated hours add up to ${fmtHrs(alloc)} h but the initial value gives ${fmtHrs(hours)} h: ${fmtHrs(hours - alloc)} h still have to be allocated to a casting first.`;
     const un = optUnassignedChangeOrders();
-    if (un.length) return `Pick the cast each change order applies to (${un.length} change order${un.length === 1 ? '' : 's'} without a cast).`;
+    if (un.length) return `Split each change order's hours between the casts that will do the work (${un.length} change order${un.length === 1 ? '' : 's'} not fully split yet).`;
     return null;
 }
 function optReadyHtml(castingId) {
@@ -3866,7 +3869,12 @@ function normalizeOptValueItems(items) {
         const i = OPT_FIXED_VALUES.findIndex(n => n.toLowerCase() === name.toLowerCase());
         if (i >= 0) fixed[i].value += value;
         else if (/^contract value$/i.test(name)) fixed[0].value += value;
-        else extras.push({ name, value, castingId: it?.castingId ? String(it.castingId) : null });
+        else {
+            const splits = {};
+            if (it?.splits && typeof it.splits === 'object') for (const [k, v] of Object.entries(it.splits)) if (Number(v) > 0) splits[String(k)] = Number(v);
+            if (!Object.keys(splits).length && it?.castingId) splits[String(it.castingId)] = Math.round(value / REVENUE_PER_HOUR * 10) / 10;   // saved before the split (2026-10-28)
+            extras.push({ name, value, splits });
+        }
     }
     return [...fixed, ...extras];
 }
@@ -3876,17 +3884,29 @@ function optChangeOrders() { return optValueItems.slice(OPT_FIXED_VALUES.length)
 function optChangeOrderValue() { return optChangeOrders().reduce((n, it) => n + (Number(it.value) || 0), 0); }
 function optInitialHours() { return Math.round(optInitialValue() / REVENUE_PER_HOUR * 10) / 10; }
 function optChangeOrderHours() { return Math.round(optChangeOrderValue() / REVENUE_PER_HOUR * 10) / 10; }
-/** Change-order hours tied to one cast (they go on that cast's upcoming tasks only). */
-function optCoHoursOf(castingId) { return Math.round(optChangeOrders().filter(it => it.castingId === castingId).reduce((n, it) => n + (Number(it.value) || 0), 0) / REVENUE_PER_HOUR * 10) / 10; }
-function optCoNamesOf(castingId) { return optChangeOrders().map((it, k) => ({ it, k })).filter(({ it }) => it.castingId === castingId && (Number(it.value) || 0) > 0).map(({ it, k }) => it.name || `Change Order #${k + 1}`); }
-function optUnassignedChangeOrders() { return optChangeOrders().filter(it => (Number(it.value) || 0) > 0 && !it.castingId); }
+/** A change order's hours are split between casts by the PM ({ castingId: hours }); they go on those casts' upcoming tasks only. */
+function optCoHours(it) { return Math.round((Number(it?.value) || 0) / REVENUE_PER_HOUR * 10) / 10; }
+function optCoAssigned(it) { return Math.round(Object.values(it?.splits || {}).reduce((n, v) => n + (Number(v) || 0), 0) * 10) / 10; }
+function optCoHoursOf(castingId) { return Math.round(optChangeOrders().reduce((n, it) => n + (Number(it.splits?.[castingId]) || 0), 0) * 10) / 10; }
+function optCoNamesOf(castingId) { return optChangeOrders().map((it, k) => ({ it, k })).filter(({ it }) => Number(it.splits?.[castingId]) > 0).map(({ it, k }) => `${it.name || `Change Order #${k + 1}`} ${fmtHrs(it.splits[castingId])} h`); }
+/** Change orders with money whose split does not add up to their hours yet. */
+function optUnassignedChangeOrders() { return optChangeOrders().filter(it => (Number(it.value) || 0) > 0 && Math.abs(optCoAssigned(it) - optCoHours(it)) > 0.05); }
 let optCastDone = new Map();     // castingId -> last scheduled date (ISO) when every scheduled day of the cast is already past
-function optCastOptionsHtml(selected) {
-    const list = [...currentCastings].sort((a, b) => String(a.casting_number || '').localeCompare(String(b.casting_number || ''), undefined, { numeric: true }));
-    return `<option value="">&mdash; Pick cast &mdash;</option>` + list.map(c => {
-        const done = optCastDone.get(c.id);
-        return `<option value="${escapeAttr(c.id)}"${c.id === selected ? ' selected' : ''}${done && c.id !== selected ? ' disabled' : ''}>Cast ${escapeHtml(String(c.casting_number || ''))}${done ? ' — work already done' : ''}</option>`;
+function optSortedCastings() { return [...currentCastings].sort((a, b) => String(a.casting_number || '').localeCompare(String(b.casting_number || ''), undefined, { numeric: true })); }
+function optCoSplitSumHtml(it) {
+    const hours = optCoHours(it), got = optCoAssigned(it), d = Math.round((hours - got) * 10) / 10;
+    const cls = Math.abs(d) < 0.05 ? 'ok' : d > 0 ? 'under' : 'over';
+    const msg = Math.abs(d) < 0.05 ? `all ${fmtHrs(hours)} h split &#10003;` : d > 0 ? `${fmtHrs(got)} of ${fmtHrs(hours)} h split &mdash; ${fmtHrs(d)} h left` : `${fmtHrs(got)} h split but the change order only has ${fmtHrs(hours)} h &mdash; ${fmtHrs(-d)} h over`;
+    return `<span class="pp-opt-val-split-${cls}">${msg}</span>`;
+}
+function optCoSplitHtml(it, i) {
+    const hours = optCoHours(it);
+    if (!hours) return '';
+    const cells = optSortedCastings().map(c => {
+        const v = Number(it.splits?.[c.id]) || 0, done = optCastDone.get(c.id), off = !!done && !(v > 0);
+        return `<label class="pp-opt-val-split-cast${off ? ' pp-opt-val-split-off' : ''}" title="${off ? 'Work already done — a change order cannot go on tasks that already happened' : `Hours of this change order that Cast ${escapeAttr(String(c.casting_number || ''))} will do`}">Cast ${escapeHtml(String(c.casting_number || ''))} <input type="number" min="0" step="0.5" data-val-split="${i}" data-cast="${escapeAttr(c.id)}" value="${v ? escapeAttr(fmtHrs(v)) : ''}" placeholder="0"${off ? ' disabled' : ''}> h</label>`;
     }).join('');
+    return `<div class="pp-opt-val-split" data-split-for="${i}"><span class="pp-opt-val-split-lead">Split its ${fmtHrs(hours)} h between the casts:</span>${cells}<span class="pp-opt-val-split-sum" data-split-sum="${i}">${optCoSplitSumHtml(it)}</span></div>`;
 }
 let optBudgets = new Map();      // castingId -> hours
 let optLegacy = null;            // { source, months, imported_at } when the job's schedule came from the Optimizer sheets — no project value needed
@@ -3931,8 +3951,8 @@ function renderOptValue() {
     if (optValueItems.length < OPT_FIXED_VALUES.length) optValueItems = normalizeOptValueItems(optValueItems);
     const amount = (it, i) => `<span class="pp-opt-val-cur">$</span><input type="number" min="0" step="1" id="pp-opt-val-${i}" data-val-amount="${i}" value="${it.value ? escapeAttr(String(it.value)) : ''}" placeholder="0">`;
     const rows = optValueItems.map((it, i) => i < OPT_FIXED_VALUES.length
-        ? `<div class="pp-opt-val-row pp-opt-val-fixed"><label for="pp-opt-val-${i}">${escapeHtml(it.name)} =</label>${amount(it, i)}<span></span><span></span></div>`
-        : `<div class="pp-opt-val-row pp-opt-val-co"><span class="pp-opt-val-co-wrap"><input type="text" data-val-name="${i}" value="${escapeAttr(it.name)}" placeholder="Change Order #${i - OPT_FIXED_VALUES.length + 1} — type a name" title="Name this change order"><span class="pp-opt-val-eq">=</span></span>${amount(it, i)}<select data-val-cast="${i}" class="pp-opt-val-cast${(Number(it.value) || 0) > 0 && !it.castingId ? ' pp-opt-val-cast-missing' : ''}" title="The cast this change order applies to — its hours go on that cast's upcoming tasks only">${optCastOptionsHtml(it.castingId)}</select><button type="button" class="pp-opt-val-del" data-val-del="${i}" title="Remove this change order">&times;</button></div>`).join('');
+        ? `<div class="pp-opt-val-row pp-opt-val-fixed"><label for="pp-opt-val-${i}">${escapeHtml(it.name)} =</label>${amount(it, i)}<span></span></div>`
+        : `<div class="pp-opt-val-row pp-opt-val-co"><span class="pp-opt-val-co-wrap"><input type="text" data-val-name="${i}" value="${escapeAttr(it.name)}" placeholder="Change Order #${i - OPT_FIXED_VALUES.length + 1} — type a name" title="Name this change order"><span class="pp-opt-val-eq">=</span></span>${amount(it, i)}<button type="button" class="pp-opt-val-del" data-val-del="${i}" title="Remove this change order">&times;</button></div>${optCoSplitHtml(it, i)}`).join('');
     box.innerHTML = `<div class="pp-opt-val-head"><strong>Project value &rarr; Optimizer hours</strong><span class="pp-opt-val-hint">value &divide; $${REVENUE_PER_HOUR}/h</span></div>
         <div class="pp-opt-val-rows">${rows}</div>
         <button type="button" class="pp-opt-val-add" data-val-add>+ Add Change Order value</button>
@@ -3946,8 +3966,8 @@ function optValueTotalsHtml() {
     const state = !hours ? '' : alloc > hours + 0.01 ? 'pp-opt-val-over' : alloc < hours - 0.01 ? 'pp-opt-val-under' : 'pp-opt-val-ok';
     const msg = !hours ? 'Enter the initial value to get the hours.' : alloc > hours + 0.01 ? `Over by ${fmtHrs(alloc - hours)} h — lower a casting's allocated hours.` : alloc < hours - 0.01 ? `${fmtHrs(left)} h still to allocate to castings.` : 'Every hour is allocated to a casting.';
     return `<div class="pp-opt-val-totals">
-        <div class="pp-opt-val-sum"><span>Initial value <strong>${money0(initial)}</strong> = ${fmtHrs(hours)} h</span><span>Change orders <strong>${money0(co)}</strong> = ${fmtHrs(coHours)} h${un ? ` <em class="pp-opt-val-warn">${un} without a cast</em>` : ''}</span><span>Total value <strong>${money0(total)}</strong> = ${fmtHrs(allHours)} h</span></div>
-        <div class="pp-opt-val-sum"><span class="pp-opt-val-alloc ${state}">Allocated hours <strong>${fmtHrs(alloc)} h</strong> of ${fmtHrs(hours)} h (initial value) · ${escapeHtml(msg)}</span><span class="pp-opt-val-hint">Change-order hours go on the picked cast's upcoming tasks only — never on work that already happened.</span></div></div>`;
+        <div class="pp-opt-val-sum"><span>Initial value <strong>${money0(initial)}</strong> = ${fmtHrs(hours)} h</span><span>Change orders <strong>${money0(co)}</strong> = ${fmtHrs(coHours)} h${un ? ` <em class="pp-opt-val-warn">${un} not fully split</em>` : ''}</span><span>Total value <strong>${money0(total)}</strong> = ${fmtHrs(allHours)} h</span></div>
+        <div class="pp-opt-val-sum"><span class="pp-opt-val-alloc ${state}">Allocated hours <strong>${fmtHrs(alloc)} h</strong> of ${fmtHrs(hours)} h (initial value) · ${escapeHtml(msg)}</span><span class="pp-opt-val-hint">Change-order hours are split between casts and go on their upcoming tasks only — never on work that already happened.</span></div></div>`;
 }
 /** Re-draw only the totals line while a PM is typing a value (keeps the caret in the box). */
 function renderOptValueTotalsOnly() {
@@ -8971,20 +8991,31 @@ function wireEvents() {
             try { await setSettingRow(`legacy:${currentProjectNumber}`, null); optLegacy = null; renderOptimizer(); showToast('Legacy flag removed — enter the project value.'); }
             catch (err) { showToast('Could not save: ' + (err.message || err), 'error'); }
         });
-        optValue.addEventListener('change', (e) => {
-            const s = e.target.closest('select[data-val-cast]');
-            if (!s) return;
-            const it = optValueItems[Number(s.dataset.valCast)];
-            if (!it) return;
-            it.castingId = s.value || null;
-            s.classList.toggle('pp-opt-val-cast-missing', (Number(it.value) || 0) > 0 && !it.castingId);
-            scheduleOptValueSave();
-            renderOptValueTotalsOnly();
-        });
         optValue.addEventListener('input', (e) => {
+            const sp = e.target.closest('input[data-val-split]');
+            if (sp) {
+                const it = optValueItems[Number(sp.dataset.valSplit)];
+                if (!it) return;
+                it.splits = it.splits || {};
+                const v = sp.value === '' ? 0 : Math.max(0, Number(sp.value) || 0);
+                if (v > 0) it.splits[sp.dataset.cast] = v; else delete it.splits[sp.dataset.cast];
+                const sum = optValue.querySelector(`[data-split-sum="${sp.dataset.valSplit}"]`);
+                if (sum) sum.innerHTML = optCoSplitSumHtml(it);
+                scheduleOptValueSave();
+                renderOptValueTotalsOnly();
+                return;
+            }
             const n = e.target.closest('[data-val-name]'), a = e.target.closest('[data-val-amount]');
             if (n) optValueItems[Number(n.dataset.valName)].name = n.value;
             if (a) optValueItems[Number(a.dataset.valAmount)].value = Number(a.value) || 0;
+            if (a && Number(a.dataset.valAmount) >= OPT_FIXED_VALUES.length) {
+                // a change order's amount changed: its split line follows (appears with the first dollar, goes with the last)
+                const i = Number(a.dataset.valAmount), it = optValueItems[i], row = a.closest('.pp-opt-val-row');
+                const line = optValue.querySelector(`[data-split-for="${i}"]`);
+                if (!optCoHours(it)) { if (line) line.remove(); }
+                else if (line) { const sum = line.querySelector(`[data-split-sum="${i}"]`); line.querySelector('.pp-opt-val-split-lead').textContent = `Split its ${fmtHrs(optCoHours(it))} h between the casts:`; if (sum) sum.innerHTML = optCoSplitSumHtml(it); }
+                else if (row) row.insertAdjacentHTML('afterend', optCoSplitHtml(it, i));
+            }
             if (n || a) { scheduleOptValueSave(); const box = optValue.querySelector('.pp-opt-val-totals'); if (box) { renderOptValueTotalsOnly(); } }
         });
         optValue.addEventListener('click', async (e) => {

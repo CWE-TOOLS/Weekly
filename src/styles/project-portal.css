@@ -6736,7 +6736,17 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
 .pp-opt-val-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; font-size: 14px; }
 .pp-opt-val-hint { font-size: 11px; color: #4338ca; }
 .pp-opt-val-rows { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
-.pp-opt-val-row { display: grid; grid-template-columns: 220px 14px 140px 200px 28px; gap: 6px; align-items: center; }
+.pp-opt-val-row { display: grid; grid-template-columns: 220px 14px 140px 28px; gap: 6px; align-items: center; }
+.pp-opt-val-split { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: -2px 0 6px 14px; padding: 4px 8px; font-size: 12px; color: #312e81; background: #fff; border: 1px dashed #c7d2fe; border-radius: 6px; max-width: 900px; }
+.pp-opt-val-split-lead { font-weight: 700; }
+.pp-opt-val-split-cast { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.pp-opt-val-split-cast input { width: 56px; padding: 3px 5px; border: 1px solid #c7d2fe; border-radius: 5px; font-size: 12px; text-align: right; }
+.pp-opt-val-split-off { color: #9ca3af; }
+.pp-opt-val-split-off input { background: #f3f4f6; }
+.pp-opt-val-split-sum { margin-left: auto; font-weight: 700; }
+.pp-opt-val-split-ok { color: #14532d; }
+.pp-opt-val-split-under { color: #92400e; }
+.pp-opt-val-split-over { color: #991b1b; }
 .pp-opt-val-cast { padding: 5px 6px; border: 1px solid #c7d2fe; border-radius: 6px; font-size: 12px; background: #fff; color: #312e81; }
 .pp-opt-val-cast-missing { border-color: #f59e0b; background: #fffbeb; }
 .pp-opt-val-sum { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; }
