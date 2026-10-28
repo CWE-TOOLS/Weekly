@@ -3861,7 +3861,7 @@ function renderOptValue() {
     const amount = (it, i) => `<span class="pp-opt-val-cur">$</span><input type="number" min="0" step="1" id="pp-opt-val-${i}" data-val-amount="${i}" value="${it.value ? escapeAttr(String(it.value)) : ''}" placeholder="0">`;
     const rows = optValueItems.map((it, i) => i < OPT_FIXED_VALUES.length
         ? `<div class="pp-opt-val-row pp-opt-val-fixed"><label for="pp-opt-val-${i}">${escapeHtml(it.name)} =</label>${amount(it, i)}<span></span></div>`
-        : `<div class="pp-opt-val-row"><input type="text" data-val-name="${i}" value="${escapeAttr(it.name)}" placeholder="Change Order #${i - OPT_FIXED_VALUES.length + 1}">${amount(it, i)}<button type="button" class="pp-opt-val-del" data-val-del="${i}" title="Remove this change order">&times;</button></div>`).join('');
+        : `<div class="pp-opt-val-row pp-opt-val-co"><span class="pp-opt-val-co-wrap"><input type="text" data-val-name="${i}" value="${escapeAttr(it.name)}" placeholder="Change Order #${i - OPT_FIXED_VALUES.length + 1} — type a name" title="Name this change order"><span class="pp-opt-val-eq">=</span></span>${amount(it, i)}<button type="button" class="pp-opt-val-del" data-val-del="${i}" title="Remove this change order">&times;</button></div>`).join('');
     box.innerHTML = `<div class="pp-opt-val-head"><strong>Project value &rarr; Optimizer hours</strong><span class="pp-opt-val-hint">value &divide; $${REVENUE_PER_HOUR}/h</span></div>
         <div class="pp-opt-val-rows">${rows}</div>
         <button type="button" class="pp-opt-val-add" data-val-add>+ Add Change Order value</button>
@@ -8900,7 +8900,7 @@ function wireEvents() {
             if (n || a) { scheduleOptValueSave(); const box = optValue.querySelector('.pp-opt-val-totals'); if (box) { renderOptValueTotalsOnly(); } }
         });
         optValue.addEventListener('click', async (e) => {
-            if (e.target.closest('[data-val-add]')) { optValueItems.push({ name: `Change Order #${optValueItems.length - OPT_FIXED_VALUES.length + 1}`, value: 0 }); renderOptValue(); optValue.querySelector(`[data-val-amount="${optValueItems.length - 1}"]`)?.focus(); scheduleOptValueSave(); return; }
+            if (e.target.closest('[data-val-add]')) { optValueItems.push({ name: '', value: 0 }); renderOptValue(); optValue.querySelector(`[data-val-name="${optValueItems.length - 1}"]`)?.focus(); scheduleOptValueSave(); return; }
             const del = e.target.closest('[data-val-del]');
             if (del) { const i = Number(del.dataset.valDel); if (i < OPT_FIXED_VALUES.length) return; const it = optValueItems[i]; if (it && it.value && !window.confirm(`Remove "${it.name || 'this change order'}" (${money0(it.value)})?`)) return; optValueItems.splice(i, 1); renderOptimizer(); scheduleOptValueSave(); }
         });
