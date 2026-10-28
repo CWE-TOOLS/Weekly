@@ -229,7 +229,8 @@ function castOverload(col, list) {
     return best && best.n > CAST_PER_DAY_LIMIT ? best : null;
 }
 const overloadTitle = (ov) => `${ov.n} castings in Cast on ${fmtShort(ov.date)} — more than ${CAST_PER_DAY_LIMIT} a day`;
-/** Fill a count span in place: red with the words POTENTIAL RISK before it when Cast is over the day limit. */
+/** Fill a count span in place: red with the words POTENTIAL RISK before it when Cast is over the day limit.
+ *  The span lives inside .pm-head-tail, so the pill and the count wrap onto a second line together (2026-10-28). */
 function fillCount(el, col, list, warn = true) {
     const ov = warn ? castOverload(col, list) : null;
     el.textContent = list.length ? String(list.length) : '';
@@ -336,10 +337,10 @@ function renderMap() {
                 <span class="fm-area-label">${escapeHtml(col)}</span>
                 <span class="fm-area-more" data-more="${escapeHtml(col)}"></span>
                 <span class="pm-head-sq" data-colsq="${escapeHtml(col)}"></span>
-                <span class="fm-area-count" data-count="${escapeHtml(col)}">0</span>
+                <span class="pm-head-tail"><span class="fm-area-count" data-count="${escapeHtml(col)}">0</span></span>
             </button>${spec.sections.map((sec, i) => `
             <div class="pm-cell${i === last ? ' pm-cell-last' : ''}" style="grid-column:${k + 1};grid-row:${i + 2}" data-cellcol="${escapeHtml(col)}">
-                ${sec.label ? `<div class="pm-section-head" data-open-band="${escapeHtml(col)}|${i}" title="See every ${escapeHtml(col)} job in ${escapeHtml(sec.label)}"><span>${escapeHtml(sec.label)}</span><span class="pm-section-sub">${escapeHtml(sec.sub)}</span><span class="pm-section-sq" data-secsq="${escapeHtml(col)}|${i}"></span><span class="pm-section-n" data-secn="${escapeHtml(col)}|${i}"></span></div>` : ''}
+                ${sec.label ? `<div class="pm-section-head" data-open-band="${escapeHtml(col)}|${i}" title="See every ${escapeHtml(col)} job in ${escapeHtml(sec.label)}"><span>${escapeHtml(sec.label)}</span><span class="pm-section-sub">${escapeHtml(sec.sub)}</span><span class="pm-section-sq" data-secsq="${escapeHtml(col)}|${i}"></span><span class="pm-head-tail"><span class="pm-section-n" data-secn="${escapeHtml(col)}|${i}"></span></span></div>` : ''}
                 <div class="fm-cards" data-cards="${escapeHtml(col)}|${i}"></div>
             </div>`).join('')}
         </div>`).join('');

@@ -114,3 +114,9 @@
 .pm-head-sq:empty { display: none; }
 .pm-cell-head .pm-cast-risk { margin-left: 0; background: #dc2626; color: #fff; border-radius: 999px; padding: 0.05rem 0.45rem; font-size: 0.6rem; }
 .pm-cell-head .fm-area-count.pm-cast-over { background: #dc2626; color: #fff; box-shadow: 0 0 0 1px #fff; }
+/* A head that is wider than its column wraps onto a second line instead of running into the next column (2026-10-28).
+   The POTENTIAL RISK pill and the count share .pm-head-tail, so they move down together and stay right-aligned. */
+.pm-cell-head.fm-area-head { flex-wrap: wrap; row-gap: 0.1rem; min-width: 0; overflow: hidden; }
+.pm-section-head { flex-wrap: wrap; row-gap: 0.05rem; }
+.pm-head-tail { margin-left: auto; display: inline-flex; align-items: center; gap: 0.3rem; }
+.pm-head-tail .fm-area-count, .pm-head-tail .pm-section-n, .pm-head-tail .pm-cast-risk { margin-left: 0; }
