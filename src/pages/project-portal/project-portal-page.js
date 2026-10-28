@@ -3899,12 +3899,25 @@ function optCoSplitSumHtml(it) {
     const msg = Math.abs(d) < 0.05 ? `all ${fmtHrs(hours)} h split &#10003;` : d > 0 ? `${fmtHrs(got)} of ${fmtHrs(hours)} h split &mdash; ${fmtHrs(d)} h left` : `${fmtHrs(got)} h split but the change order only has ${fmtHrs(hours)} h &mdash; ${fmtHrs(-d)} h over`;
     return `<span class="pp-opt-val-split-${cls}">${msg}</span>`;
 }
+/** Lock the empty boxes of a split line once every hour is split; unlock them when hours are taken back. */
+function optCoSplitLock(line, it) {
+    const full = Math.abs(optCoAssigned(it) - optCoHours(it)) < 0.05;
+    for (const inp of line.querySelectorAll('input[data-val-split]')) {
+        if (inp.hasAttribute('data-off')) continue;   // work already done: stays off
+        const has = Number(inp.value) > 0, lock = full && !has;
+        inp.disabled = lock;
+        const lab = inp.closest('label');
+        if (lab) { lab.classList.toggle('pp-opt-val-split-locked', lock); lab.title = lock ? 'Every hour of this change order is already split — lower another cast first' : lab.title.replace(/^Every hour.*$/, `Hours of this change order that ${lab.textContent.trim().replace(/\s*h$/, '').replace(/\s+\S*$/, '')} will do`); }
+    }
+}
 function optCoSplitHtml(it, i) {
     const hours = optCoHours(it);
     if (!hours) return '';
+    const full = Math.abs(optCoAssigned(it) - hours) < 0.05;
     const cells = optSortedCastings().map(c => {
-        const v = Number(it.splits?.[c.id]) || 0, done = optCastDone.get(c.id), off = !!done && !(v > 0);
-        return `<label class="pp-opt-val-split-cast${off ? ' pp-opt-val-split-off' : ''}" title="${off ? 'Work already done — a change order cannot go on tasks that already happened' : `Hours of this change order that Cast ${escapeAttr(String(c.casting_number || ''))} will do`}">Cast ${escapeHtml(String(c.casting_number || ''))} <input type="number" min="0" step="0.5" data-val-split="${i}" data-cast="${escapeAttr(c.id)}" value="${v ? escapeAttr(fmtHrs(v)) : ''}" placeholder="0"${off ? ' disabled' : ''}> h</label>`;
+        const v = Number(it.splits?.[c.id]) || 0, done = optCastDone.get(c.id), off = !!done && !(v > 0), locked = full && !(v > 0);
+        const tip = off ? 'Work already done — a change order cannot go on tasks that already happened' : locked ? 'Every hour of this change order is already split — lower another cast first' : `Hours of this change order that Cast ${escapeAttr(String(c.casting_number || ''))} will do`;
+        return `<label class="pp-opt-val-split-cast${off ? ' pp-opt-val-split-off' : ''}${locked ? ' pp-opt-val-split-locked' : ''}" title="${tip}">Cast ${escapeHtml(String(c.casting_number || ''))} <input type="number" min="0" step="0.5" data-val-split="${i}" data-cast="${escapeAttr(c.id)}" value="${v ? escapeAttr(fmtHrs(v)) : ''}" placeholder="0"${off ? ' disabled data-off' : locked ? ' disabled' : ''}> h</label>`;
     }).join('');
     return `<div class="pp-opt-val-split" data-split-for="${i}"><span class="pp-opt-val-split-lead">Split its ${fmtHrs(hours)} h between the casts:</span>${cells}<span class="pp-opt-val-split-sum" data-split-sum="${i}">${optCoSplitSumHtml(it)}</span></div>`;
 }
@@ -8997,10 +9010,15 @@ function wireEvents() {
                 const it = optValueItems[Number(sp.dataset.valSplit)];
                 if (!it) return;
                 it.splits = it.splits || {};
-                const v = sp.value === '' ? 0 : Math.max(0, Number(sp.value) || 0);
+                let v = sp.value === '' ? 0 : Math.max(0, Number(sp.value) || 0);
+                const others = Math.round((optCoAssigned(it) - (Number(it.splits[sp.dataset.cast]) || 0)) * 10) / 10;
+                const room = Math.max(0, Math.round((optCoHours(it) - others) * 10) / 10);
+                if (v > room + 0.001) { v = room; sp.value = room ? fmtHrs(room) : ''; showToast(room ? `Only ${fmtHrs(room)} h of this change order are left to split.` : 'Every hour of this change order is already split — lower another cast first.', 'error'); }
                 if (v > 0) it.splits[sp.dataset.cast] = v; else delete it.splits[sp.dataset.cast];
                 const sum = optValue.querySelector(`[data-split-sum="${sp.dataset.valSplit}"]`);
                 if (sum) sum.innerHTML = optCoSplitSumHtml(it);
+                const line = sp.closest('.pp-opt-val-split');
+                if (line) optCoSplitLock(line, it);
                 scheduleOptValueSave();
                 renderOptValueTotalsOnly();
                 return;
@@ -9013,7 +9031,7 @@ function wireEvents() {
                 const i = Number(a.dataset.valAmount), it = optValueItems[i], row = a.closest('.pp-opt-val-row');
                 const line = optValue.querySelector(`[data-split-for="${i}"]`);
                 if (!optCoHours(it)) { if (line) line.remove(); }
-                else if (line) { const sum = line.querySelector(`[data-split-sum="${i}"]`); line.querySelector('.pp-opt-val-split-lead').textContent = `Split its ${fmtHrs(optCoHours(it))} h between the casts:`; if (sum) sum.innerHTML = optCoSplitSumHtml(it); }
+                else if (line) { const sum = line.querySelector(`[data-split-sum="${i}"]`); line.querySelector('.pp-opt-val-split-lead').textContent = `Split its ${fmtHrs(optCoHours(it))} h between the casts:`; if (sum) sum.innerHTML = optCoSplitSumHtml(it); optCoSplitLock(line, it); }
                 else if (row) row.insertAdjacentHTML('afterend', optCoSplitHtml(it, i));
             }
             if (n || a) { scheduleOptValueSave(); const box = optValue.querySelector('.pp-opt-val-totals'); if (box) { renderOptValueTotalsOnly(); } }

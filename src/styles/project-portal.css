@@ -6743,6 +6743,8 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
 .pp-opt-val-split-cast input { width: 56px; padding: 3px 5px; border: 1px solid #c7d2fe; border-radius: 5px; font-size: 12px; text-align: right; }
 .pp-opt-val-split-off { color: #9ca3af; }
 .pp-opt-val-split-off input { background: #f3f4f6; }
+.pp-opt-val-split-locked { color: #9ca3af; }
+.pp-opt-val-split-locked input { background: #f3f4f6; border-style: dashed; cursor: not-allowed; }
 .pp-opt-val-split-sum { margin-left: auto; font-weight: 700; }
 .pp-opt-val-split-ok { color: #14532d; }
 .pp-opt-val-split-under { color: #92400e; }
