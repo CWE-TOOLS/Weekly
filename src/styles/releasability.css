@@ -24,7 +24,7 @@
   --status-not-applicable-text: #999999; /* Gray text */
 
   /* Grid Dimensions */
-  --grid-project-column-width: 350px;
+  --grid-project-column-width: 380px;   /* 350 until 2026-10-28: the project name got bigger */
   --grid-tracking-column-width: 100px;
   --grid-cell-gap: 2px;
   --grid-row-height: 34px;
@@ -651,7 +651,7 @@ html {
   grid-template-columns:
     var(--grid-project-column-width)
     70px
-    repeat(22, minmax(50px, 1fr));
+    repeat(22, minmax(62px, 1fr));   /* 50px min until 2026-10-28: upright titles need room for their longest word ("Instructions") and the P. MANUAL tag */
   gap: var(--grid-cell-gap);
   background-color: #E8E7E4;
   width: fit-content;
@@ -767,13 +767,13 @@ html {
   align-items: center;
   justify-content: flex-end;
   gap: 6px;
-  white-space: nowrap;
-  padding: 0.75rem 0.5rem 0.5rem;
+  white-space: normal;
+  padding: 0.6rem 0.2rem 0.4rem;
   font-weight: 600;
-  font-size: 0.8rem;
+  font-size: 0.74rem;
   color: rgba(0, 0, 0, 0.90);
   border-right: 1px solid rgba(255, 255, 255, 0.5);
-  letter-spacing: 0.08em;
+  letter-spacing: 0.02em;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   transition: filter var(--transition-fast);
   box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.25), inset 0 -1px 2px rgba(0, 0, 0, 0.06);
@@ -782,14 +782,24 @@ html {
 .tracking-item-header:hover {
   filter: brightness(0.95);
 }
-/* The column name reads bottom-to-top as before; the AUTO / MANUAL tag sits upright at the foot (2026-10-15) */
+/* The column name reads upright, wrapped over a few lines (2026-10-28; it read bottom-to-top before);
+   the AUTO / MANUAL tag sits at the foot. A word too long for the column breaks rather than running over. */
 .tracking-item-label {
-  writing-mode: vertical-rl;
-  transform: rotate(180deg);
   flex: 1 1 auto;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
+  justify-content: center;
+  width: 100%;
+  text-align: center;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
 }
+/* Casting Inventory is the gate every print waits on (2026-10-28): dark teal head + a teal ring down the column */
+.header-cell.tracking-item-header[data-tracking-item="Casting Inventory"] { background-color: #00897B; color: #fff; box-shadow: inset 0 0 0 2px #004D40; }
+.tracking-item-header[data-tracking-item="Casting Inventory"] .tracking-item-label { font-weight: 800; font-size: 0.8rem; }
+.tracking-item-header[data-tracking-item="Casting Inventory"] .tracking-mode-auto { background: #fff; color: #004D40; }
+.releasability-grid-body .status-cell[data-tracking-item="Casting Inventory"] { box-shadow: inset 0 0 0 2px #00695C, 0 2px 3px rgba(0, 0, 0, 0.18); }
+.releasability-grid-body .status-cell[data-tracking-item="Casting Inventory"]:hover { box-shadow: inset 0 0 0 2px #00695C, 0 3px 8px rgba(0, 0, 0, 0.15); }
 .tracking-mode-tag {
   display: inline-block;
   flex: 0 0 auto;
@@ -1007,6 +1017,8 @@ html {
 
 .project-name {
   flex: 1 1 auto; /* Take all available width; cast tag sits by the controls */
+  font-size: 1.05rem;   /* 2026-10-28: taller than the cell's 0.875rem so the name reads from across the room */
+  font-weight: 600;
   text-align: left;
   overflow-wrap: break-word;
   word-wrap: break-word;

@@ -158,7 +158,7 @@ function createHeaderRow() {
     const label = TRACKING_ITEM_LABELS[item] || item;
     const labelEl = document.createElement('span');
     labelEl.className = 'tracking-item-label';
-    labelEl.textContent = label;
+    labelEl.textContent = label.replace(/\//g, '/​');   // zero-width space: upright titles may break after a slash ("3D Drawings/ Parts List")
     headerCell.appendChild(labelEl);
     const auto = AUTO_MILESTONES.includes(item);
     const pman = PORTAL_MANUAL_MILESTONES.includes(item);
@@ -172,6 +172,7 @@ function createHeaderRow() {
         : ' — MANUAL: click the cell')
         + (MILESTONE_HOW[item] ? '\n\nHow: ' + MILESTONE_HOW[item] : ''); // Tooltip with full name + how it is set
     headerCell.dataset.trackingIndex = index; // Add index for individual targeting
+    headerCell.dataset.trackingItem = item;   // the key, for per-column styling (Casting Inventory stands out)
     cells.push(headerCell);
   });
 
