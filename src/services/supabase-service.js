@@ -286,6 +286,8 @@ async function runRefresh(payloads) {
     // No visual indicator - silent refresh per user preference
     // Smart rendering will handle updates without disruption
 
+    // A change of the weekly's source setting: forget the memoised source before anyone reloads (2026-10-28)
+    if (payloads.some(p => isPortalChange(p) && signalInfo(p).table === 'plant_schedule_settings') && typeof window !== 'undefined' && typeof window.__resetWeeklySourceMemo === 'function') window.__resetWeeklySourceMemo();
     // Use custom handler if registered (e.g., releasability board)
     if (customRefreshHandler) {
         await customRefreshHandler(payloads[payloads.length - 1], payloads);
@@ -295,7 +297,11 @@ async function runRefresh(payloads) {
     // Fallback to weekly schedule page handler
     // Skip only when every signal in the batch is a releasability-only action or a portal
     // table the weekly does not read (its own tables keep triggering a reload).
-    const WEEKLY_TABLES = new Set([tasksTable, 'task_descriptions']);
+    // 2026-10-28: plant_schedule_settings carries the "weekly reads the Plant Scheduler" switch, so a change
+    // there always reloads (and forgets the memoised source); plant_schedule rows matter only while the
+    // scheduler is the source (weekly-source-service keeps window.__weeklySource up to date).
+    const WEEKLY_TABLES = new Set([tasksTable, 'task_descriptions', 'plant_schedule_settings']);
+    if (typeof window !== 'undefined' && window.__weeklySource === 'scheduler') WEEKLY_TABLES.add('plant_schedule');
     const isReleasabilityAction = (payload) => {
         const info = signalInfo(payload);
         const action = info.action;

@@ -25,6 +25,11 @@ const SETTINGS_TABLE = 'plant_schedule_settings';
 const MEMO_MS = 10 * 1000;        // one read per page per 10 s; a settings broadcast clears it
 
 let memo = null;                  // { source, at }
+function remember(source) {
+    memo = { source, at: Date.now() };
+    try { window.__weeklySource = source; } catch (_) { /* no window */ }
+}
+try { window.__resetWeeklySourceMemo = () => { memo = null; }; } catch (_) { /* no window */ }
 
 function normalize(v) {
     const s = String((v && typeof v === 'object') ? v.source : v || '').trim().toLowerCase();
@@ -49,7 +54,7 @@ export function resetWeeklySourceMemo() { memo = null; }
  */
 export async function getWeeklySource(opts = {}) {
     const override = urlSourceOverride();
-    if (override) return override;
+    if (override) { try { window.__weeklySource = override; } catch (_) { /* no window */ } return override; }
     if (!opts.fresh && memo && Date.now() - memo.at < MEMO_MS) return memo.source;
     let source = SOURCE_SHEET;
     try {
@@ -63,7 +68,7 @@ export async function getWeeklySource(opts = {}) {
     } catch (err) {
         logger.warn('[weekly-source] lookup failed, using the Google Sheet:', err);
     }
-    memo = { source, at: Date.now() };
+    remember(source);
     return source;
 }
 
@@ -82,7 +87,7 @@ export async function setWeeklySource(source) {
     if (!client) throw new Error('No database connection');
     const { error } = await client.from(SETTINGS_TABLE).upsert({ key: WEEKLY_SOURCE_KEY, value, updated_at: new Date().toISOString() }, { onConflict: 'key' });
     if (error) throw error;
-    memo = { source: value.source, at: Date.now() };
+    remember(value.source);
     return value.source;
 }
 
