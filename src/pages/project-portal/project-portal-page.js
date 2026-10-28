@@ -37,7 +37,6 @@ import {
 import {
     fetchForProject as fetchTaskDescriptionsForProject,
     upsertOne as upsertTaskDescription,
-    isStagingTaskHoursMigrationPending,
     deleteOne as deleteTaskDescription
 } from '../../services/task-descriptions-service.js';
 import {
@@ -132,8 +131,6 @@ import { activateJigListTab } from './jig-list.js?v=20261026-1';
 import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, APPROVALS_TAB_ITEMS } from '../../config/milestones-config.js?v=20261027-2';
 import { loadMilestonesForProject, saveMilestone, isMilestonesMigrationPending, loadLayoutConditions, LAYOUT_CONDITION_PREFIX, layoutConditionNote, parseLayoutCondition, sideWords } from '../../services/milestones-service.js';
 import { loadJigListsForProject as loadJigListsForScrim, scrimForInventory } from '../../services/jig-list-service.js';
-import { loadReadyFlags, setReadyFlag, loadSettingRows, setSettingRow, loadScheduleForCastings } from '../../services/schedule-service.js?v=20261027-1';
-import { tasksForDepartment, teamOfDepartment, taskForPhase, STAGING_NAME_OF_TEAM, REVENUE_PER_HOUR } from '../../config/scheduler-config.js?v=20261027-1';
 import {
     loadLayoutPositions,
     snapshotLayout,
@@ -1040,53 +1037,6 @@ function populateForm(project) {
         currentTrackingPhases = new Set(TRACKING_PHASES);
     }
     trackingPhasesProject = project.project_number || null;
-    refreshInfoValue(project.project_number);   // the read-only Project Value block (entered on the Optimizer Hours tab)
-}
-
-// ---- Project Info: the project value lines, read-only — they are entered on the Optimizer Hours tab (2026-10-28) ----
-let infoValueFor = null;
-function renderInfoValue(items, legacy, castName) {
-    const box = document.getElementById('pp-info-value');
-    if (!box) return;
-    const list = normalizeOptValueItems(items);
-    const fixed = list.slice(0, OPT_FIXED_VALUES.length), cos = list.slice(OPT_FIXED_VALUES.length);
-    const initial = fixed.reduce((n, it) => n + (Number(it.value) || 0), 0);
-    const coSum = cos.reduce((n, it) => n + (Number(it.value) || 0), 0);
-    const total = initial + coSum;
-    const h = (v) => fmtHrs(Math.round(v / REVENUE_PER_HOUR * 10) / 10);
-    const names = castName || new Map(currentCastings.map(c => [c.id, String(c.casting_number || '')]));
-    const line = (name, v, cls = '', extra = '') => `<div class="pp-info-val-row${cls}"><span class="pp-info-val-name">${escapeHtml(name)}${extra}</span><span class="pp-info-val-amt">${money0(v)}</span></div>`;
-    const rows = fixed.map(it => line(it.name, it.value));
-    rows.push(line('Initial Value', initial, ' pp-info-val-sub', ` <small>= ${h(initial)} h</small>`));
-    cos.forEach((it, k) => {
-        const parts = Object.entries(it.splits || {}).filter(([, v]) => Number(v) > 0).map(([id, v]) => `Cast ${names.get(id) || '?'} ${fmtHrs(v)} h`);
-        const hrs = optCoHours(it), got = optCoAssigned(it), gap = Math.round((hrs - got) * 10) / 10;
-        const tag = (Number(it.value) || 0) > 0
-            ? (parts.length ? ` <small>&rarr; ${escapeHtml(parts.join(', '))}${Math.abs(gap) > 0.05 ? ` <span class="pp-info-val-warn">(${gap > 0 ? fmtHrs(gap) + ' h not split yet' : fmtHrs(-gap) + ' h over'})</span>` : ''}</small>` : ' <small class="pp-info-val-warn">&rarr; hours not split between casts yet</small>')
-            : '';
-        rows.push(line(it.name || `Change Order #${k + 1}`, it.value, ' pp-info-val-co', tag));
-    });
-    if (cos.length) rows.push(line('Change Orders', coSum, ' pp-info-val-sub', ` <small>= ${h(coSum)} h</small>`));
-    rows.push(line('Total Project Value', total, ' pp-info-val-total'));
-    const note = legacy && !total ? '<div class="pp-info-val-note">Legacy project &mdash; its hours came from the Optimizer sheets; no project value was entered.</div>' : '';
-    box.innerHTML = `<div class="pp-info-val-grid">${rows.join('')}</div>
-        <div class="pp-info-val-foot">= ${h(total)} Optimizer hours at $${REVENUE_PER_HOUR}/h${cos.length ? ` (initial ${h(initial)} h + change orders ${h(coSum)} h)` : ''} &middot; entered on the Optimizer Hours tab</div>${note}`;
-}
-async function refreshInfoValue(projectNumber) {
-    const pn = String(projectNumber || '').trim();
-    infoValueFor = pn;
-    const box = document.getElementById('pp-info-value');
-    if (!box) return;
-    if (!pn) { box.innerHTML = ''; return; }
-    try {
-        const rows = await loadSettingRows([`value:${pn}`, `legacy:${pn}`]);
-        if (infoValueFor !== pn) return;   // another job was opened meanwhile
-        const v = rows.get(`value:${pn}`), lg = rows.get(`legacy:${pn}`);
-        let names = null;
-        try { const cs = (currentCastings.length && currentCastings[0].project_number === pn) ? currentCastings : await loadCastings(pn); names = new Map((cs || []).map(c => [c.id, String(c.casting_number || '')])); } catch (e) { /* names stay generic */ }
-        if (infoValueFor !== pn) return;
-        renderInfoValue(v && Array.isArray(v.items) ? v.items : [], !!(lg && typeof lg === 'object'), names);
-    } catch (e) { box.innerHTML = '<span class="pp-muted">Project value could not be loaded.</span>'; }
 }
 
 /**
@@ -2795,162 +2745,7 @@ async function activateOptimizerTab() {
         currentOptCastingId = phaseScoped[0].id;
     }
     await loadAllPhasesForProject();
-    try { optReady = await loadReadyFlags(currentCastings.map(c => c.id)); } catch (e) { optReady = new Map(); }
-    await loadOptValue();
-    await loadStagingDescriptions();   // the Optimizer Hours tab mirrors Staging (teams × days with task names)
     renderOptimizer();
-}
-
-// ---- Optimizer Hours per staged day (2026-10-22): the tab mirrors the Staging tab; hours live on the staging row.
-function optStagedCells(castNum) {
-    const scaffold = currentStagingScaffold.get(castNum) || [];
-    const cells = [];
-    for (const sec of scaffold) {
-        for (let d = 1; d <= sec.days; d++) {
-            const entry = currentStagingDescriptions.get(`${castNum}|${sec.department}|${d}`) || {};
-            cells.push({ department: sec.department, day: d, taskName: entry.taskName || '', hours: entry.hours == null ? null : Number(entry.hours), description: entry.description || '' });
-        }
-    }
-    return cells;
-}
-function optStagedHours(castNum) { return optStagedCells(castNum).reduce((n, c) => n + (Number(c.hours) || 0), 0); }
-/** Total hours of a casting: the staged days when any carry hours, else the previous task list. */
-function optHoursOf(casting) {
-    const staged = optStagedHours(String(casting.casting_number || ''));
-    if (staged > 0) return staged;
-    return getPhasesFor(casting.id).reduce((n, p) => n + (typeof p.hours === 'number' ? p.hours : 0), 0);
-}
-const optHoursSaveTimers = new Map();
-function scheduleOptHoursSave(castNum, dept, day, value) {
-    const key = `${castNum}|${dept}|${day}`;
-    const hours = value === '' || value == null ? null : Math.max(0, Number(value) || 0);
-    const cur = currentStagingDescriptions.get(key) || { description: '', castingSide: null };
-    currentStagingDescriptions.set(key, { ...cur, hours });
-    renderOptTotals();
-    const prev = optHoursSaveTimers.get(key);
-    if (prev) clearTimeout(prev);
-    optHoursSaveTimers.set(key, setTimeout(async () => {
-        optHoursSaveTimers.delete(key);
-        try { await upsertTaskDescription({ projectNumber: currentProjectNumber, castingNumber: castNum, department: dept, dayNumber: String(day), hours }); }
-        catch (err) { logger.error('[project-portal] save optimizer hours failed:', err); showToast('Save hours failed: ' + (err.message || err), 'error'); }
-    }, 500));
-}
-/** Whole-number split, first day heavier (same rule as the scheduler). */
-function optWholeSplit(hours, n) {
-    if (n <= 1) return [hours];
-    const whole = Math.floor(hours), extra = Math.round((hours - whole) * 100) / 100;
-    const base = Math.floor(whole / n), rem = whole - base * n;
-    const out = Array.from({ length: n }, (_, k) => base + (k < rem ? 1 : 0));
-    out[0] = Math.round((out[0] + extra) * 100) / 100;
-    return out;
-}
-/**
- * Pull the previous task list's hours into the staged days (2026-10-22): each old task goes to its team's
- * staging department; the team's days are shared out between its tasks (a task gets at least one day; more
- * days than tasks are split by hours), the task name and the hours land on those days. Days already carrying
- * hours are left alone. Returns { filled, skipped }.
- */
-async function optPullLegacyHours(casting) {
-    const castNum = String(casting.casting_number || '');
-    const phases = getPhasesFor(casting.id).filter(p => Number(p.hours) > 0);
-    if (!phases.length) return { filled: 0, skipped: 'no previous hours' };
-    let scaffold = currentStagingScaffold.get(castNum);
-    if (!scaffold) { scaffold = []; currentStagingScaffold.set(castNum, scaffold); }
-    // old tasks by team, in their order
-    const groups = new Map();
-    const sealIdx = phases.findIndex(p => taskForPhase(p.phase_name).code === 'SEAL');
-    phases.forEach((p, i) => {
-        const m = taskForPhase(p.phase_name, { afterSeal: sealIdx >= 0 && i > sealIdx });
-        if (!groups.has(m.dept)) groups.set(m.dept, []);
-        groups.get(m.dept).push({ code: m.code, hours: Number(p.hours) || 0 });
-    });
-    let filled = 0;
-    const skippedTeams = [];
-    for (const [team, tasks] of groups) {
-        let sec = scaffold.find(s => teamOfDepartment(s.department) === team);
-        if (!sec) { sec = { department: STAGING_NAME_OF_TEAM[team] || team, days: 0 }; scaffold.push(sec); }
-        const hasHours = Array.from({ length: sec.days }, (_, i) => currentStagingDescriptions.get(`${castNum}|${sec.department}|${i + 1}`)).some(e => e && e.hours != null && e.hours !== '');
-        if (hasHours) { skippedTeams.push(sec.department); continue; }
-        if (sec.days < tasks.length) sec.days = tasks.length;
-        // share the team's days between its tasks: at least one each, the rest by hours
-        const total = tasks.reduce((n, t) => n + t.hours, 0) || 1;
-        const alloc = tasks.map(() => 1);
-        for (let left = sec.days - tasks.length; left > 0; left--) {
-            let best = 0, bestGap = -Infinity;
-            tasks.forEach((t, i) => { const gap = t.hours / total * sec.days - alloc[i]; if (gap > bestGap) { bestGap = gap; best = i; } });
-            alloc[best] += 1;
-        }
-        let day = 1;
-        for (let i = 0; i < tasks.length; i++) {
-            const split = optWholeSplit(tasks[i].hours, alloc[i]);
-            for (const h of split) {
-                const key = `${castNum}|${sec.department}|${day}`;
-                const cur = currentStagingDescriptions.get(key) || { description: '', castingSide: null };
-                await upsertTaskDescription({ projectNumber: currentProjectNumber, castingNumber: castNum, department: sec.department, dayNumber: String(day), taskName: tasks[i].code, hours: h });
-                currentStagingDescriptions.set(key, { ...cur, taskName: tasks[i].code, hours: h });
-                filled++; day++;
-            }
-        }
-    }
-    scaffold.sort((a, b) => { const i = DEPARTMENT_ORDER.indexOf(a.department), j = DEPARTMENT_ORDER.indexOf(b.department); return (i === -1 ? 999 : i) - (j === -1 ? 999 : j); });
-    return { filled, skipped: skippedTeams.length ? `${skippedTeams.join(', ')} already had hours` : '' };
-}
-async function handlePullLegacyHours(castingId) {
-    const c = currentCastings.find(x => x.id === castingId);
-    if (!c) return;
-    if (isStagingTaskHoursMigrationPending()) { showToast('Run migration/staging-task-hours.sql first — the hours columns are not in the database yet.', 'error'); return; }
-    try {
-        const r = await optPullLegacyHours(c);
-        renderOptimizer();
-        showToast(r.filled ? `Cast ${c.casting_number}: ${r.filled} day${r.filled === 1 ? '' : 's'} filled from the previous task list${r.skipped ? ' (' + r.skipped + ')' : ''}` : `Cast ${c.casting_number}: nothing to pull${r.skipped ? ' — ' + r.skipped : ''}`);
-    } catch (err) { showToast('Pull failed: ' + (err.message || err), 'error'); }
-}
-async function handlePullLegacyHoursAll() {
-    if (isStagingTaskHoursMigrationPending()) { showToast('Run migration/staging-task-hours.sql first — the hours columns are not in the database yet.', 'error'); return; }
-    const list = getCastingsForActivePhase().filter(c => optStagedHours(String(c.casting_number || '')) <= 0 && getPhasesFor(c.id).some(p => Number(p.hours) > 0));
-    if (!list.length) { showToast('Every casting already has hours on its staged days.'); return; }
-    if (!window.confirm(`Pull the previous task list hours into the staged days of ${list.length} casting${list.length === 1 ? '' : 's'}? Days that already have hours are left alone.`)) return;
-    let filled = 0;
-    try { for (const c of list) filled += (await optPullLegacyHours(c)).filled; }
-    catch (err) { showToast('Pull failed: ' + (err.message || err), 'error'); }
-    renderOptimizer();
-    showToast(`${filled} day${filled === 1 ? '' : 's'} filled across ${list.length} casting${list.length === 1 ? '' : 's'}`);
-}
-
-function renderOptStagedGrid(casting) {
-    const castNum = String(casting.casting_number || '');
-    const scaffold = currentStagingScaffold.get(castNum) || [];
-    const deptChip = (dept) => {
-        const colorKey = normalizeDepartmentClass(normalizeDepartment(dept));
-        const color = DEPARTMENT_COLORS[colorKey];
-        const style = color ? ` style="background:${color.background};color:${color.text}"` : '';
-        return `<span class="pp-opt-dept-chip"${style}>${escapeHtml(dept)}</span>`;
-    };
-    const staged = scaffold.filter(sec => Array.from({ length: sec.days }, (_, i) => i + 1).some(d => currentStagingDescriptions.has(`${castNum}|${sec.department}|${d}`)));
-    if (!staged.length) {
-        return `<div class="pp-opt-staged-empty">Nothing staged yet for Cast ${escapeHtml(castNum)}. Set the days and tasks on the <button type="button" class="pp-link-btn" data-action="goto-staging">Staging tab</button> first — the hours are entered here per day.</div>`;
-    }
-    return staged.map(sec => {
-        const rows = [];
-        for (let d = 1; d <= sec.days; d++) {
-            const entry = currentStagingDescriptions.get(`${castNum}|${sec.department}|${d}`) || {};
-            const task = entry.taskName || '';
-            const hours = entry.hours == null ? '' : String(entry.hours);
-            const pastOn = optPastDays.get(`${castNum}|${sec.department}|${d}`);
-            const lockTip = pastOn ? `Scheduled on ${pastOn} — already happened. Hours can only be changed for today and later days.` : '';
-            rows.push(`<div class="pp-opt-stg-row${pastOn ? ' pp-opt-stg-row-past' : ''}"${pastOn ? ` title="${escapeAttr(lockTip)}"` : ''}>
-                <span class="pp-opt-day-label">Day ${d}${pastOn ? ' <span class="pp-opt-past-lock" aria-label="locked">&#128274;</span>' : ''}</span>
-                <span class="pp-opt-stg-task${task ? '' : ' pp-opt-stg-task-missing'}" title="${pastOn ? escapeAttr(lockTip) : task ? 'Task from the Staging tab' : 'No task picked on the Staging tab yet'}">${task ? escapeHtml(task.toLowerCase()) : '— no task —'}</span>
-                <input type="number" min="0" step="1" class="pp-opt-card-hours${pastOn ? ' pp-opt-card-hours-past' : ''}" data-action="staged-hours" data-casting-number="${escapeAttr(castNum)}" data-department="${escapeAttr(sec.department)}" data-day="${d}" value="${escapeAttr(hours)}" placeholder="0"${pastOn ? ' readonly data-past="1"' : ''} title="${escapeAttr(pastOn ? lockTip : (entry.description || '').trim() || 'Hours for this day')}" />
-                <span class="pp-opt-card-hours-label">hrs</span>
-            </div>`);
-        }
-        const deptTotal = Array.from({ length: sec.days }, (_, i) => Number((currentStagingDescriptions.get(`${castNum}|${sec.department}|${i + 1}`) || {}).hours) || 0).reduce((a, b) => a + b, 0);
-        return `<section class="pp-opt-dept pp-opt-stg-dept" data-department="${escapeAttr(sec.department)}">
-            <div class="pp-opt-dept-head">${deptChip(sec.department)}<span class="pp-opt-stg-dept-total" data-dept-total="${escapeAttr(castNum + '|' + sec.department)}">${deptTotal} hrs</span></div>
-            ${rows.join('')}
-        </section>`;
-    }).join('');
 }
 
 // ---------- Staging (pre-author task descriptions per casting, by department × day) ----------
@@ -3151,33 +2946,6 @@ function buildStgScaffold() {
     }
 }
 
-/** The Task box of a staging day: one of the team's tasks (the Plant Scheduler shows this word). */
-function stgTaskSelectHtml(castNum, department, day, current) {
-    const opts = tasksForDepartment(department);
-    const cur = String(current || '').trim();
-    if (!opts.length) return cur ? `<span class="pp-stg-task-fixed" title="Task">${escapeHtml(cur)}</span>` : '';
-    const missing = !cur ? ' pp-stg-task-missing' : '';
-    const extra = cur && !opts.includes(cur) ? `<option value="${escapeAttr(cur)}" selected>${escapeHtml(cur)}</option>` : '';
-    return `<select class="pp-stg-task${missing}" data-action="grid-task" data-casting-number="${escapeAttr(castNum)}" data-department="${escapeAttr(department)}" data-day="${day}" title="${cur ? 'Task for this day (shown on the Plant Scheduler)' : 'No task picked yet — pick the task for this day'}">
-        <option value=""${cur ? '' : ' selected'}>— task —</option>${extra}
-        ${opts.map(o => `<option value="${escapeAttr(o)}"${o === cur ? ' selected' : ''}>${escapeHtml(o.toLowerCase())}</option>`).join('')}
-    </select>`;
-}
-async function handleSaveStagingTask(castNum, dept, day, taskName) {
-    if (!currentProjectNumber || !castNum || !dept || !day) return;
-    const key = `${castNum}|${dept}|${day}`;
-    const cur = currentStagingDescriptions.get(key) || { description: '', castingSide: null };
-    currentStagingDescriptions.set(key, { ...cur, taskName: taskName || '' });
-    try {
-        await upsertTaskDescription({ projectNumber: currentProjectNumber, castingNumber: castNum, department: dept, dayNumber: String(day), taskName: taskName || null });
-        const sel = document.querySelector(`#pp-stg-columns select[data-action="grid-task"][data-casting-number="${CSS.escape(castNum)}"][data-department="${CSS.escape(dept)}"][data-day="${day}"]`);
-        if (sel) sel.classList.toggle('pp-stg-task-missing', !taskName);
-    } catch (err) {
-        logger.error('[project-portal] save staging task failed:', err);
-        showToast('Save task failed: ' + (err.message || err), 'error');
-    }
-}
-
 function renderStaging() {
     renderStgPills();
     renderStgColumns();
@@ -3251,18 +3019,14 @@ function renderStgColumn(casting) {
         for (let d = 1; d <= days; d++) {
             const entry = currentStagingDescriptions.get(`${castNum}|${department}|${d}`);
             const desc = entry ? (entry.description || '') : '';
-            const taskSel = stgTaskSelectHtml(castNum, department, d, entry ? (entry.taskName || '') : '');
             const removable = d === days && days > 1;
             const removeBtn = removable
                 ? `<button type="button" class="pp-opt-day-remove" data-action="remove-day" data-casting-number="${escapeAttr(castNum)}" data-department="${escapeAttr(department)}" data-day="${d}" title="Remove Day ${d}" aria-label="Remove Day ${d}">&times;</button>`
                 : `<span class="pp-opt-day-remove-spacer" aria-hidden="true"></span>`;
             dayRows.push(`
-                <div class="pp-opt-day-row pp-stg-day-row" data-department="${escapeAttr(department)}" data-day="${d}">
+                <div class="pp-opt-day-row" data-department="${escapeAttr(department)}" data-day="${d}">
                     <span class="pp-opt-day-label">Day ${d}</span>
-                    <div class="pp-stg-day-cell">
-                        ${taskSel}
-                        <textarea class="pp-opt-grid-desc" data-action="grid-desc" data-casting-number="${escapeAttr(castNum)}" data-department="${escapeAttr(department)}" data-day="${d}" rows="2" placeholder="Description…">${escapeHtml(desc)}</textarea>
-                    </div>
+                    <textarea class="pp-opt-grid-desc" data-action="grid-desc" data-casting-number="${escapeAttr(castNum)}" data-department="${escapeAttr(department)}" data-day="${d}" rows="2" placeholder="Description…">${escapeHtml(desc)}</textarea>
                     ${removeBtn}
                 </div>`);
         }
@@ -3334,12 +3098,10 @@ async function handleSelectStgCasting(castingId) {
 
 // Snapshot a casting's staging grid (department/day shape + every non-empty description)
 // to the in-memory clipboard so it can be pasted onto another casting.
-let copiedStaging_tasks = {};
 function handleCopyStaging(castNum) {
     if (!castNum) return;
     const scaffold = currentStagingScaffold.get(castNum) || [];
     const descById = {};
-    copiedStaging_tasks = {};
     let count = 0;
     for (const sec of scaffold) {
         for (let d = 1; d <= sec.days; d++) {
@@ -3349,14 +3111,12 @@ function handleCopyStaging(castNum) {
                 descById[`${sec.department}|${d}`] = desc;
                 count++;
             }
-            if (entry && entry.taskName) (copiedStaging_tasks[`${sec.department}|${d}`] = entry.taskName);
         }
     }
     copiedStaging = {
         fromCastNum: castNum,
         scaffold: scaffold.map(s => ({ department: s.department, days: s.days })),
-        descById,
-        taskById: { ...copiedStaging_tasks }
+        descById
     };
     showToast(`Copied staging from Cast ${castNum} (${count} description${count === 1 ? '' : 's'}).`);
     renderStgColumns();   // re-render so the Paste buttons enable on the other columns
@@ -3414,19 +3174,17 @@ async function handlePasteStaging(targetCastNum) {
         }
         // 2. Write the source's non-empty descriptions onto the target.
         for (const cell of srcCells) {
-            const taskName = (copiedStaging.taskById || {})[`${cell.department}|${cell.day}`] || '';
-            if (!(cell.description || '').trim() && !taskName) continue;
+            if (!(cell.description || '').trim()) continue;
             await upsertTaskDescription({
                 projectNumber: currentProjectNumber,
                 castingNumber: targetCastNum,
                 department: cell.department,
                 dayNumber: String(cell.day),
-                description: cell.description,
-                taskName: taskName || null
+                description: cell.description
             });
             const fk = `${targetCastNum}|${cell.department}|${cell.day}`;
-            const prev = currentStagingDescriptions.get(fk) || {};
-            currentStagingDescriptions.set(fk, { ...prev, description: cell.description, castingSide: prev.castingSide || null, taskName });
+            const prevSide = (currentStagingDescriptions.get(fk) || {}).castingSide || null;
+            currentStagingDescriptions.set(fk, { description: cell.description, castingSide: prevSide });
         }
         // 3. Match the target's grid shape to the source.
         currentStagingScaffold.set(targetCastNum, copiedStaging.scaffold.map(s => ({ department: s.department, days: s.days })));
@@ -3444,7 +3202,7 @@ function scheduleStagingGridSave(castNum, dept, day, text) {
     const key = `${castNum}|${dept}|${day}`;
     // Keep the local map current so the Staging milestone (red / orange / green) follows the typing.
     const cur = currentStagingDescriptions.get(key) || {};
-    currentStagingDescriptions.set(key, { ...cur, description: text == null ? '' : String(text), castingSide: cur.castingSide || null });
+    currentStagingDescriptions.set(key, { description: text == null ? '' : String(text), castingSide: cur.castingSide || null });
     scheduleStagingDerive();
     const prev = stagingGridSaveTimers.get(key);
     if (prev) clearTimeout(prev);
@@ -3465,8 +3223,8 @@ async function handleSaveStagingDescription(castNum, dept, day, text) {
             description: desc
         });
         // Update the in-memory map without re-rendering so the caret stays put.
-        const prev = currentStagingDescriptions.get(key) || {};
-        currentStagingDescriptions.set(key, { ...prev, description: desc, castingSide: prev.castingSide || null });
+        const prevSide = (currentStagingDescriptions.get(key) || {}).castingSide || null;
+        currentStagingDescriptions.set(key, { description: desc, castingSide: prevSide });
     } catch (err) {
         logger.error('[project-portal] save staging description failed:', err);
         showToast('Save description failed: ' + (err.message || err), 'error');
@@ -3783,9 +3541,6 @@ async function loadAllPhasesForProject() {
 }
 
 function renderOptimizer() {
-    const mig = document.getElementById('pp-opt-migration'); if (mig) mig.hidden = !isStagingTaskHoursMigrationPending();
-    renderOptValue();
-    renderOptReadyBar();
     renderOptPills();
     renderOptColumns();
     renderOptTotals();
@@ -3834,248 +3589,6 @@ function renderOptPills() {
 }
 
 /** The Final Optimizer HRS cell on a casting column — looks and works like the board's cell (red − / green ✓). */
-// ---- "Ready for scheduling" (2026-10-21): puts the casting in the Plant Scheduler's "Not yet scheduled" list.
-let optReady = new Map();   // castingId -> { project_number, at }
-function optCastingHours(castingId) { const c = currentCastings.find(x => x.id === castingId); return c ? optHoursOf(c) : 0; }
-/** Why the castings cannot be marked ready yet: the budgets must add up to exactly the job's Optimizer hours (null = fine). */
-function optReadyBlocker() {
-    if (optLegacy) return null;   // imported from the Optimizer: the hours are already on the castings
-    const hours = optInitialHours();
-    if (!hours) return 'Enter the project value first: the castings\' allocated hours must add up to the job\'s Optimizer hours before they can be marked ready.';
-    const alloc = optAllocated(getCastingsForActivePhase());
-    if (alloc > hours + 0.01) return `The allocated hours add up to ${fmtHrs(alloc)} h but the initial value only gives ${fmtHrs(hours)} h: lower a casting's allocated hours by ${fmtHrs(alloc - hours)} h first.`;
-    if (alloc < hours - 0.01) return `The allocated hours add up to ${fmtHrs(alloc)} h but the initial value gives ${fmtHrs(hours)} h: ${fmtHrs(hours - alloc)} h still have to be allocated to a casting first.`;
-    const un = optUnassignedChangeOrders();
-    if (un.length) return `Split each change order's hours between the casts that will do the work (${un.length} change order${un.length === 1 ? '' : 's'} not fully split yet).`;
-    return null;
-}
-function optReadyHtml(castingId) {
-    const on = optReady.has(castingId);
-    const blocker = on ? null : optReadyBlocker();
-    if (blocker) return `<button type="button" class="pp-opt-ready pp-opt-ready-blocked" data-action="toggle-ready" data-casting-id="${escapeAttr(castingId)}" title="${escapeAttr(blocker)}">&#128274; Ready for scheduling</button>`;
-    const at = on && optReady.get(castingId).at ? new Date(optReady.get(castingId).at).toLocaleString() : '';
-    const tip = on ? `Ready for scheduling since ${at} — it is in the Plant Scheduler's "Not yet scheduled" list (once it has a Casting Inventory). Click to take it back.`
-                   : 'Click when this casting\'s hours are ready to be scheduled — it then shows in the Plant Scheduler\'s "Not yet scheduled" list (it also needs a Casting Inventory).';
-    return `<button type="button" class="pp-opt-ready ${on ? 'pp-opt-ready-on' : ''}" data-action="toggle-ready" data-casting-id="${escapeAttr(castingId)}" title="${escapeAttr(tip)}">${on ? '&#10003; Ready for scheduling' : 'Ready for scheduling'}</button>`;
-}
-// ---- Project value → Optimizer hours (2026-10-27): PMs enter the job's value (base + change orders); ÷ $135 = the
-// hours the job has; each casting gets a budget; the budgets must add up to exactly those hours.
-let optValueItems = [];          // [{ name, value }] — the first three are the fixed lines, the rest are change orders
-const OPT_FIXED_VALUES = ['Fabrication Value', 'Crating Value', 'Loading Value'];
-/** Three fixed lines first (filled from a saved list by name; an old "Contract value" lands on Fabrication), change orders after. */
-function normalizeOptValueItems(items) {
-    const fixed = OPT_FIXED_VALUES.map(name => ({ name, value: 0 }));
-    const extras = [];
-    for (const it of Array.isArray(items) ? items : []) {
-        const name = String(it?.name || '').trim(), value = Number(it?.value) || 0;
-        const i = OPT_FIXED_VALUES.findIndex(n => n.toLowerCase() === name.toLowerCase());
-        if (i >= 0) fixed[i].value += value;
-        else if (/^contract value$/i.test(name)) fixed[0].value += value;
-        else {
-            const splits = {};
-            if (it?.splits && typeof it.splits === 'object') for (const [k, v] of Object.entries(it.splits)) if (Number(v) > 0) splits[String(k)] = Number(v);
-            if (!Object.keys(splits).length && it?.castingId) splits[String(it.castingId)] = Math.round(value / REVENUE_PER_HOUR * 10) / 10;   // saved before the split (2026-10-28)
-            extras.push({ name, value, splits });
-        }
-    }
-    return [...fixed, ...extras];
-}
-// Initial value = the three fixed lines; change orders are summed separately and each one is tied to the cast that does the extra work.
-function optInitialValue() { return optValueItems.slice(0, OPT_FIXED_VALUES.length).reduce((n, it) => n + (Number(it.value) || 0), 0); }
-function optChangeOrders() { return optValueItems.slice(OPT_FIXED_VALUES.length); }
-function optChangeOrderValue() { return optChangeOrders().reduce((n, it) => n + (Number(it.value) || 0), 0); }
-function optInitialHours() { return Math.round(optInitialValue() / REVENUE_PER_HOUR * 10) / 10; }
-function optChangeOrderHours() { return Math.round(optChangeOrderValue() / REVENUE_PER_HOUR * 10) / 10; }
-/** A change order's hours are split between casts by the PM ({ castingId: hours }); they go on those casts' upcoming tasks only. */
-function optCoHours(it) { return Math.round((Number(it?.value) || 0) / REVENUE_PER_HOUR * 10) / 10; }
-function optCoAssigned(it) { return Math.round(Object.values(it?.splits || {}).reduce((n, v) => n + (Number(v) || 0), 0) * 10) / 10; }
-function optCoHoursOf(castingId) { return Math.round(optChangeOrders().reduce((n, it) => n + (Number(it.splits?.[castingId]) || 0), 0) * 10) / 10; }
-function optCoNamesOf(castingId) { return optChangeOrders().map((it, k) => ({ it, k })).filter(({ it }) => Number(it.splits?.[castingId]) > 0).map(({ it, k }) => `${it.name || `Change Order #${k + 1}`} ${fmtHrs(it.splits[castingId])} h`); }
-/** Change orders with money whose split does not add up to their hours yet. */
-function optUnassignedChangeOrders() { return optChangeOrders().filter(it => (Number(it.value) || 0) > 0 && Math.abs(optCoAssigned(it) - optCoHours(it)) > 0.05); }
-let optCastDone = new Map();     // castingId -> last scheduled date (ISO) when every scheduled day of the cast is already past
-let optPastDays = new Map();     // "cast|department|day" -> first scheduled date that already happened: that staged day's hours are locked
-function optSortedCastings() { return [...currentCastings].sort((a, b) => String(a.casting_number || '').localeCompare(String(b.casting_number || ''), undefined, { numeric: true })); }
-function optCoSplitSumHtml(it) {
-    const hours = optCoHours(it), got = optCoAssigned(it), d = Math.round((hours - got) * 10) / 10;
-    const cls = Math.abs(d) < 0.05 ? 'ok' : d > 0 ? 'under' : 'over';
-    const msg = Math.abs(d) < 0.05 ? `all ${fmtHrs(hours)} h split &#10003;` : d > 0 ? `${fmtHrs(got)} of ${fmtHrs(hours)} h split &mdash; ${fmtHrs(d)} h left` : `${fmtHrs(got)} h split but the change order only has ${fmtHrs(hours)} h &mdash; ${fmtHrs(-d)} h over`;
-    return `<span class="pp-opt-val-split-${cls}">${msg}</span>`;
-}
-/** Lock the empty boxes of a split line once every hour is split; unlock them when hours are taken back. */
-function optCoSplitLock(line, it) {
-    const full = Math.abs(optCoAssigned(it) - optCoHours(it)) < 0.05;
-    for (const inp of line.querySelectorAll('input[data-val-split]')) {
-        if (inp.hasAttribute('data-off')) continue;   // work already done: stays off
-        const has = Number(inp.value) > 0, lock = full && !has;
-        inp.disabled = lock;
-        const lab = inp.closest('label');
-        if (lab) { lab.classList.toggle('pp-opt-val-split-locked', lock); lab.title = lock ? 'Every hour of this change order is already split — lower another cast first' : lab.title.replace(/^Every hour.*$/, `Hours of this change order that ${lab.textContent.trim().replace(/\s*h$/, '').replace(/\s+\S*$/, '')} will do`); }
-    }
-}
-function optCoSplitHtml(it, i) {
-    const hours = optCoHours(it);
-    if (!hours) return '';
-    const full = Math.abs(optCoAssigned(it) - hours) < 0.05;
-    const cells = optSortedCastings().map(c => {
-        const v = Number(it.splits?.[c.id]) || 0, done = optCastDone.get(c.id), off = !!done && !(v > 0), locked = full && !(v > 0);
-        const tip = off ? 'Work already done — a change order cannot go on tasks that already happened' : locked ? 'Every hour of this change order is already split — lower another cast first' : `Hours of this change order that Cast ${escapeAttr(String(c.casting_number || ''))} will do`;
-        return `<label class="pp-opt-val-split-cast${off ? ' pp-opt-val-split-off' : ''}${locked ? ' pp-opt-val-split-locked' : ''}" title="${tip}">Cast ${escapeHtml(String(c.casting_number || ''))} <input type="number" min="0" step="0.5" data-val-split="${i}" data-cast="${escapeAttr(c.id)}" value="${v ? escapeAttr(fmtHrs(v)) : ''}" placeholder="0"${off ? ' disabled data-off' : locked ? ' disabled' : ''}> h</label>`;
-    }).join('');
-    return `<div class="pp-opt-val-split" data-split-for="${i}"><span class="pp-opt-val-split-lead">Split its ${fmtHrs(hours)} h between the casts:</span>${cells}<span class="pp-opt-val-split-sum" data-split-sum="${i}">${optCoSplitSumHtml(it)}</span></div>`;
-}
-let optBudgets = new Map();      // castingId -> hours
-let optLegacy = null;            // { source, months, imported_at } when the job's schedule came from the Optimizer sheets — no project value needed
-const optValueSaveTimers = new Map();
-async function loadOptValue() {
-    optValueItems = []; optBudgets = new Map(); optLegacy = null;
-    if (!currentProjectNumber) return;
-    try {
-        const rows = await loadSettingRows([`value:${currentProjectNumber}`, `legacy:${currentProjectNumber}`, ...currentCastings.map(c => `budget:${c.id}`)]);
-        const lg = rows.get(`legacy:${currentProjectNumber}`);
-        optLegacy = lg && typeof lg === 'object' ? lg : null;
-        const v = rows.get(`value:${currentProjectNumber}`);
-        optValueItems = normalizeOptValueItems(v && Array.isArray(v.items) ? v.items : []);
-        for (const c of currentCastings) { const b = rows.get(`budget:${c.id}`); if (b != null && b !== '') optBudgets.set(c.id, Number(b) || 0); }
-        optCastDone = new Map(); optPastDays = new Map();
-        try {
-            const today = new Date(); const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-            const last = new Map();
-            for (const r of await loadScheduleForCastings(currentCastings.map(c => c.id))) {
-                const d = String(r.date || '').slice(0, 10); if (d && (!last.has(r.casting_id) || d > last.get(r.casting_id))) last.set(r.casting_id, d);
-                const note = String(r.note || '').trim();
-                if (d && d < iso && note.startsWith('unit:')) { const k = note.slice(5).split(' — ')[0]; if (!optPastDays.has(k) || d < optPastDays.get(k)) optPastDays.set(k, d); }   // a task that already happened (user rule 2026-10-28)
-            }
-            for (const [id, d] of last) if (d < iso) optCastDone.set(id, d);   // every scheduled day is behind us: a change order cannot land on tasks that already happened
-        } catch (e) { /* no scheduler rows readable — every cast stays pickable */ }
-    } catch (e) { logger.warn('[project-portal] loadOptValue failed', e); }
-}
-function optTotalValue() { return optValueItems.reduce((n, it) => n + (Number(it.value) || 0), 0); }
-function optJobHours() { return Math.round(optTotalValue() / REVENUE_PER_HOUR * 10) / 10; }
-function optAllocated(castings) { return castings.reduce((n, c) => n + (optBudgets.get(c.id) || 0), 0); }
-const money0 = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('en-US');
-function renderOptValue() {
-    const box = document.getElementById('pp-opt-value');
-    if (!box) return;
-    if (!currentProjectNumber) { box.innerHTML = ''; return; }
-    const total = optTotalValue(), hours = optJobHours();
-    const castings = getCastingsForActivePhase();
-    const alloc = optAllocated(castings), left = Math.round((hours - alloc) * 10) / 10;
-    if (optLegacy) {
-        const months = Array.isArray(optLegacy.months) && optLegacy.months.length ? optLegacy.months.join(' / ') : 'the Optimizer';
-        box.innerHTML = `<div class="pp-opt-val-head"><strong>Project value &rarr; Optimizer hours</strong><span class="pp-opt-val-hint">legacy project</span></div>
-            <div class="pp-opt-legacy-band">&#128230; <strong>Legacy project</strong> &mdash; its schedule and hours were brought in from the ${escapeHtml(months)} Optimizer sheet${/\//.test(months) ? 's' : ''}. No project value is needed: the castings can be marked ready for scheduling as they are.
-            <button type="button" class="pp-opt-legacy-off" data-val-legacy-off title="Switch this job to the new way: enter its value, allocate hours to every casting">Enter a project value instead</button></div>`;
-        return;
-    }
-    if (optValueItems.length < OPT_FIXED_VALUES.length) optValueItems = normalizeOptValueItems(optValueItems);
-    const amount = (it, i) => `<span class="pp-opt-val-cur">$</span><input type="number" min="0" step="1" id="pp-opt-val-${i}" data-val-amount="${i}" value="${it.value ? escapeAttr(String(it.value)) : ''}" placeholder="0">`;
-    const rows = optValueItems.map((it, i) => i < OPT_FIXED_VALUES.length
-        ? `<div class="pp-opt-val-row pp-opt-val-fixed"><label for="pp-opt-val-${i}">${escapeHtml(it.name)} =</label>${amount(it, i)}<span></span></div>`
-        : `<div class="pp-opt-val-row pp-opt-val-co"><span class="pp-opt-val-co-wrap"><input type="text" data-val-name="${i}" value="${escapeAttr(it.name)}" placeholder="Change Order #${i - OPT_FIXED_VALUES.length + 1} — type a name" title="Name this change order"><span class="pp-opt-val-eq">=</span></span>${amount(it, i)}<button type="button" class="pp-opt-val-del" data-val-del="${i}" title="Remove this change order">&times;</button></div>${optCoSplitHtml(it, i)}`).join('');
-    box.innerHTML = `<div class="pp-opt-val-head"><strong>Project value &rarr; Optimizer hours</strong><span class="pp-opt-val-hint">value &divide; $${REVENUE_PER_HOUR}/h</span></div>
-        <div class="pp-opt-val-rows">${rows}</div>
-        <button type="button" class="pp-opt-val-add" data-val-add>+ Add Change Order value</button>
-        ${optValueTotalsHtml()}`;
-}
-function optValueTotalsHtml() {
-    const initial = optInitialValue(), co = optChangeOrderValue(), total = optTotalValue();
-    const hours = optInitialHours(), coHours = optChangeOrderHours(), allHours = optJobHours();
-    const alloc = optAllocated(getCastingsForActivePhase()), left = Math.round((hours - alloc) * 10) / 10;
-    const un = optUnassignedChangeOrders().length;
-    const state = !hours ? '' : alloc > hours + 0.01 ? 'pp-opt-val-over' : alloc < hours - 0.01 ? 'pp-opt-val-under' : 'pp-opt-val-ok';
-    const msg = !hours ? 'Enter the initial value to get the hours.' : alloc > hours + 0.01 ? `Over by ${fmtHrs(alloc - hours)} h — lower a casting's allocated hours.` : alloc < hours - 0.01 ? `${fmtHrs(left)} h still to allocate to castings.` : 'Every hour is allocated to a casting.';
-    return `<div class="pp-opt-val-totals">
-        <div class="pp-opt-val-sum"><span>Initial value <strong>${money0(initial)}</strong> = ${fmtHrs(hours)} h</span><span>Change orders <strong>${money0(co)}</strong> = ${fmtHrs(coHours)} h${un ? ` <em class="pp-opt-val-warn">${un} not fully split</em>` : ''}</span><span>Total value <strong>${money0(total)}</strong> = ${fmtHrs(allHours)} h</span></div>
-        <div class="pp-opt-val-sum"><span class="pp-opt-val-alloc ${state}">Allocated hours <strong>${fmtHrs(alloc)} h</strong> of ${fmtHrs(hours)} h (initial value) · ${escapeHtml(msg)}</span><span class="pp-opt-val-hint">Change-order hours are split between casts and go on their upcoming tasks only — never on work that already happened.</span></div></div>`;
-}
-/** Re-draw only the totals line while a PM is typing a value (keeps the caret in the box). */
-function renderOptValueTotalsOnly() {
-    const cur = document.querySelector('#pp-opt-value .pp-opt-val-totals');
-    if (cur) cur.outerHTML = optValueTotalsHtml();   // only the totals line — the box being typed in is left alone
-    document.querySelectorAll('#pp-opt-columns .pp-opt-budget').forEach(el => { const id = el.querySelector('input')?.dataset.castingId; if (id && document.activeElement !== el.querySelector('input')) el.outerHTML = optBudgetHtml(id); });
-    document.querySelectorAll('#pp-opt-columns .pp-opt-ready').forEach(el => { const id = el.dataset.castingId; if (id) el.outerHTML = optReadyHtml(id); });
-    renderOptReadyBar();
-}
-function fmtHrs(n) { const v = Math.round((Number(n) || 0) * 10) / 10; return Number.isInteger(v) ? String(v) : v.toFixed(1); }
-function scheduleOptValueSave() {
-    const key = `value:${currentProjectNumber}`;
-    const prev = optValueSaveTimers.get(key); if (prev) clearTimeout(prev);
-    optValueSaveTimers.set(key, setTimeout(async () => {
-        optValueSaveTimers.delete(key);
-        try { await setSettingRow(key, { items: optValueItems }); renderInfoValue(optValueItems, !!optLegacy); } catch (err) { showToast('Could not save the project value: ' + (err.message || err), 'error'); }
-    }, 500));
-}
-function optBudgetHtml(castingId) {
-    const b = optBudgets.get(castingId);
-    const c = currentCastings.find(x => x.id === castingId);
-    const entered = c ? optHoursOf(c) : 0;
-    const co = optCoHoursOf(castingId);
-    const limit = b == null && !co ? null : (b || 0) + co;
-    const over = limit != null && entered > limit + 0.01;
-    const coLine = co ? `<span class="pp-opt-budget-co" title="${escapeAttr(optCoNamesOf(castingId).join(', '))}">+ ${fmtHrs(co)} h change order = <strong>${fmtHrs(limit)} h</strong></span>` : '';
-    return `<div class="pp-opt-budget${over ? ' pp-opt-budget-over' : ''}" title="Hours allocated to this casting out of the initial value's Optimizer hours${co ? ', plus its change-order hours' : ''}; the hours entered on its days should not exceed them">
-        <span class="pp-opt-budget-label">Allocated hours</span><input type="number" min="0" step="0.5" data-action="casting-budget" data-casting-id="${escapeAttr(castingId)}" value="${b == null ? '' : escapeAttr(fmtHrs(b))}" placeholder="0"><span class="pp-opt-budget-unit">h</span>${coLine}
-        <span class="pp-opt-budget-entered">entered ${fmtHrs(entered)} h${over ? ' &#9888;' : ''}</span></div>`;
-}
-async function handleCastingBudget(castingId, raw) {
-    if (!currentProjectNumber) return;
-    const val = raw === '' ? null : Math.max(0, Number(raw) || 0);
-    const hours = optInitialHours();
-    const others = optAllocated(getCastingsForActivePhase().filter(c => c.id !== castingId));
-    if (val != null && hours > 0 && others + val > hours + 0.01) {
-        showToast(`That would allocate ${fmtHrs(others + val)} h but the initial value only gives ${fmtHrs(hours)} h. Most you can allocate to this casting: ${fmtHrs(hours - others)} h.`, 'error');
-        renderOptimizer();
-        return;
-    }
-    if (val == null) optBudgets.delete(castingId); else optBudgets.set(castingId, val);
-    renderOptValueTotalsOnly();   // the totals line, the other budget boxes and the ready buttons — the box being typed in keeps its cursor
-    const key = `budget:${castingId}`;
-    const prev = optValueSaveTimers.get(key); if (prev) clearTimeout(prev);
-    optValueSaveTimers.set(key, setTimeout(async () => {
-        optValueSaveTimers.delete(key);
-        try { await setSettingRow(key, val); } catch (err) { showToast('Could not save the allocated hours: ' + (err.message || err), 'error'); }
-    }, 500));
-}
-
-function renderOptReadyBar() {
-    const bar = document.getElementById('pp-opt-ready-bar');
-    if (!bar) return;
-    const list = getCastingsForActivePhase();
-    if (!list.length) { bar.innerHTML = ''; return; }
-    const n = list.filter(c => optReady.has(c.id)).length;
-    const pullable = list.filter(c => optStagedHours(String(c.casting_number || '')) <= 0 && getPhasesFor(c.id).some(p => Number(p.hours) > 0)).length;
-    bar.innerHTML = `${pullable ? `<button type="button" class="pp-opt-pull pp-opt-pull-all" data-action="pull-legacy-all" title="Put every casting's previous task list hours onto its staged days">&#8681; Pull previous hours into ${pullable} casting${pullable === 1 ? '' : 's'}</button>` : ''}<span class="pp-opt-ready-count"><strong>${n} of ${list.length}</strong> casting${list.length === 1 ? '' : 's'} ready for scheduling</span>
-        ${n < list.length ? (optReadyBlocker() ? `<span class="pp-opt-ready-locked" title="${escapeAttr(optReadyBlocker())}">&#128274; ${escapeHtml(optReadyBlocker())}</span>` : '<button type="button" class="pp-opt-ready-all" data-action="ready-all">Mark all castings ready for scheduling</button>') : '<span class="pp-opt-ready-done">&#10003; all ready</span>'}`;
-}
-async function toggleReady(castingId) {
-    if (!castingId || !currentProjectNumber) return;
-    const on = !optReady.has(castingId);
-    const blocker = on ? optReadyBlocker() : null;
-    if (blocker) { showToast(blocker, 'error'); return; }
-    if (on && optCastingHours(castingId) <= 0 && !window.confirm('This casting has no Optimizer Hours yet. Mark it ready for scheduling anyway?')) return;
-    try {
-        await setReadyFlag(castingId, currentProjectNumber, on);
-        if (on) optReady.set(castingId, { project_number: currentProjectNumber, at: new Date().toISOString() }); else optReady.delete(castingId);
-        renderOptimizer();
-        const c = currentCastings.find(x => x.id === castingId);
-        showToast(on ? `Cast ${c?.casting_number || ''} is ready for scheduling` : `Cast ${c?.casting_number || ''} taken back from scheduling`);
-    } catch (err) { showToast('Could not save: ' + (err.message || err), 'error'); }
-}
-async function markAllReady() {
-    const list = getCastingsForActivePhase().filter(c => !optReady.has(c.id));
-    if (!list.length || !currentProjectNumber) return;
-    const blocker = optReadyBlocker();
-    if (blocker) { showToast(blocker, 'error'); return; }
-    const empty = list.filter(c => optCastingHours(c.id) <= 0).length;
-    if (!window.confirm(`Mark ${list.length} casting${list.length === 1 ? '' : 's'} ready for scheduling?${empty ? `\n\n${empty} of them ha${empty === 1 ? 's' : 've'} no Optimizer Hours yet.` : ''}`)) return;
-    try {
-        for (const c of list) { await setReadyFlag(c.id, currentProjectNumber, true); optReady.set(c.id, { project_number: currentProjectNumber, at: new Date().toISOString() }); }
-        renderOptimizer();
-        showToast(`${list.length} casting${list.length === 1 ? '' : 's'} ready for scheduling`);
-    } catch (err) { showToast('Could not save: ' + (err.message || err), 'error'); renderOptimizer(); }
-}
-
 function optMsCellHtml(castingId) {
     if (!msOn()) return '';
     const green = msStatus(castingId, 'Final Optimizer HRS') === MS.GREEN;
@@ -4182,15 +3695,11 @@ function renderOptColumn(casting) {
                     </button>
                 </div>
                 ${optMsCellHtml(casting.id)}
-                ${optReadyHtml(casting.id)}
             </div>
-            ${optBudgetHtml(casting.id)}
-            <div class="pp-opt-staged" data-casting-id="${escapeAttr(casting.id)}">${renderOptStagedGrid(casting)}</div>
-            ${phases.some(p => Number(p.hours) > 0) && optStagedHours(String(casting.casting_number || '')) <= 0 ? `<button type="button" class="pp-opt-pull" data-action="pull-legacy" data-casting-id="${escapeAttr(casting.id)}" title="Put the previous task list's hours onto this casting's staged days, team by team">&#8681; Pull hours from the previous task list</button>` : ''}
-            ${phases.length ? `<details class="pp-opt-legacy"><summary>Previous task list (${phases.length} task${phases.length === 1 ? '' : 's'} · ${phases.reduce((s, p) => s + (typeof p.hours === 'number' ? p.hours : 0), 0)} hrs) — read only</summary>
-            <div class="pp-opt-cards pp-opt-cards-legacy" data-casting-id="${escapeAttr(casting.id)}">
+            <div class="pp-opt-cards" data-casting-id="${escapeAttr(casting.id)}">
                 ${cardsHtml}
-            </div></details>` : ''}
+            </div>
+            <button type="button" class="pp-add-btn pp-opt-col-add" data-action="add-task" data-casting-id="${escapeAttr(casting.id)}">+ Add Task</button>
             <div class="pp-opt-col-total">
                 <span class="pp-opt-col-total-label">Total</span>
                 <span class="pp-opt-col-total-value"><strong data-col-total="${escapeAttr(casting.id)}">0</strong> hrs</span>
@@ -4207,17 +3716,10 @@ function renderOptTotals() {
         return total;
     };
 
-    // Per-column totals (visible columns only) — staged hours when any, else the previous task list
+    // Per-column totals (visible columns only)
     document.querySelectorAll('[data-col-total]').forEach(el => {
         const castingId = el.getAttribute('data-col-total');
-        const c = currentCastings.find(x => x.id === castingId);
-        el.textContent = String(c ? optHoursOf(c) : sumPhases(getPhasesFor(castingId)));
-    });
-    document.querySelectorAll('[data-dept-total]').forEach(el => {
-        const [castNum, dept] = el.getAttribute('data-dept-total').split('|');
-        const sec = (currentStagingScaffold.get(castNum) || []).find(s => s.department === dept);
-        const n = sec ? Array.from({ length: sec.days }, (_, i) => Number((currentStagingDescriptions.get(`${castNum}|${dept}|${i + 1}`) || {}).hours) || 0).reduce((a, b) => a + b, 0) : 0;
-        el.textContent = `${n} hrs`;
+        el.textContent = String(sumPhases(getPhasesFor(castingId)));
     });
 
     // Grand/Phase total — for phased projects, sum only the active phase's
@@ -4225,7 +3727,15 @@ function renderOptTotals() {
     const grandEl = document.getElementById('pp-opt-grand-total');
     if (grandEl) {
         let grand = 0;
-        for (const c of (currentPhasesEnabled ? getCastingsForActivePhase() : currentCastings)) grand += optHoursOf(c);
+        if (currentPhasesEnabled) {
+            for (const c of getCastingsForActivePhase()) {
+                grand += sumPhases(getPhasesFor(c.id));
+            }
+        } else {
+            for (const phases of currentCastingPhases.values()) {
+                grand += sumPhases(phases);
+            }
+        }
         grandEl.textContent = String(grand);
     }
 
@@ -6440,7 +5950,6 @@ const LIVE_TABLE_TABS = {
     batch_tickets: ['batch-tickets', 'color-log'],
     color_logs: ['color-log', 'batch-tickets', 'castings'],
     casting_phases: ['optimizer', 'actual-labor'],
-    plant_schedule_settings: ['optimizer'],   // "Ready for scheduling" flags
     actual_hours: ['actual-labor'],
     task_descriptions: ['staging'],
     jig_lists: ['jig-list'],
@@ -8993,72 +8502,12 @@ function wireEvents() {
         if (cell) { await toggleApproval(cell.dataset.castingId, cell.dataset.milestone); renderApprovals(); }
     });
 
-    document.getElementById('pp-opt-ready-bar')?.addEventListener('click', (e) => { if (e.target.closest('[data-action="ready-all"]')) markAllReady(); else if (e.target.closest('[data-action="pull-legacy-all"]')) handlePullLegacyHoursAll(); });
-
     // Optimizer: column container (event delegation across all visible columns)
     const optColumns = document.getElementById('pp-opt-columns');
-    optColumns.addEventListener('input', (e) => {
-        const inp = e.target.closest('input[data-action="staged-hours"]');
-        if (inp && inp.dataset.past) { const cur = currentStagingDescriptions.get(`${inp.dataset.castingNumber}|${inp.dataset.department}|${inp.dataset.day}`); inp.value = cur && cur.hours != null ? String(cur.hours) : ''; showToast('That day already happened on the Plant Scheduler — its hours are locked. Only today and later days can be changed.', 'error'); return; }
-        if (inp) { scheduleOptHoursSave(inp.dataset.castingNumber, inp.dataset.department, parseInt(inp.dataset.day, 10), inp.value); return; }
-        const bud = e.target.closest('input[data-action="casting-budget"]');
-        if (bud) handleCastingBudget(bud.dataset.castingId, bud.value);
-    });
-    const optValue = document.getElementById('pp-opt-value');
-    if (optValue) {
-        optValue.addEventListener('click', async (e) => {
-            if (!e.target.closest('[data-val-legacy-off]') || !currentProjectNumber) return;
-            if (!window.confirm('Switch this job to the project-value way? From then on the castings\' allocated hours must add up to the job\'s Optimizer hours before they can be marked ready.')) return;
-            try { await setSettingRow(`legacy:${currentProjectNumber}`, null); optLegacy = null; renderOptimizer(); showToast('Legacy flag removed — enter the project value.'); }
-            catch (err) { showToast('Could not save: ' + (err.message || err), 'error'); }
-        });
-        optValue.addEventListener('input', (e) => {
-            const sp = e.target.closest('input[data-val-split]');
-            if (sp) {
-                const it = optValueItems[Number(sp.dataset.valSplit)];
-                if (!it) return;
-                it.splits = it.splits || {};
-                let v = sp.value === '' ? 0 : Math.max(0, Number(sp.value) || 0);
-                const others = Math.round((optCoAssigned(it) - (Number(it.splits[sp.dataset.cast]) || 0)) * 10) / 10;
-                const room = Math.max(0, Math.round((optCoHours(it) - others) * 10) / 10);
-                if (v > room + 0.001) { v = room; sp.value = room ? fmtHrs(room) : ''; showToast(room ? `Only ${fmtHrs(room)} h of this change order are left to split.` : 'Every hour of this change order is already split — lower another cast first.', 'error'); }
-                if (v > 0) it.splits[sp.dataset.cast] = v; else delete it.splits[sp.dataset.cast];
-                const sum = optValue.querySelector(`[data-split-sum="${sp.dataset.valSplit}"]`);
-                if (sum) sum.innerHTML = optCoSplitSumHtml(it);
-                const line = sp.closest('.pp-opt-val-split');
-                if (line) optCoSplitLock(line, it);
-                scheduleOptValueSave();
-                renderOptValueTotalsOnly();
-                return;
-            }
-            const n = e.target.closest('[data-val-name]'), a = e.target.closest('[data-val-amount]');
-            if (n) optValueItems[Number(n.dataset.valName)].name = n.value;
-            if (a) optValueItems[Number(a.dataset.valAmount)].value = Number(a.value) || 0;
-            if (a && Number(a.dataset.valAmount) >= OPT_FIXED_VALUES.length) {
-                // a change order's amount changed: its split line follows (appears with the first dollar, goes with the last)
-                const i = Number(a.dataset.valAmount), it = optValueItems[i], row = a.closest('.pp-opt-val-row');
-                const line = optValue.querySelector(`[data-split-for="${i}"]`);
-                if (!optCoHours(it)) { if (line) line.remove(); }
-                else if (line) { const sum = line.querySelector(`[data-split-sum="${i}"]`); line.querySelector('.pp-opt-val-split-lead').textContent = `Split its ${fmtHrs(optCoHours(it))} h between the casts:`; if (sum) sum.innerHTML = optCoSplitSumHtml(it); optCoSplitLock(line, it); }
-                else if (row) row.insertAdjacentHTML('afterend', optCoSplitHtml(it, i));
-            }
-            if (n || a) { scheduleOptValueSave(); const box = optValue.querySelector('.pp-opt-val-totals'); if (box) { renderOptValueTotalsOnly(); } }
-        });
-        optValue.addEventListener('click', async (e) => {
-            if (e.target.closest('[data-val-add]')) { optValueItems.push({ name: '', value: 0 }); renderOptValue(); optValue.querySelector(`[data-val-name="${optValueItems.length - 1}"]`)?.focus(); scheduleOptValueSave(); return; }
-            const del = e.target.closest('[data-val-del]');
-            if (del) { const i = Number(del.dataset.valDel); if (i < OPT_FIXED_VALUES.length) return; const it = optValueItems[i]; if (it && it.value && !window.confirm(`Remove "${it.name || 'this change order'}" (${money0(it.value)})?`)) return; optValueItems.splice(i, 1); renderOptimizer(); scheduleOptValueSave(); }
-        });
-    }
 
     optColumns.addEventListener('click', (e) => {
         const msBtn = e.target.closest('button[data-action="toggle-final-hours"]');
         if (msBtn) { toggleFinalHours(msBtn.dataset.castingId); return; }
-        const readyBtn = e.target.closest('button[data-action="toggle-ready"]');
-        if (readyBtn) { toggleReady(readyBtn.dataset.castingId); return; }
-        if (e.target.closest('[data-action="goto-staging"]')) { setActiveTab('staging'); activateStagingTab(); return; }
-        const pull = e.target.closest('button[data-action="pull-legacy"]');
-        if (pull) { handlePullLegacyHours(pull.dataset.castingId); return; }
         // Copy hours
         const copyBtn = e.target.closest('button[data-action="copy-hours"]');
         if (copyBtn) {
@@ -9221,8 +8670,6 @@ function wireEvents() {
             scheduleStagingGridSave(ta.dataset.castingNumber, ta.dataset.department, parseInt(ta.dataset.day, 10), ta.value);
         });
         stgColumns.addEventListener('change', (e) => {
-            const task = e.target.closest('select[data-action="grid-task"]');
-            if (task) { handleSaveStagingTask(task.dataset.castingNumber, task.dataset.department, parseInt(task.dataset.day, 10), task.value); return; }
             const sel = e.target.closest('select[data-action="add-dept"]');
             if (!sel) return;
             const dept = sel.value;
@@ -14134,10 +13581,6 @@ function buildOptPrintPage(casting, phases, projectNumber, projectName) {
     const projectLabel = [projectNumber, projectName].filter(Boolean).map(s => escapeHtml(s)).join(' — ');
     const castLabel = phaseName ? `${escapeHtml(phaseName)} &middot; Cast ${escapeHtml(num)}` : `Cast ${escapeHtml(num)}`;
 
-    const stagedCells = optStagedCells(String(num)).filter(c => c.hours != null || c.taskName);
-    if (stagedCells.some(c => Number(c.hours) > 0)) {
-        phases = stagedCells.map(c => ({ phase_name: `${c.department} · Day ${c.day}${c.taskName ? ' · ' + c.taskName.toLowerCase() : ''}`, hours: Number(c.hours) || 0, description: c.description }));
-    }
     const total = phases.reduce((s, p) => s + (typeof p.hours === 'number' ? p.hours : 0), 0);
 
     const rows = phases.length === 0

@@ -18,20 +18,6 @@ import { logger } from '../utils/logger.js';
 
 const TABLE = 'task_descriptions';
 const ONCONFLICT = 'project_number,casting_number,department,day_number';
-// task_name + hours arrive with migration/staging-task-hours.sql; until it is run, reads fall back to the old columns.
-const FULL_COLS = 'casting_number, department, day_number, description, casting_side, task_name, hours';
-const BASE_COLS = 'casting_number, department, day_number, description, casting_side';
-let hoursColumnsMissing = false;
-export function isStagingTaskHoursMigrationPending() { return hoursColumnsMissing; }
-function missingColumn(error) { return !!error && /task_name|hours/.test(String(error.message || '')) && /column|does not exist|schema cache/i.test(String(error.message || '')); }
-function rowToEntry(row) {
-    return {
-        description: row.description || '',
-        castingSide: row.casting_side || null,
-        taskName: row.task_name || '',
-        hours: row.hours == null || row.hours === '' ? null : Number(row.hours)
-    };
-}
 
 async function getClient() {
     let client = getSupabaseClient();
@@ -58,16 +44,11 @@ export async function fetchForProject(projectNumber) {
     const client = await getClient();
     if (!client) return out;
 
-    let { data, error } = await client
+    const { data, error } = await client
         .from(TABLE)
-        .select(hoursColumnsMissing ? BASE_COLS : FULL_COLS)
+        .select('casting_number, department, day_number, description, casting_side')
         .eq('project_number', pnum)
         .not('casting_number', 'is', null);
-    if (error && !hoursColumnsMissing && missingColumn(error)) {
-        hoursColumnsMissing = true;
-        logger.warn('[task-descriptions] task_name / hours columns missing — run migration/staging-task-hours.sql');
-        ({ data, error } = await client.from(TABLE).select(BASE_COLS).eq('project_number', pnum).not('casting_number', 'is', null));
-    }
 
     if (error) {
         logger.error('[task-descriptions] fetchForProject error:', error);
@@ -76,36 +57,11 @@ export async function fetchForProject(projectNumber) {
 
     for (const row of (data || [])) {
         const key = `${s(row.casting_number)}|${s(row.department)}|${s(row.day_number)}`;
-        out.set(key, rowToEntry(row));
+        out.set(key, {
+            description: row.description || '',
+            castingSide: row.casting_side || null
+        });
     }
-    return out;
-}
-
-/**
- * Casting-aware descriptions for many projects at once (the Plant Scheduler).
- * @param {string[]} projectNumbers
- * @returns {Promise<Map<string, Map<string, Object>>>} project_number -> (`${cast}|${department}|${day}` -> entry)
- */
-export async function fetchForProjects(projectNumbers) {
-    const out = new Map();
-    const nums = [...new Set((projectNumbers || []).map(s).filter(Boolean))];
-    const client = await getClient();
-    if (!client || !nums.length) return out;
-    for (let i = 0; i < nums.length; i += 40) {
-        const part = nums.slice(i, i + 40);
-        let { data, error } = await client.from(TABLE).select('project_number, ' + (hoursColumnsMissing ? BASE_COLS : FULL_COLS)).in('project_number', part).not('casting_number', 'is', null);
-        if (error && !hoursColumnsMissing && missingColumn(error)) {
-            hoursColumnsMissing = true;
-            ({ data, error } = await client.from(TABLE).select('project_number, ' + BASE_COLS).in('project_number', part).not('casting_number', 'is', null));
-        }
-        if (error) { logger.error('[task-descriptions] fetchForProjects error:', error); continue; }
-        for (const row of (data || [])) {
-            const pn = s(row.project_number);
-            if (!out.has(pn)) out.set(pn, new Map());
-            out.get(pn).set(`${s(row.casting_number)}|${s(row.department)}|${s(row.day_number)}`, rowToEntry(row));
-        }
-    }
-    for (const pn of nums) if (!out.has(pn)) out.set(pn, new Map());
     return out;
 }
 
@@ -133,12 +89,9 @@ export async function upsertOne(entry) {
         casting_number: castingNumber,
         department: department,
         day_number: dayNumber,
+        description: (entry.description != null ? entry.description : ''),
         updated_at: new Date().toISOString()
     };
-    const has = (k) => Object.prototype.hasOwnProperty.call(entry, k);
-    if (has('description')) record.description = entry.description != null ? entry.description : '';
-    if (has('taskName') && !hoursColumnsMissing) record.task_name = entry.taskName ? String(entry.taskName).trim() : null;
-    if (has('hours') && !hoursColumnsMissing) record.hours = entry.hours == null || entry.hours === '' ? null : Number(entry.hours);
 
     // Only write casting_side when the caller explicitly provides it, so the
     // optimizer never clobbers a Side A/B set on the weekly Cast card.

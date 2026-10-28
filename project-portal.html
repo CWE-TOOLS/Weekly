@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="src/styles/variables.css">
     <link rel="stylesheet" href="src/styles/base.css">
     <link rel="stylesheet" href="src/styles/buttons.css">
-    <link rel="stylesheet" href="src/styles/project-portal.css?v=20261028-7">
+    <link rel="stylesheet" href="src/styles/project-portal.css?v=20261026-3">
 
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 </head>
@@ -40,7 +40,6 @@
                 <a href="releasability.html" class="pp-link-btn">Releasability Board</a>
                 <a href="finishing-map.html" class="pp-link-btn">Finishing Map</a>
                 <a href="project-map.html" class="pp-link-btn">Project Map</a>
-                <a href="scheduler.html" class="pp-link-btn" title="Plant Scheduler (preview)">Plant Scheduler</a>
             </div>
         </header>
 
@@ -119,10 +118,7 @@
         <!-- FORM VIEW -->
         <section id="pp-form-view" class="pp-view" hidden>
             <div class="pp-form-controls">
-                <div class="pp-form-nav">
-                    <button id="pp-back-list-btn" class="pp-link-btn">&larr; Back to list</button>
-                    <a href="scheduler.html" class="pp-link-btn pp-sched-return" title="Return to the Plant Scheduler">&larr; Plant Scheduler</a>
-                </div>
+                <button id="pp-back-list-btn" class="pp-link-btn">&larr; Back to list</button>
                 <div class="pp-form-context">
                     <span id="pp-form-context-num"></span>
                     <span id="pp-form-context-name"></span>
@@ -381,12 +377,6 @@
                 <div class="pp-section pp-full">
                     <h3 class="pp-section-title pp-section-title--full">Imperative Information</h3>
                     <textarea id="pp-f-imperative_information" name="imperative_information" rows="4"></textarea>
-                </div>
-
-                <!-- Project value: read-only here, entered on the Optimizer Hours tab (2026-10-28) -->
-                <div class="pp-section pp-full pp-value-section">
-                    <h3 class="pp-section-title pp-section-title--full">Project Value</h3>
-                    <div id="pp-info-value" class="pp-info-value"></div>
                 </div>
 
                 <!-- Phases -->
@@ -831,8 +821,7 @@
                         <div class="pp-opt-wrap">
                             <div class="pp-opt-header">
                                 <h2 class="pp-opt-title">Optimizer Hours</h2>
-                                <p class="pp-muted pp-opt-sub">The days and tasks come from the Staging tab; enter the hours for each day here. The Plant Scheduler uses both.</p>
-                                <div id="pp-opt-migration" class="pp-castings-hint" hidden>The task-and-hours columns are not in the database yet — run <code>migration/staging-task-hours.sql</code> in Supabase. Until then the previous task list is used.</div>
+                                <p class="pp-muted pp-opt-sub">Designate manhours per task for each casting. Tasks are shared across the project; hours are per casting.</p>
                             </div>
 
                             <div class="pp-tab-notes" id="pp-optimizer-notes-wrap">
@@ -853,12 +842,6 @@
 
                             <!-- Active editor -->
                             <div id="pp-opt-editor" hidden>
-                                <!-- Project value -> Optimizer hours, casting budgets -->
-                                <div class="pp-opt-value" id="pp-opt-value"></div>
-
-                                <!-- Ready for scheduling (Plant Scheduler) -->
-                                <div class="pp-opt-ready-bar" id="pp-opt-ready-bar"></div>
-
                                 <!-- Casting pills -->
                                 <div class="pp-opt-pills" id="pp-opt-pills"></div>
 
@@ -1281,7 +1264,7 @@
         <div id="pp-toast" class="pp-toast" hidden></div>
     </div>
 
-    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20261028-7"></script>
+    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20261027-4"></script>
     <script type="module" src="src/utils/auto-update.js?v=20261023-1"></script>
 </body>
 </html>
