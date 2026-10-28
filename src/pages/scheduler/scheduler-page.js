@@ -591,6 +591,8 @@ function renderGrid() {
         cellMap.get(k).push(r);
     }
     const totals = new Map();    // date|dept -> hours (all castings, not only visible)
+    const countBy = new Map();   // date|dept -> castings with a task that day (user 2026-10-28: shown under the date, above the team names)
+    for (const r of S.rows) { const k = `${r.date}|${r.department}`; if (!countBy.has(k)) countBy.set(k, new Set()); countBy.get(k).add(r.casting_id); }
     const weekHours = new Map(); // monday -> hours
     for (const r of S.rows) {
         const k = `${r.date}|${r.department}`;
@@ -600,7 +602,7 @@ function renderGrid() {
     }
 
     // header: weeks / days / departments
-    let h = '<table class="sc-grid"><thead><tr><th class="sc-label" rowspan="4">Job · Casting</th>';
+    let h = '<table class="sc-grid"><thead><tr><th class="sc-label" rowspan="5">Job · Casting</th>';
     const weeks = [];
     for (const d of days) { const wk = mondayOf(d); if (!weeks.length || weeks[weeks.length - 1].wk !== wk) weeks.push({ wk, days: [] }); weeks[weeks.length - 1].days.push(d); }
     // "Week 1", "Week 2" … centred over the Wednesday (revenue lives in the Revenue view only)
@@ -627,6 +629,12 @@ function renderGrid() {
         const tip = isHoliday(d) ? 'Holiday — never scheduled' : isWeekend(d) ? 'Weekend — needs an allow' : '';
         h += `<th class="${cls}" colspan="${DEPT_KEYS.length}" title="${esc(tip)}">${esc(shortDay(d))}</th>`;
     }
+    h += '</tr><tr class="sc-count-row">';
+    // count row: how many castings each team has that day, in bold black, between the date and the team names
+    for (const d of days) DEPARTMENTS.forEach((dep, i) => {
+        const n = (countBy.get(`${d}|${dep.key}`) || new Set()).size;
+        h += `<th class="sc-count ${i === 0 ? 'sc-dept-first' : ''} ${isWeekend(d) ? 'sc-weekend' : ''} ${isHoliday(d) ? 'sc-holiday' : ''}" data-dept="${dep.key}" title="${n} casting${n === 1 ? '' : 's'} with a ${esc(dep.label)} task on ${esc(shortDay(d))}">${n || ''}</th>`;
+    });
     h += '</tr><tr>';
     for (const d of days) DEPARTMENTS.forEach((dep, i) => {
         const x = (overByDay.get(d) || []).find(o => o.dept === dep.key);
