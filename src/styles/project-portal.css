@@ -6769,3 +6769,13 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
 .pp-opt-val-eq { font-size: 13px; font-weight: 700; color: #312e81; }
 .pp-opt-val-row input[type=number] { text-align: right; }
 .pp-opt-val-row input[data-val-name] { font-style: italic; }
+.pp-info-value { margin-top: 6px; }
+.pp-info-val-grid { display: grid; grid-template-columns: 220px 160px; gap: 4px 12px; align-items: center; width: max-content; }
+.pp-info-val-row { display: contents; }
+.pp-info-val-name { font-size: 13px; font-weight: 700; color: #312e81; }
+.pp-info-val-co .pp-info-val-name { font-weight: 500; font-style: italic; color: #4338ca; }
+.pp-info-val-amt { font-size: 13px; text-align: right; padding: 5px 10px; border: 1px solid #c7d2fe; border-radius: 6px; background: #f8fafc; color: #1e293b; }
+.pp-info-val-total .pp-info-val-name { color: #1e293b; font-size: 14px; border-top: 1px solid #c7d2fe; padding-top: 6px; }
+.pp-info-val-total .pp-info-val-amt { font-weight: 700; font-size: 14px; background: #eef2ff; border-color: #a5b4fc; }
+.pp-info-val-foot { margin-top: 6px; font-size: 12px; color: #475569; }
+.pp-info-val-note { margin-top: 6px; font-size: 12px; color: #065f46; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 6px; padding: 4px 8px; width: max-content; }

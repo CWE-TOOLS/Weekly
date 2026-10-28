@@ -1040,6 +1040,37 @@ function populateForm(project) {
         currentTrackingPhases = new Set(TRACKING_PHASES);
     }
     trackingPhasesProject = project.project_number || null;
+    refreshInfoValue(project.project_number);   // the read-only Project Value block (entered on the Optimizer Hours tab)
+}
+
+// ---- Project Info: the project value lines, read-only — they are entered on the Optimizer Hours tab (2026-10-28) ----
+let infoValueFor = null;
+function renderInfoValue(items, legacy) {
+    const box = document.getElementById('pp-info-value');
+    if (!box) return;
+    const list = normalizeOptValueItems(items);
+    const total = list.reduce((n, it) => n + (Number(it.value) || 0), 0);
+    const hours = Math.round(total / REVENUE_PER_HOUR * 10) / 10;
+    const line = (name, v, cls = '') => `<div class="pp-info-val-row${cls}"><span class="pp-info-val-name">${escapeHtml(name)}</span><span class="pp-info-val-amt">${money0(v)}</span></div>`;
+    const rows = list.map((it, i) => i < OPT_FIXED_VALUES.length
+        ? line(it.name, it.value)
+        : line(it.name || `Change Order #${i - OPT_FIXED_VALUES.length + 1}`, it.value, ' pp-info-val-co'));
+    const note = legacy && !total ? '<div class="pp-info-val-note">Legacy project &mdash; its hours came from the Optimizer sheets; no project value was entered.</div>' : '';
+    box.innerHTML = `<div class="pp-info-val-grid">${rows.join('')}${line('Total Project Value', total, ' pp-info-val-total')}</div>
+        <div class="pp-info-val-foot">= ${fmtHrs(hours)} Optimizer hours at $${REVENUE_PER_HOUR}/h &middot; entered on the Optimizer Hours tab</div>${note}`;
+}
+async function refreshInfoValue(projectNumber) {
+    const pn = String(projectNumber || '').trim();
+    infoValueFor = pn;
+    const box = document.getElementById('pp-info-value');
+    if (!box) return;
+    if (!pn) { box.innerHTML = ''; return; }
+    try {
+        const rows = await loadSettingRows([`value:${pn}`, `legacy:${pn}`]);
+        if (infoValueFor !== pn) return;   // another job was opened meanwhile
+        const v = rows.get(`value:${pn}`), lg = rows.get(`legacy:${pn}`);
+        renderInfoValue(v && Array.isArray(v.items) ? v.items : [], !!(lg && typeof lg === 'object'));
+    } catch (e) { box.innerHTML = '<span class="pp-muted">Project value could not be loaded.</span>'; }
 }
 
 /**
@@ -3888,7 +3919,7 @@ function scheduleOptValueSave() {
     const prev = optValueSaveTimers.get(key); if (prev) clearTimeout(prev);
     optValueSaveTimers.set(key, setTimeout(async () => {
         optValueSaveTimers.delete(key);
-        try { await setSettingRow(key, { items: optValueItems }); } catch (err) { showToast('Could not save the project value: ' + (err.message || err), 'error'); }
+        try { await setSettingRow(key, { items: optValueItems }); renderInfoValue(optValueItems, !!optLegacy); } catch (err) { showToast('Could not save the project value: ' + (err.message || err), 'error'); }
     }, 500));
 }
 function optBudgetHtml(castingId) {

@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="src/styles/variables.css">
     <link rel="stylesheet" href="src/styles/base.css">
     <link rel="stylesheet" href="src/styles/buttons.css">
-    <link rel="stylesheet" href="src/styles/project-portal.css?v=20261028-2">
+    <link rel="stylesheet" href="src/styles/project-portal.css?v=20261028-3">
 
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 </head>
@@ -381,6 +381,12 @@
                 <div class="pp-section pp-full">
                     <h3 class="pp-section-title pp-section-title--full">Imperative Information</h3>
                     <textarea id="pp-f-imperative_information" name="imperative_information" rows="4"></textarea>
+                </div>
+
+                <!-- Project value: read-only here, entered on the Optimizer Hours tab (2026-10-28) -->
+                <div class="pp-section pp-full pp-value-section">
+                    <h3 class="pp-section-title pp-section-title--full">Project Value</h3>
+                    <div id="pp-info-value" class="pp-info-value"></div>
                 </div>
 
                 <!-- Phases -->
@@ -1275,7 +1281,7 @@
         <div id="pp-toast" class="pp-toast" hidden></div>
     </div>
 
-    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20261028-2"></script>
+    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20261028-3"></script>
     <script type="module" src="src/utils/auto-update.js?v=20261023-1"></script>
 </body>
 </html>
