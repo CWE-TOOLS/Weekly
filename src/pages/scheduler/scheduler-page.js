@@ -18,7 +18,7 @@ import {
     deleteCastingSchedule, loadScheduleSettings, saveScheduleSetting, isScheduleMigrationPending
 } from '../../services/schedule-service.js?v=20261027-1';
 import {
-    DEPARTMENTS, DEPT_KEYS, TASKS, tasksForDept, taskForPhase, SETTINGS_DEFAULTS, REVENUE_PER_HOUR, SCHEDULABLE_STATUSES, TEAM_DAY_LIMITS, teamOfDepartment, DEFAULT_CREW
+    DEPARTMENTS, DEPT_KEYS, TASKS, tasksForDept, teamAccepts, taskForPhase, SETTINGS_DEFAULTS, REVENUE_PER_HOUR, SCHEDULABLE_STATUSES, TEAM_DAY_LIMITS, teamOfDepartment, DEFAULT_CREW
 } from '../../config/scheduler-config.js?v=20261027-1';
 import { logger } from '../../utils/logger.js';
 import { getWeeklySource, setWeeklySource, resetWeeklySourceMemo, SOURCE_SCHEDULER, sourceLabel } from '../../services/weekly-source-service.js';
@@ -192,7 +192,7 @@ function stagedUnits(castingId) {
     cells.sort((a, b) => (DEPT_KEYS.indexOf(a.team) - DEPT_KEYS.indexOf(b.team)) || (a.day - b.day));
     return cells.map(x => {
         const code = x.taskName ? x.taskName.toUpperCase() : (tasksForDept(x.team)[0] || x.team.toUpperCase());
-        const known = !!x.taskName && (TASKS[code] || []).includes(x.team);
+        const known = !!x.taskName && teamAccepts(code, x.team);
         return { phase: { id: null, phase_name: `${x.sd} day ${x.day}${x.taskName ? ' · ' + x.taskName.toLowerCase() : ''}`, hours: x.hours }, code, dept: x.team, unmapped: !known, unit: 'unit:' + x.key, staged: true, day: x.day };
     });
 }
@@ -1010,7 +1010,7 @@ async function saveRollover(rowId, todayH) {
 
 /** Optimizer Hours tasks of this casting that this team may do — the only things a new day can be. */
 function addablePhases(cid, dept) {
-    return mappedPhases(cid).filter(m => (TASKS[m.code] || []).includes(dept) || m.dept === dept);
+    return mappedPhases(cid).filter(m => teamAccepts(m.code, dept) || m.dept === dept);
 }
 function addFormHtml(cid, dept, date) {
     const list = addablePhases(cid, dept);

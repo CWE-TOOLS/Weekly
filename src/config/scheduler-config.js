@@ -67,9 +67,18 @@ export const TASKS = {
 };
 export const TASK_CODES = Object.keys(TASKS);
 
-/** Task codes a department column accepts. */
+/** Teams that share their task words (user 2026-10-29): a Parts column can carry any FO task and the other way round;
+ *  Crate and Spec likewise. The team's own words come first in a dropdown, the partner's after them. */
+export const SHARED_TEAMS = [['Parts', 'FO'], ['Crate', 'Spec']];
+export function teamGroup(dept) { return SHARED_TEAMS.find(g => g.includes(dept)) || [dept]; }
+/** Does this team's column take that task code (its own words or a sharing partner's)? */
+export function teamAccepts(code, dept) { const teams = TASKS[code] || []; return teamGroup(dept).some(t => teams.includes(t)); }
+
+/** Task codes a department column accepts: its own first, then the words it shares with a partner team. */
 export function tasksForDept(dept) {
-    return TASK_CODES.filter(code => TASKS[code].includes(dept));
+    const own = TASK_CODES.filter(code => TASKS[code].includes(dept));
+    const shared = TASK_CODES.filter(code => !own.includes(code) && teamAccepts(code, dept));
+    return [...own, ...shared];
 }
 
 /** A staging / weekly department name -> the scheduler's team ("FormOut", "Form Out", "Mill", "Load" … are free text). */
