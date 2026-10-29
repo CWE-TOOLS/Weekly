@@ -35,8 +35,8 @@ import {
   VALIDATION,
   STATUS,
   STATUS_DISPLAY
-} from '../../config/releasability-config.js?v=20260807-2';
-import { renderReleasabilityGrid, getUniqueDepartments, setProjectActions, groupProjectsByWeek, getWeekRange, setMilestoneLookup } from './releasability-grid.js?v=20261020-1';
+} from '../../config/releasability-config.js?v=20261027-1';
+import { renderReleasabilityGrid, getUniqueDepartments, setProjectActions, groupProjectsByWeek, getWeekRange, setMilestoneLookup } from './releasability-grid.js?v=20261028-1';
 import { loadAllMilestones, saveMilestone } from '../../services/milestones-service.js';
 
 /** Pull the portal's milestone rows and index them by casting for the grid (AUTO columns). */
@@ -268,10 +268,19 @@ async function handleCacheUpdate(payload) {
  * This is called when another client updates releasability data (status changes, etc.)
  */
 const BOARD_TABLES = new Set(['releasability_tracking', 'releasability_manual_weeks', 'project_castings', 'project_phases', 'casting_milestones', 'projects']);
+// 2026-10-28: the "weekly reads the Plant Scheduler" switch lives in plant_schedule_settings; scheduler rows
+// feed the board only while that is the source (weekly-source-service keeps window.__weeklySource).
+function boardTables() {
+  const s = new Set(BOARD_TABLES);
+  s.add('plant_schedule_settings');
+  if (window.__weeklySource === 'scheduler') s.add('plant_schedule');
+  return s;
+}
 async function handleSilentRefresh(payload, payloads = null) {
   // Portal saves announce themselves per table; the board only cares about a few of them.
   const batch = Array.isArray(payloads) && payloads.length ? payloads : [payload];
-  if (batch.every(p => isPortalChange(p) && !BOARD_TABLES.has(signalInfo(p).table))) {
+  const tables = boardTables();
+  if (batch.every(p => isPortalChange(p) && !tables.has(signalInfo(p).table))) {
     debug.log('⏭️ Portal change on a non-board table — ignoring');
     return;
   }

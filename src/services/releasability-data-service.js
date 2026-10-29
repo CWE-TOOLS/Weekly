@@ -11,6 +11,7 @@
 
 import { fetchTasks } from './sheets-service.js';
 import { loadFromCacheOrFetch } from './sheets-cache-service.js';
+import { getWeeklySource, SOURCE_SCHEDULER } from './weekly-source-service.js';
 import { initializeSupabase, getSupabaseClient, sendRefreshSignal } from './supabase-service.js';
 import { logger } from '../utils/logger.js';
 import { parseDate, getMonday, getLocalDateString } from '../utils/date-utils.js';
@@ -447,7 +448,11 @@ export async function loadProjectsFromSheets(forceRefresh = false) {
 
   try {
     // Fetch all tasks from Google Sheets (via cache when possible)
-    const tasks = await loadFromCacheOrFetch(forceRefresh, 'primary', fetchTasks);
+    // 2026-10-28: when the weekly reads the Plant Scheduler, so does the board — straight from the database,
+    // the sheet cache is only for the Google Sheet.
+    const tasks = (await getWeeklySource()) === SOURCE_SCHEDULER
+      ? await fetchTasks()
+      : await loadFromCacheOrFetch(forceRefresh, 'primary', fetchTasks);
     logger.debug(`  → Loaded ${tasks.length} tasks`);
 
     // Group tasks by project name

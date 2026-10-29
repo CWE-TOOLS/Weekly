@@ -48,7 +48,9 @@ export function updateMultiSelectLabel() {
 
 /**
  * Filter tasks by selected departments and update state
- * Note: Batch and Layout are synthetic departments that are always included
+ * Note: Batch and Layout are synthetic departments (generated from Cast / Demold when a week is drawn) and
+ * never obey the dropdown, so they are not listed in it (2026-10-28). Batch/Layout cards typed by hand are
+ * kept here like the generated ones; the week renderer shows them under their parent department.
  */
 export function filterTasks(silent = false) {
     const selectedDepartments = getSelectedDepartments();
@@ -61,13 +63,13 @@ export function filterTasks(silent = false) {
     if (selectedDepartments.length === 0) {
         filtered = [];
     } else {
-        const allDeptsSelected = selectedDepartments.length === [...new Set(allTasks.map(task => task.department))].filter(dept => dept).length;
+        const effective = new Set([...selectedDepartments, ...SYNTHETIC_DEPARTMENT_NAMES]);
+        const deptsInData = [...new Set(allTasks.map(task => task.department))].filter(dept => dept && !SYNTHETIC_DEPARTMENT_NAMES.has(dept));
+        const allDeptsSelected = selectedDepartments.length === deptsInData.length;
         if (allDeptsSelected) {
             filtered = [...allTasks];
         } else {
-            // Filter tasks normally, but synthetic departments (Batch/Layout) are handled separately
-            // They will always be rendered regardless of filter state
-            filtered = allTasks.filter(task => selectedDepartments.includes(task.department));
+            filtered = allTasks.filter(task => effective.has(task.department));
         }
     }
 
@@ -88,7 +90,8 @@ export function filterTasks(silent = false) {
  */
 export function populateDepartmentCheckboxes() {
     const allTasks = getAllTasks();
-    const departments = DEPARTMENT_ORDER;
+    // Batch and Layout are not offered: the dropdown never controlled them (see filterTasks).
+    const departments = DEPARTMENT_ORDER.filter(dept => !SYNTHETIC_DEPARTMENT_NAMES.has(dept));
     const list = document.getElementById('department-list');
 
     if (!list) {
@@ -101,15 +104,6 @@ export function populateDepartmentCheckboxes() {
     // Load saved selections, default to all departments
     let savedDepartments = loadState('selectedDepartments', departments);
 
-    // IMPORTANT: Always ensure Batch and Layout synthetic departments are included
-    // These are special departments that should always be selected by default
-    // If they're missing from saved state (e.g., user saved before they were added),
-    // we need to add them automatically
-    for (const dept of SYNTHETIC_DEPARTMENT_NAMES) {
-        if (!savedDepartments.includes(dept)) {
-            savedDepartments = [...savedDepartments, dept];
-        }
-    }
     // A department added to the list after someone saved their selection starts ticked
     // (CNC + Parts, November 2026), otherwise its rows would silently stay filtered out.
     const known = loadState('knownDepartments', null) || departments.filter(d => !NEW_DEPARTMENTS.includes(d));

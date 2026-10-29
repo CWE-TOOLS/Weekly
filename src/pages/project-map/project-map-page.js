@@ -20,6 +20,18 @@
  * TOUCH (2026-10-27): finger drag-and-drop does not exist in browsers, so a card's full view has a "Move" button:
  * tap it, then tap the day (or band) it should start on; Cancel / Esc / tapping anything else lets go. Works with a
  * mouse too. "Full screen" in the header uses the whole display.
+ * Views: Day (one date), Week (Mon–Sat, each column broken into weekdays), 4 weeks (broken into Week 1–7, 8–14, 15–21,
+ * 22–28 blocks), Month (the weeks that belong to a calendar month, numbered Week 1, 2, 3… like the Releasability Board).
+ * A casting appears in a department's column in every break where it has a weekly day in that department.
+ * Shipped castings (last Ship day before the view, or job Shipped / Closed Out) sit in the Shipped pop-up for
+ * SHIPPED_WINDOW_DAYS. Cards are collapsed; click one for the full card with the casting's trail through the
+ * departments (the department it was opened from in bold); a full column's title opens the whole list.
+ * The Departments picker (like the weekly's) chooses which columns are shown; the choice is remembered per browser.
+ * Loads (2026-10-27): a line that is one clear day (a Week day band, the column title in Day view) shows the finished-face
+ * sq ft of its jobs (rounded up), green under SQFT_WARN, orange to SQFT_OVER, red from there; lines that span several days
+ * (Month week bands, column titles in Week/Month views) show none — the user wants the load per day only.
+ * Cast with more than CAST_PER_DAY_LIMIT castings on one day gets a red count and the words POTENTIAL RISK on every band
+ * head and pop-up heading; the column title carries it only in Day view (user, 2026-10-27: not on the department otherwise).
  */
 import { fetchAllTasks } from '../../services/data-service.js';
 import { loadAllProjects } from '../../services/projects-service.js';
@@ -254,15 +266,8 @@ function partition() {
     return { byCol, shipped, spec };
 }
 
-/** Dummy mode, Cast only: the busiest day inside a band has more castings than the limit → { n, date }, else null. */
-function castOverload(col, list) {
-    if (!S.dummy || col !== 'Cast' || !list || list.length <= CAST_PER_DAY_LIMIT) return null;
-    const perDay = new Map();
-    for (const e of list) for (const d of e.days) perDay.set(d, (perDay.get(d) || 0) + 1);
-    let best = null;
-    for (const [date, n] of perDay) if (!best || n > best.n) best = { n, date };
-    return best && best.n > CAST_PER_DAY_LIMIT ? best : null;
-}
+// ---------------------------------------------------------------- loads on a line: sq ft and the cast warning
+
 /** Finished-face sq ft of the jobs on a line, rounded up (null when none of them has an inventory), and the busiest
  *  single day inside the line (a week band's colour follows that day, a day line's follows its own total). */
 function sqftOf(list) {
@@ -280,18 +285,56 @@ function sqftOf(list) {
     return { total: Math.ceil(t), busiest };
 }
 function sqftClass(n) { return n >= SQFT_OVER ? 'pm-sq-over' : n >= SQFT_WARN ? 'pm-sq-warn' : 'pm-sq-ok'; }
-function sqftTitle(sq) { return sq.busiest.n !== sq.total ? `Busiest day ${fmtShort(sq.busiest.date)}: ${sq.busiest.n.toLocaleString('en-US')} sq ft (green under ${SQFT_WARN}, orange to ${SQFT_OVER}, red from ${SQFT_OVER})` : `Green under ${SQFT_WARN} sq ft, orange ${SQFT_WARN}–${SQFT_OVER}, red ${SQFT_OVER} and over`; }
-function sqftHtml(list) {
-    const sq = sqftOf(list);
-    return S.dummy && sq ? `<span class="pm-section-h pm-section-sq ${sqftClass(sq.busiest.n)}" title="${escapeHtml(sqftTitle(sq))}">${sq.total.toLocaleString('en-US')} sq ft</span>` : '';
+function sqftTitle(sq) {
+    return sq.busiest.n !== sq.total
+        ? `Busiest day ${fmtShort(sq.busiest.date)}: ${sq.busiest.n.toLocaleString('en-US')} sq ft (green under ${SQFT_WARN}, orange to ${SQFT_OVER}, red from ${SQFT_OVER})`
+        : `Finished-face sq ft — green under ${SQFT_WARN}, orange ${SQFT_WARN}–${SQFT_OVER}, red ${SQFT_OVER} and over`;
 }
-/** The count shown on a band / department head; red with "!" when Cast has too many castings on one day. */
-function countHtml(col, list) {
+/** True when a section is one clear day (the only lines that carry a sq ft load). */
+const oneDay = (sec) => !!sec && sec.start === sec.end;
+/** Fill a sq ft span in place (text, colour class, tooltip); empty when the line spans days or the jobs have no inventory. */
+function fillSqft(el, list, base, single) {
+    const sq = single ? sqftOf(list) : null;
+    el.textContent = sq ? `${sq.total.toLocaleString('en-US')} sq ft` : '';
+    el.className = `${base}${sq ? ' ' + sqftClass(sq.busiest.n) : ''}`;
+    el.title = sq ? sqftTitle(sq) : '';
+}
+function sqftHtml(list, base, single) {
+    const sq = single ? sqftOf(list) : null;
+    return sq ? `<span class="${base} ${sqftClass(sq.busiest.n)}" title="${escapeHtml(sqftTitle(sq))}">${sq.total.toLocaleString('en-US')} sq ft</span>` : '';
+}
+/** Cast only: the busiest day inside a line has more castings than the limit → { n, date }, else null. */
+function castOverload(col, list) {
+    if (col !== 'Cast' || !list || list.length <= CAST_PER_DAY_LIMIT) return null;
+    const perDay = new Map();
+    for (const e of list) for (const d of e.days) perDay.set(d, (perDay.get(d) || 0) + 1);
+    let best = null;
+    for (const [date, n] of perDay) if (!best || n > best.n) best = { n, date };
+    return best && best.n > CAST_PER_DAY_LIMIT ? best : null;
+}
+const overloadTitle = (ov) => `${ov.n} castings in Cast on ${fmtShort(ov.date)} — more than ${CAST_PER_DAY_LIMIT} a day`;
+/** Fill a count span in place: red with the words POTENTIAL RISK before it when Cast is over the day limit.
+ *  The span lives inside .pm-head-tail, so the pill and the count wrap onto a second line together (2026-10-28). */
+function fillCount(el, col, list, warn = true) {
+    const ov = warn ? castOverload(col, list) : null;
+    el.textContent = list.length ? String(list.length) : '';
+    el.classList.toggle('pm-cast-over', !!ov);
+    el.title = ov ? overloadTitle(ov) : '';
+    let risk = el.parentElement.querySelector('.pm-cast-risk');
+    if (ov && !risk) { risk = document.createElement('span'); risk.className = 'pm-cast-risk'; risk.textContent = 'potential risk'; el.before(risk); }
+    else if (!ov && risk) risk.remove();
+}
+function riskHtml(col, list) {
     const ov = castOverload(col, list);
-    if (!ov) return `<span class="pm-section-n">${list.length ? list.length : ''}</span>`;
-    return `<span class="pm-cast-risk">potential risk</span><span class="pm-section-n pm-cast-over" title="${ov.n} castings in Cast on ${escapeHtml(fmtShort(ov.date))} — more than ${CAST_PER_DAY_LIMIT} a day">${list.length}</span>`;
+    return ov ? `<span class="pm-cast-risk">potential risk</span><span class="pm-section-n pm-cast-over" title="${escapeHtml(overloadTitle(ov))}">${list.length}</span>` : '';
 }
 
+/** Count span for a calendar / pop-up head: the red count with POTENTIAL RISK when Cast is over the day limit. */
+function countHtml(col, list) {
+    return riskHtml(col, list) || `<span class="pm-section-n">${list.length ? list.length : ''}</span>`;
+}
+
+/** Columns to draw. In Day view a ticked department with nothing scheduled that day is hidden too (and listed in a notice). */
 function shownDepartments(byCol) {
     const ticked = MAP_DEPARTMENTS.filter(d => (!S.depts || S.depts.has(d)) && (ALWAYS_SHOWN.has(d) || byCol.get(d).some(l => l.length)));
     if (S.view !== 'day') return { shown: ticked, hiddenEmpty: [] };
@@ -572,10 +615,11 @@ function renderMap() {
             <button type="button" class="fm-area-head pm-cell-head" style="grid-column:${k + 1};grid-row:1" data-open-col="${escapeHtml(col)}" title="See every job in ${escapeHtml(col)}">
                 <span class="fm-area-label">${escapeHtml(col)}</span>
                 <span class="fm-area-more" data-more="${escapeHtml(col)}"></span>
-                <span class="fm-area-count" data-count="${escapeHtml(col)}">0</span>
+                <span class="pm-head-sq" data-colsq="${escapeHtml(col)}"></span>
+                <span class="pm-head-tail"><span class="fm-area-count" data-count="${escapeHtml(col)}">0</span></span>
             </button>${spec.sections.map((sec, i) => `
             <div class="pm-cell${i === last ? ' pm-cell-last' : ''}" style="grid-column:${k + 1};grid-row:${i + 2}" data-cellcol="${escapeHtml(col)}" data-sec="${i}" data-secstart="${escapeHtml(sec.start)}" data-seckind="${escapeHtml(sec.kind)}">
-                ${sec.label ? `<div class="pm-section-head" data-open-band="${escapeHtml(col)}|${i}" title="See every ${escapeHtml(col)} job in ${escapeHtml(sec.label)}"><span>${escapeHtml(sec.label)}</span><span class="pm-section-sub">${escapeHtml(sec.sub)}</span><span class="pm-section-h" data-sech="${escapeHtml(col)}|${i}"></span><span class="pm-section-h pm-section-sq" data-secsq="${escapeHtml(col)}|${i}"></span><span class="pm-section-n" data-secn="${escapeHtml(col)}|${i}"></span></div>` : `<div class="pm-section-head pm-section-head-day"><span class="pm-section-h" data-sech="${escapeHtml(col)}|${i}"></span><span class="pm-section-h pm-section-sq" data-secsq="${escapeHtml(col)}|${i}"></span></div>`}
+                ${sec.label ? `<div class="pm-section-head" data-open-band="${escapeHtml(col)}|${i}" title="See every ${escapeHtml(col)} job in ${escapeHtml(sec.label)}"><span>${escapeHtml(sec.label)}</span><span class="pm-section-sub">${escapeHtml(sec.sub)}</span><span class="pm-section-h" data-sech="${escapeHtml(col)}|${i}"></span><span class="pm-section-h pm-section-sq" data-secsq="${escapeHtml(col)}|${i}"></span><span class="pm-head-tail"><span class="pm-section-n" data-secn="${escapeHtml(col)}|${i}"></span></span></div>` : `<div class="pm-section-head pm-section-head-day"><span class="pm-section-h" data-sech="${escapeHtml(col)}|${i}"></span><span class="pm-section-h pm-section-sq" data-secsq="${escapeHtml(col)}|${i}"></span></div>`}
                 <div class="fm-cards" data-cards="${escapeHtml(col)}|${i}"></div>
             </div>`).join('')}
         </div>`).join('');
@@ -591,22 +635,9 @@ function renderMap() {
             const box = map.querySelector(`[data-cards="${CSS.escape(col + '|' + i)}"]`);
             if (box) box.innerHTML = list.map(e => chipHtml(e, col, i)).join('');
             const n = map.querySelector(`[data-secn="${CSS.escape(col + '|' + i)}"]`);
-            if (n) {
-                const ov = castOverload(col, list);
-                n.textContent = list.length ? String(list.length) : "";
-                n.classList.toggle('pm-cast-over', !!ov);
-                n.title = ov ? `${ov.n} castings in Cast on ${fmtShort(ov.date)} — more than ${CAST_PER_DAY_LIMIT} a day` : '';
-                let risk = n.parentElement.querySelector('.pm-cast-risk');
-                if (ov && !risk) { risk = document.createElement('span'); risk.className = 'pm-cast-risk'; risk.textContent = 'potential risk'; n.before(risk); }
-                else if (!ov && risk) risk.remove();
-            }
+            if (n) fillCount(n, col, list);
             const sqEl = map.querySelector(`[data-secsq="${CSS.escape(col + '|' + i)}"]`);
-            if (sqEl) {
-                const sq = sqftOf(list);
-                sqEl.textContent = S.dummy && sq ? `${sq.total.toLocaleString('en-US')} sq ft` : '';
-                sqEl.className = `pm-section-h pm-section-sq${S.dummy && sq ? ' ' + sqftClass(sq.busiest.n) : ''}`;
-                sqEl.title = S.dummy && sq ? sqftTitle(sq) : '';
-            }
+            if (sqEl) fillSqft(sqEl, list, 'pm-section-h pm-section-sq', oneDay(spec.sections[i]));
             const hEl = map.querySelector(`[data-sech="${CSS.escape(col + '|' + i)}"]`);
             const cell = hEl && hEl.closest('.pm-cell');
             if (hEl) {
@@ -621,8 +652,11 @@ function renderMap() {
             }
         });
         onFloor += total;
+        const all = sections.flat();
         const n = map.querySelector(`[data-count="${CSS.escape(col)}"]`);
-        if (n) n.textContent = String(total);
+        if (n) { fillCount(n, col, all, S.view === 'day'); n.textContent = String(total); }
+        const sq = map.querySelector(`[data-colsq="${CSS.escape(col)}"]`);
+        if (sq) fillSqft(sq, all, 'pm-head-sq', S.view === 'day');
     }
     $('fm-shipped-count').textContent = String(shipped.length);
     const unit = { day: 'that day', week: 'that week', month4: 'in those 4 weeks', month: 'that month', calendar: 'that month' }[S.view];
@@ -662,7 +696,7 @@ function renderCalendar(byCol, shipped, spec, shown) {
             dayHours += hours; dayN += list.length;
             const hTitle = usual ? `Busiest real day for ${col} in the last 8 weeks: ${fmtH(usual)} h` : '';
             groups.push(`<div class="pm-cal-dept${over ? ' pm-cal-dept-over' : ''}" style="${colStyle(col)}">
-                <div class="pm-cal-dept-head" data-open-band="${escapeHtml(col)}|${i}" title="See every ${escapeHtml(col)} job on ${escapeHtml(sec.label)} ${escapeHtml(sec.sub)}"><span class="pm-cal-dept-name">${escapeHtml(col)}</span>${S.dummy && hours ? `<span class="pm-section-h${over ? ' pm-over' : ''}" title="${escapeHtml(hTitle)}">${fmtH(hours)} h</span>` : ''}${sqftHtml(list)}${countHtml(col, list)}</div>
+                <div class="pm-cal-dept-head" data-open-band="${escapeHtml(col)}|${i}" title="See every ${escapeHtml(col)} job on ${escapeHtml(sec.label)} ${escapeHtml(sec.sub)}"><span class="pm-cal-dept-name">${escapeHtml(col)}</span>${S.dummy && hours ? `<span class="pm-section-h${over ? ' pm-over' : ''}" title="${escapeHtml(hTitle)}">${fmtH(hours)} h</span>` : ''}${sqftHtml(list, 'pm-section-h pm-section-sq', true)}${countHtml(col, list)}</div>
                 <div class="fm-cards" data-cards="${escapeHtml(col)}|${i}">${list.map(e => chipHtml(e, col, i)).join('')}</div>
             </div>`);
         }
@@ -780,7 +814,7 @@ async function renderModalBody() {
             hoursAll += hours;
             const rows = list.filter(e => matchesSearch(e.c, q));
             if (!rows.length) continue;
-            parts.push(`<div class="fm-log-day pm-day-dept" style="${colStyle(col)}"><span class="pm-hidden-dept">${escapeHtml(col)}</span><span class="pm-section-sub">${list.length} ${list.length === 1 ? 'job' : 'jobs'}${S.dummy && hours ? ` · ${fmtH(hours)} h` : ''}</span>${sqftHtml(list)}${castOverload(col, list) ? countHtml(col, list) : ''}</div>`);
+            parts.push(`<div class="fm-log-day pm-day-dept" style="${colStyle(col)}"><span class="pm-hidden-dept">${escapeHtml(col)}</span><span class="pm-section-sub">${list.length} ${list.length === 1 ? 'job' : 'jobs'}${S.dummy && hours ? ` · ${fmtH(hours)} h` : ''}</span>${sqftHtml(list, 'pm-section-sq', true)}${riskHtml(col, list)}</div>`);
             parts.push(rows.map(e => rowHtml(e)).join(''));
         }
         title.textContent = `${sec.label} ${sec.sub} — ${total} ${total === 1 ? 'job' : 'jobs'}${S.dummy && hoursAll ? ` · ${fmtH(hoursAll)} h` : ''}`;
@@ -797,7 +831,7 @@ async function renderModalBody() {
             const rows = list.filter(e => matchesSearch(e.c, q));
             if (!rows.length) return;
             const sec = spec.sections[i];
-            if (sec.label) parts.push(`<div class="fm-log-day">${escapeHtml(sec.label)} <span class="pm-section-sub">${escapeHtml(sec.sub)}</span></div>`);
+            if (sec.label) parts.push(`<div class="fm-log-day pm-day-dept">${escapeHtml(sec.label)} <span class="pm-section-sub">${escapeHtml(sec.sub)}</span>${sqftHtml(list, 'pm-section-sq', oneDay(sec))}${riskHtml(S.modal.column, list)}</div>`);
             parts.push(rows.map(e => rowHtml(e)).join(''));
         });
         body.innerHTML = parts.length ? parts.join('') : `<div class="fm-empty">${total ? 'No jobs match.' : 'Nothing here.'}</div>`;
