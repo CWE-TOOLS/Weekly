@@ -809,6 +809,7 @@ function openEditor(td) {
         const nLater = S.rows.filter(r => r.casting_id === cid && r.date > date).length;
         html += `<div class="sc-ed-move">Move these to <input type="date" id="sc-ed-move-date" value="${date}" min="${todayIso()}"><button type="button" class="btn-secondary" id="sc-ed-move">Move</button></div>`;
         html += `<label class="sc-ed-cascade"><input type="checkbox" id="sc-ed-cascade"${S.cascade ? ' checked' : ''}${nLater ? '' : ' disabled'}> Cascade: also move every task after this one (${nLater}) by the same number of working days</label>`;
+        html += `<div class="sc-ed-delete-wrap"><button type="button" class="btn-danger" id="sc-ed-delete" title="Take this task off the scheduler and the weekly (Undo brings it back)">Delete this task</button></div>`;
     }
     if (rows.length) html += crewSectionHtml(dept, rows);
     if (rows.length) html += `<div class="sc-stg" id="sc-stg"><div class="sc-stg-title">Staging note</div><div class="sc-hint">Loading the portal's staging note…</div></div>`;
@@ -1309,6 +1310,54 @@ async function moveSelected(to) {
     finally { setBusy(false); }
 }
 
+// ---- delete (user 2026-10-29): take a task off the scheduler outright. Unlike the × on a row (which hands the hours to the
+// phase's other day), this removes the cell even when it is the phase's only day — the casting then shows the red
+// "hours differ from the Optimizer Hours tab" mark until the task is added back or the Optimizer Hours are changed.
+function deleteWarning(rows) {
+    const mapped = rows.some(r => unitOf(r));
+    return mapped ? '\n\nThe hours come from the Optimizer Hours tab, so this casting will show the red "hours differ" mark until the task is added back or the Optimizer Hours are changed.' : '';
+}
+async function deleteCellTasks() {
+    if (!editorCtx) return;
+    const { cid, date, dept } = editorCtx;
+    const rows = S.rows.filter(r => r.casting_id === cid && r.date === date && r.department === dept);
+    if (!rows.length) return;
+    if (isPast(date)) { toast(PAST_MSG, 'error'); return; }
+    const c = S.castingById.get(cid);
+    const words = [...new Set(rows.map(r => String(r.task).toLowerCase()))].join('+');
+    if (!window.confirm(`Delete ${words} (${deptLabel(dept)}, ${shortDay(date)}) for ${c ? projectLabel(c.project_number) + ' ' + castingLabel(c) : 'this casting'}?\n\nThe task comes off the scheduler and the weekly. Undo brings it back.${deleteWarning(rows)}`)) return;
+    setBusy(true);
+    const __h = await histBegin(`delete ${words} on ${shortDay(date)}`, [cid]);
+    try {
+        for (const r of rows) await deleteScheduleRow(r.id);
+        await histEnd(__h);
+        closeEditor();
+        await loadRows();
+        render();
+        toast(`Deleted ${words} on ${shortDay(date)} — Undo brings it back`);
+    } catch (err) { toast('Delete failed: ' + (err.message || err), 'error'); }
+    finally { setBusy(false); }
+}
+async function deleteSelected() {
+    const sel = [...SEL.values()].filter(s => !isPast(s.date));
+    if (!sel.length) return;
+    const rows = sel.flatMap(s => S.rows.filter(r => r.casting_id === s.cid && r.date === s.date && r.department === s.dept));
+    if (!rows.length) return;
+    const casts = new Set(rows.map(r => r.casting_id));
+    if (!window.confirm(`Delete the ${sel.length} selected task${sel.length === 1 ? '' : 's'} on ${casts.size} casting${casts.size === 1 ? '' : 's'}?\n\nThey come off the scheduler and the weekly. One Undo brings them all back.${deleteWarning(rows)}`)) return;
+    setBusy(true);
+    const __h = await histBegin(`delete ${sel.length} selected task${sel.length === 1 ? '' : 's'}`, [...casts]);
+    try {
+        for (const r of rows) await deleteScheduleRow(r.id);
+        await histEnd(__h);
+        clearSelection();
+        await loadRows();
+        render();
+        toast(`Deleted ${sel.length} task${sel.length === 1 ? '' : 's'} on ${casts.size} casting${casts.size === 1 ? '' : 's'} — Undo brings them back`);
+    } catch (err) { toast('Delete failed: ' + (err.message || err), 'error'); }
+    finally { setBusy(false); }
+}
+
 // ---- drag a task to another day on the same casting's row (it keeps its team column)
 let dragCtx = null;   // { cid, date, dept }
 function dropTargetFor(td) {
@@ -1706,6 +1755,7 @@ function wire() {
     $('sc-select-btn').addEventListener('click', () => setSelectMode(!S.selectMode));
     $('sc-sel-move').addEventListener('click', async () => { if (!S.busy) await moveSelected($('sc-sel-date').value); });
     $('sc-sel-clear').addEventListener('click', () => { clearSelection(); setSelectMode(false); });
+    $('sc-sel-delete').addEventListener('click', async () => { if (!S.busy) await deleteSelected(); });
     $('sc-sel-date').addEventListener('keydown', async (e) => { if (e.key === 'Enter' && !S.busy) { e.preventDefault(); await moveSelected(e.target.value); } });
     document.addEventListener('keydown', (e) => {
         if (!(e.ctrlKey || e.metaKey)) return;
@@ -1747,6 +1797,7 @@ function wire() {
         if (ro) { const pnl = $('sc-editor').querySelector(`.sc-roll[data-roll="${ro.dataset.rollOpen}"]`); if (pnl) { pnl.hidden = !pnl.hidden; placeEditor(document.querySelector(`td.sc-cell[data-cid="${editorCtx.cid}"][data-date="${editorCtx.date}"][data-dept="${editorCtx.dept}"]`) || ro); } return; }
         if (t.closest('[data-roll-save]')) { const pnl = t.closest('.sc-roll'); await saveRollover(pnl.dataset.roll, pnl.querySelector('[data-roll-today]').value); return; }
         if (t.id === 'sc-ed-move') { await moveEditorEntries(); return; }
+        if (t.id === 'sc-ed-delete') { await deleteCellTasks(); return; }
         const del = t.closest('[data-del]');
         if (del) { await deleteEditorEntry(del.closest('.sc-ed-row').dataset.id); return; }
         if (t.id === 'sc-m-regen') {

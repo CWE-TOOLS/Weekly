@@ -159,6 +159,10 @@ body.sc-selecting .sc-grid td.sc-cell.sc-has { cursor: cell; }
 .sc-ed-row { display: grid; grid-template-columns: 1fr 70px 28px; gap: 6px; align-items: center; margin-bottom: 6px; }
 .sc-ed-row select, .sc-ed-row input, .sc-editor input[type=date] { padding: 4px 6px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; width: 100%; box-sizing: border-box; }
 .sc-ed-row .sc-del { background: none; border: none; color: #b91c1c; font-size: 16px; cursor: pointer; }
+/* 2026-10-29: outright delete (editor + selection bar) */
+.btn-danger { background: #b91c1c; color: #fff; border: 1px solid #991b1b; border-radius: 6px; padding: 6px 12px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.btn-danger:hover { background: #991b1b; }
+.sc-ed-delete-wrap { margin-top: 8px; display: flex; justify-content: flex-end; }
 .sc-ed-phase { font-size: 11px; color: #6b7280; grid-column: 1 / -1; margin-top: -4px; }
 .sc-ed-row input.sc-ed-locked { background: #f3f4f6; color: #374151; cursor: not-allowed; }
 .sc-roll-open { grid-column: 1 / -1; justify-self: start; padding: 3px 8px !important; font-size: 12px !important; }

@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="src/styles/variables.css">
     <link rel="stylesheet" href="src/styles/base.css">
     <link rel="stylesheet" href="src/styles/buttons.css">
-    <link rel="stylesheet" href="src/styles/scheduler.css?v=20261029-3">
+    <link rel="stylesheet" href="src/styles/scheduler.css?v=20261029-4">
 </head>
 <body>
 <div id="sc-app">
@@ -41,6 +41,7 @@
         <span id="sc-sel-count" class="sc-sel-count"></span>
         <label class="sc-sel-to">Move all to <input type="date" id="sc-sel-date"></label>
         <button type="button" class="btn-primary" id="sc-sel-move">Move</button>
+        <button type="button" class="btn-danger" id="sc-sel-delete" title="Delete every selected task (one Undo brings them back)">Delete</button>
         <button type="button" class="btn-secondary" id="sc-sel-clear" title="Clear the selection (Esc)">Clear</button>
     </div>
 
@@ -99,6 +100,6 @@
 
     <div id="sc-toast" class="sc-toast" hidden></div>
 </div>
-<script type="module" src="src/pages/scheduler/scheduler-page.js?v=20261029-4"></script>
+<script type="module" src="src/pages/scheduler/scheduler-page.js?v=20261029-5"></script>
 </body>
 </html>
