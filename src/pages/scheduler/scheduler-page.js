@@ -717,7 +717,7 @@ function jumpTo(step = 0) {
     const wrap = $('sc-grid-wrap');
     const head = wrap.querySelector('thead');
     const top = tr.getBoundingClientRect().top - wrap.getBoundingClientRect().top - (head ? head.getBoundingClientRect().height : 0);
-    wrap.scrollTo({ top: wrap.scrollTop + top, behavior: 'smooth' });
+    wrap.scrollTop = wrap.scrollTop + top;   // instant: a smooth scroll stalls in background tabs and is slow on a long grid
     document.querySelectorAll('tr.sc-jump-hit').forEach(el => el.classList.remove('sc-jump-hit'));
     tr.classList.add('sc-jump-hit');
     clearTimeout(jumpFlashTimer);
