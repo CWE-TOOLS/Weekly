@@ -433,7 +433,7 @@ function dummyMoveBlock(key, dept, toFirstDate) {
     if (S.dummy.undo.length > 50) S.dummy.undo.shift();
     for (const [k, orig, next] of plan) { if (next === orig) S.dummy.moves.delete(k); else S.dummy.moves.set(k, next); }
     const kept = cur.length - movable.length;
-    if (kept) notice(`${kept} day${kept === 1 ? '' : 's'} of that block already happened and stayed put.`, 'info');
+    if (kept) notice(`${kept} day${kept === 1 ? '' : 's'} of that block already happened and stayed put.`, 'info'); else notice('');   // a refusal shown earlier is over
     S.dummy.dirty = true;
     S.castings = summarise(S.rawTasks);
     renderMap();
