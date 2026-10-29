@@ -16,7 +16,9 @@
  * days are Mon–Fri minus holidays. Blocks move whole, so day numbers (and therefore the
  * staging notes keyed by them) travel with the card. Each band shows its hours; a band above the busiest real day or
  * week seen in the last 8 weeks is flagged. Save / Open / Rename / Delete / Final live in project_map_dummies (+ moves).
- * Nothing real changes until a dummy is applied — Apply is a later phase, written with the DOP.
+ * Nothing real changes until a dummy is APPLIED (2026-10-29): a saved, final dummy's moves are written into the live
+ * Plant Scheduler rows (updateScheduleRow, as a drag there does) after a preview with pre-flight and a typed
+ * confirmation; the apply is recorded on the dummy and Revert apply takes it back.
  * CALENDAR (dummy mode only, 2026-10-27): the month as the conference-room whiteboard — rows Week 1, 2, 3…, a cell per
  * day, the day's jobs grouped by department inside the cell; drag a card to any day.
  * TOUCH (2026-10-27): finger drag-and-drop does not exist in browsers, so a card's full view has a "Move" button:
@@ -39,9 +41,9 @@
 import { fetchAllTasks } from '../../services/data-service.js';
 import { loadAllProjects } from '../../services/projects-service.js';
 import { initializeSupabase, registerRefreshHandler, isPortalChange, signalInfo } from '../../services/supabase-service.js';
-import { listDummies, loadDummyMoves, saveDummy, deleteDummy, isDummyMigrationPending } from '../../services/project-map-dummy-service.js';
+import { listDummies, loadDummyMoves, saveDummy, deleteDummy, isDummyMigrationPending, isApplyMigrationPending, markApplied, loadScheduleRowsByIds } from '../../services/project-map-dummy-service.js';
 import { REVENUE_PER_HOUR, DEFAULT_HOLIDAYS } from '../../config/scheduler-config.js';   // the Plant Scheduler's $ per labor hour + its holiday seed
-import { loadScheduleSettings, loadSettingRows, setSettingRow } from '../../services/schedule-service.js';    // its monthly revenue target (read only) + the shared Warnings levels
+import { loadScheduleSettings, loadSettingRows, setSettingRow, updateScheduleRow } from '../../services/schedule-service.js';    // its monthly revenue target (read only) + the shared Warnings levels
 import { MAP_DEPARTMENTS, ALWAYS_SHOWN, SHIPPING_DEPARTMENTS, SHIPPED_STATUSES, SHIPPED_WINDOW_DAYS } from '../../config/project-map-config.js';
 import { DEPARTMENT_COLORS, normalizeDepartmentClass } from '../../config/department-config.js';
 import { parseDate, getLocalDateString, getMonday, getWeekMonth } from '../../utils/date-utils.js';
@@ -204,7 +206,7 @@ function summarise(tasks) {
         const iso = missing.length ? orig : effectiveDate(pn, cn, t.department, orig);   // rows without numbers cannot be moved in a dummy
         let c = out.get(key);
         if (!c) {
-            c = { key, projectNumber: pn, castingNumber: cn, sheetName, missing, days: new Map(), orig: new Map(), hours: new Map(), inv: null, lastShip: null, lastDate: null, firstDate: null, moved: false };
+            c = { key, projectNumber: pn, castingNumber: cn, sheetName, missing, days: new Map(), orig: new Map(), hours: new Map(), rows: new Map(), inv: null, lastShip: null, lastDate: null, firstDate: null, moved: false };
             out.set(key, c);
         }
         if (t.invSummary && !c.inv) c.inv = t.invSummary;
@@ -212,6 +214,7 @@ function summarise(tasks) {
         c.days.get(t.department).push(iso);
         c.orig.set(`${t.department}|${iso}`, orig);
         c.hours.set(`${t.department}|${iso}`, (c.hours.get(`${t.department}|${iso}`) || 0) + (parseFloat(t.hours) || 0));
+        if (t.scheduleRowId) { const rk = `${t.department}|${orig}`; if (!c.rows.has(rk)) c.rows.set(rk, []); c.rows.get(rk).push(t.scheduleRowId); }   // the live scheduler rows behind this real day (Apply)
         if (iso !== orig) c.moved = true;
         if (SHIPPING_DEPARTMENTS.includes(t.department) && (!c.lastShip || iso > c.lastShip)) c.lastShip = iso;
         if (!c.lastDate || iso > c.lastDate) c.lastDate = iso;
@@ -520,6 +523,7 @@ async function dummySave(saveAs = false) {
     }
     try {
         const id = await saveDummy({ id: saveAs ? null : S.dummy.id, name, final: S.dummy.final, chain: S.dummy.chain, createdBy: who() }, S.dummy.moves);
+        if (saveAs) S.dummy.applied = null;   // a copy starts unapplied
         S.dummy.id = id; S.dummy.name = name.trim(); S.dummy.dirty = false;
         notice(`Saved "${S.dummy.name}" (${S.dummy.moves.size} moved days).`, 'info');
         setTimeout(() => { if ($('fm-notice').textContent.startsWith('Saved "')) notice(''); }, 4000);
@@ -536,7 +540,7 @@ async function dummyOpen(id) {
         const d = list.find(x => x.id === id);
         if (!d) return;
         const moves = await loadDummyMoves(id);
-        S.dummy = { id: d.id, name: d.name, final: !!d.final, chain: d.chain !== false, moves, dirty: false, undo: [] };
+        S.dummy = { id: d.id, name: d.name, final: !!d.final, chain: d.chain !== false, moves, dirty: false, undo: [], applied: appliedOf(d) };
         if (S.view === 'day') S.view = 'week';
         S.expandedKey = null;
         S.castings = summarise(S.rawTasks);
@@ -741,6 +745,199 @@ function renderRevenueStrip() {
     el.innerHTML = `<span class="pm-rev-label" title="Revenue = scheduled hours × $${REVENUE_PER_HOUR}, the Plant Scheduler's rule. Net = every department incl. Ship.">REVENUE</span>` + parts.join('');
 }
 
+// ---------------------------------------------------------------- APPLY (2026-10-29): the dummy's moves into the live Plant Scheduler
+// Writes go through updateScheduleRow, the same row update a drag on the scheduler page makes, so the weekly, the boards
+// and the maps see nothing new. Two stages: a preview with the pre-flight (stale / past / holiday / weekend), then a
+// confirmation that needs the dummy's name typed and initials. Recorded on the dummy; Revert apply takes it back.
+const A = { open: false, mode: 'apply', stage: 1, plan: null, running: false };
+const appliedOf = (d) => d && d.applied_at ? { at: String(d.applied_at), by: d.applied_by || '', moves: Array.isArray(d.applied_moves) ? d.applied_moves : [] } : null;
+/** Why the open dummy cannot be applied right now ('' when it can). */
+function applyBlocker() {
+    const d = S.dummy;
+    if (!d) return 'Open a dummy first.';
+    if (isApplyMigrationPending()) return 'The apply record columns are not in the database yet — run migration/project-map-dummies-apply.sql.';
+    if (!S.rawTasks.some(t => t.fromScheduler)) return 'The weekly board is not reading the Plant Scheduler right now, so there is nothing to apply to.';
+    if (d.applied) return `Already applied ${fmtDate(d.applied.at.slice(0, 10))}${d.applied.by ? ' by ' + d.applied.by : ''} — Revert apply takes it back.`;
+    if (!d.moves.size) return 'This dummy has no moves.';
+    if (!d.id || d.dirty) return 'Save the dummy first — only a saved dummy can be applied.';
+    if (!d.final) return 'Mark the dummy final first — only a final dummy can be applied.';
+    return '';
+}
+const castingOfKey = (pn, cn) => S.castings.get(`${pn}|${cn}`) || null;
+const castName = (c, pn, cn) => c ? `${jobName(c)} ${castLabel(c)}` : `${pn} Cast ${cn}`;
+/** Pre-flight for an apply: every move resolved to live scheduler rows, re-read from the database, with its problems. */
+async function planApply() {
+    const tod = today();
+    const items = [];
+    for (const [key, to] of S.dummy.moves) {
+        const [pn, cn, dept, from] = key.split('|');
+        const c = castingOfKey(pn, cn);
+        items.push({ key, pn, cn, dept, from, to, c, rowIds: c ? (c.rows.get(`${dept}|${from}`) || []) : [], rows: [], problems: [], notes: [] });
+    }
+    const fresh = await loadScheduleRowsByIds(items.flatMap(i => i.rowIds));
+    const byId = new Map(fresh.map(r => [r.id, r]));
+    for (const it of items) {
+        if (!it.c) it.problems.push('this casting is not on the weekly any more');
+        else if (!it.rowIds.length) it.problems.push(`no ${it.dept} day on ${fmtShort(it.from)} on the live schedule any more — it changed since the dummy was saved`);
+        it.rows = it.rowIds.map(id => byId.get(id)).filter(Boolean);
+        if (it.rowIds.length && it.rows.length !== it.rowIds.length) it.problems.push('a scheduler row behind it was removed since the dummy was saved');
+        const elsewhere = it.rows.filter(r => r.date !== it.from);
+        if (elsewhere.length) it.problems.push(`moved on the scheduler since the dummy was saved (now ${[...new Set(elsewhere.map(r => fmtShort(r.date)))].join(', ')})`);
+        if (it.from < tod) it.problems.push('that day has already happened');
+        if (it.to < tod) it.problems.push('it would land before today');
+        if (S.holidays.has(it.to)) it.problems.push(`${fmtShort(it.to)} is a plant holiday`);
+        if (!it.problems.length && isWeekend(it.to)) it.notes.push('weekend — the allow will be set');
+    }
+    items.sort((a, b) => castName(a.c, a.pn, a.cn).localeCompare(castName(b.c, b.pn, b.cn), undefined, { numeric: true }) || deptRank(a.dept) - deptRank(b.dept) || a.from.localeCompare(b.from));
+    return finishPlan(items);
+}
+/** Pre-flight for a revert: every applied move's row re-read; it must still sit where the apply put it. */
+async function planRevert() {
+    const tod = today();
+    const moves = S.dummy.applied.moves || [];
+    const fresh = await loadScheduleRowsByIds(moves.map(m => m.row));
+    const byId = new Map(fresh.map(r => [r.id, r]));
+    const items = moves.map(m => {
+        const [pn, cn, dept] = String(m.key || '||').split('|');
+        const c = castingOfKey(pn, cn);
+        const r = byId.get(m.row);
+        const it = { key: m.key, pn, cn, dept, from: m.to, to: m.from, wk: !!m.wk, c, rowIds: [m.row], rows: r ? [r] : [], problems: [], notes: [] };
+        if (!r) it.problems.push('the scheduler row no longer exists');
+        else if (r.date !== m.to) it.problems.push(`moved on the scheduler since the apply (now ${fmtShort(r.date)})`);
+        if (m.to < tod) it.problems.push('that day has already happened');
+        if (m.from < tod) it.problems.push('it would land before today');
+        if (S.holidays.has(m.from)) it.problems.push(`${fmtShort(m.from)} is a plant holiday now`);
+        return it;
+    });
+    items.sort((a, b) => castName(a.c, a.pn, a.cn).localeCompare(castName(b.c, b.pn, b.cn), undefined, { numeric: true }) || deptRank(a.dept) - deptRank(b.dept) || a.from.localeCompare(b.from));
+    return finishPlan(items);
+}
+function finishPlan(items) {
+    const blocked = items.filter(i => i.problems.length);
+    const castings = new Set(items.map(i => `${i.pn}|${i.cn}`)).size;
+    const rowsN = items.reduce((a, i) => a + i.rows.length, 0);
+    const weekend = items.filter(i => i.notes.length).length;
+    return { items, blocked, castings, rowsN, weekend };
+}
+function openApply(mode) {
+    if (!S.dummy) return;
+    if (mode === 'apply') { const why = applyBlocker(); if (why) { notice(why, 'warn'); return; } }
+    if (mode === 'revert' && !(S.dummy.applied && S.dummy.applied.moves && S.dummy.applied.moves.length)) { notice('Nothing to revert — this dummy has no recorded apply.', 'warn'); return; }
+    A.open = true; A.mode = mode; A.stage = 1; A.plan = null; A.running = false;
+    const box = $('pm-apply'); box.hidden = false;
+    $('pm-apply-title').textContent = mode === 'apply' ? `Apply "${S.dummy.name}" to the live Plant Schedule` : `Revert the apply of "${S.dummy.name}"`;
+    $('pm-apply-stage').textContent = 'Checking the live schedule…';
+    $('pm-apply-body').innerHTML = '<div class="fm-empty">Reading the live scheduler rows behind every move…</div>';
+    $('pm-apply-foot').innerHTML = '';
+    (mode === 'apply' ? planApply() : planRevert()).then(plan => { if (!A.open) return; A.plan = plan; renderApplyStage(); })
+        .catch(err => { if (!A.open) return; $('pm-apply-stage').textContent = ''; $('pm-apply-body').innerHTML = `<div class="pm-apply-warn">Could not read the live schedule: ${escapeHtml(err.message || err)}</div>`; $('pm-apply-foot').innerHTML = '<button type="button" class="fm-mini-btn" id="pm-apply-cancel">Close</button>'; });
+}
+function closeApply() { A.open = false; A.plan = null; A.running = false; const box = $('pm-apply'); if (box) box.hidden = true; }
+const applyVerb = () => (A.mode === 'apply' ? 'apply' : 'revert');
+function renderApplyStage() {
+    const p = A.plan, d = S.dummy, isApply = A.mode === 'apply';
+    const stage = $('pm-apply-stage'), body = $('pm-apply-body'), foot = $('pm-apply-foot');
+    const rowHtml = (it) => `<tr class="${it.problems.length ? 'pm-apply-bad' : ''}"><td>${escapeHtml(castName(it.c, it.pn, it.cn))}</td><td>${escapeHtml(it.dept)}</td><td class="pm-apply-dates">${escapeHtml(weekdayOf(it.from))} ${escapeHtml(fmtShort(it.from))} &rarr; <b>${escapeHtml(weekdayOf(it.to))} ${escapeHtml(fmtShort(it.to))}</b></td><td>${it.rows.length} row${it.rows.length === 1 ? '' : 's'}</td><td class="pm-apply-note">${escapeHtml([...it.problems, ...it.notes].join('; '))}</td></tr>`;
+    if (A.stage === 1) {
+        stage.textContent = `Step 1 of 2 — what will change`;
+        const parts = [];
+        if (p.blocked.length) parts.push(`<div class="pm-apply-warn"><b>This ${isApply ? 'dummy cannot be applied' : 'apply cannot be reverted'} until these are fixed (${p.blocked.length} of ${p.items.length} moves):</b><ul>${p.blocked.map(it => `<li>${escapeHtml(castName(it.c, it.pn, it.cn))} · ${escapeHtml(it.dept)} ${escapeHtml(fmtShort(it.from))} &rarr; ${escapeHtml(fmtShort(it.to))}: ${escapeHtml(it.problems.join('; '))}</li>`).join('')}</ul>${isApply ? 'Fix the dummy (Clear moves, or move those days again), save, mark final, then try again. Nothing was written.' : 'Nothing was written.'}</div>`);
+        parts.push(`<div class="pm-apply-sum">${isApply ? 'Applying' : 'Reverting'} moves <b>${p.items.length} day${p.items.length === 1 ? '' : 's'}</b> of <b>${p.castings} casting${p.castings === 1 ? '' : 's'}</b> on the live Plant Scheduler (${p.rowsN} scheduler row${p.rowsN === 1 ? '' : 's'})${p.weekend ? ` · ${p.weekend} land${p.weekend === 1 ? 's' : ''} on a weekend (the scheduler's allow will be set)` : ''}.</div>`);
+        parts.push(`<table class="pm-apply-table"><thead><tr><th>Job · Cast</th><th>Department</th><th>From &rarr; To</th><th>Rows</th><th>Notes</th></tr></thead><tbody>${p.items.map(rowHtml).join('')}</tbody></table>`);
+        body.innerHTML = parts.join('');
+        foot.innerHTML = `<button type="button" class="fm-mini-btn" id="pm-apply-cancel">Cancel</button>${p.blocked.length ? '' : '<button type="button" class="fm-mini-btn fm-bulk-go" id="pm-apply-continue">Continue to the confirmation &rarr;</button>'}`;
+        return;
+    }
+    if (A.stage === 2) {
+        stage.textContent = `Step 2 of 2 — confirm`;
+        body.innerHTML = `<div class="pm-apply-warn pm-apply-final">
+            <b>${isApply ? 'This changes the live plant schedule for everyone.' : 'This changes the live plant schedule for everyone, back to where it was before the apply.'}</b>
+            <ul>
+                <li>${p.items.length} day${p.items.length === 1 ? '' : 's'} of ${p.castings} casting${p.castings === 1 ? '' : 's'} move on the Plant Scheduler the moment you press the button.</li>
+                <li>Every open weekly board, Releasability Board, Finishing Map and Project Map reloads within seconds. Printed batch tickets and travelers keep the dates they were printed with.</li>
+                <li>${isApply ? 'It can be taken back with <b>Revert apply</b> on this dummy, as long as the days have not passed and nobody has moved them again on the scheduler.' : 'The dummy keeps its moves, so it can be applied again later.'}</li>
+                <li>Someone with the Plant Scheduler open can still Undo a casting back in their own tab, as with any change.</li>
+            </ul>
+        </div>
+        <div class="pm-apply-form">
+            <label>Type the dummy's name to confirm: <input type="text" id="pm-apply-name" autocomplete="off" placeholder="${escapeHtml(d.name)}"></label>
+            <label>Your initials: <input type="text" id="pm-apply-by" autocomplete="off" maxlength="12" value="${escapeHtml(who())}"></label>
+        </div>`;
+        foot.innerHTML = `<button type="button" class="fm-mini-btn" id="pm-apply-back">&larr; Back</button><button type="button" class="fm-mini-btn" id="pm-apply-cancel">Cancel</button><button type="button" class="fm-mini-btn pm-apply-go" id="pm-apply-go" disabled>${isApply ? 'Apply to the live schedule' : 'Revert on the live schedule'}</button>`;
+        validateApplyForm();
+        $('pm-apply-name').focus();
+    }
+}
+function validateApplyForm() {
+    const go = $('pm-apply-go'), name = $('pm-apply-name'), by = $('pm-apply-by');
+    if (!go || !name || !by) return;
+    const ok = name.value.trim().toLowerCase() === String(S.dummy.name || '').trim().toLowerCase() && by.value.trim().length >= 2;
+    go.disabled = !ok;
+}
+async function runApply() {
+    const p = A.plan, isApply = A.mode === 'apply', by = $('pm-apply-by').value.trim();
+    try { localStorage.setItem(WHO_KEY, by); } catch { /* ignore */ }
+    A.running = true;
+    $('pm-apply-stage').textContent = isApply ? 'Applying…' : 'Reverting…';
+    $('pm-apply-foot').innerHTML = '';
+    const body = $('pm-apply-body');
+    const total = p.rowsN; let n = 0;
+    const done = [];
+    const show = (t) => { body.innerHTML = `<div class="pm-apply-sum">${t}</div>`; };
+    show(`Writing row 1 of ${total}…`);
+    try {
+        for (const it of p.items) {
+            for (const r of it.rows) {
+                const fields = isApply ? { date: it.to, weekend_ok: isWeekend(it.to) ? true : !!r.weekend_ok } : { date: it.to, weekend_ok: it.wk };
+                await updateScheduleRow(r.id, fields);
+                done.push({ row: r.id, key: it.key, from: it.from, to: it.to, wk: !!r.weekend_ok });
+                n++; if (n % 5 === 0 || n === total) show(`Writing row ${n} of ${total}…`);
+            }
+        }
+        if (isApply) {
+            const info = { applied_at: new Date().toISOString(), applied_by: by, applied_moves: done };
+            await markApplied(S.dummy.id, info);
+            await saveDummy({ id: S.dummy.id, name: S.dummy.name, final: S.dummy.final, chain: S.dummy.chain }, new Map());   // the moves are real now
+            S.dummy.applied = { at: info.applied_at, by, moves: done };
+            S.dummy.moves = new Map(); S.dummy.undo = []; S.dummy.dirty = false;
+        } else {
+            const restored = new Map();
+            for (const it of p.items) restored.set(it.key, it.from);   // from = where the apply had put it = the dummy's move
+            await saveDummy({ id: S.dummy.id, name: S.dummy.name, final: S.dummy.final, chain: S.dummy.chain }, restored);
+            await markApplied(S.dummy.id, null);
+            S.dummy.applied = null; S.dummy.moves = restored; S.dummy.undo = []; S.dummy.dirty = false;
+        }
+        A.running = false;
+        $('pm-apply-stage').textContent = 'Done';
+        show(`<b>${isApply ? 'Applied' : 'Reverted'}.</b> ${n} scheduler row${n === 1 ? '' : 's'} of ${p.castings} casting${p.castings === 1 ? '' : 's'} ${isApply ? 'moved on the live Plant Scheduler' : 'moved back'}. Every open screen reloads on its own.`);
+        $('pm-apply-foot').innerHTML = '<button type="button" class="fm-mini-btn fm-bulk-go" id="pm-apply-cancel">Close</button>';
+        loadAll({ silent: true });
+    } catch (err) {
+        logger.error('[dummy] apply failed', err);
+        A.running = false;
+        if (isApply && done.length) {
+            try { await markApplied(S.dummy.id, { applied_at: new Date().toISOString(), applied_by: by, applied_moves: done }); S.dummy.applied = { at: new Date().toISOString(), by, moves: done }; } catch { /* the rows moved stay listed below */ }
+        }
+        $('pm-apply-stage').textContent = 'Stopped';
+        show(`<b>Stopped after ${done.length} of ${total} rows:</b> ${escapeHtml(err.message || err)}.${isApply && done.length ? ' The rows already moved are recorded on this dummy — Revert apply takes them back.' : ''}`);
+        $('pm-apply-foot').innerHTML = '<button type="button" class="fm-mini-btn" id="pm-apply-cancel">Close</button>';
+        loadAll({ silent: true });
+    }
+}
+function wireApply() {
+    const box = $('pm-apply');
+    if (!box) return;
+    box.addEventListener('click', (e) => {
+        if (A.running) return;
+        if (e.target === box || e.target.closest('#pm-apply-cancel') || e.target.closest('#pm-apply-x')) { closeApply(); return; }
+        if (e.target.closest('#pm-apply-continue')) { A.stage = 2; renderApplyStage(); return; }
+        if (e.target.closest('#pm-apply-back')) { A.stage = 1; renderApplyStage(); return; }
+        if (e.target.closest('#pm-apply-go')) { if (!$('pm-apply-go').disabled) runApply(); return; }
+    });
+    box.addEventListener('input', (e) => { if (e.target.id === 'pm-apply-name' || e.target.id === 'pm-apply-by') validateApplyForm(); });
+    box.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.target.id === 'pm-apply-name' || e.target.id === 'pm-apply-by')) { e.preventDefault(); if (!$('pm-apply-go').disabled && !A.running) runApply(); } });
+}
+
 function renderDummyBar() {
     const bar = $('pm-dummy-bar');
     const btn = $('pm-dummy-btn');
@@ -751,7 +948,10 @@ function renderDummyBar() {
     bar.hidden = false;
     const d = S.dummy;
     $('pm-dummy-name').textContent = d.name ? d.name : 'unsaved dummy';
-    $('pm-dummy-state').textContent = `${d.moves.size} moved ${d.moves.size === 1 ? 'day' : 'days'}${d.dirty ? ' · unsaved changes' : ''}${d.final ? ' · FINAL' : ''}`;
+    $('pm-dummy-state').textContent = `${d.moves.size} moved ${d.moves.size === 1 ? 'day' : 'days'}${d.dirty ? ' · unsaved changes' : ''}${d.final ? ' · FINAL' : ''}${d.applied ? ` · APPLIED ${fmtShort(d.applied.at.slice(0, 10))}${d.applied.by ? ' by ' + d.applied.by : ''}` : ''}`;
+    const ab = $('pm-dummy-apply'), rb = $('pm-dummy-revert');
+    if (ab) { const why = applyBlocker(); ab.hidden = !!d.applied; ab.title = why || 'Write this dummy\'s moves into the live Plant Scheduler — two confirmations follow'; ab.classList.toggle('pm-apply-ready', !why); }
+    if (rb) rb.hidden = !d.applied;
     $('pm-dummy-chain').checked = d.chain;
     $('pm-dummy-undo').disabled = !d.undo.length;
     $('pm-dummy-final').textContent = d.final ? 'Unmark final' : 'Mark final';
@@ -958,7 +1158,7 @@ async function renderModalBody() {
         if (isDummyMigrationPending()) { body.innerHTML = '<div class="fm-empty">The dummy tables are not in the database yet — run migration/project-map-dummies.sql.</div>'; return; }
         body.innerHTML = list.length ? list.map(d => `<div class="fm-mrow pm-dummy-row${S.dummy && S.dummy.id === d.id ? ' fm-mrow-open' : ''}">
             <div class="fm-mrow-text">
-                <div class="fm-card-job">${escapeHtml(d.name)}${d.final ? ' <span class="pm-final-tag">FINAL</span>' : ''}</div>
+                <div class="fm-card-job">${escapeHtml(d.name)}${d.final ? ' <span class="pm-final-tag">FINAL</span>' : ''}${d.applied_at ? ` <span class="pm-applied-tag" title="Written into the live Plant Scheduler">APPLIED ${escapeHtml(fmtShort(String(d.applied_at).slice(0, 10)))}${d.applied_by ? ' by ' + escapeHtml(d.applied_by) : ''}</span>` : ''}</div>
                 <div class="fm-card-meta">${d.moves} moved ${d.moves === 1 ? 'day' : 'days'} · chain ${d.chain === false ? 'off' : 'on'} · ${d.created_by ? escapeHtml(d.created_by) + ' · ' : ''}updated ${new Date(d.updated_at).toLocaleString('en-US', { month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</div>
             </div>
             <button type="button" class="fm-mini-btn fm-bulk-go" data-dummy-open="${escapeHtml(d.id)}">Open</button>
@@ -1120,6 +1320,8 @@ function wireEvents() {
         $('pm-warn-dropdown')?.classList.remove('open');
         if (e.target.closest('#pm-dummy-btn')) { if (S.dummy) exitDummy(); else enterDummy(); return; }
         if (e.target.closest('#pm-dummy-save')) { dummySave(false); return; }
+        if (e.target.closest('#pm-dummy-apply')) { openApply('apply'); return; }
+        if (e.target.closest('#pm-dummy-revert')) { openApply('revert'); return; }
         if (e.target.closest('#pm-dummy-saveas')) { dummySave(true); return; }
         if (e.target.closest('#pm-dummy-open')) { openModal('dummies'); return; }
         if (e.target.closest('#pm-dummy-rename')) { dummyRename(); return; }
@@ -1183,6 +1385,7 @@ function wireEvents() {
         dummyMoveBlock(key, dept, dropTarget(cell, first));
     });
 
+    wireApply();
     $('pm-dept-list').addEventListener('change', (e) => {
         const box = e.target.closest('input[data-dept]');
         if (!box) return;
@@ -1214,6 +1417,7 @@ function wireEvents() {
     });
     $('fm-modal-search').addEventListener('input', (e) => { if (S.modal) { S.modal.filter = e.target.value.trim().toLowerCase(); renderModalBody(); } });
     document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && A.open) { if (!A.running) closeApply(); return; }
         if (e.key === 'Escape') { if (S.modal) closeModal(); else if (S.picking) cancelPick(); else if (S.expandedKey) { S.expandedKey = null; renderMap(); } else { $('pm-dept-dropdown')?.classList.remove('open'); $('pm-warn-dropdown')?.classList.remove('open'); } }
         if (!S.modal && !(e.target.closest && e.target.closest('input'))) { if (e.key === 'ArrowLeft') step(-1); if (e.key === 'ArrowRight') step(1); }
         if (S.dummy && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !(e.target.closest && e.target.closest('input'))) { e.preventDefault(); dummyUndo(); }

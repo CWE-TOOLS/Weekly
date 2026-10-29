@@ -9,8 +9,12 @@ import { logger } from '../utils/logger.js';
 const T = 'project_map_dummies';
 const M = 'project_map_dummy_moves';
 let migrationPending = false;
+let applyPending = false;      // the apply columns (migration/project-map-dummies-apply.sql) are not there yet
 
 export function isDummyMigrationPending() { return migrationPending; }
+export function isApplyMigrationPending() { return applyPending; }
+const BASE_COLS = 'id, name, final, chain, created_by, created_at, updated_at';
+const APPLY_COLS = BASE_COLS + ', applied_at, applied_by, applied_moves';
 
 async function client() { return getSupabaseClient() || await initializeSupabase(); }
 
@@ -22,7 +26,11 @@ function missing(error) {
 export async function listDummies() {
     const sb = await client();
     if (!sb) return [];
-    const { data, error } = await sb.from(T).select('id, name, final, chain, created_by, created_at, updated_at').order('updated_at', { ascending: false });
+    let { data, error } = await sb.from(T).select(APPLY_COLS).order('updated_at', { ascending: false });
+    if (error && (error.code === '42703' || /applied_/.test(error.message || ''))) {   // apply columns not added yet
+        applyPending = true;
+        ({ data, error } = await sb.from(T).select(BASE_COLS).order('updated_at', { ascending: false }));
+    } else if (!error) applyPending = false;
     if (error) { if (missing(error)) { migrationPending = true; return []; } throw error; }
     migrationPending = false;
     const { data: counts } = await sb.from(M).select('dummy_id');
@@ -77,4 +85,27 @@ export async function deleteDummy(id) {
     if (!sb) throw new Error('No database connection');
     const { error } = await sb.from(T).delete().eq('id', id);
     if (error) throw error;
+}
+
+/** Record (info = { applied_at, applied_by, applied_moves }) or clear (null) the apply of a dummy. */
+export async function markApplied(id, info) {
+    const sb = await client();
+    if (!sb) throw new Error('No database connection');
+    const row = info ? { applied_at: info.applied_at, applied_by: info.applied_by || null, applied_moves: info.applied_moves || [] } : { applied_at: null, applied_by: null, applied_moves: null };
+    const { error } = await sb.from(T).update(row).eq('id', id);
+    if (error) throw error;
+}
+
+/** Live Plant Scheduler rows by id (the pre-flight re-reads them so a stale dummy never writes). */
+export async function loadScheduleRowsByIds(ids) {
+    const sb = await client();
+    const out = [];
+    if (!sb || !ids || !ids.length) return out;
+    const list = [...new Set(ids.filter(Boolean))];
+    for (let i = 0; i < list.length; i += 80) {
+        const { data, error } = await sb.from('plant_schedule').select('id, casting_id, project_number, date, department, task, hours, note, weekend_ok').in('id', list.slice(i, i + 80));
+        if (error) throw error;
+        out.push(...(data || []));
+    }
+    return out;
 }

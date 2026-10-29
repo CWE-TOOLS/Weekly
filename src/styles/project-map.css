@@ -271,3 +271,30 @@ body.pm-dummy .pm-cell.pm-holiday { background: #fee2e2; }
 body.pm-dummy .pm-cell.pm-holiday .pm-section-head::after, body.pm-dummy .pm-cell.pm-holiday .pm-cal-date::after { content: 'HOLIDAY'; margin-left: 0.4rem; background: #b91c1c; color: #fff; font-size: 9.5px; font-weight: 800; letter-spacing: 0.05em; padding: 0 0.4rem; border-radius: 999px; }
 body.pm-dummy .pm-cell.pm-holiday.pm-past .pm-section-head::after, body.pm-dummy .pm-cell.pm-holiday.pm-past .pm-cal-date::after { content: 'HOLIDAY'; }
 .pm-movebox-past { color: #64748b; font-weight: 600; }
+
+/* ---------- APPLY a dummy to the live Plant Scheduler (2026-10-29): two warning stages ---------- */
+.pm-dummy-apply.pm-apply-ready { background: #166534; color: #fff; border-color: #166534; font-weight: 800; }
+.pm-dummy-revert { border-color: #b45309; color: #b45309; }
+.pm-applied-tag { background: #166534; color: #fff; font-size: 10px; font-weight: 800; padding: 0.05rem 0.4rem; border-radius: 3px; margin-left: 0.3rem; }
+.pm-apply .fm-modal-box { width: min(960px, 94vw); max-height: 88vh; display: flex; flex-direction: column; }
+.pm-apply .fm-modal-head { align-items: center; }
+.pm-apply-stage { margin-left: 0.6rem; font-size: 11px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: #a21caf; background: #fdf4ff; border: 1px solid #e9d5ff; border-radius: 999px; padding: 0.05rem 0.6rem; }
+.pm-apply-body { flex: 1 1 auto; min-height: 0; overflow: auto; }
+.pm-apply-sum { font-size: 13px; margin: 0.4rem 0 0.6rem; }
+.pm-apply-warn { background: #fef2f2; border: 2px solid #dc2626; color: #7f1d1d; border-radius: 8px; padding: 0.5rem 0.8rem; margin: 0.4rem 0 0.6rem; font-size: 12.5px; }
+.pm-apply-warn ul { margin: 0.3rem 0 0.3rem 1.1rem; padding: 0; }
+.pm-apply-warn li { margin-bottom: 0.15rem; }
+.pm-apply-final { background: #fff7ed; border-color: #ea580c; color: #431407; font-size: 13px; }
+.pm-apply-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.pm-apply-table th, .pm-apply-table td { border-bottom: 1px solid #e2e8f0; padding: 0.2rem 0.45rem; text-align: left; vertical-align: top; }
+.pm-apply-table th { background: #f1f5f9; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: #475569; }
+.pm-apply-table tr.pm-apply-bad td { background: #fee2e2; }
+.pm-apply-dates { white-space: nowrap; }
+.pm-apply-note { color: #475569; }
+.pm-apply-form { display: flex; flex-wrap: wrap; gap: 0.6rem 1.4rem; align-items: center; padding: 0.4rem 0 0.2rem; font-size: 13px; }
+.pm-apply-form label { display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 600; }
+.pm-apply-form input { font: inherit; font-size: 13px; padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 6px; width: 16rem; }
+.pm-apply-form #pm-apply-by { width: 6rem; }
+.pm-apply-foot { flex: 0 0 auto; display: flex; justify-content: flex-end; gap: 0.5rem; padding: 0.6rem 0.9rem; border-top: 1px solid #e2e8f0; }
+.pm-apply-go { background: #dc2626; color: #fff; border-color: #dc2626; font-weight: 800; padding: 0.3rem 1rem; }
+.pm-apply-go:disabled { opacity: 0.45; cursor: not-allowed; }

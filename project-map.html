@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="src/styles/base.css">
     <link rel="stylesheet" href="src/styles/buttons.css">
     <link rel="stylesheet" href="src/styles/finishing-map.css?v=20261026-4">
-    <link rel="stylesheet" href="src/styles/project-map.css?v=20261029-9">
+    <link rel="stylesheet" href="src/styles/project-map.css?v=20261029-11">
 </head>
 <body class="pm-body">
     <div id="fm-app" class="fm-app pm-app">
@@ -94,6 +94,8 @@
                 <button type="button" class="fm-mini-btn" id="pm-dummy-open">Open&hellip;</button>
                 <button type="button" class="fm-mini-btn" id="pm-dummy-rename">Rename</button>
                 <button type="button" class="fm-mini-btn" id="pm-dummy-final">Mark final</button>
+                <button type="button" class="fm-mini-btn pm-dummy-apply" id="pm-dummy-apply" title="Write this dummy's moves into the live Plant Scheduler">Apply&hellip;</button>
+                <button type="button" class="fm-mini-btn pm-dummy-revert" id="pm-dummy-revert" title="Take the applied moves back off the live Plant Scheduler" hidden>Revert apply&hellip;</button>
                 <button type="button" class="fm-mini-btn pm-dummy-exit" id="pm-dummy-exit">Exit dummy mode</button>
             </span>
             <div class="pm-dummy-rev" id="pm-dummy-rev"></div>
@@ -115,7 +117,19 @@
         </div>
     </div>
 
-    <script type="module" src="src/pages/project-map/project-map-page.js?v=20261029-10"></script>
+    <div class="fm-modal pm-apply" id="pm-apply" hidden>
+        <div class="fm-modal-box pm-apply-box" role="dialog" aria-modal="true" aria-labelledby="pm-apply-title">
+            <div class="fm-modal-head">
+                <span class="fm-modal-title" id="pm-apply-title"></span>
+                <span class="pm-apply-stage" id="pm-apply-stage"></span>
+                <button type="button" class="fm-mini-btn fm-modal-close" id="pm-apply-x">Close</button>
+            </div>
+            <div class="fm-modal-body pm-apply-body" id="pm-apply-body"></div>
+            <div class="pm-apply-foot" id="pm-apply-foot"></div>
+        </div>
+    </div>
+
+    <script type="module" src="src/pages/project-map/project-map-page.js?v=20261029-11"></script>
     <script type="module" src="src/utils/auto-update.js?v=20261023-1"></script>
 </body>
 </html>
