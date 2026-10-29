@@ -466,7 +466,7 @@ export async function saveToStaging(projectName, changedTasks) {
                 record = {
                     project_number: projectNumber,
                     casting_number: castingNumber,
-                    department: task.department,
+                    department: task.stagingDepartment || task.department,   // the row the note lives under (a task moved to another team's column keeps it)
                     day_number: castingDay,
                     description: (newText != null ? newText : '')
                 };

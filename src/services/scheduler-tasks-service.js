@@ -29,7 +29,7 @@
  */
 
 import { initializeSupabase, getSupabaseClient } from './supabase-service.js';
-import { DEPARTMENTS } from '../config/scheduler-config.js';
+import { DEPARTMENTS, teamOfDepartment } from '../config/scheduler-config.js';
 import { DEPARTMENT_ORDER } from '../config/department-config.js';
 import { normalizeDepartment, normalizeProjectName } from '../utils/ui-utils.js';
 import { logger } from '../utils/logger.js';
@@ -142,7 +142,13 @@ export async function fetchTasksFromScheduler() {
         const unit = unitOf(r.note);
         const team = String(r.department || '').trim();
         const code = String(r.task || '').trim().toUpperCase();
-        let department = unit ? unit.dept : (code === 'LOAD' ? 'Load' : (WEEKLY_OF_TEAM[team] || team));
+        // The weekly row is the scheduler column the task sits in. The unit note names the Staging-tab department the
+        // task was imported under (Mill / Load / Special …): it is kept as the weekly row only while it still belongs
+        // to that same team, so a task moved to another team's column (user 2026-10-29: pan rows put under Crate)
+        // shows under that team on the weekly — and its staging note is still looked up under the original department.
+        const stagingDepartment = unit ? unit.dept : '';
+        const columnDept = (code === 'LOAD' && team === 'Crate') ? 'Load' : (WEEKLY_OF_TEAM[team] || team);
+        let department = (unit && teamOfDepartment(unit.dept) === team) ? unit.dept : columnDept;
         department = normalizeDepartment(department) || team;
         const projectName = nameByNumber.get(projectNumber) || projectNumber;
         const word = SHEET_WORD[code] || code.toLowerCase();
@@ -168,6 +174,7 @@ export async function fetchTasksFromScheduler() {
             taskCode: code,
             crew: Array.isArray(r.crew) ? r.crew : null,
             stagingDayNumber: unit && unit.day ? String(unit.day) : '',
+            stagingDepartment,                                // the Staging-tab department the note lives under ('' = same as department)
             _iso: r.date,
             _sortKey: ''
         });

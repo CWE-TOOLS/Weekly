@@ -241,7 +241,7 @@ function computeCastingDayMap(tasks) {
         const proj = (t.projectNumber || '').toString().trim();
         const cast = (t.castingNumber || '').toString().trim();
         if (!proj || !cast || !t.department) continue;
-        const key = `${proj}|${cast}|${t.department}`;
+        const key = `${proj}|${cast}|${t.stagingDepartment || t.department}`;   // a task moved to another team's column keeps its staging day
         if (!groups.has(key)) groups.set(key, []);
         groups.get(key).push(t);
     }
@@ -290,7 +290,7 @@ export function mergeTaskDescriptions(tasks, descriptionsMap) {
 
         let entry = null;
         if (pnum && cnum && cday) {
-            entry = descriptionsMap.get(taskDescCastingKey(pnum, cnum, task.department, cday));
+            entry = descriptionsMap.get(taskDescCastingKey(pnum, cnum, task.stagingDepartment || task.department, cday));
         }
         if (!entry) {
             entry = descriptionsMap.get(taskDescNameKey(task.project, task.department, task.dayNumber));
