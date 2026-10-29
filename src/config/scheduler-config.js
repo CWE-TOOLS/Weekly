@@ -45,6 +45,7 @@ export const TASKS = {
     PARTS:      ['Parts'],
     'PARTS/FO': ['Parts'],
     FO:         ['FO'],
+    RB:         ['FO'],            // rubber (user 2026-10-29); shared with Parts through SHARED_TEAMS
     CAST:       ['Cast'],
     DM:         ['DM'],
     'G/F':      ['F'],
