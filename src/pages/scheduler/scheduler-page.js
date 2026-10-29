@@ -237,26 +237,25 @@ function lockOk(report) { return report.every(r => Math.abs(r.scheduled - r.opti
  *  were not handed to another day shows up under "not scheduled". Not-scheduled is counted per phase, so over-booking one
  *  phase never hides a gap on another. */
 function hoursSummaryHtml(castingId, report) {
-    // user 2026-10-29: totals for the casting as a whole, whatever month its days fall in —
-    //   scheduled      = every hour on this casting's schedule (the whole timeline)
-    //   not scheduled  = what the Optimizer Hours tab still expects, counted per phase (a deleted task whose hours were
-    //                    not handed to another day shows up here)
-    //   total          = scheduled + not scheduled
+    // user 2026-10-29 (final wording):
+    //   scheduled      = the casting's scheduled hours, whatever month its days fall in
+    //   not scheduled  = hours that went missing by deleting tasks or changing their hours = total − scheduled
+    //   total          = the casting's hours on the portal's Optimizer Hours tab
     const rows = rowsOfCasting(castingId);
     const sched = Math.round(rows.reduce((n, r) => n + (Number(r.hours) || 0), 0) * 100) / 100;
     const dates = rows.map(r => r.date).sort();
     const span = dates.length ? (dates[0] === dates[dates.length - 1] ? shortDay(dates[0]) : `${shortDay(dates[0])} – ${shortDay(dates[dates.length - 1])}`) : 'nothing scheduled';
     if (!report.length) {
-        return `<span class="sc-casthrs" title="${esc(`Hours scheduled (whole timeline, ${span}): ${fmtH(sched)}\nNo Optimizer Hours to compare against yet.`)}"><b>${fmtH(sched)}</b> h scheduled · no Optimizer Hours</span>`;
+        return `<span class="sc-casthrs" title="${esc(`Scheduled hours (${span}): ${fmtH(sched)}\nNo hours on the Optimizer Hours tab yet, so nothing to compare against.`)}"><b>${fmtH(sched)}</b> h scheduled · no Optimizer Hours</span>`;
     }
-    const optimizer = Math.round(report.reduce((n, r) => n + r.optimizer, 0) * 100) / 100;
-    const open = Math.round(report.reduce((n, r) => n + Math.max(0, r.optimizer - r.scheduled), 0) * 100) / 100;
-    const over = Math.round(report.reduce((n, r) => n + Math.max(0, r.scheduled - r.optimizer), 0) * 100) / 100;
-    const total = Math.round((sched + open) * 100) / 100;
-    const gaps = report.filter(r => r.optimizer - r.scheduled > 0.01).map(r => `${r.phase.phase_name}: ${fmtH(r.optimizer - r.scheduled)} h not scheduled`);
-    const tip = `Hours scheduled (whole timeline, ${span}): ${fmtH(sched)}\nHours not scheduled: ${fmtH(open)}${over ? ` (and ${fmtH(over)} h over the Optimizer on some phase)` : ''}\nTotal hours: ${fmtH(total)}\nOptimizer Hours tab: ${fmtH(optimizer)}${gaps.length ? '\n\n' + gaps.join('\n') : ''}`;
+    const total = Math.round(report.reduce((n, r) => n + r.optimizer, 0) * 100) / 100;
+    const open = Math.max(0, Math.round((total - sched) * 100) / 100);
+    const over = Math.max(0, Math.round((sched - total) * 100) / 100);
+    const gaps = report.filter(r => r.optimizer - r.scheduled > 0.01).map(r => `${r.phase.phase_name}: ${fmtH(r.optimizer - r.scheduled)} h short`);
+    const tip = `Scheduled hours (${span}): ${fmtH(sched)}\nHours not scheduled: ${fmtH(open)}${over ? `\nOver the Optimizer by: ${fmtH(over)} h` : ''}\nTotal hours (Optimizer Hours tab): ${fmtH(total)}${gaps.length ? '\n\nPhases short of their Optimizer hours:\n' + gaps.join('\n') : ''}`;
     return `<span class="sc-casthrs" title="${esc(tip)}"><b>${fmtH(sched)}</b> h scheduled · <b class="${open > 0 ? 'sc-open' : 'sc-ok'}">${fmtH(open)}</b> h not scheduled · <b>${fmtH(total)}</b> h total</span>`;
 }
+
 
 
 
