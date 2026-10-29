@@ -89,7 +89,13 @@ function monthLabel(s) { return fromIso(s).toLocaleDateString('en-US', { month: 
 // A month is every week whose WEDNESDAY falls in it (user rule 2026-10-27, like the Optimizer sheet: November 2026 =
 // 4 weeks, Nov 2–28; the week of Mon Nov 30 belongs to December). Before: every week whose Monday fell in the month.
 function windowStart() { let w = S.from; while (dow(w) !== 3) w = addDays(w, 1); return addDays(w, -2); }
-function windowEnd() { let w = lastOfMonth(S.from); while (dow(w) !== 3) w = addDays(w, -1); return addDays(w, 4); }
+function monthWindowEnd(from) { let w = lastOfMonth(from); while (dow(w) !== 3) w = addDays(w, -1); return addDays(w, 4); }
+/** The grid shows GRID_MONTHS months in one strip (user 2026-10-29: scroll between months with the bar / Shift+wheel);
+ *  the Revenue view keeps its one month. */
+const GRID_MONTHS = 2;
+function gridMonths() { return Array.from({ length: GRID_MONTHS }, (_, i) => String(addMonths(S.from, i)).slice(0, 7)); }
+function gridEnd() { return monthWindowEnd(addMonths(S.from, GRID_MONTHS - 1)); }
+function windowEnd() { return S.view === 'revenue' ? monthWindowEnd(S.from) : gridEnd(); }
 /** The days on screen: Monday to Saturday of every week (Saturday shaded grey as the week break); Sundays when switched on. */
 function windowDays() {
     const out = [];
@@ -155,12 +161,12 @@ async function loadBase() {
 }
 
 async function loadRows() {
-    const inWindow = await loadScheduleRange(windowStart(), windowEnd());
+    const inWindow = await loadScheduleRange(windowStart(), gridEnd());   // both months of the strip, whatever view is up
     const seen = new Set(inWindow.map(r => r.id));
     // every casting on screen is loaded whole (its other months too): the lock check, cascades and undo see the full casting
     // castings the month's sheet order lists are on screen even with nothing in this month (their days may all sit in
     // another month): load them whole too, or the hours summary and the lock dot would count them as unscheduled (2026-10-29)
-    const onSheet = new Set(S.sheetOrder[String(S.from).slice(0, 7)] || []);
+    const onSheet = new Set(gridMonths().flatMap(m => S.sheetOrder[m] || []));
     const sheetIds = (S.castings || []).filter(c => onSheet.has(`${c.project_number}|${c.casting_number}`)).map(c => c.id);
     const extraIds = [...new Set([...S.pinned, ...inWindow.map(r => r.casting_id), ...sheetIds])];
     const extra = extraIds.length ? await loadScheduleForCastings(extraIds) : [];
@@ -425,7 +431,7 @@ function sheetOrderFrom(saved) {
 /** The rows in the same order as the month's Optimizer sheet (user 2026-10-27: "exact same position so I can visually verify");
  *  castings the sheet does not list follow in the scheduler's own order. */
 function inSheetOrder(list) {
-    const order = S.sheetOrder[String(S.from).slice(0, 7)];
+    const order = gridMonths().flatMap(m => S.sheetOrder[m] || []);
     if (!order || !order.length) return list;
     const pos = new Map(); order.forEach((k, i) => { if (!pos.has(k)) pos.set(k, i); });   // a casting listed twice on the sheet sits where it first appears
     return list.map((c, i) => ({ c, i, p: pos.has(`${c.project_number}|${c.casting_number}`) ? pos.get(`${c.project_number}|${c.casting_number}`) : order.length + i }))
@@ -437,7 +443,7 @@ function visibleCastings() {
     // only castings with days scheduled in this month (user 2026-10-22); what is waiting lives in "Not yet scheduled"
     const withRows = new Set(S.rows.filter(r => days.has(r.date)).map(r => r.casting_id));
     // castings the month's Optimizer sheet lists are shown even with nothing on their days (remakes carry no hours — user 2026-10-27)
-    const onSheet = new Set(S.sheetOrder[String(S.from).slice(0, 7)] || []);
+    const onSheet = new Set(gridMonths().flatMap(m => S.sheetOrder[m] || []));
     return inSheetOrder(S.castings.filter(c => {
         if (!withRows.has(c.id) && !onSheet.has(`${c.project_number}|${c.casting_number}`)) return false;
         if (!q) return true;
@@ -447,7 +453,7 @@ function visibleCastings() {
 }
 
 function render() {
-    const ml = $('sc-month-label'); if (ml) ml.textContent = monthLabel(S.from);
+    const ml = $('sc-month-label'); if (ml) ml.textContent = S.view === 'revenue' ? monthLabel(S.from) : gridMonths().map((m, i) => i === GRID_MONTHS - 1 ? monthLabel(addMonths(S.from, i)) : fromIso(addMonths(S.from, i)).toLocaleDateString('en-US', { month: 'long' })).join(' – ');
     const vt = $('sc-view-toggle'); if (vt) vt.textContent = S.view === 'revenue' ? 'Schedule' : 'Revenue';
     if (S.view === 'revenue') renderRevenue(); else renderGrid();
     renderUnscheduled();
@@ -640,12 +646,16 @@ function renderGrid() {
     for (const d of days) { const wk = mondayOf(d); if (!weeks.length || weeks[weeks.length - 1].wk !== wk) weeks.push({ wk, days: [] }); weeks[weeks.length - 1].days.push(d); }
     // "Week 1", "Week 2" … centred over the Wednesday (revenue lives in the Revenue view only)
     const nD = DEPT_KEYS.length;
+    const perMonth = {};
     weeks.forEach((w, wi) => {
         let mid = w.days.findIndex(d => dow(d) === 3);
         if (mid < 0) mid = Math.floor((w.days.length - 1) / 2);
         const before = mid, after = w.days.length - mid - 1;
+        const mk = String(w.days[mid]).slice(0, 7);                       // a week belongs to the month its Wednesday is in
+        perMonth[mk] = (perMonth[mk] || 0) + 1;
+        const monName = fromIso(w.days[mid]).toLocaleDateString('en-US', { month: 'short' });
         if (before) h += `<th class="sc-week sc-week-start" colspan="${before * nD}"></th>`;
-        h += `<th class="sc-week sc-week-mid${before ? '' : ' sc-week-start'}" colspan="${nD}" title="Week of ${esc(shortDay(w.wk))}">Week ${wi + 1}</th>`;
+        h += `<th class="sc-week sc-week-mid${before ? '' : ' sc-week-start'}${perMonth[mk] === 1 ? ' sc-month-first' : ''}" colspan="${nD}" title="Week of ${esc(shortDay(w.wk))}">${esc(monName)} · Week ${perMonth[mk]}</th>`;
         if (after) h += `<th class="sc-week sc-week-end" colspan="${after * nD}"></th>`;
     });
     h += '</tr><tr class="sc-alert-row">';
@@ -660,7 +670,7 @@ function renderGrid() {
         const ov = overByDay.get(d) || [];
         const cls = ['sc-day', isWeekend(d) ? 'sc-weekend' : '', isHoliday(d) ? 'sc-holiday' : '', d === today ? 'sc-today' : '', ov.length ? 'sc-day-over' : ''].join(' ');
         const tip = isHoliday(d) ? 'Holiday — never scheduled' : isWeekend(d) ? 'Weekend — needs an allow' : '';
-        h += `<th class="${cls}" colspan="${DEPT_KEYS.length}" title="${esc(tip)}">${esc(shortDay(d))}</th>`;
+        h += `<th class="${cls}" colspan="${DEPT_KEYS.length}" data-date="${d}" title="${esc(tip)}">${esc(shortDay(d))}</th>`;
     }
     h += '</tr><tr class="sc-count-row">';
     // count row: how many castings each team has that day, in bold black, between the date and the team names
@@ -745,6 +755,59 @@ function fitLabelColumn(wrap) {
     for (const td of m.querySelectorAll('td.sc-label')) max = Math.max(max, td.getBoundingClientRect().width);
     m.remove();
     wrap.style.setProperty('--sc-label-w', `${Math.max(333, Math.min(700, Math.ceil(max) + 6))}px`);
+}
+
+// ---- months slide in at the edges (user 2026-10-29): the strip holds two months; reaching its right end with the bar
+// or Shift+wheel brings the next month in, its left end the previous one — the day at the left edge stays put.
+function labelColumnWidth(wrap) { return parseFloat(getComputedStyle(wrap).getPropertyValue('--sc-label-w')) || 333; }
+function dateAtLeftEdge(wrap) {
+    const x = wrap.scrollLeft + labelColumnWidth(wrap) + 1;
+    const wl = wrap.getBoundingClientRect().left;
+    for (const th of wrap.querySelectorAll('th.sc-day')) {
+        const r = th.getBoundingClientRect();
+        if (r.right - wl + wrap.scrollLeft > x) return th.dataset.date;
+    }
+    return null;
+}
+/** Scroll the strip so that day sits at the left edge of the day area. */
+function scrollToDate(date, smooth = true) {
+    const wrap = $('sc-grid-wrap');
+    const th = wrap && wrap.querySelector(`th.sc-day[data-date="${date}"]`);
+    if (!th) return false;
+    const left = th.getBoundingClientRect().left - wrap.getBoundingClientRect().left + wrap.scrollLeft - labelColumnWidth(wrap);
+    wrap.scrollTo({ left: Math.max(0, left), behavior: smooth ? 'smooth' : 'auto' });
+    return true;
+}
+let edgeShifting = false, edgeShiftAt = 0, edgeLastLeft = 0;
+async function shiftMonths(dir) {
+    const wrap = $('sc-grid-wrap');
+    if (edgeShifting || S.busy || S.view === 'revenue' || Date.now() - edgeShiftAt < 800) return;
+    edgeShifting = true; edgeShiftAt = Date.now();
+    const keep = dateAtLeftEdge(wrap);
+    S.from = addMonths(S.from, dir);
+    try {
+        await reloadRows();
+        if (!(keep && scrollToDate(keep, false))) wrap.scrollLeft = dir > 0 ? 0 : wrap.scrollWidth;
+    } finally { edgeLastLeft = wrap.scrollLeft; edgeShifting = false; }
+}
+function wireEdgeScroll(wrap) {
+    wrap.addEventListener('scroll', () => {
+        if (edgeShifting || S.view === 'revenue') return;
+        const left = wrap.scrollLeft, max = wrap.scrollWidth - wrap.clientWidth;
+        if (max > 0) {
+            if (left >= max - 2 && edgeLastLeft < left) shiftMonths(1);
+            else if (left <= 0 && edgeLastLeft > 0) shiftMonths(-1);
+        }
+        edgeLastLeft = left;
+    }, { passive: true });
+    wrap.addEventListener('wheel', (e) => {
+        if (edgeShifting || S.view === 'revenue') return;
+        const dx = e.shiftKey ? e.deltaY : e.deltaX;
+        if (!dx) return;
+        const left = wrap.scrollLeft, max = wrap.scrollWidth - wrap.clientWidth;
+        if (dx < 0 && left <= 0) shiftMonths(-1);
+        else if (dx > 0 && left >= max - 2) shiftMonths(1);
+    }, { passive: true });
 }
 
 // ---- jump box (user 2026-10-29): scroll the grid to the job being typed; Enter steps through the matches
@@ -1804,7 +1867,8 @@ function setBusy(b) { S.busy = b; document.body.style.cursor = b ? 'progress' : 
 function wire() {
     $('sc-prev').addEventListener('click', () => { S.from = addMonths(S.from, -1); reloadRows(); });
     $('sc-next').addEventListener('click', () => { S.from = addMonths(S.from, 1); reloadRows(); });
-    $('sc-today').addEventListener('click', () => { S.from = firstOfMonth(todayIso()); reloadRows(); });
+    $('sc-today').addEventListener('click', async () => { S.from = firstOfMonth(todayIso()); await reloadRows(); scrollToDate(todayIso(), false) || scrollToDate(nextWorking(todayIso(), 1), false); });
+    wireEdgeScroll($('sc-grid-wrap'));
     $('sc-grid-wrap').addEventListener('change', (e) => {
         const inp = e.target.closest('input[data-cost]'); if (inp) { saveCostInput(inp); return; }
         const tg = e.target.closest('input[data-target]'); if (tg) saveTargetInput(tg);

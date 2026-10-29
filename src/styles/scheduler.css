@@ -50,6 +50,7 @@ table.sc-grid { border-collapse: separate; border-spacing: 0; table-layout: fixe
 .sc-grid thead th.sc-count { font-size: 14px; font-weight: 800; color: #000; background: #fff; line-height: 1; }
 .sc-grid th.sc-week { border-right: none; }
 .sc-grid th.sc-week-start { border-left: 3px solid #1f2937; }
+.sc-grid th.sc-week-mid.sc-month-first { background: #e0e7ff; }   /* the first week of each month in the two-month strip (2026-10-29) */
 .sc-grid th.sc-week-mid { text-align: center; font-size: 17px; font-weight: 800; color: #1e1b4b; letter-spacing: .5px; overflow: visible; }
 .sc-grid th.sc-week-end { text-align: right; padding-right: 8px; border-right: 1px solid #9ca3af; }
 .sc-grid th.sc-week .sc-rev { color: #065f46; font-weight: 700; font-size: 12px; }
