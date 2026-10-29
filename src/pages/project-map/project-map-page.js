@@ -579,6 +579,16 @@ function cardBodyHtml(c, e) {
         ${moveBox}`;
 }
 
+/** Dummy mode: "452 sq ft · 38 cu ft" on the collapsed card, so a move can be judged without opening it (2026-10-29). */
+function chipInvLine(c) {
+    if (!S.dummy || !c.inv) return '';
+    const n = (v) => (v == null || isNaN(v)) ? null : Math.round(Number(v)).toLocaleString('en-US');
+    const parts = [n(c.inv.ff) != null ? `${n(c.inv.ff)} sq ft${c.inv.ffComplete === false ? '*' : ''}` : null,
+                   n(c.inv.cuFt) != null ? `${n(c.inv.cuFt)} cu ft${c.inv.cuFtComplete === false ? '*' : ''}` : null].filter(Boolean);
+    if (!parts.length) return '';
+    const partial = c.inv.ffComplete === false || c.inv.cuFtComplete === false;
+    return `<span class="pm-chip-inv" title="Finished-face sq ft · cu ft from the Casting Inventory${partial ? ' (* = some types have no figure yet)' : ''}">${escapeHtml(parts.join(' · '))}</span>`;
+}
 function chipHtml(e, col, sec) {
     const c = e.c;
     const pcs = c.inv && c.inv.pcs != null ? `${c.inv.pcs} pcs` : '';
@@ -588,6 +598,7 @@ function chipHtml(e, col, sec) {
         <span class="fm-chip-job">${escapeHtml(jobName(c))}</span>
         <span class="fm-chip-line"><b>${escapeHtml(castLabel(c))}</b><span>${escapeHtml(c.projectNumber)}</span><span>${escapeHtml(pcs)}</span></span>
         ${missingHtml(c)}
+        ${chipInvLine(c)}
         <span class="pm-chip-day">${escapeHtml(entryLine(e))}${S.dummy && e.hours ? ` · ${fmtH(e.hours)} h` : ''}</span>
     </div>`;
 }

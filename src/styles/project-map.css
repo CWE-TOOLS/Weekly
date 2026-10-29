@@ -259,3 +259,6 @@ body.pm-fs .pm-dummy-rev { gap: 0.2rem 0.35rem; }
 .pm-warn-hint { flex-basis: 100%; font-size: 11px; color: #64748b; }
 .pm-warn-actions { display: flex; flex-wrap: wrap; gap: 0.3rem; padding-top: 0.4rem; }
 .pm-warn-btn-on { border-color: #b91c1c; }
+
+/* dummy mode (2026-10-29): sq ft · cu ft on the collapsed card */
+.pm-chip-inv { font-size: 10.5px; color: #0f766e; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
