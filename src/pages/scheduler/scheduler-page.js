@@ -721,8 +721,30 @@ function renderGrid() {
     });
     h += '</tr></tfoot></table>';
     wrap.innerHTML = h;
+    fitLabelColumn(wrap);
     if (jumpFocus) { const j = $('sc-jump'); if (j) { j.focus(); try { j.setSelectionRange(jumpCaret, jumpCaret); } catch (_) { /* ignore */ } } }
     markJumpMatches();
+}
+
+/** The Job · Casting column is as wide as its longest line (user 2026-10-29): every label cell is cloned into a hidden
+ *  shrink-to-fit table with the same styles, the widest one sets --sc-label-w (never under 333 px, capped at 700). */
+function fitLabelColumn(wrap) {
+    const cells = wrap.querySelectorAll('tbody td.sc-label');
+    if (!cells.length) return;
+    const m = document.createElement('table');
+    m.className = 'sc-grid sc-measure';
+    m.setAttribute('aria-hidden', 'true');
+    let html = '<tbody>';
+    for (const td of cells) {
+        const st = td.getAttribute('style');
+        html += `<tr class="${td.parentElement.className}"><td class="sc-label"${st ? ` style="${st}"` : ''}>${td.innerHTML}</td></tr>`;
+    }
+    m.innerHTML = html + '</tbody>';
+    wrap.appendChild(m);
+    let max = 0;
+    for (const td of m.querySelectorAll('td.sc-label')) max = Math.max(max, td.getBoundingClientRect().width);
+    m.remove();
+    wrap.style.setProperty('--sc-label-w', `${Math.max(333, Math.min(700, Math.ceil(max) + 6))}px`);
 }
 
 // ---- jump box (user 2026-10-29): scroll the grid to the job being typed; Enter steps through the matches

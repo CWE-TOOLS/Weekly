@@ -308,12 +308,18 @@ body.sc-selecting .sc-grid td.sc-cell.sc-has { cursor: cell; }
 }
 
 /* 2026-10-27 (user): the Job · Casting column enlarged and every row 1.75× taller (190→333 px; cast rows 20→35 px, project rows 24→42 px) */
-.sc-grid th.sc-label, .sc-grid td.sc-label { width: 333px; min-width: 333px; max-width: 333px; font-size: 14px; padding: 0 10px; }
+.sc-grid th.sc-label, .sc-grid td.sc-label { width: var(--sc-label-w, 333px); min-width: var(--sc-label-w, 333px); max-width: var(--sc-label-w, 333px); font-size: 14px; padding: 0 10px; }
 .sc-grid td.sc-cell { height: 35px; }
 .sc-grid tr.sc-project td { height: 46px; font-size: 19px; }   /* user 2026-10-29: project names larger than the casts below */
+/* 2026-10-29 (user): every line in a casting's cell at the cast number's size */
 .sc-castnum { font-size: 15px; }
-.sc-castdate { font-size: 12px; }
-.sc-castinv { font-size: 12px; }
+.sc-castdate { font-size: 15px; }
+.sc-castinv { font-size: 15px; }
+.sc-casthrs { font-size: 15px; letter-spacing: 0; }
+/* 2026-10-29: the column is sized to its longest line — fitLabelColumn() measures the label cells in this hidden clone */
+.sc-grid.sc-measure { position: absolute; left: -20000px; top: 0; visibility: hidden; table-layout: auto; width: auto; pointer-events: none; }
+.sc-grid.sc-measure td.sc-label { position: static; width: auto; min-width: 0; max-width: none; overflow: visible; white-space: nowrap; }
+.sc-grid.sc-measure td.sc-label > * { overflow: visible; }
 /* 2026-10-29: hours scheduled / not scheduled / total under each casting */
 .sc-casthrs { display: block; font-size: 10.5px; font-weight: 500; color: #374151; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -.1px; }
 .sc-casthrs b { font-weight: 800; color: #111827; }
