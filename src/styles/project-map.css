@@ -254,7 +254,7 @@ body.pm-fs .pm-dummy-rev { gap: 0.2rem 0.35rem; }
 .pm-warn-what { flex-basis: 100%; font-weight: 700; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: #475569; }
 .pm-warn-row label { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; }
 .pm-warn-row label span { white-space: nowrap; }
-.pm-warn-row label span { font-weight: 800; }
+.pm-warn-row label .pm-sq-warn, .pm-warn-row label .pm-sq-over { font-weight: 800; }
 .pm-warn-row input { width: 4.2rem; font: inherit; padding: 2px 4px; border: 1px solid #cbd5e1; border-radius: 4px; }
 .pm-warn-hint { flex-basis: 100%; font-size: 11px; color: #64748b; }
 .pm-warn-actions { display: flex; flex-wrap: wrap; gap: 0.3rem; padding-top: 0.4rem; }
