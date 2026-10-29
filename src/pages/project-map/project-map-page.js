@@ -424,8 +424,9 @@ async function enterDummy() {
     if (S.view === 'day') S.view = 'calendar';
     S.expandedKey = null;
     renderMap();
-    try { await listDummies(); } catch { /* the notice below covers a missing table */ }
-    if (isDummyMigrationPending()) notice('The dummy tables are not in the database yet — run migration/project-map-dummies.sql. You can move cards, but Save will not work until then.', 'warn');
+    try { await listDummies(); } catch { /* the note in the bar covers a missing table */ }
+    const noSave = $('pm-dummy-nosave');
+    if (noSave) noSave.hidden = !isDummyMigrationPending();   // a short note in the bar, not a band of its own (2026-10-29)
 }
 
 function exitDummy() {
