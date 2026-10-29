@@ -1051,6 +1051,7 @@ function addFormHtml(cid, dept, date) {
     };
     return `<div class="sc-ed-add-wrap"><div class="sc-ed-add-title">Add a day for</div>
         <div class="sc-ed-add"><select id="sc-ed-add-phase">${list.map(opt).join('')}</select><input type="number" id="sc-ed-add-hours" step="0.5" min="0" placeholder="h"><button type="button" class="btn-secondary" id="sc-ed-add">Add</button></div>
+        <label class="sc-ed-add-from" id="sc-ed-add-from-wrap" hidden>Take the hours from <select id="sc-ed-add-from"></select></label>
         <div id="sc-ed-add-note" class="sc-ed-phase"></div></div>`;
 }
 /** Fill the hours box with an even share and explain where the hours come from. */
@@ -1061,13 +1062,27 @@ function refreshAddForm() {
     if (!m) return;
     const total = Number(m.phase.hours) || 0;
     const days = S.rows.filter(r => unitOf(r) === m.unit);
+    const fromWrap = $('sc-ed-add-from-wrap'), fromSel = $('sc-ed-add-from');
     if (!days.length) {
         hin.value = fmtH(total); hin.readOnly = true;
+        if (fromWrap) fromWrap.hidden = true;
         note.textContent = `Not scheduled yet: this day gets all ${fmtH(total)} h from the Optimizer Hours tab.`;
     } else {
         hin.readOnly = false;
         if (!hin.dataset.touched) hin.value = fmtH(Math.max(0.5, Math.round(total / (days.length + 1) * 2) / 2));
-        note.textContent = `Already on ${days.map(r => shortDay(r.date)).join(', ')}. The hours for this day are taken from those days (in proportion) so the total stays ${fmtH(total)} h.`;
+        // which day gives up the hours: all future days in proportion (default) or one chosen day of this task (user 2026-10-29)
+        const future = days.filter(r => !isPast(r.date)).sort((a, b) => a.date.localeCompare(b.date));
+        if (fromSel && fromWrap) {
+            const keep = fromSel.value;
+            fromSel.innerHTML = `<option value="">all its other days, in proportion</option>` + future.map(r => `<option value="${r.id}">${esc(shortDay(r.date))} · ${fmtH(r.hours)} h</option>`).join('');
+            if ([...fromSel.options].some(o => o.value === keep)) fromSel.value = keep;
+            fromWrap.hidden = !future.length;
+        }
+        const hours = Math.round((Number(hin.value) || 0) * 100) / 100;
+        const src = fromSel && fromSel.value ? future.find(r => r.id === fromSel.value) : null;
+        if (hours === 0) note.textContent = `0 h: a placeholder day. Nothing is taken from the other days (${days.map(r => shortDay(r.date)).join(', ')}); the total stays ${fmtH(total)} h.`;
+        else if (src) note.textContent = `${fmtH(hours)} h come off ${shortDay(src.date)} (${fmtH(src.hours)} h → ${fmtH(Math.max(0, src.hours - hours))} h); the total stays ${fmtH(total)} h.`;
+        else note.textContent = `Already on ${days.map(r => shortDay(r.date)).join(', ')}. The hours for this day are taken from those days (in proportion) so the total stays ${fmtH(total)} h. Enter 0 for a placeholder day that takes nothing.`;
     }
 }
 
@@ -1083,15 +1098,28 @@ async function addEditorEntry() {
     const days = S.rows.filter(r => unitOf(r) === m.unit && !isPast(r.date));   // past days keep their hours; only today-and-later days give some up
     if (days.some(r => r.date === date && r.department === dept)) { toast('This task is already on this day — use Roll over or Move instead.', 'error'); return; }
     let hours = days.length ? Math.round((Number($('sc-ed-add-hours').value) || 0) * 100) / 100 : total;
-    if (days.length && (hours <= 0 || hours >= total)) { toast(`Enter between 0 and ${fmtH(total)} h — the other day${days.length === 1 ? '' : 's'} must keep some hours.`, 'error'); return; }
-    // the other days give up the new day's hours in proportion to what they hold, so the phase still totals the portal's hours
-    const held = days.reduce((n, r) => n + (Number(r.hours) || 0), 0);
-    const plan = days.map(r => ({ row: r, hours: Math.round((Number(r.hours) || 0) * (held - hours) / held * 100) / 100 }));
-    if (plan.length) {
-        const diff = Math.round(((total - hours) - plan.reduce((n, x) => n + x.hours, 0)) * 100) / 100;
+    if (hours < 0) { toast('Hours cannot be negative.', 'error'); return; }
+    const fromId = days.length ? ($('sc-ed-add-from')?.value || '') : '';
+    let plan = [];
+    if (!days.length || hours === 0) {
+        // the first day takes all the phase's hours; a 0 h day is a placeholder that takes nothing from anyone (user 2026-10-29)
+    } else if (fromId) {
+        // the hours come off one chosen future day of this task; that day may go down to 0 h and stays as a placeholder
+        const src = days.find(r => r.id === fromId);
+        if (!src) { toast('That day is no longer on the schedule — pick again.', 'error'); return; }
+        const have = Math.round((Number(src.hours) || 0) * 100) / 100;
+        if (hours > have) { toast(`${shortDay(src.date)} only has ${fmtH(have)} h to give.`, 'error'); return; }
+        plan = [{ row: src, hours: Math.round((have - hours) * 100) / 100 }];
+    } else {
+        if (hours >= total) { toast(`Enter less than ${fmtH(total)} h — the other day${days.length === 1 ? '' : 's'} must keep some hours (or pick the day the hours come from).`, 'error'); return; }
+        // the other days give up the new day's hours in proportion to what they hold, so the phase still totals the portal's hours
+        const held = days.reduce((n, r) => n + (Number(r.hours) || 0), 0);
+        if (held <= 0) { toast('The other days hold no hours to take from — enter 0 for a placeholder day.', 'error'); return; }
+        plan = days.map(r => ({ row: r, hours: Math.round((Number(r.hours) || 0) * (held - hours) / held * 100) / 100 }));
+        const diff = Math.round(((held - hours) - plan.reduce((n, x) => n + x.hours, 0)) * 100) / 100;
         const big = plan.reduce((a, x) => (x.hours > a.hours ? x : a), plan[0]);
         big.hours = Math.round((big.hours + diff) * 100) / 100;
-        if (plan.some(x => x.hours <= 0)) { toast('That would leave another day with no hours — enter fewer hours.', 'error'); return; }
+        if (plan.some(x => x.hours < 0)) { toast('That would leave another day below zero — enter fewer hours.', 'error'); return; }
     }
     const c = S.castingById.get(cid);
     const weekend = isWeekend(date);
@@ -1108,7 +1136,9 @@ async function addEditorEntry() {
         await histEnd(__h);
         await loadRows();
         render();
-        toast(plan.length ? `Added ${fmtH(hours)} h of ${String(m.code).toLowerCase()} on ${shortDay(date)}; the other day${plan.length === 1 ? '' : 's'} now ${plan.length === 1 ? 'has' : 'have'} ${plan.map(x => fmtH(x.hours) + ' h').join(', ')} (total ${fmtH(total)} h)` : `Added ${String(m.code).toLowerCase()} with all ${fmtH(total)} h on ${shortDay(date)}`);
+        toast(plan.length ? `Added ${fmtH(hours)} h of ${String(m.code).toLowerCase()} on ${shortDay(date)}; ${plan.length === 1 ? shortDay(plan[0].row.date) + ' now has ' + fmtH(plan[0].hours) + ' h' : 'the other days now have ' + plan.map(x => fmtH(x.hours) + ' h').join(', ')} (total ${fmtH(total)} h)`
+            : hours === 0 && days.length ? `Added a 0 h placeholder day of ${String(m.code).toLowerCase()} on ${shortDay(date)} — nothing taken from the other days`
+            : `Added ${String(m.code).toLowerCase()} with all ${fmtH(total)} h on ${shortDay(date)}`);
         const td = document.querySelector(`tr.sc-cast-top td.sc-cell[data-cid="${c.id}"][data-date="${date}"][data-dept="${dept}"]`);
         if (td) openEditor(td); else closeEditor();
     } catch (err) { toast('Add failed: ' + (err.message || err), 'error'); }
@@ -1754,7 +1784,7 @@ function wire() {
     });
     $('sc-cascade').addEventListener('change', (e) => setCascade(e.target.checked));
     $('sc-editor').addEventListener('change', (e) => { if (e.target.id === 'sc-ed-cascade') setCascade(e.target.checked); });
-    $('sc-editor').addEventListener('change', (e) => { if (e.target.id === 'sc-ed-add-phase') { const h = $('sc-ed-add-hours'); if (h) delete h.dataset.touched; refreshAddForm(); } });
+    $('sc-editor').addEventListener('change', (e) => { if (e.target.id === 'sc-ed-add-phase') { const h = $('sc-ed-add-hours'); if (h) delete h.dataset.touched; refreshAddForm(); } else if (e.target.id === 'sc-ed-add-from') refreshAddForm(); });
     $('sc-editor').addEventListener('change', async (e) => {
         if (S.busy) return;
         if (e.target.matches('input[data-crew-name]')) { await saveCrewFromEditor(); return; }
@@ -1765,7 +1795,7 @@ function wire() {
         }
     });
     $('sc-editor').addEventListener('input', (e) => {
-        if (e.target.id === 'sc-ed-add-hours') e.target.dataset.touched = '1';
+        if (e.target.id === 'sc-ed-add-hours') { e.target.dataset.touched = '1'; refreshAddForm(); }
         const panel = e.target.closest('.sc-roll');
         if (!panel) return;
         const total = Number(panel.dataset.total) || 0;

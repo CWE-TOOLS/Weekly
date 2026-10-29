@@ -163,6 +163,9 @@ body.sc-selecting .sc-grid td.sc-cell.sc-has { cursor: cell; }
 .btn-danger { background: #b91c1c; color: #fff; border: 1px solid #991b1b; border-radius: 6px; padding: 6px 12px; font-size: 13px; font-weight: 600; cursor: pointer; }
 .btn-danger:hover { background: #991b1b; }
 .sc-ed-delete-wrap { margin-top: 8px; display: flex; justify-content: flex-end; }
+.sc-ed-add-from { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 12px; color: #1f2937; }
+.sc-ed-add-from select { flex: 1; min-width: 0; padding: 4px 6px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 12px; }
+.sc-ed-add-from[hidden] { display: none; }
 .sc-ed-phase { font-size: 11px; color: #6b7280; grid-column: 1 / -1; margin-top: -4px; }
 .sc-ed-row input.sc-ed-locked { background: #f3f4f6; color: #374151; cursor: not-allowed; }
 .sc-roll-open { grid-column: 1 / -1; justify-self: start; padding: 3px 8px !important; font-size: 12px !important; }
