@@ -469,6 +469,27 @@ function renderModalBody() {
     if (openRow) openRow.addEventListener('mouseleave', () => { if (S.modal && S.modal.expandedKey === openRow.dataset.mrow) { S.modal.expandedKey = null; renderModalBody(); } }, { once: true });
 }
 
+// ---------------------------------------------------------------- full screen (2026-10-29): like the Releasability Board's button
+/** Full screen from the button (the Fullscreen API). */
+function apiFullscreenOn() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+/** Full screen either way: the button, or the browser's own F11 (the window then fills the display). */
+function fullscreenOn() { return apiFullscreenOn() || (window.innerWidth >= screen.width - 2 && window.innerHeight >= screen.height - 2); }
+function toggleFullscreen() {
+    const el = document.documentElement;
+    if (apiFullscreenOn()) { (document.exitFullscreen || document.webkitExitFullscreen || (() => {})).call(document); return; }
+    if (fullscreenOn()) { notice('The browser is in its own full screen — press F11 to leave it.', 'info'); return; }
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (!req) { notice('This browser cannot go full screen from a button — press F11 instead.', 'warn'); return; }
+    try { const r = req.call(el); if (r && r.catch) r.catch(() => notice('Full screen was refused by the browser — press F11 instead.', 'warn')); } catch { notice('Full screen was refused by the browser — press F11 instead.', 'warn'); }
+}
+/** The button's label, and body.pm-fs: in full screen the page top collapses so the cells get the display. */
+function renderFullscreenBtn() {
+    const on = fullscreenOn();
+    document.body.classList.toggle('pm-fs', on);
+    const b = $('pm-fullscreen');
+    if (b) { b.textContent = on ? '\u26F6 Exit full screen' : '\u26F6 Full screen'; b.classList.toggle('pm-view-on', on); }
+}
+
 function notice(text, kind = 'info') {
     const el = $('fm-notice');
     el.hidden = !text;
@@ -566,7 +587,9 @@ function wireEvents() {
     $('fm-search').addEventListener('input', (e) => { S.search = e.target.value.trim().toLowerCase(); renderMap(); });
     $('fm-refresh').addEventListener('click', () => loadAll());
     $('fm-shipped-btn').addEventListener('click', () => openModal('shipped'));
-    window.addEventListener('resize', markOverflow);
+    $('pm-fullscreen').addEventListener('click', toggleFullscreen);
+    window.addEventListener('resize', () => { renderFullscreenBtn(); markOverflow(); });   // F11 shows up as a resize
+    for (const ev of ['fullscreenchange', 'webkitfullscreenchange']) document.addEventListener(ev, () => { renderFullscreenBtn(); setTimeout(markOverflow, 300); });
     registerRefreshHandler(async (payload, payloads) => {
         const batch = Array.isArray(payloads) && payloads.length ? payloads : [payload];
         const onlyMaps = batch.every(isPortalChange) && batch.every(p => /^finishing_map/.test(signalInfo(p).table || ''));
@@ -581,6 +604,7 @@ function wireEvents() {
     try { S.sundays = !!localStorage.getItem(SUNDAY_KEY); } catch { /* ignore */ }
     if (document.getElementById('ro-test-count') || document.querySelector('[style*="99999"]')) document.body.classList.add('fm-has-test-bar');
     wireEvents();
+    renderFullscreenBtn();
     renderWhen(viewSpec());
     renderDeptPicker();
     try { await initializeSupabase(); } catch (err) { logger.warn('[project-map] supabase init failed', err); }

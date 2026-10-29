@@ -120,3 +120,15 @@
 .pm-section-head { flex-wrap: wrap; row-gap: 0.05rem; }
 .pm-head-tail { margin-left: auto; display: inline-flex; align-items: center; gap: 0.3rem; }
 .pm-head-tail .fm-area-count, .pm-head-tail .pm-section-n, .pm-head-tail .pm-cast-risk { margin-left: 0; }
+
+/* ---------- full screen (2026-10-29): body.pm-fs while the display is ours (the button, or F11) — the page links, the
+   title and the paddings go and the header is one row, so the day / week cells get the screen ---------- */
+body.pm-fs .fm-header-left, body.pm-fs .fm-title { display: none; }
+body.pm-fs .fm-header { padding: 0.15rem 0.5rem; gap: 0.5rem; }
+body.pm-fs .pm-view-stack { flex-direction: row; gap: 0.3rem; }
+body.pm-fs .pm-when-label { min-width: 11rem; }
+body.pm-fs .fm-search { width: 10rem; }
+body.pm-fs .fm-notice { margin: 0.2rem 0.4rem 0; padding: 0.15rem 0.6rem; font-size: 11.5px; }
+body.pm-fs .pm-hidden { margin: 0.2rem 0.4rem 0; padding: 0.15rem 0.5rem; }
+body.pm-fs .pm-main { padding: 0.3rem 0.4rem; }
+#pm-fullscreen { border-color: #1d4ed8; }
