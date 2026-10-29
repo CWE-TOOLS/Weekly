@@ -201,7 +201,11 @@ body.sc-selecting .sc-grid td.sc-cell.sc-has { cursor: cell; }
 .sc-stg-cur { font-size: 12px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 6px 8px; white-space: pre-wrap; margin-bottom: 6px; color: #111827; }
 .sc-stg textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 13px; padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 6px; resize: vertical; }
 .sc-stg-actions { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
-.sc-editor .sc-ed-add { display: grid; grid-template-columns: 1fr 70px auto; gap: 6px; margin-top: 8px; }
+.sc-editor .sc-ed-add { display: grid; grid-template-columns: minmax(0, 1fr) 70px auto; gap: 6px; margin-top: 8px; align-items: center; }
+/* 2026-10-29: the phase dropdown's long option text used to widen the row past the panel and push the Add button out of sight */
+.sc-editor .sc-ed-add select, .sc-editor .sc-ed-add input { min-width: 0; width: 100%; box-sizing: border-box; padding: 4px 6px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; }
+.sc-editor .sc-ed-add select { text-overflow: ellipsis; }
+.sc-editor .sc-ed-add .btn-secondary { white-space: nowrap; }
 
 /* casting menu */
 .sc-menu { display: flex; flex-direction: column; gap: 6px; }
