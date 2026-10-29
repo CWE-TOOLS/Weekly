@@ -237,28 +237,27 @@ function lockOk(report) { return report.every(r => Math.abs(r.scheduled - r.opti
  *  were not handed to another day shows up under "not scheduled". Not-scheduled is counted per phase, so over-booking one
  *  phase never hides a gap on another. */
 function hoursSummaryHtml(castingId, report) {
-    // user 2026-10-29: TOTAL = every hour on this casting's schedule, whatever month it falls in (the whole timeline);
-    // the first number is the share that lands in the month on screen; NOT SCHEDULED = what the Optimizer Hours tab
-    // still expects, counted per phase so over-booking one phase never hides a gap on another.
+    // user 2026-10-29: totals for the casting as a whole, whatever month its days fall in —
+    //   scheduled      = every hour on this casting's schedule (the whole timeline)
+    //   not scheduled  = what the Optimizer Hours tab still expects, counted per phase (a deleted task whose hours were
+    //                    not handed to another day shows up here)
+    //   total          = scheduled + not scheduled
     const rows = rowsOfCasting(castingId);
-    const sum = (list) => Math.round(list.reduce((n, r) => n + (Number(r.hours) || 0), 0) * 100) / 100;
-    const ym = String(S.from).slice(0, 7);
-    const mon = fromIso(S.from).toLocaleDateString('en-US', { month: 'short' });
-    const inMonth = sum(rows.filter(r => String(r.date).slice(0, 7) === ym));
-    const all = sum(rows);
+    const sched = Math.round(rows.reduce((n, r) => n + (Number(r.hours) || 0), 0) * 100) / 100;
     const dates = rows.map(r => r.date).sort();
     const span = dates.length ? (dates[0] === dates[dates.length - 1] ? shortDay(dates[0]) : `${shortDay(dates[0])} – ${shortDay(dates[dates.length - 1])}`) : 'nothing scheduled';
     if (!report.length) {
-        const tip = `Hours scheduled in ${monthLabel(S.from)}: ${fmtH(inMonth)}\nTotal hours scheduled, whole timeline (${span}): ${fmtH(all)}\nNo Optimizer Hours to compare against yet.`;
-        return `<span class="sc-casthrs" title="${esc(tip)}"><b>${fmtH(inMonth)}</b> h in ${esc(mon)} · <b>${fmtH(all)}</b> h total · no Optimizer Hours</span>`;
+        return `<span class="sc-casthrs" title="${esc(`Hours scheduled (whole timeline, ${span}): ${fmtH(sched)}\nNo Optimizer Hours to compare against yet.`)}"><b>${fmtH(sched)}</b> h scheduled · no Optimizer Hours</span>`;
     }
     const optimizer = Math.round(report.reduce((n, r) => n + r.optimizer, 0) * 100) / 100;
     const open = Math.round(report.reduce((n, r) => n + Math.max(0, r.optimizer - r.scheduled), 0) * 100) / 100;
     const over = Math.round(report.reduce((n, r) => n + Math.max(0, r.scheduled - r.optimizer), 0) * 100) / 100;
+    const total = Math.round((sched + open) * 100) / 100;
     const gaps = report.filter(r => r.optimizer - r.scheduled > 0.01).map(r => `${r.phase.phase_name}: ${fmtH(r.optimizer - r.scheduled)} h not scheduled`);
-    const tip = `Hours scheduled in ${monthLabel(S.from)}: ${fmtH(inMonth)}\nHours not scheduled: ${fmtH(open)}${over ? ` (and ${fmtH(over)} h over the Optimizer on some phase)` : ''}\nTotal hours scheduled, whole timeline (${span}): ${fmtH(all)}\nOptimizer Hours tab: ${fmtH(optimizer)}${gaps.length ? '\n\n' + gaps.join('\n') : ''}`;
-    return `<span class="sc-casthrs" title="${esc(tip)}"><b>${fmtH(inMonth)}</b> h in ${esc(mon)} · <b class="${open > 0 ? 'sc-open' : 'sc-ok'}">${fmtH(open)}</b> h not scheduled · <b>${fmtH(all)}</b> h total</span>`;
+    const tip = `Hours scheduled (whole timeline, ${span}): ${fmtH(sched)}\nHours not scheduled: ${fmtH(open)}${over ? ` (and ${fmtH(over)} h over the Optimizer on some phase)` : ''}\nTotal hours: ${fmtH(total)}\nOptimizer Hours tab: ${fmtH(optimizer)}${gaps.length ? '\n\n' + gaps.join('\n') : ''}`;
+    return `<span class="sc-casthrs" title="${esc(tip)}"><b>${fmtH(sched)}</b> h scheduled · <b class="${open > 0 ? 'sc-open' : 'sc-ok'}">${fmtH(open)}</b> h not scheduled · <b>${fmtH(total)}</b> h total</span>`;
 }
+
 
 
 // ---------------------------------------------------------------------------
