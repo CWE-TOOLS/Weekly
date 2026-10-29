@@ -928,7 +928,7 @@ async function renderModalBody() {
 /** Full screen from the button (the Fullscreen API). */
 function apiFullscreenOn() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
 /** Full screen either way: the button, or the browser's own F11 (the window then fills the display). */
-function fullscreenOn() { return apiFullscreenOn() || (window.innerWidth >= screen.width - 2 && window.innerHeight >= screen.height - 2); }
+function fullscreenOn() { return apiFullscreenOn() || (screen.width > 0 && window.innerWidth >= screen.width - 2 && window.innerHeight >= screen.height - 2); }   // screen is 0×0 in some embedded browsers
 function toggleFullscreen() {
     const el = document.documentElement;
     if (apiFullscreenOn()) { (document.exitFullscreen || document.webkitExitFullscreen || (() => {})).call(document); return; }
