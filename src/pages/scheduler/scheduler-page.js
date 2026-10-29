@@ -1063,15 +1063,25 @@ function refreshAddForm() {
     const total = Number(m.phase.hours) || 0;
     const days = S.rows.filter(r => unitOf(r) === m.unit);
     const fromWrap = $('sc-ed-add-from-wrap'), fromSel = $('sc-ed-add-from');
+    const future = days.filter(r => !isPast(r.date)).sort((a, b) => a.date.localeCompare(b.date));
     if (!days.length) {
         hin.value = fmtH(total); hin.readOnly = true;
         if (fromWrap) fromWrap.hidden = true;
         note.textContent = `Not scheduled yet: this day gets all ${fmtH(total)} h from the Optimizer Hours tab.`;
+    } else if (!future.length) {
+        // every day of this task has passed (locked): the hours are spent, so a new day can only be a 0 h placeholder
+        // without going over the Optimizer total (0860 cast 8 "pan", user 2026-10-29)
+        hin.readOnly = false;
+        if (!hin.dataset.touched) hin.value = '0';
+        if (fromWrap) fromWrap.hidden = true;
+        const hours = Math.round((Number(hin.value) || 0) * 100) / 100;
+        note.textContent = hours > 0
+            ? `All ${fmtH(total)} h of this task sit on ${days.map(r => shortDay(r.date)).join(', ')} — days that have passed and are locked. ${fmtH(hours)} h here would put the casting ${fmtH(hours)} h OVER the Optimizer total.`
+            : `All ${fmtH(total)} h of this task sit on ${days.map(r => shortDay(r.date)).join(', ')} — days that have passed and are locked. 0 h adds a placeholder day; the total stays ${fmtH(total)} h.`;
     } else {
         hin.readOnly = false;
         if (!hin.dataset.touched) hin.value = fmtH(Math.max(0.5, Math.round(total / (days.length + 1) * 2) / 2));
         // which day gives up the hours: all future days in proportion (default) or one chosen day of this task (user 2026-10-29)
-        const future = days.filter(r => !isPast(r.date)).sort((a, b) => a.date.localeCompare(b.date));
         if (fromSel && fromWrap) {
             const keep = fromSel.value;
             fromSel.innerHTML = `<option value="">all its other days, in proportion</option>` + future.map(r => `<option value="${r.id}">${esc(shortDay(r.date))} · ${fmtH(r.hours)} h</option>`).join('');
@@ -1095,14 +1105,18 @@ async function addEditorEntry() {
     const m = mappedPhases(cid).find(x => x.unit === sel.value);
     if (!m) { toast('Pick a task first.', 'error'); return; }
     const total = Math.round((Number(m.phase.hours) || 0) * 100) / 100;
-    const days = S.rows.filter(r => unitOf(r) === m.unit && !isPast(r.date));   // past days keep their hours; only today-and-later days give some up
-    if (days.some(r => r.date === date && r.department === dept)) { toast('This task is already on this day — use Roll over or Move instead.', 'error'); return; }
-    let hours = days.length ? Math.round((Number($('sc-ed-add-hours').value) || 0) * 100) / 100 : total;
+    const allDays = S.rows.filter(r => unitOf(r) === m.unit);
+    const days = allDays.filter(r => !isPast(r.date));   // past days keep their hours; only today-and-later days give some up
+    if (allDays.some(r => r.date === date && r.department === dept)) { toast('This task is already on this day — use Roll over or Move instead.', 'error'); return; }
+    let hours = allDays.length ? Math.round((Number($('sc-ed-add-hours').value) || 0) * 100) / 100 : total;
     if (hours < 0) { toast('Hours cannot be negative.', 'error'); return; }
     const fromId = days.length ? ($('sc-ed-add-from')?.value || '') : '';
     let plan = [];
-    if (!days.length || hours === 0) {
+    if (!allDays.length || hours === 0) {
         // the first day takes all the phase's hours; a 0 h day is a placeholder that takes nothing from anyone (user 2026-10-29)
+    } else if (!days.length) {
+        // the task's hours all sit on days that have passed (locked): more hours here go over the Optimizer total
+        if (!window.confirm(`All ${fmtH(total)} h of this task are on days that have passed and are locked. Adding ${fmtH(hours)} h here puts the casting ${fmtH(hours)} h OVER the Optimizer total.\n\nOK = add it anyway.   Cancel = go back (enter 0 for a placeholder day).`)) return;
     } else if (fromId) {
         // the hours come off one chosen future day of this task; that day may go down to 0 h and stays as a placeholder
         const src = days.find(r => r.id === fromId);
@@ -1137,7 +1151,8 @@ async function addEditorEntry() {
         await loadRows();
         render();
         toast(plan.length ? `Added ${fmtH(hours)} h of ${String(m.code).toLowerCase()} on ${shortDay(date)}; ${plan.length === 1 ? shortDay(plan[0].row.date) + ' now has ' + fmtH(plan[0].hours) + ' h' : 'the other days now have ' + plan.map(x => fmtH(x.hours) + ' h').join(', ')} (total ${fmtH(total)} h)`
-            : hours === 0 && days.length ? `Added a 0 h placeholder day of ${String(m.code).toLowerCase()} on ${shortDay(date)} — nothing taken from the other days`
+            : hours === 0 && allDays.length ? `Added a 0 h placeholder day of ${String(m.code).toLowerCase()} on ${shortDay(date)} — nothing taken from the other days`
+            : allDays.length && !days.length ? `Added ${fmtH(hours)} h of ${String(m.code).toLowerCase()} on ${shortDay(date)} — ${fmtH(hours)} h over the Optimizer total`
             : `Added ${String(m.code).toLowerCase()} with all ${fmtH(total)} h on ${shortDay(date)}`);
         const td = document.querySelector(`tr.sc-cast-top td.sc-cell[data-cid="${c.id}"][data-date="${date}"][data-dept="${dept}"]`);
         if (td) openEditor(td); else closeEditor();
