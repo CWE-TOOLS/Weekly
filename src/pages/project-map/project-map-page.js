@@ -37,6 +37,8 @@ import { fetchAllTasks } from '../../services/data-service.js';
 import { loadAllProjects } from '../../services/projects-service.js';
 import { initializeSupabase, registerRefreshHandler, isPortalChange, signalInfo } from '../../services/supabase-service.js';
 import { listDummies, loadDummyMoves, saveDummy, deleteDummy, isDummyMigrationPending } from '../../services/project-map-dummy-service.js';
+import { REVENUE_PER_HOUR } from '../../config/scheduler-config.js';          // the Plant Scheduler's $ per labor hour
+import { loadScheduleSettings } from '../../services/schedule-service.js';    // its monthly revenue target (read only)
 import { MAP_DEPARTMENTS, ALWAYS_SHOWN, SHIPPING_DEPARTMENTS, SHIPPED_STATUSES, SHIPPED_WINDOW_DAYS } from '../../config/project-map-config.js';
 import { DEPARTMENT_COLORS, normalizeDepartmentClass } from '../../config/department-config.js';
 import { parseDate, getLocalDateString, getMonday, getWeekMonth } from '../../utils/date-utils.js';
@@ -68,6 +70,7 @@ const S = {
     dummy: null,             // { id, name, final, chain, moves: Map, dirty, undo: [] } while in Dummy mode
     hoursMax: { day: new Map(), week: new Map() },   // busiest real day / week per department in the look-back window
     dragging: null,          // { key, dept, first } while a card is being dragged (dummy mode)
+    revTarget: 400000,       // the scheduler's monthly revenue target (plant_schedule_settings 'target'), read when Dummy mode opens
     picking: null,           // { key, dept, first } after "Move" was tapped on a card: the next tap on a cell drops it there
 };
 
@@ -417,6 +420,7 @@ async function enterDummy() {
     if (S.dummy) return;
     if (!window.confirm('Dummy mode is for the DOP.\n\nUnless the DOP has asked you to work in it, press Cancel.\n\nNothing real changes in Dummy mode: moves are saved as a named dummy only.')) return;
     S.dummy = { id: null, name: '', final: false, chain: true, moves: new Map(), dirty: false, undo: [] };
+    loadScheduleSettings().then(saved => { if (Number(saved.target) > 0) S.revTarget = Number(saved.target); renderDummyBar(); }).catch(() => { /* the default target stands */ });
     if (S.view === 'day') S.view = 'calendar';
     S.expandedKey = null;
     renderMap();
@@ -576,6 +580,79 @@ function renderWhen(spec) {
     if (dayBtn) { dayBtn.disabled = !!S.dummy; dayBtn.title = S.dummy ? 'Day view has no other day to drag to — use Week, 4 weeks or Month' : ''; }
 }
 
+// ---------------------------------------------------------------- revenue (dummy mode, 2026-10-29): hours × $135 like the scheduler
+/** The scheduler's cut: a week belongs to the month its WEDNESDAY falls in. */
+const revMonthOf = (monday) => addDays(monday, 2).slice(0, 7);
+const money0 = (n) => (n < 0 ? '−' : '') + '$' + Math.round(Math.abs(n)).toLocaleString('en-US');
+const money2 = (n) => '$' + (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const monthName = (ym) => { const [y, m] = ym.split('-').map(Number); return `${MONTHS[m - 1].slice(0, 3)} ${y}`; };
+/** Hours of every casting by week (Monday), as the dummy has them and as the live weekly has them: { fab, ship } each. */
+function revByWeek() {
+    const weeks = new Map();
+    const add = (monday, side, dept, h) => {
+        let w = weeks.get(monday);
+        if (!w) { w = { d: { fab: 0, ship: 0 }, l: { fab: 0, ship: 0 } }; weeks.set(monday, w); }
+        w[side][dept === 'Ship' ? 'ship' : 'fab'] += h;
+    };
+    for (const c of S.castings.values()) {
+        for (const [k, h] of c.hours) {
+            if (!h) continue;
+            const bar = k.indexOf('|'); const dept = k.slice(0, bar), iso = k.slice(bar + 1);
+            add(mondayOf(iso), 'd', dept, h);
+            add(mondayOf(c.orig.get(k) || iso), 'l', dept, h);
+        }
+    }
+    return weeks;
+}
+const netOf = (t) => (t.fab + t.ship) * REVENUE_PER_HOUR;
+/** Per-month totals (Wednesday rule) from the per-week map. */
+function revByMonth(weeks) {
+    const months = new Map();
+    for (const [monday, w] of weeks) {
+        const ym = revMonthOf(monday);
+        let m = months.get(ym);
+        if (!m) { m = { d: { fab: 0, ship: 0 }, l: { fab: 0, ship: 0 } }; months.set(ym, m); }
+        for (const side of ['d', 'l']) { m[side].fab += w[side].fab; m[side].ship += w[side].ship; }
+    }
+    return months;
+}
+function deltaHtml(d) {
+    if (Math.abs(d) < 0.5) return '';
+    return ` <span class="${d > 0 ? 'pm-rev-up' : 'pm-rev-down'}" title="against the live weekly">${d > 0 ? '+' : '−'}${money0(Math.abs(d))}</span>`;
+}
+function revTitle(label, t, live) {
+    return `${label}\nDummy: Fabrication ${money2(t.fab * REVENUE_PER_HOUR)} + Ship ${money2(t.ship * REVENUE_PER_HOUR)} = Net ${money2(netOf(t))} (${fmtH(t.fab + t.ship)} h)\nLive weekly: Net ${money2(netOf(live))} (${fmtH(live.fab + live.ship)} h)`;
+}
+/** The strip under the dummy's buttons: Net revenue per week in view, the months the view touches (and any month a move
+ *  reached) against the scheduler's target, and where the moves shifted money. Live = the weekly as it is now. */
+function renderRevenueStrip() {
+    const el = $('pm-dummy-rev');
+    if (!el) return;
+    if (!S.dummy) { el.innerHTML = ''; return; }
+    const spec = viewSpec();
+    const weeks = revByWeek(), months = revByMonth(weeks);
+    const empty = { fab: 0, ship: 0 };
+    const parts = [];
+    for (let m = mondayOf(spec.start); m <= spec.end; m = addDays(m, 7)) {
+        const w = weeks.get(m) || { d: empty, l: empty };
+        parts.push(`<span class="pm-rev-wk" title="${escapeHtml(revTitle(`Week of ${fmtShort(m)} – ${fmtShort(addDays(m, 5))}`, w.d, w.l))}">Wk ${fmtShort(m)} <b>${money0(netOf(w.d))}</b>${deltaHtml(netOf(w.d) - netOf(w.l))}</span>`);
+    }
+    const inView = new Set();
+    for (let m = mondayOf(spec.start); m <= spec.end; m = addDays(m, 7)) inView.add(revMonthOf(m));
+    const shown = [...months.keys()].filter(ym => inView.has(ym) || Math.abs(netOf(months.get(ym).d) - netOf(months.get(ym).l)) >= 0.5).sort();
+    const target = S.revTarget || 400000;
+    const out = [], into = [];
+    for (const ym of shown) {
+        const t = months.get(ym);
+        const net = netOf(t.d), live = netOf(t.l), pct = Math.round(net / target * 100);
+        parts.push(`<span class="pm-rev-month${inView.has(ym) ? '' : ' pm-rev-away'}" title="${escapeHtml(revTitle(`${monthName(ym)} — every week whose Wednesday is in it`, t.d, t.l))}\nTarget ${money0(target)} (the scheduler's setting)">${monthName(ym)} <b>${money0(net)}</b>${deltaHtml(net - live)} <span class="${pct >= 100 ? 'pm-rev-pct-ok' : 'pm-rev-pct-low'}" title="Net ÷ target">${pct}% of target</span>${inView.has(ym) ? '' : ' <i>(not in view)</i>'}</span>`);
+        const d = net - live;
+        if (d <= -0.5) out.push(`${monthName(ym)} ${money0(d)}`); else if (d >= 0.5) into.push(`${monthName(ym)} +${money0(d)}`);
+    }
+    if (out.length || into.length) parts.push(`<span class="pm-rev-note">Moves shifted: ${escapeHtml([...out, ...into].join(' · '))}</span>`);
+    el.innerHTML = `<span class="pm-rev-label" title="Revenue = scheduled hours × $${REVENUE_PER_HOUR}, the Plant Scheduler's rule. Net = every department incl. Ship.">REVENUE</span>` + parts.join('');
+}
+
 function renderDummyBar() {
     const bar = $('pm-dummy-bar');
     const btn = $('pm-dummy-btn');
@@ -590,6 +667,7 @@ function renderDummyBar() {
     $('pm-dummy-chain').checked = d.chain;
     $('pm-dummy-undo').disabled = !d.undo.length;
     $('pm-dummy-final').textContent = d.final ? 'Unmark final' : 'Mark final';
+    renderRevenueStrip();
 }
 
 function renderMap() {

@@ -218,3 +218,16 @@ html { touch-action: manipulation; }   /* no double-tap zoom delay on touch disp
 .pm-section-head { flex-wrap: wrap; row-gap: 0.05rem; }
 .pm-head-tail { margin-left: auto; display: inline-flex; align-items: center; gap: 0.3rem; }
 .pm-head-tail .fm-area-count, .pm-head-tail .pm-section-n, .pm-head-tail .pm-cast-risk { margin-left: 0; }
+
+/* ---------- dummy mode revenue strip (2026-10-29): hours × $135 per week / month, dummy vs live, against the target ---------- */
+.pm-dummy-rev { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.5rem; font-size: 12px; color: #3b0764; }
+.pm-dummy-rev:empty { display: none; }
+.pm-rev-label { font-weight: 900; letter-spacing: 0.08em; font-size: 10.5px; color: #86198f; }
+.pm-rev-wk { background: #fff; border: 1px solid #e9d5ff; border-radius: 6px; padding: 0.1rem 0.45rem; white-space: nowrap; }
+.pm-rev-month { background: #f5d0fe; border: 1px solid #c026d3; border-radius: 6px; padding: 0.1rem 0.5rem; white-space: nowrap; font-weight: 600; }
+.pm-rev-month.pm-rev-away { background: #fff; border-style: dashed; }
+.pm-rev-up { color: #15803d; font-weight: 800; }
+.pm-rev-down { color: #b91c1c; font-weight: 800; }
+.pm-rev-pct-ok { color: #15803d; font-weight: 800; }
+.pm-rev-pct-low { color: #c2410c; font-weight: 800; }
+.pm-rev-note { color: #86198f; font-weight: 600; }

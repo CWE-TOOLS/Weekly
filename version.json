@@ -1,4 +1,4 @@
 {
-  "version": "2026-10-29-1",
+  "version": "2026-10-29-2",
   "note": "Bump this stamp with every publish: open pages reload themselves when they see a new one (src/utils/auto-update.js)."
 }
