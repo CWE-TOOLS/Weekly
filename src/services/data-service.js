@@ -293,7 +293,7 @@ export function mergeTaskDescriptions(tasks, descriptionsMap) {
             entry = descriptionsMap.get(taskDescCastingKey(pnum, cnum, task.stagingDepartment || task.department, cday));
         }
         if (!entry) {
-            entry = descriptionsMap.get(taskDescNameKey(task.project, task.department, task.dayNumber));
+            entry = descriptionsMap.get(taskDescNameKey(task.project, task.stagingDepartment || task.department, task.dayNumber));
         }
 
         if (entry) {
