@@ -423,6 +423,7 @@ function render() {
     if (S.view === 'revenue') renderRevenue(); else renderGrid();
     renderUnscheduled();
     renderBanner();
+    paintSelection();
 }
 
 // ---------------------------------------------------------------------------
@@ -673,7 +674,7 @@ function renderGrid() {
                 }
                 const past = d < today;
                 const attrs = `data-cid="${c.id}" data-date="${d}" data-dept="${dept}"`;
-                const drag = rows.length ? (past ? ' title="Already happened — locked. Only today and later days can be moved or changed."' : ' draggable="true" title="Drag to another day on this row to move it; click to edit"') : '';
+                const drag = rows.length ? (past ? ' title="Already happened — locked. Only today and later days can be moved or changed."' : ' draggable="true" title="Drag to another day on this row to move it; click to edit; Ctrl+click to select several and move them together"') : '';
                 taskTds += `<td class="${cls} sc-trow" ${attrs}${drag}><span class="sc-task">${esc(task)}</span>${crewBadge(rows)}</td>`;
                 hourTds += `<td class="${cls} sc-hrow" ${attrs}${drag}><span class="sc-h">${hrs}</span></td>`;
             });
@@ -1178,6 +1179,102 @@ async function moveEditorEntries() {
     if (await moveCellEntries(ctx.cid, ctx.date, ctx.dept, $('sc-ed-move-date').value, !!$('sc-ed-cascade')?.checked)) closeEditor();
 }
 
+// ---- multi-select (user 2026-10-29): Ctrl+click, or the "Select tasks" button, picks several task cells — e.g. every
+// casting's Ship task on one day — and the bar at the bottom (or dragging any selected cell) moves them all to one day.
+const SEL = new Map();   // "cid|date|dept" -> { cid, date, dept }
+function selKey(td) { return `${td.dataset.cid}|${td.dataset.date}|${td.dataset.dept}`; }
+function cellsOf(s) { return document.querySelectorAll(`td.sc-cell[data-cid="${s.cid}"][data-date="${s.date}"][data-dept="${s.dept}"]`); }
+function toggleSelect(td) {
+    if (!td.classList.contains('sc-has')) return;
+    if (isPast(td.dataset.date)) { toast(PAST_MSG, 'error'); return; }
+    const k = selKey(td);
+    if (SEL.has(k)) SEL.delete(k); else SEL.set(k, { cid: td.dataset.cid, date: td.dataset.date, dept: td.dataset.dept });
+    paintSelection();
+}
+function clearSelection() { SEL.clear(); const inp = $('sc-sel-date'); if (inp) inp.value = ''; paintSelection(); }
+function paintSelection() {
+    document.querySelectorAll('td.sc-cell.sc-selected').forEach(el => el.classList.remove('sc-selected'));
+    for (const k of [...SEL.keys()]) {
+        const s = SEL.get(k), els = cellsOf(s);
+        if (!els.length || isPast(s.date)) { SEL.delete(k); continue; }   // drawn no more (other month / moved) or now in the past
+        els.forEach(el => el.classList.add('sc-selected'));
+    }
+    const bar = $('sc-selbar'); if (!bar) return;
+    bar.hidden = SEL.size === 0;
+    if (SEL.size) {
+        const casts = new Set([...SEL.values()].map(s => s.cid)).size;
+        const words = [...new Set([...SEL.values()].flatMap(s => S.rows.filter(r => r.casting_id === s.cid && r.date === s.date && r.department === s.dept).map(r => String(r.task).toLowerCase())))];
+        $('sc-sel-count').textContent = `${SEL.size} task${SEL.size === 1 ? '' : 's'} selected on ${casts} casting${casts === 1 ? '' : 's'}${words.length ? ' (' + words.slice(0, 4).join(', ') + (words.length > 4 ? '…' : '') + ')' : ''}`;
+        const inp = $('sc-sel-date'); if (inp && !inp.value) inp.value = [...SEL.values()].map(s => s.date).sort()[0];
+    }
+}
+function setSelectMode(on) {
+    S.selectMode = !!on;
+    const b = $('sc-select-btn');
+    if (b) { b.classList.toggle('on', S.selectMode); b.textContent = S.selectMode ? 'Done selecting' : 'Select tasks'; }
+    document.body.classList.toggle('sc-selecting', S.selectMode);
+    if (S.selectMode) { closeEditor(); toast('Click tasks to select them (Ctrl+click works any time). Then pick a day at the bottom and press Move, or drag one of them.', 'info'); }
+}
+/** Move every selected task cell to one day (same rules as a single move; with Cascade on, each casting's later tasks follow). */
+async function moveSelected(to) {
+    const sel = [...SEL.values()].filter(s => !isPast(s.date));
+    if (!sel.length) return false;
+    if (!to) { toast('Pick the day to move the selected tasks to.', 'error'); return false; }
+    if (isPast(to)) { toast(`${shortDay(to)} has passed — a task cannot be moved to a day that already happened.`, 'error'); return false; }
+    if (isHoliday(to)) { toast(`${shortDay(to)} is a holiday — nothing can be scheduled there.`, 'error'); return false; }
+    if (isWeekend(to) && !window.confirm(`${shortDay(to)} is a weekend. Allow it for these ${sel.length} tasks?`)) return false;
+    const plan = new Map();   // row id -> { row, date }
+    for (const s of sel) {
+        for (const r of S.rows.filter(r => r.casting_id === s.cid && r.date === s.date && r.department === s.dept)) plan.set(r.id, { row: r, date: to });
+    }
+    if (S.cascade) {
+        for (const s of sel) {
+            if (s.date === to) continue;
+            const n = workingOffset(s.date, to);
+            for (const r of S.rows.filter(r => r.casting_id === s.cid && r.date > s.date)) if (!plan.has(r.id)) plan.set(r.id, { row: r, date: stepWorking(r.date, n) });
+        }
+    }
+    const changed = [...plan.values()].filter(m => m.date !== m.row.date);
+    if (!changed.length) { toast('Those tasks are already on that day.', 'info'); return false; }
+    if (changed.some(m => isPast(m.date))) { toast('That cascade would push later tasks into days that have passed.', 'error'); return false; }
+    // team limits: count the castings on each team-day once the move is done (moved rows leave their old day)
+    const limited = changed.filter(m => TEAM_DAY_LIMITS[m.row.department]);
+    if (limited.length) {
+        const span = limited.map(m => m.date).sort();
+        const moving = new Set(plan.keys());
+        const load = new Map();
+        for (const r of await loadScheduleRange(span[0], span[span.length - 1])) {
+            if (moving.has(r.id) || !TEAM_DAY_LIMITS[r.department]) continue;
+            const k = `${r.date}|${r.department}`; if (!load.has(k)) load.set(k, new Set()); load.get(k).add(r.casting_id);
+        }
+        for (const m of limited) {
+            const k = `${m.date}|${m.row.department}`; if (!load.has(k)) load.set(k, new Set()); load.get(k).add(m.row.casting_id);
+        }
+        const over = [], seen = new Set();
+        for (const m of limited) {
+            const k = `${m.date}|${m.row.department}`; if (seen.has(k)) continue; seen.add(k);
+            const set = load.get(k), lim = TEAM_DAY_LIMITS[m.row.department];
+            if (set.size > lim) over.push({ date: m.date, dept: m.row.department, count: set.size, limit: lim, names: [...set].map(whoCasts) });
+        }
+        if (!confirmOverload(over.sort((x, y) => x.date.localeCompare(y.date)))) return false;
+    }
+    const cids = [...new Set(changed.map(m => m.row.casting_id))];
+    const direct = changed.filter(m => m.date === to && sel.some(s => s.cid === m.row.casting_id && s.date === m.row.date && s.dept === m.row.department)).length;
+    const cascaded = changed.length - direct;
+    setBusy(true);
+    const __h = await histBegin(`move ${sel.length} selected task${sel.length === 1 ? '' : 's'} to ${shortDay(to)}${cascaded > 0 ? ` + ${cascaded} cascaded` : ''}`, cids);
+    try {
+        for (const m of changed) await updateScheduleRow(m.row.id, { date: m.date, weekend_ok: isWeekend(m.date) ? true : (m.date === to ? m.row.weekend_ok : false) });
+        await histEnd(__h);
+        clearSelection();
+        await loadRows();
+        render();
+        toast(`Moved ${sel.length} task${sel.length === 1 ? '' : 's'} on ${cids.length} casting${cids.length === 1 ? '' : 's'} to ${shortDay(to)}${cascaded > 0 ? ` and cascaded ${cascaded} later task${cascaded === 1 ? '' : 's'}` : ''}`);
+        return true;
+    } catch (err) { toast('Move failed: ' + (err.message || err), 'error'); return false; }
+    finally { setBusy(false); }
+}
+
 // ---- drag a task to another day on the same casting's row (it keeps its team column)
 let dragCtx = null;   // { cid, date, dept }
 function dropTargetFor(td) {
@@ -1187,6 +1284,10 @@ function dropTargetFor(td) {
 function clearDropMarks() { document.querySelectorAll('.sc-drop-target, .sc-drop-target-h').forEach(el => el.classList.remove('sc-drop-target', 'sc-drop-target-h')); }
 function markDrop(td) {
     clearDropMarks();
+    if (dragCtx && dragCtx.multi) {   // the whole selection lands on that day: mark each selected cell's target
+        for (const s of SEL.values()) document.querySelectorAll(`td.sc-cell[data-cid="${s.cid}"][data-date="${td.dataset.date}"][data-dept="${s.dept}"]`).forEach(el => el.classList.add('sc-drop-target'));
+        return;
+    }
     const top = dropTargetFor(td);
     if (!top) return;
     top.classList.add('sc-drop-target');
@@ -1197,7 +1298,7 @@ function wireDrag(wrap) {
     wrap.addEventListener('dragstart', (e) => {
         const td = e.target.closest && e.target.closest('td.sc-cell.sc-has');
         if (!td || S.busy || isPast(td.dataset.date)) { e.preventDefault(); if (td && isPast(td.dataset.date)) toast(PAST_MSG, 'error'); return; }
-        dragCtx = { cid: td.dataset.cid, date: td.dataset.date, dept: td.dataset.dept };
+        dragCtx = { cid: td.dataset.cid, date: td.dataset.date, dept: td.dataset.dept, multi: SEL.size > 1 && SEL.has(selKey(td)) };
         closeEditor();
         e.dataTransfer.effectAllowed = 'move';
         try { e.dataTransfer.setData('text/plain', `${dragCtx.dept} ${dragCtx.date}`); } catch (_) { /* ignore */ }
@@ -1205,7 +1306,7 @@ function wireDrag(wrap) {
     });
     wrap.addEventListener('dragover', (e) => {
         const td = e.target.closest && e.target.closest('td.sc-cell');
-        if (!dragCtx || !td || td.dataset.cid !== dragCtx.cid || isPast(td.dataset.date)) return;   // only the same casting's row, today or later, accepts the drop
+        if (!dragCtx || !td || isPast(td.dataset.date) || (!dragCtx.multi && td.dataset.cid !== dragCtx.cid)) return;   // only the same casting's row, today or later, accepts the drop (a selection: any row)
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
         markDrop(td);
@@ -1213,12 +1314,13 @@ function wireDrag(wrap) {
     wrap.addEventListener('dragleave', (e) => { if (!wrap.contains(e.relatedTarget)) clearDropMarks(); });
     wrap.addEventListener('drop', async (e) => {
         const td = e.target.closest && e.target.closest('td.sc-cell');
-        if (!dragCtx || !td || td.dataset.cid !== dragCtx.cid) return;
+        if (!dragCtx || !td || (!dragCtx.multi && td.dataset.cid !== dragCtx.cid)) return;
         e.preventDefault();
         const ctx = dragCtx, to = td.dataset.date;
         dragCtx = null;
         clearDropMarks();
         document.querySelectorAll('.sc-dragging').forEach(el => el.classList.remove('sc-dragging'));
+        if (ctx.multi) { await moveSelected(to); return; }
         if (to !== ctx.date) await moveCellEntries(ctx.cid, ctx.date, ctx.dept, to, S.cascade || e.shiftKey);   // Shift while dropping = cascade too
     });
     wrap.addEventListener('dragend', () => {
@@ -1561,6 +1663,10 @@ function wire() {
     });
     $('sc-undo').addEventListener('click', undo);
     $('sc-redo').addEventListener('click', redo);
+    $('sc-select-btn').addEventListener('click', () => setSelectMode(!S.selectMode));
+    $('sc-sel-move').addEventListener('click', async () => { if (!S.busy) await moveSelected($('sc-sel-date').value); });
+    $('sc-sel-clear').addEventListener('click', () => { clearSelection(); setSelectMode(false); });
+    $('sc-sel-date').addEventListener('keydown', async (e) => { if (e.key === 'Enter' && !S.busy) { e.preventDefault(); await moveSelected(e.target.value); } });
     document.addEventListener('keydown', (e) => {
         if (!(e.ctrlKey || e.metaKey)) return;
         const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '');
@@ -1584,7 +1690,7 @@ function wire() {
     $('sc-grid-wrap').addEventListener('click', (e) => {
         if (S.busy) return;
         const cell = e.target.closest('td.sc-cell');
-        if (cell) { openEditor(cell); return; }
+        if (cell) { if (e.ctrlKey || e.metaKey || S.selectMode) { closeEditor(); toggleSelect(cell); } else openEditor(cell); return; }
         const label = e.target.closest('td.sc-label[data-cid]');
         if (label) { openCastingMenu(label); }
     });
@@ -1623,7 +1729,7 @@ function wire() {
             finally { setBusy(false); }
         }
     });
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeEditor(); $('sc-settings').hidden = true; $('sc-sched').hidden = true; schedCtx = null; } });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeEditor(); $('sc-settings').hidden = true; $('sc-sched').hidden = true; schedCtx = null; if (SEL.size || S.selectMode) { clearSelection(); setSelectMode(false); } } });
     document.addEventListener('mousedown', (e) => {
         const ed = $('sc-editor');
         if (ed.hidden) return;

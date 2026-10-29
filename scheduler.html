@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="src/styles/variables.css">
     <link rel="stylesheet" href="src/styles/base.css">
     <link rel="stylesheet" href="src/styles/buttons.css">
-    <link rel="stylesheet" href="src/styles/scheduler.css?v=20261028-3">
+    <link rel="stylesheet" href="src/styles/scheduler.css?v=20261029-1">
 </head>
 <body>
 <div id="sc-app">
@@ -28,6 +28,7 @@
             <label class="sc-ctl"><input type="checkbox" id="sc-show-weekends"> Show Sundays</label>
             <label class="sc-ctl sc-ctl-cascade" title="When on, moving a task (drag or the Move button) also moves every later task of that casting by the same number of working days. Holding Shift while dropping does the same for one drag."><input type="checkbox" id="sc-cascade"> Cascade moves</label>
             <button type="button" class="btn-primary" id="sc-view-toggle" title="Flip between the schedule grid and the revenue table">Revenue</button>
+            <button type="button" class="btn-secondary" id="sc-select-btn" title="Pick several tasks (any castings, any days) and move them all to one day. Ctrl+click a task does the same without this button.">Select tasks</button>
             <button type="button" class="btn-secondary" id="sc-undo" disabled title="Nothing to undo">&#8630; Undo</button>
             <button type="button" class="btn-secondary" id="sc-redo" disabled title="Nothing to redo">&#8631; Redo</button>
             <button type="button" class="btn-secondary" id="sc-settings-btn">Settings</button>
@@ -36,6 +37,12 @@
     </header>
 
     <div id="sc-banner" class="sc-banner" hidden></div>
+    <div id="sc-selbar" class="sc-selbar" hidden>
+        <span id="sc-sel-count" class="sc-sel-count"></span>
+        <label class="sc-sel-to">Move all to <input type="date" id="sc-sel-date"></label>
+        <button type="button" class="btn-primary" id="sc-sel-move">Move</button>
+        <button type="button" class="btn-secondary" id="sc-sel-clear" title="Clear the selection (Esc)">Clear</button>
+    </div>
 
     <div class="sc-body">
         <aside class="sc-side">
@@ -92,6 +99,6 @@
 
     <div id="sc-toast" class="sc-toast" hidden></div>
 </div>
-<script type="module" src="src/pages/scheduler/scheduler-page.js?v=20261028-3"></script>
+<script type="module" src="src/pages/scheduler/scheduler-page.js?v=20261029-1"></script>
 </body>
 </html>

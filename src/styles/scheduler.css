@@ -119,6 +119,16 @@ table.sc-grid { border-collapse: separate; border-spacing: 0; table-layout: fixe
 .sc-grid td.sc-cell.sc-dragging { opacity: .35; }
 .sc-grid td.sc-cell.sc-drop-target { outline: 3px dashed #2563eb; outline-offset: -3px; background: #dbeafe !important; }
 .sc-grid td.sc-cell.sc-drop-target-h { outline: 3px dashed #2563eb; outline-offset: -3px; background: #dbeafe !important; }
+/* 2026-10-29: multi-select — selected cells, select mode cursor, the bar at the bottom */
+.sc-grid td.sc-cell.sc-selected { outline: 3px solid #f59e0b; outline-offset: -3px; background: #fef3c7 !important; }
+body.sc-selecting .sc-grid td.sc-cell.sc-has { cursor: cell; }
+#sc-select-btn.on { background: #f59e0b; color: #111; border-color: #d97706; }
+.sc-selbar { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 95; display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: #111827; color: #fff; border-radius: 10px; box-shadow: 0 12px 30px rgba(0,0,0,.35); font-size: 13px; border: 2px solid #f59e0b; }
+.sc-selbar .sc-sel-count { font-weight: 700; }
+.sc-selbar .sc-sel-to { display: flex; align-items: center; gap: 6px; }
+.sc-selbar input[type="date"] { font-size: 13px; padding: 4px 6px; border-radius: 6px; border: 1px solid #9ca3af; }
+.sc-selbar[hidden] { display: none !important; }
+@media print { .sc-selbar, #sc-select-btn { display: none !important; } }
 .sc-task { display: block; font-size: 10px; font-weight: 800; letter-spacing: .1px; color: #000; text-transform: lowercase; overflow: hidden; text-overflow: ellipsis; padding-top: 3px; }
 .sc-h { display: block; font-size: 12px; font-weight: 800; color: #000; }
 .sc-grid .sc-weekend { background: #e5e7eb; color: #4b5563; }
