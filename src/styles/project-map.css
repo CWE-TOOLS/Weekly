@@ -246,3 +246,15 @@ body.pm-fs .pm-main { padding: 0.3rem 0.4rem; }
 .pm-dummy-nosave[hidden] { display: none; }
 body.pm-fs .pm-dummy-bar { margin: 0.2rem 0.4rem 0; padding: 0.15rem 0.5rem; gap: 0.4rem; border-width: 1px; }
 body.pm-fs .pm-dummy-rev { gap: 0.2rem 0.35rem; }
+
+/* ---------- Warnings pop-up (2026-10-29): the sq ft colour levels and the POTENTIAL RISK limit, saved for everyone ---------- */
+.pm-warn-panel { width: 19rem; font-size: 12.5px; color: #0f172a; }
+.pm-warn-title { font-weight: 800; font-size: 13px; padding-bottom: 0.3rem; border-bottom: 1px solid #e2e8f0; margin-bottom: 0.4rem; }
+.pm-warn-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.5rem; padding: 0.3rem 0; border-bottom: 1px dashed #e2e8f0; }
+.pm-warn-what { flex-basis: 100%; font-weight: 700; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: #475569; }
+.pm-warn-row label { display: inline-flex; align-items: center; gap: 0.3rem; }
+.pm-warn-row label span { font-weight: 800; }
+.pm-warn-row input { width: 4.2rem; font: inherit; padding: 2px 4px; border: 1px solid #cbd5e1; border-radius: 4px; }
+.pm-warn-hint { flex-basis: 100%; font-size: 11px; color: #64748b; }
+.pm-warn-actions { display: flex; gap: 0.3rem; padding-top: 0.4rem; }
+.pm-warn-btn-on { border-color: #b91c1c; }

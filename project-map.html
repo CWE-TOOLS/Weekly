@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="src/styles/base.css">
     <link rel="stylesheet" href="src/styles/buttons.css">
     <link rel="stylesheet" href="src/styles/finishing-map.css?v=20261026-4">
-    <link rel="stylesheet" href="src/styles/project-map.css?v=20261029-4">
+    <link rel="stylesheet" href="src/styles/project-map.css?v=20261029-5">
 </head>
 <body class="pm-body">
     <div id="fm-app" class="fm-app pm-app">
@@ -48,6 +48,25 @@
                         <div class="pm-dept-actions"><button type="button" class="fm-mini-btn" id="pm-dept-all">Show all</button><button type="button" class="fm-mini-btn" id="pm-dept-none">Show none</button></div>
                         <ul class="pm-dept-list" id="pm-dept-list"></ul>
                     </div>
+                </div>
+                <div class="pm-dept-dropdown pm-warn-dropdown" id="pm-warn-dropdown">
+                    <button type="button" class="fm-nav-btn pm-dept-btn" id="pm-warn-btn" title="Warning levels (saved for everyone)">&#9888; Warnings</button>
+                    <form class="pm-dept-panel pm-warn-panel" id="pm-warn-form" onsubmit="return false">
+                        <div class="pm-warn-title">Warning levels</div>
+                        <div class="pm-warn-row"><span class="pm-warn-what">Sq ft on one day</span>
+                            <label><span class="pm-sq-warn">orange</span> from <input type="number" name="sqftWarn" min="1" step="10" required></label>
+                            <label><span class="pm-sq-over">red</span> from <input type="number" name="sqftOver" min="1" step="10" required></label>
+                            <span class="pm-warn-hint">Finished-face sq ft of a department's jobs on one day; green below the orange level.</span>
+                        </div>
+                        <div class="pm-warn-row"><span class="pm-warn-what">Potential risk</span>
+                            <label>more than <input type="number" name="castLimit" min="1" step="1" required> castings in Cast on one day</label>
+                        </div>
+                        <div class="pm-warn-actions">
+                            <button type="button" class="fm-mini-btn fm-bulk-go" id="pm-warn-save">Save for everyone</button>
+                            <button type="button" class="fm-mini-btn" id="pm-warn-reset" title="300 / 350 / 2">Defaults</button>
+                            <button type="button" class="fm-mini-btn" id="pm-warn-close">Close</button>
+                        </div>
+                    </form>
                 </div>
                 <input type="search" id="fm-search" class="fm-search" placeholder="Find a job or cast&hellip;" autocomplete="off">
                 <button type="button" id="fm-shipped-btn" class="fm-nav-btn fm-btn-shipped" title="Castings shipped in the last 60 days">Shipped <span class="fm-area-count" id="fm-shipped-count">0</span></button>
@@ -95,7 +114,7 @@
         </div>
     </div>
 
-    <script type="module" src="src/pages/project-map/project-map-page.js?v=20261029-4"></script>
+    <script type="module" src="src/pages/project-map/project-map-page.js?v=20261029-5"></script>
     <script type="module" src="src/utils/auto-update.js?v=20261023-1"></script>
 </body>
 </html>

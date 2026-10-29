@@ -28,17 +28,18 @@
  * departments (the department it was opened from in bold); a full column's title opens the whole list.
  * The Departments picker (like the weekly's) chooses which columns are shown; the choice is remembered per browser.
  * Loads (2026-10-27): a line that is one clear day (a Week day band, the column title in Day view) shows the finished-face
- * sq ft of its jobs (rounded up), green under SQFT_WARN, orange to SQFT_OVER, red from there; lines that span several days
+ * sq ft of its jobs (rounded up), green under S.warn.sqftWarn, orange to S.warn.sqftOver, red from there; lines that span several days
  * (Month week bands, column titles in Week/Month views) show none — the user wants the load per day only.
- * Cast with more than CAST_PER_DAY_LIMIT castings on one day gets a red count and the words POTENTIAL RISK on every band
+ * Cast with more than S.warn.castLimit castings on one day gets a red count and the words POTENTIAL RISK on every band
  * head and pop-up heading; the column title carries it only in Day view (user, 2026-10-27: not on the department otherwise).
+ * The levels (sq ft orange / red, castings a day) come from the header's Warnings pop-up, saved for everyone (2026-10-29).
  */
 import { fetchAllTasks } from '../../services/data-service.js';
 import { loadAllProjects } from '../../services/projects-service.js';
 import { initializeSupabase, registerRefreshHandler, isPortalChange, signalInfo } from '../../services/supabase-service.js';
 import { listDummies, loadDummyMoves, saveDummy, deleteDummy, isDummyMigrationPending } from '../../services/project-map-dummy-service.js';
 import { REVENUE_PER_HOUR } from '../../config/scheduler-config.js';          // the Plant Scheduler's $ per labor hour
-import { loadScheduleSettings } from '../../services/schedule-service.js';    // its monthly revenue target (read only)
+import { loadScheduleSettings, loadSettingRows, setSettingRow } from '../../services/schedule-service.js';    // its monthly revenue target (read only) + the shared Warnings levels
 import { MAP_DEPARTMENTS, ALWAYS_SHOWN, SHIPPING_DEPARTMENTS, SHIPPED_STATUSES, SHIPPED_WINDOW_DAYS } from '../../config/project-map-config.js';
 import { DEPARTMENT_COLORS, normalizeDepartmentClass } from '../../config/department-config.js';
 import { parseDate, getLocalDateString, getMonday, getWeekMonth } from '../../utils/date-utils.js';
@@ -51,9 +52,10 @@ const DEPTS_KEY = 'projectMapDepartments';
 const SUNDAY_KEY = 'projectMapSundays';
 const WHO_KEY = 'projectMapDummyBy';
 const HOURS_LOOKBACK_DAYS = 56;
-const SQFT_WARN = 300;              // dummy mode sq ft colours: under 300 green, 300 up to 350 orange, 350 and over red (user, 2026-10-27)
-const SQFT_OVER = 350;
-const CAST_PER_DAY_LIMIT = 2;      // dummy mode: more castings than this in Cast on one day get a red count (user, 2026-10-27); kept here, not in the config, so a cached config cannot break the import
+// Warning levels (2026-10-29): adjustable from the header's Warnings pop-up and saved for everyone in
+// plant_schedule_settings under 'map_warnings'; these are only the defaults (user, 2026-10-27: 300 / 350 / 2).
+const WARN_KEY = 'map_warnings';
+const WARN_DEFAULTS = Object.freeze({ sqftWarn: 300, sqftOver: 350, castLimit: 2 });   // sq ft: green under sqftWarn, orange to sqftOver, red from there; Cast: more than castLimit castings on one day = POTENTIAL RISK
 
 const S = {
     rawTasks: [],            // the weekly as fetched (never changed by a dummy)
@@ -71,6 +73,7 @@ const S = {
     hoursMax: { day: new Map(), week: new Map() },   // busiest real day / week per department in the look-back window
     dragging: null,          // { key, dept, first } while a card is being dragged (dummy mode)
     revTarget: 400000,       // the scheduler's monthly revenue target (plant_schedule_settings 'target'), read when Dummy mode opens
+    warn: { ...WARN_DEFAULTS },   // the Warnings levels in force (shared, re-read on every load)
     picking: null,           // { key, dept, first } after "Move" was tapped on a card: the next tap on a cell drops it there
 };
 
@@ -287,11 +290,12 @@ function sqftOf(list) {
     for (const [date, n] of perDay) if (!busiest || n > busiest.n) busiest = { date, n: Math.ceil(n) };
     return { total: Math.ceil(t), busiest };
 }
-function sqftClass(n) { return n >= SQFT_OVER ? 'pm-sq-over' : n >= SQFT_WARN ? 'pm-sq-warn' : 'pm-sq-ok'; }
+function sqftClass(n) { return n >= S.warn.sqftOver ? 'pm-sq-over' : n >= S.warn.sqftWarn ? 'pm-sq-warn' : 'pm-sq-ok'; }
 function sqftTitle(sq) {
+    const { sqftWarn, sqftOver } = S.warn;
     return sq.busiest.n !== sq.total
-        ? `Busiest day ${fmtShort(sq.busiest.date)}: ${sq.busiest.n.toLocaleString('en-US')} sq ft (green under ${SQFT_WARN}, orange to ${SQFT_OVER}, red from ${SQFT_OVER})`
-        : `Finished-face sq ft — green under ${SQFT_WARN}, orange ${SQFT_WARN}–${SQFT_OVER}, red ${SQFT_OVER} and over`;
+        ? `Busiest day ${fmtShort(sq.busiest.date)}: ${sq.busiest.n.toLocaleString('en-US')} sq ft (green under ${sqftWarn}, orange to ${sqftOver}, red from ${sqftOver})`
+        : `Finished-face sq ft — green under ${sqftWarn}, orange ${sqftWarn}–${sqftOver}, red ${sqftOver} and over (Warnings in the header changes these)`;
 }
 /** True when a section is one clear day (the only lines that carry a sq ft load). */
 const oneDay = (sec) => !!sec && sec.start === sec.end;
@@ -308,14 +312,50 @@ function sqftHtml(list, base, single) {
 }
 /** Cast only: the busiest day inside a line has more castings than the limit → { n, date }, else null. */
 function castOverload(col, list) {
-    if (col !== 'Cast' || !list || list.length <= CAST_PER_DAY_LIMIT) return null;
+    if (col !== 'Cast' || !list || list.length <= S.warn.castLimit) return null;
     const perDay = new Map();
     for (const e of list) for (const d of e.days) perDay.set(d, (perDay.get(d) || 0) + 1);
     let best = null;
     for (const [date, n] of perDay) if (!best || n > best.n) best = { n, date };
-    return best && best.n > CAST_PER_DAY_LIMIT ? best : null;
+    return best && best.n > S.warn.castLimit ? best : null;
 }
-const overloadTitle = (ov) => `${ov.n} castings in Cast on ${fmtShort(ov.date)} — more than ${CAST_PER_DAY_LIMIT} a day`;
+const overloadTitle = (ov) => `${ov.n} castings in Cast on ${fmtShort(ov.date)} — more than ${S.warn.castLimit} a day (Warnings in the header changes the limit)`;
+
+// ---------------------------------------------------------------- Warnings pop-up (2026-10-29): the levels, saved for everyone
+/** A saved value row -> levels (anything missing or unusable keeps the default). */
+function warnFrom(v) {
+    const w = { ...WARN_DEFAULTS };
+    if (v && typeof v === 'object') for (const k of Object.keys(WARN_DEFAULTS)) { const n = Number(v[k]); if (Number.isFinite(n) && n > 0) w[k] = Math.round(n); }
+    if (w.sqftOver < w.sqftWarn) w.sqftOver = w.sqftWarn;
+    return w;
+}
+async function loadWarnings() {
+    try { const rows = await loadSettingRows([WARN_KEY]); S.warn = warnFrom(rows.get(WARN_KEY)); }
+    catch (err) { logger.warn('[project-map] warnings levels not read, defaults stand', err); }
+    renderWarnForm();
+}
+function renderWarnForm() {
+    const f = $('pm-warn-form');
+    if (!f) return;
+    f.elements.sqftWarn.value = S.warn.sqftWarn; f.elements.sqftOver.value = S.warn.sqftOver; f.elements.castLimit.value = S.warn.castLimit;
+    const b = $('pm-warn-btn');
+    if (b) b.title = `Warning levels: sq ft green under ${S.warn.sqftWarn}, orange to ${S.warn.sqftOver}, red from there; POTENTIAL RISK over ${S.warn.castLimit} castings in Cast a day. Saved for everyone.`;
+}
+async function saveWarnings(reset) {
+    const f = $('pm-warn-form');
+    const w = reset ? { ...WARN_DEFAULTS } : warnFrom({ sqftWarn: f.elements.sqftWarn.value, sqftOver: f.elements.sqftOver.value, castLimit: f.elements.castLimit.value });
+    if (!reset && Number(f.elements.sqftOver.value) < Number(f.elements.sqftWarn.value)) { notice('Red must start at or above orange.', 'warn'); return; }
+    try {
+        await setSettingRow(WARN_KEY, reset ? null : w);
+        S.warn = w;
+        renderWarnForm(); renderMap();
+        $('pm-warn-dropdown').classList.remove('open');
+        notice(reset ? 'Warning levels back to the defaults (300 / 350 / 2), for everyone.' : `Warning levels saved for everyone: sq ft orange from ${w.sqftWarn}, red from ${w.sqftOver}; POTENTIAL RISK over ${w.castLimit} castings a day.`);
+        setTimeout(() => { if ($('fm-notice').textContent.startsWith('Warning levels')) notice(''); }, 6000);
+    } catch (err) {
+        notice('Could not save the warning levels: ' + (err && err.message ? err.message : err), 'error');
+    }
+}
 /** Fill a count span in place: red with the words POTENTIAL RISK before it when Cast is over the day limit.
  *  The span lives inside .pm-head-tail, so the pill and the count wrap onto a second line together (2026-10-28). */
 function fillCount(el, col, list, warn = true) {
@@ -961,7 +1001,8 @@ async function loadAll({ silent = false } = {}) {
     try {
         const [tasks, projects] = await Promise.all([
             fetchAllTasks(true),
-            loadAllProjects().catch(err => { logger.warn('[project-map] projects failed', err); return []; })
+            loadAllProjects().catch(err => { logger.warn('[project-map] projects failed', err); return []; }),
+            loadWarnings()   // the shared levels, so a change saved on another screen shows here on the next refresh
         ]);
         S.projects = new Map((projects || []).map(p => [String(p.project_number || '').trim(), p]));
         S.rawTasks = tasks || [];
@@ -1024,6 +1065,12 @@ function wireEvents() {
         if (e.target.closest('#pm-dept-none')) { S.depts = new Set(); saveDepts(); renderMap(); return; }
         if (e.target.closest('#pm-dept-dropdown')) return;
         $('pm-dept-dropdown')?.classList.remove('open');
+        if (e.target.closest('#pm-warn-btn')) { renderWarnForm(); $('pm-warn-dropdown').classList.toggle('open'); return; }
+        if (e.target.closest('#pm-warn-save')) { saveWarnings(false); return; }
+        if (e.target.closest('#pm-warn-reset')) { saveWarnings(true); return; }
+        if (e.target.closest('#pm-warn-close')) { $('pm-warn-dropdown').classList.remove('open'); return; }
+        if (e.target.closest('#pm-warn-dropdown')) return;
+        $('pm-warn-dropdown')?.classList.remove('open');
         if (e.target.closest('#pm-dummy-btn')) { if (S.dummy) exitDummy(); else enterDummy(); return; }
         if (e.target.closest('#pm-dummy-save')) { dummySave(false); return; }
         if (e.target.closest('#pm-dummy-saveas')) { dummySave(true); return; }
@@ -1120,7 +1167,7 @@ function wireEvents() {
     });
     $('fm-modal-search').addEventListener('input', (e) => { if (S.modal) { S.modal.filter = e.target.value.trim().toLowerCase(); renderModalBody(); } });
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') { if (S.modal) closeModal(); else if (S.picking) cancelPick(); else if (S.expandedKey) { S.expandedKey = null; renderMap(); } else $('pm-dept-dropdown')?.classList.remove('open'); }
+        if (e.key === 'Escape') { if (S.modal) closeModal(); else if (S.picking) cancelPick(); else if (S.expandedKey) { S.expandedKey = null; renderMap(); } else { $('pm-dept-dropdown')?.classList.remove('open'); $('pm-warn-dropdown')?.classList.remove('open'); } }
         if (!S.modal && !(e.target.closest && e.target.closest('input'))) { if (e.key === 'ArrowLeft') step(-1); if (e.key === 'ArrowRight') step(1); }
         if (S.dummy && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !(e.target.closest && e.target.closest('input'))) { e.preventDefault(); dummyUndo(); }
     });
