@@ -229,6 +229,19 @@ function lockReport(castingId) {
     return out;
 }
 function lockOk(report) { return report.every(r => Math.abs(r.scheduled - r.optimizer) < 0.01); }
+/** "32 h scheduled · 8 h not scheduled · 40 h total" for the Job · Casting cell (user 2026-10-29): a deleted task whose hours
+ *  were not handed to another day shows up under "not scheduled". Not-scheduled is counted per phase, so over-booking one
+ *  phase never hides a gap on another. */
+function hoursSummaryHtml(castingId, report) {
+    const sched = Math.round(rowsOfCasting(castingId).reduce((n, r) => n + (Number(r.hours) || 0), 0) * 100) / 100;
+    if (!report.length) return `<span class="sc-casthrs" title="${fmtH(sched)} hours scheduled on the grid. No Optimizer Hours to compare against yet.">${fmtH(sched)} h scheduled · no Optimizer Hours</span>`;
+    const total = Math.round(report.reduce((n, r) => n + r.optimizer, 0) * 100) / 100;
+    const open = Math.round(report.reduce((n, r) => n + Math.max(0, r.optimizer - r.scheduled), 0) * 100) / 100;
+    const over = Math.round(report.reduce((n, r) => n + Math.max(0, r.scheduled - r.optimizer), 0) * 100) / 100;
+    const gaps = report.filter(r => r.optimizer - r.scheduled > 0.01).map(r => `${r.phase.phase_name}: ${fmtH(r.optimizer - r.scheduled)} h not scheduled`);
+    const tip = `Hours scheduled: ${fmtH(sched)}\nHours not scheduled: ${fmtH(open)}${over ? ` (and ${fmtH(over)} h over the Optimizer on some phase)` : ''}\nTotal hours (Optimizer Hours tab): ${fmtH(total)}${gaps.length ? '\n\n' + gaps.join('\n') : ''}`;
+    return `<span class="sc-casthrs" title="${esc(tip)}"><b>${fmtH(sched)}</b> h scheduled · <b class="${open > 0 ? 'sc-open' : 'sc-ok'}">${fmtH(open)}</b> h not scheduled · <b>${fmtH(total)}</b> h total</span>`;
+}
 
 // ---------------------------------------------------------------------------
 // spreading (the default schedule from the Optimizer Hours tab)
@@ -682,7 +695,7 @@ function renderGrid() {
                 hourTds += `<td class="${cls} sc-hrow" ${attrs}${drag}><span class="sc-h">${hrs}</span></td>`;
             });
         }
-        h += `<tr class="sc-cast-top"><td class="sc-label"${pcStyle(c)} rowspan="2" data-cid="${c.id}" title="${esc(tip)}\n\nClick for options"><span class="sc-castnum">${esc(castingLabel(c))}</span><span class="sc-castdate">${c.casting_date ? 'cast ' + esc(shortDay(c.casting_date)) : 'no cast date'}</span>${bad ? '<span class="sc-lock" title="Scheduled hours differ from the Optimizer Hours tab"></span>' : ''}<span class="sc-castinv" title="From the Casting Inventory: types, pieces (qty + extras), finished-face sq ft">${esc(invSummaryText(c.id))}</span></td>${taskTds}</tr>`;
+        h += `<tr class="sc-cast-top"><td class="sc-label"${pcStyle(c)} rowspan="2" data-cid="${c.id}" title="${esc(tip)}\n\nClick for options"><span class="sc-castnum">${esc(castingLabel(c))}</span><span class="sc-castdate">${c.casting_date ? 'cast ' + esc(shortDay(c.casting_date)) : 'no cast date'}</span>${bad ? '<span class="sc-lock" title="Scheduled hours differ from the Optimizer Hours tab"></span>' : ''}<span class="sc-castinv" title="From the Casting Inventory: types, pieces (qty + extras), finished-face sq ft">${esc(invSummaryText(c.id))}</span>${hoursSummaryHtml(c.id, report)}</td>${taskTds}</tr>`;
         h += `<tr class="sc-cast-bottom">${hourTds}</tr>`;
     }
     h += '</tbody><tfoot><tr><td class="sc-label">Total optimizer hours</td>';
