@@ -57,6 +57,13 @@ table.sc-grid { border-collapse: separate; border-spacing: 0; table-layout: fixe
 .sc-grid .sc-dept-first, .sc-grid td.sc-dept-first { border-left: 3px solid #1f2937; }
 .sc-grid th.sc-label, .sc-grid td.sc-label { position: sticky; left: 0; z-index: 2; background: #fff; width: 190px; min-width: 190px; max-width: 190px; text-align: left; padding: 0 8px; overflow: hidden; text-overflow: ellipsis; border-right: 3px solid #1f2937; }
 .sc-grid thead th.sc-label { z-index: 4; }
+.sc-corner { display: flex; flex-direction: column; justify-content: center; gap: 6px; height: 100%; padding: 6px 0; }
+.sc-corner span { font-weight: 600; }
+#sc-jump { width: 100%; box-sizing: border-box; padding: 5px 8px; border: 1px solid #9ca3af; border-radius: 6px; font-size: 12px; font-weight: 500; white-space: normal; }
+#sc-jump:focus { outline: 2px solid #2563eb; outline-offset: 1px; }
+#sc-jump.sc-nomatch { border-color: #dc2626; background: #fee2e2; }
+.sc-grid tr.sc-project.sc-jump-hit td { background: #fde68a !important; outline: 3px solid #f59e0b; outline-offset: -3px; }
+@media print { #sc-jump { display: none; } }
 .sc-grid td.sc-label { cursor: pointer; }
 .sc-grid td.sc-label:hover { background: #f3f4f6; }
 .sc-grid tr.sc-project td { background: #f3f4f6; font-weight: 700; color: #1f2937; height: 24px; }
@@ -292,7 +299,7 @@ body.sc-selecting .sc-grid td.sc-cell.sc-has { cursor: cell; }
 /* 2026-10-27 (user): the Job · Casting column enlarged and every row 1.75× taller (190→333 px; cast rows 20→35 px, project rows 24→42 px) */
 .sc-grid th.sc-label, .sc-grid td.sc-label { width: 333px; min-width: 333px; max-width: 333px; font-size: 14px; padding: 0 10px; }
 .sc-grid td.sc-cell { height: 35px; }
-.sc-grid tr.sc-project td { height: 42px; font-size: 14px; }
+.sc-grid tr.sc-project td { height: 46px; font-size: 19px; }   /* user 2026-10-29: project names larger than the casts below */
 .sc-castnum { font-size: 15px; }
 .sc-castdate { font-size: 12px; }
 .sc-castinv { font-size: 12px; }

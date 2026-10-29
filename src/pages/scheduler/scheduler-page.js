@@ -603,7 +603,10 @@ function renderGrid() {
     }
 
     // header: weeks / days / departments
-    let h = '<table class="sc-grid"><thead><tr><th class="sc-label" rowspan="5">Job · Casting</th>';
+    const prevJump = $('sc-jump');
+    const jumpFocus = !!prevJump && document.activeElement === prevJump;
+    const jumpCaret = prevJump ? prevJump.selectionStart : 0;
+    let h = `<table class="sc-grid"><thead><tr><th class="sc-label" rowspan="5"><div class="sc-corner"><span>Job · Casting</span><input type="search" id="sc-jump" placeholder="Find a job… (Enter = next)" autocomplete="off" value="${esc(S.jump || '')}" title="Type a job number or name: the grid scrolls to it. Enter = the next match, Esc = clear."></div></th>`;
     const weeks = [];
     for (const d of days) { const wk = mondayOf(d); if (!weeks.length || weeks[weeks.length - 1].wk !== wk) weeks.push({ wk, days: [] }); weeks[weeks.length - 1].days.push(d); }
     // "Week 1", "Week 2" … centred over the Wednesday (revenue lives in the Revenue view only)
@@ -689,6 +692,37 @@ function renderGrid() {
     });
     h += '</tr></tfoot></table>';
     wrap.innerHTML = h;
+    if (jumpFocus) { const j = $('sc-jump'); if (j) { j.focus(); try { j.setSelectionRange(jumpCaret, jumpCaret); } catch (_) { /* ignore */ } } }
+    markJumpMatches();
+}
+
+// ---- jump box (user 2026-10-29): scroll the grid to the job being typed; Enter steps through the matches
+function jumpMatches() {
+    const q = String(S.jump || '').trim().toLowerCase();
+    if (!q) return [];
+    return [...document.querySelectorAll('#sc-grid-wrap tr.sc-project')].filter(tr => (tr.querySelector('td.sc-label')?.textContent || '').toLowerCase().includes(q));
+}
+function markJumpMatches() {
+    const j = $('sc-jump'); if (!j) return;
+    const m = jumpMatches();
+    j.classList.toggle('sc-nomatch', !!String(S.jump || '').trim() && !m.length);
+}
+let jumpFlashTimer = null;
+function jumpTo(step = 0) {
+    const m = jumpMatches();
+    markJumpMatches();
+    if (!m.length) { S.jumpIdx = 0; return; }
+    S.jumpIdx = ((Number(S.jumpIdx) || 0) + step + m.length) % m.length;
+    const tr = m[S.jumpIdx];
+    const wrap = $('sc-grid-wrap');
+    const head = wrap.querySelector('thead');
+    const top = tr.getBoundingClientRect().top - wrap.getBoundingClientRect().top - (head ? head.getBoundingClientRect().height : 0);
+    wrap.scrollTo({ top: wrap.scrollTop + top, behavior: 'smooth' });
+    document.querySelectorAll('tr.sc-jump-hit').forEach(el => el.classList.remove('sc-jump-hit'));
+    tr.classList.add('sc-jump-hit');
+    clearTimeout(jumpFlashTimer);
+    jumpFlashTimer = setTimeout(() => tr.classList.remove('sc-jump-hit'), 2500);
+    const j = $('sc-jump'); if (j) j.title = `${S.jumpIdx + 1} of ${m.length} matching job${m.length === 1 ? '' : 's'} — Enter = next, Esc = clear`;
 }
 
 function renderUnscheduled() {
@@ -1663,6 +1697,12 @@ function wire() {
     });
     $('sc-undo').addEventListener('click', undo);
     $('sc-redo').addEventListener('click', redo);
+    $('sc-grid-wrap').addEventListener('input', (e) => { if (e.target.id === 'sc-jump') { S.jump = e.target.value; S.jumpIdx = 0; jumpTo(0); } });
+    $('sc-grid-wrap').addEventListener('keydown', (e) => {
+        if (e.target.id !== 'sc-jump') return;
+        if (e.key === 'Enter') { e.preventDefault(); jumpTo(e.shiftKey ? -1 : 1); }
+        else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); S.jump = ''; e.target.value = ''; markJumpMatches(); e.target.blur(); }
+    });
     $('sc-select-btn').addEventListener('click', () => setSelectMode(!S.selectMode));
     $('sc-sel-move').addEventListener('click', async () => { if (!S.busy) await moveSelected($('sc-sel-date').value); });
     $('sc-sel-clear').addEventListener('click', () => { clearSelection(); setSelectMode(false); });
