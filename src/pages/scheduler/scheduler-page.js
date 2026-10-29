@@ -158,7 +158,11 @@ async function loadRows() {
     const inWindow = await loadScheduleRange(windowStart(), windowEnd());
     const seen = new Set(inWindow.map(r => r.id));
     // every casting on screen is loaded whole (its other months too): the lock check, cascades and undo see the full casting
-    const extraIds = [...new Set([...S.pinned, ...inWindow.map(r => r.casting_id)])];
+    // castings the month's sheet order lists are on screen even with nothing in this month (their days may all sit in
+    // another month): load them whole too, or the hours summary and the lock dot would count them as unscheduled (2026-10-29)
+    const onSheet = new Set(S.sheetOrder[String(S.from).slice(0, 7)] || []);
+    const sheetIds = (S.castings || []).filter(c => onSheet.has(`${c.project_number}|${c.casting_number}`)).map(c => c.id);
+    const extraIds = [...new Set([...S.pinned, ...inWindow.map(r => r.casting_id), ...sheetIds])];
     const extra = extraIds.length ? await loadScheduleForCastings(extraIds) : [];
     S.rows = inWindow.concat(extra.filter(r => !seen.has(r.id)));
     // which castings are on the scheduler at all, whatever month (so they never show as "not yet scheduled")
