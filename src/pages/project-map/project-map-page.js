@@ -11,7 +11,9 @@
  *
  * DUMMY MODE (for the DOP): a named what-if laid over the weekly. Drag a card to another day or week band of the same
  * department and the casting's whole block of days in that department slides by that many working days; with "Move
- * chain" on, every later department of that casting slides too. Blocks move whole, so day numbers (and therefore the
+ * chain" on, every later department of that casting slides too. The dummy follows the Plant Scheduler's calendar rules
+ * (2026-10-29): days before today never move, holidays are never landed on, a weekend only after a confirm, and working
+ * days are Mon–Fri minus holidays. Blocks move whole, so day numbers (and therefore the
  * staging notes keyed by them) travel with the card. Each band shows its hours; a band above the busiest real day or
  * week seen in the last 8 weeks is flagged. Save / Open / Rename / Delete / Final live in project_map_dummies (+ moves).
  * Nothing real changes until a dummy is applied — Apply is a later phase, written with the DOP.
@@ -38,7 +40,7 @@ import { fetchAllTasks } from '../../services/data-service.js';
 import { loadAllProjects } from '../../services/projects-service.js';
 import { initializeSupabase, registerRefreshHandler, isPortalChange, signalInfo } from '../../services/supabase-service.js';
 import { listDummies, loadDummyMoves, saveDummy, deleteDummy, isDummyMigrationPending } from '../../services/project-map-dummy-service.js';
-import { REVENUE_PER_HOUR } from '../../config/scheduler-config.js';          // the Plant Scheduler's $ per labor hour
+import { REVENUE_PER_HOUR, DEFAULT_HOLIDAYS } from '../../config/scheduler-config.js';   // the Plant Scheduler's $ per labor hour + its holiday seed
 import { loadScheduleSettings, loadSettingRows, setSettingRow } from '../../services/schedule-service.js';    // its monthly revenue target (read only) + the shared Warnings levels
 import { MAP_DEPARTMENTS, ALWAYS_SHOWN, SHIPPING_DEPARTMENTS, SHIPPED_STATUSES, SHIPPED_WINDOW_DAYS } from '../../config/project-map-config.js';
 import { DEPARTMENT_COLORS, normalizeDepartmentClass } from '../../config/department-config.js';
@@ -74,6 +76,7 @@ const S = {
     dragging: null,          // { key, dept, first } while a card is being dragged (dummy mode)
     revTarget: 400000,       // the scheduler's monthly revenue target (plant_schedule_settings 'target'), read when Dummy mode opens
     warn: { ...WARN_DEFAULTS },   // the Warnings levels in force (shared, re-read on every load)
+    holidays: new Set(DEFAULT_HOLIDAYS),   // the scheduler's plant holidays (its Settings), read when Dummy mode opens
     picking: null,           // { key, dept, first } after "Move" was tapped on a card: the next tap on a cell drops it there
 };
 
@@ -89,24 +92,38 @@ const deptRank = (d) => MAP_DEPARTMENTS.indexOf(d);
 const isSunday = (iso) => parseIso(iso).getDay() === 0;
 const fmtH = (h) => (Math.round(h * 10) / 10).toLocaleString('en-US');
 
-/** Move a date by n working days (Mon–Sat, Sundays skipped unless the Sunday band is on). */
+// Dummy moves follow the Plant Scheduler's calendar rules (2026-10-29): a working day is Mon–Fri and not a plant
+// holiday; days before today never move; a weekend is landed on only after an explicit confirm (the scheduler's
+// weekend allow); a holiday is never landed on.
+const isWeekend = (iso) => { const w = parseIso(iso).getDay(); return w === 0 || w === 6; };
+const isOffDay = (iso) => isWeekend(iso) || S.holidays.has(iso);
+/** Move a date by n working days, skipping weekends and holidays (the scheduler's nextWorking). */
 function shiftWorking(iso, n) {
     let d = iso;
     const step = n > 0 ? 1 : -1;
     for (let left = Math.abs(n); left > 0; left--) {
         d = addDays(d, step);
-        while (!S.sundays && isSunday(d)) d = addDays(d, step);
+        for (let guard = 0; guard < 30 && isOffDay(d); guard++) d = addDays(d, step);
     }
     return d;
 }
-/** Working days from a to b (negative when b is earlier). */
+/** Working days from a to b (negative when b is earlier). An off day b (a weekend the user confirmed) counts as one. */
 function workingDaysBetween(a, b) {
     if (a === b) return 0;
     const step = b > a ? 1 : -1;
     let d = a, n = 0;
-    while (d !== b) { d = addDays(d, step); if (S.sundays || !isSunday(d)) n += step; }
+    while (d !== b) { d = addDays(d, step); if (!isOffDay(d) || d === b) n += step; }
     return n;
 }
+/** The scheduler's three refusals, asked before a dummy move lands: past day, holiday, weekend (confirm). */
+function landingAllowed(iso) {
+    if (iso < today()) { notice(`${fmtDate(iso)} has passed — the Plant Scheduler changes only today and later days, so the dummy does too.`, 'warn'); return false; }
+    if (S.holidays.has(iso)) { notice(`${fmtDate(iso)} is a plant holiday — the Plant Scheduler never schedules holidays, so the dummy cannot land there.`, 'warn'); return false; }
+    if (isWeekend(iso) && !window.confirm(`Land on ${weekdayOf(iso)} ${fmtShort(iso)}?\n\nThe Plant Scheduler works weekends only with an explicit allow per day. Applying this dummy would set that allow for this day.`)) return false;
+    return true;
+}
+/** A cell a dummy card may be dropped on: a day cell that is today or later and not a holiday (week bands are checked on landing). */
+const cellLandable = (cell) => !(cell.dataset.seckind === 'day' && (cell.dataset.secstart < today() || S.holidays.has(cell.dataset.secstart)));
 
 // ---------------------------------------------------------------- the view: its range and its breaks ("sections")
 
@@ -393,21 +410,30 @@ function dummyMoveBlock(key, dept, toFirstDate) {
     if (c.missing && c.missing.length) { notice('That row has no job / cast number on the weekly, so a dummy cannot move it. Add the numbers in the Optimizer first.', 'warn'); return; }
     const cur = c.days.get(dept);
     if (!cur || !cur.length) return;
-    const n = workingDaysBetween(cur[0], toFirstDate);
+    const tod = today();
+    const movable = cur.filter(iso => iso >= tod);                 // days that already happened stay where they are (scheduler rule)
+    if (!movable.length) { notice('Every day of that block has already happened — the Plant Scheduler changes only today and later days, so the dummy does too.', 'warn'); return; }
+    if (!landingAllowed(toFirstDate)) return;
+    const n = workingDaysBetween(movable[0], toFirstDate);
     if (!n) return;
-    S.dummy.undo.push(new Map(S.dummy.moves));
-    if (S.dummy.undo.length > 50) S.dummy.undo.shift();
     const blockStart = cur[0];
     const depts = [...c.days.keys()].filter(d => deptRank(d) !== -1 && (d === dept || (S.dummy.chain && deptRank(d) > deptRank(dept))));
+    const plan = [];
     for (const d of depts) {
         for (const iso of c.days.get(d)) {
             if (d !== dept && iso < blockStart) continue;          // a later department's prep day that sits before the block stays put
+            if (iso < tod) continue;                               // past days never move
             const orig = c.orig.get(`${d}|${iso}`) || iso;
-            const next = shiftWorking(iso, n);
-            const k = moveKey(c.projectNumber, c.castingNumber, d, orig);
-            if (next === orig) S.dummy.moves.delete(k); else S.dummy.moves.set(k, next);
+            const next = d === dept && iso === movable[0] ? toFirstDate : shiftWorking(iso, n);
+            if (next < tod) { notice('That move would push tasks into days that have passed — the Plant Scheduler refuses that, so the dummy does too.', 'warn'); return; }
+            plan.push([moveKey(c.projectNumber, c.castingNumber, d, orig), orig, next]);
         }
     }
+    S.dummy.undo.push(new Map(S.dummy.moves));
+    if (S.dummy.undo.length > 50) S.dummy.undo.shift();
+    for (const [k, orig, next] of plan) { if (next === orig) S.dummy.moves.delete(k); else S.dummy.moves.set(k, next); }
+    const kept = cur.length - movable.length;
+    if (kept) notice(`${kept} day${kept === 1 ? '' : 's'} of that block already happened and stayed put.`, 'info');
     S.dummy.dirty = true;
     S.castings = summarise(S.rawTasks);
     renderMap();
@@ -431,7 +457,7 @@ function renderPickState() {
     const p = S.picking;
     document.body.classList.toggle('pm-picking', !!p);
     for (const el of document.querySelectorAll('.pm-cell.pm-pick-ok')) el.classList.remove('pm-pick-ok');
-    if (p) for (const cell of document.querySelectorAll(`.pm-cell[data-cellcol="${CSS.escape(p.dept)}"], .pm-cell[data-cellcol="*"]`)) cell.classList.add('pm-pick-ok');
+    if (p) for (const cell of document.querySelectorAll(`.pm-cell[data-cellcol="${CSS.escape(p.dept)}"], .pm-cell[data-cellcol="*"]`)) if (cellLandable(cell)) cell.classList.add('pm-pick-ok');
     const note = $('pm-pick-note');
     if (!note) return;
     note.hidden = !p;
@@ -460,7 +486,11 @@ async function enterDummy() {
     if (S.dummy) return;
     if (!window.confirm('Dummy mode is for the DOP.\n\nUnless the DOP has asked you to work in it, press Cancel.\n\nNothing real changes in Dummy mode: moves are saved as a named dummy only.')) return;
     S.dummy = { id: null, name: '', final: false, chain: true, moves: new Map(), dirty: false, undo: [] };
-    loadScheduleSettings().then(saved => { if (Number(saved.target) > 0) S.revTarget = Number(saved.target); renderDummyBar(); }).catch(() => { /* the default target stands */ });
+    loadScheduleSettings().then(saved => {
+        if (Number(saved.target) > 0) S.revTarget = Number(saved.target);
+        if (Array.isArray(saved.holidays) && saved.holidays.length) S.holidays = new Set(saved.holidays);   // the scheduler's Settings list
+        renderDummyBar(); renderMap();
+    }).catch(() => { /* the defaults stand */ });
     if (S.view === 'day') S.view = 'calendar';
     S.expandedKey = null;
     renderMap();
@@ -567,7 +597,12 @@ function cardBodyHtml(c, e) {
             return e && e.dept === d ? `<b class="pm-trail-here">${text}</b>` : text;
         }).join(' · ');
     const origLine = e && e.moved ? `<div class="fm-card-meta pm-orig">Weekly has it: ${escapeHtml(e.days.map(d => fmtShort(c.orig.get(`${e.dept}|${d}`) || d)).join(', '))}</div>` : '';
-    const moveBox = S.dummy && e && !(c.missing && c.missing.length) ? `<div class="pm-movebox"><button type="button" class="fm-mini-btn fm-bulk-go pm-pickup" data-pickup="${escapeHtml(c.key)}::${escapeHtml(e.dept)}" title="Then tap the day it should start on">Move ${escapeHtml(e.dept)} block&hellip;</button><label>or to <input type="date" data-move-date="${escapeHtml(c.key)}::${escapeHtml(e.dept)}" value="${escapeHtml(c.days.get(e.dept)[0])}"></label></div>` : '';
+    const blockMovable = S.dummy && e && (c.days.get(e.dept) || []).some(iso => iso >= today());
+    const moveBox = S.dummy && e && !(c.missing && c.missing.length)
+        ? (blockMovable
+            ? `<div class="pm-movebox"><button type="button" class="fm-mini-btn fm-bulk-go pm-pickup" data-pickup="${escapeHtml(c.key)}::${escapeHtml(e.dept)}" title="Then tap the day it should start on">Move ${escapeHtml(e.dept)} block&hellip;</button><label>or to <input type="date" data-move-date="${escapeHtml(c.key)}::${escapeHtml(e.dept)}" value="${escapeHtml(c.days.get(e.dept)[0])}" min="${today()}"></label></div>`
+            : `<div class="pm-movebox pm-movebox-past" title="The Plant Scheduler changes only today and later days">&#128274; ${escapeHtml(e.dept)} already happened — cannot move</div>`)
+        : '';
     return `<div class="fm-card-job">${escapeHtml(jobName(c))}</div>
         <div class="fm-card-cast">${escapeHtml(castLabel(c))}<span class="fm-card-pn">${escapeHtml(c.projectNumber)}</span>${missingHtml(c)}</div>
         ${p && p.pm ? `<div class="fm-card-meta">${escapeHtml(p.pm)}</div>` : ''}
@@ -594,7 +629,8 @@ function chipHtml(e, col, sec) {
     const pcs = c.inv && c.inv.pcs != null ? `${c.inv.pcs} pcs` : '';
     const id = `${c.key}@${col}@${sec}`;
     const cls = ['fm-chip', S.expandedKey === id ? 'fm-chip-open' : '', matchesSearch(c) ? '' : 'fm-card-dim', e.moved ? 'pm-chip-moved' : ''].filter(Boolean).join(' ');
-    return `<div class="${cls}" data-key="${escapeHtml(id)}" data-cast="${escapeHtml(c.key)}" data-dept="${escapeHtml(col)}"${S.dummy && !(c.missing && c.missing.length) ? ' draggable="true"' : ''} title="${escapeHtml(c.sheetName || jobName(c))}${e.moved ? ' — moved in this dummy' : ''}">
+    const movable = S.dummy && (c.days.get(col) || []).some(iso => iso >= today());
+    return `<div class="${cls}" data-key="${escapeHtml(id)}" data-cast="${escapeHtml(c.key)}" data-dept="${escapeHtml(col)}"${movable && !(c.missing && c.missing.length) ? ' draggable="true"' : ''} title="${escapeHtml(c.sheetName || jobName(c))}${e.moved ? ' — moved in this dummy' : ''}">
         <span class="fm-chip-job">${escapeHtml(jobName(c))}</span>
         <span class="fm-chip-line"><b>${escapeHtml(castLabel(c))}</b><span>${escapeHtml(c.projectNumber)}</span><span>${escapeHtml(pcs)}</span></span>
         ${missingHtml(c)}
@@ -748,7 +784,7 @@ function renderMap() {
                 <span class="pm-head-sq" data-colsq="${escapeHtml(col)}"></span>
                 <span class="pm-head-tail"><span class="fm-area-count" data-count="${escapeHtml(col)}">0</span></span>
             </button>${spec.sections.map((sec, i) => `
-            <div class="pm-cell${i === last ? ' pm-cell-last' : ''}" style="grid-column:${k + 1};grid-row:${i + 2}" data-cellcol="${escapeHtml(col)}" data-sec="${i}" data-secstart="${escapeHtml(sec.start)}" data-seckind="${escapeHtml(sec.kind)}">
+            <div class="pm-cell${i === last ? ' pm-cell-last' : ''}${S.dummy && sec.kind === 'day' && sec.start < today() ? ' pm-past' : ''}${S.dummy && sec.kind === 'day' && S.holidays.has(sec.start) ? ' pm-holiday' : ''}" style="grid-column:${k + 1};grid-row:${i + 2}" data-cellcol="${escapeHtml(col)}" data-sec="${i}" data-secstart="${escapeHtml(sec.start)}" data-seckind="${escapeHtml(sec.kind)}">
                 ${sec.label ? `<div class="pm-section-head" data-open-band="${escapeHtml(col)}|${i}" title="See every ${escapeHtml(col)} job in ${escapeHtml(sec.label)}"><span>${escapeHtml(sec.label)}</span><span class="pm-section-sub">${escapeHtml(sec.sub)}</span><span class="pm-section-h" data-sech="${escapeHtml(col)}|${i}"></span><span class="pm-section-h pm-section-sq" data-secsq="${escapeHtml(col)}|${i}"></span><span class="pm-head-tail"><span class="pm-section-n" data-secn="${escapeHtml(col)}|${i}"></span></span></div>` : `<div class="pm-section-head pm-section-head-day"><span class="pm-section-h" data-sech="${escapeHtml(col)}|${i}"></span><span class="pm-section-h pm-section-sq" data-secsq="${escapeHtml(col)}|${i}"></span></div>`}
                 <div class="fm-cards" data-cards="${escapeHtml(col)}|${i}"></div>
             </div>`).join('')}
@@ -836,7 +872,7 @@ function renderCalendar(byCol, shipped, spec, shown) {
         const openHtml = !openDepts.length ? ''
             : openDepts.length === shown.length ? '<span class="pm-cal-open" title="Nothing scheduled that day for any department you are viewing">open day</span>'
             : `<span class="pm-cal-open" title="Nothing scheduled that day for ${escapeHtml(openDepts.join(', '))}">open ${escapeHtml(openDepts.join(', '))} day</span>`;
-        parts.push(`<div class="pm-cell pm-cal-day${sec.start === tod ? ' pm-cal-today' : ''}${sec.label === 'Sun' ? ' pm-cal-sun' : ''}" style="grid-column:${sec.col + 2};grid-row:${sec.week + 2}" data-cellcol="*" data-sec="${i}" data-secstart="${escapeHtml(sec.start)}" data-seckind="day">
+        parts.push(`<div class="pm-cell pm-cal-day${sec.start === tod ? ' pm-cal-today' : ''}${sec.label === 'Sun' ? ' pm-cal-sun' : ''}${sec.start < tod ? ' pm-past' : ''}${S.holidays.has(sec.start) ? ' pm-holiday' : ''}" style="grid-column:${sec.col + 2};grid-row:${sec.week + 2}" data-cellcol="*" data-sec="${i}" data-secstart="${escapeHtml(sec.start)}" data-seckind="day">
             <div class="pm-cal-date" data-open-day="${i}" title="See every job on ${escapeHtml(sec.label)} ${escapeHtml(sec.sub)}"><b>${escapeHtml(sec.sub)}</b>${openHtml}<span class="pm-cal-date-n">${dayN ? `${dayN} ${dayN === 1 ? 'job' : 'jobs'}` : ''}${S.dummy && dayHours ? ` · ${fmtH(dayHours)} h` : ''}</span></div>
             <div class="pm-cal-body">${groups.join('')}</div>
         </div>`);
@@ -1121,7 +1157,7 @@ function wireEvents() {
         e.dataTransfer.effectAllowed = 'move';
         chip.classList.add('fm-card-dragging');
         document.body.classList.add('pm-dragging');
-        for (const cell of document.querySelectorAll(`.pm-cell[data-cellcol="${CSS.escape(dept)}"], .pm-cell[data-cellcol="*"]`)) cell.classList.add('pm-drop-ok');
+        for (const cell of document.querySelectorAll(`.pm-cell[data-cellcol="${CSS.escape(dept)}"], .pm-cell[data-cellcol="*"]`)) if (cellLandable(cell)) cell.classList.add('pm-drop-ok');
     });
     // dragend fires on the dragged card — which a drop has already redrawn, so it never reaches us: clean up in drop too
     const endDrag = () => {

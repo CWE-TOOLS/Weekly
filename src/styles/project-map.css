@@ -262,3 +262,12 @@ body.pm-fs .pm-dummy-rev { gap: 0.2rem 0.35rem; }
 
 /* dummy mode (2026-10-29): sq ft · cu ft on the collapsed card */
 .pm-chip-inv { font-size: 10.5px; color: #0f766e; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- dummy mode follows the scheduler's calendar rules (2026-10-29) ---------- */
+.pm-dummy-rules { font-size: 11px; color: #86198f; border: 1px dashed #d946ef; border-radius: 999px; padding: 0.05rem 0.55rem; white-space: nowrap; cursor: help; }
+body.pm-dummy .pm-cell.pm-past .fm-cards, body.pm-dummy .pm-cell.pm-past .pm-cal-body { background-image: repeating-linear-gradient(135deg, rgba(100, 116, 139, 0.14) 0 6px, transparent 6px 14px); }
+body.pm-dummy .pm-cell.pm-past .pm-section-head::after, body.pm-dummy .pm-cell.pm-past .pm-cal-date::after { content: '\1F512'; font-size: 10px; margin-left: 0.3rem; }
+body.pm-dummy .pm-cell.pm-holiday { background: #fee2e2; }
+body.pm-dummy .pm-cell.pm-holiday .pm-section-head::after, body.pm-dummy .pm-cell.pm-holiday .pm-cal-date::after { content: 'HOLIDAY'; margin-left: 0.4rem; background: #b91c1c; color: #fff; font-size: 9.5px; font-weight: 800; letter-spacing: 0.05em; padding: 0 0.4rem; border-radius: 999px; }
+body.pm-dummy .pm-cell.pm-holiday.pm-past .pm-section-head::after, body.pm-dummy .pm-cell.pm-holiday.pm-past .pm-cal-date::after { content: 'HOLIDAY'; }
+.pm-movebox-past { color: #64748b; font-weight: 600; }
