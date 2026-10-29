@@ -413,7 +413,8 @@ window.addEventListener('beforeunload', (e) => {
 });
 let inventorySaveTimers = new Map();       // itemId -> debounce handle
 let copiedComponents = null;               // Array<{type,width,length,color,sealer,quantity,extras,cu_ft,ff_sq_ft}> from a copy action
-const invSelected = new Set();             // inventory row ids ticked for "Copy / Cut selected" (2026-10-13); only for this screen
+const invSelected = new Set();             // inventory row ids ticked for "Copy / Cut selected" (2026-10-13) and "colour the selected" (2026-10-29); only for this screen
+let invLastTick = null;                    // { castingId, id } of the last tick box clicked without Shift — Shift+click ticks the range from it
 function invSelectedIn(castingId) { return getInventoryFor(castingId).filter(it => invSelected.has(it.id)); }
 /** Redraw just the Copy / Cut buttons in a casting's title block after ticks change. */
 function invRefreshTitleButtons(card, castingId) {
@@ -1492,7 +1493,7 @@ function renderInventoryBody(casting, items) {
                 <span class="pp-inv-h-pm">Type</span>
                 <span class="pp-inv-h-pm">Width</span>
                 <span class="pp-inv-h-pm">Length</span>
-                <span class="pp-inv-h-pm">Color</span>
+                <span class="pp-inv-h-pm" title="Tick several rows (Shift+click for a range), then pick the colour on any ticked row: it goes on all of them.">Color</span>
                 <span class="pp-inv-header-num pp-inv-h-eng">Cu Ft</span>
                 <span class="pp-inv-header-num pp-inv-h-eng">FF Sq Ft</span>
                 <span class="pp-inv-h-pm">Remake Of</span>
@@ -1567,7 +1568,7 @@ function renderInventoryRow(item, castingId) {
     }
     return `
         <div class="pp-inv-row${remakeIds.length ? ' pp-inv-row-remake' : ''}${invSelected.has(item.id) ? ' pp-inv-row-selected' : ''}" data-inventory-id="${escapeAttr(item.id)}" data-casting-id="${escapeAttr(castingId)}">
-            <input type="checkbox" class="pp-inv-row-select" data-select-row aria-label="Select component" title="Tick to copy or cut several components at once" ${invSelected.has(item.id) ? 'checked' : ''}>
+            <input type="checkbox" class="pp-inv-row-select" data-select-row aria-label="Select component" title="Tick to copy, cut or colour several components at once. Shift+click ticks every row from the last ticked one to this one." ${invSelected.has(item.id) ? 'checked' : ''}>
             <div class="pp-inv-row-grip" aria-hidden="true" title="Drag to reorder">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/>
@@ -9718,6 +9719,28 @@ function wireEvents() {
             handleCutSelected(castingId);
         }
     });
+    // Shift+click on a row's tick box: every row between the last plain tick and this one is ticked too (2026-10-29).
+    castingsList.addEventListener('click', (e) => {
+        if (!e.target.matches('.pp-inv-row-select[data-select-row]')) return;
+        const card = e.target.closest('.pp-cast-card[data-casting-id]');
+        const row = e.target.closest('.pp-inv-row[data-inventory-id]');
+        const castingId = card?.getAttribute('data-casting-id'), id = row?.getAttribute('data-inventory-id');
+        if (!castingId || !id) return;
+        const rows = [...card.querySelectorAll('.pp-inv-row[data-inventory-id]')];
+        const here = rows.indexOf(row);
+        const anchor = e.shiftKey && invLastTick && invLastTick.castingId === castingId ? rows.findIndex(r => r.getAttribute('data-inventory-id') === invLastTick.id) : -1;
+        if (anchor !== -1 && here !== -1 && anchor !== here) {
+            for (const r of rows.slice(Math.min(anchor, here), Math.max(anchor, here) + 1)) {
+                if (r === row) continue;                       // the clicked box itself goes through the change handler below
+                const rid = r.getAttribute('data-inventory-id');
+                invSelected.add(rid);
+                r.classList.add('pp-inv-row-selected');
+                const box = r.querySelector('[data-select-row]'); if (box) box.checked = true;
+            }
+            e.target.checked = true;                           // a Shift+click always ticks (never unticks) the range
+        }
+        if (!e.shiftKey) invLastTick = { castingId, id };
+    });
     // Tick boxes: per row, or the header box for the whole casting. Only the title block redraws.
     castingsList.addEventListener('change', (e) => {
         if (!e.target.matches('.pp-inv-row-select')) return;
@@ -9793,6 +9816,29 @@ function wireEvents() {
         if (t) clearTimeout(t);
         inventorySaveTimers.delete(itemId);
         saveInventoryItem(itemId, castingId);
+        // A colour picked on a TICKED row goes on every other ticked row of the casting too (2026-10-29): each row
+        // keeps its own red mark + undo and saves on its own, exactly as if it had been picked there.
+        if (e.target.dataset.field === 'color_log_id' && invSelected.has(itemId)) {
+            const casting = currentCastings.find(c => c.id === castingId);
+            if (isCastingInventoryLocked(casting)) return;     // the first save already showed the lock toast
+            const value = e.target.value, label = e.target.selectedOptions[0]?.text || '';
+            let n = 0;
+            for (const other of invSelectedIn(castingId)) {
+                if (other.id === itemId) continue;
+                const sel = document.querySelector(`.pp-inv-row[data-inventory-id="${other.id}"] select[data-field="color_log_id"]`);
+                if (!sel || sel.disabled || sel.value === value) continue;
+                sel.dataset.before = sel.value; sel.dataset.beforeLabel = sel.selectedOptions[0]?.text || '';
+                sel.value = value;
+                invRecordEdit(sel);
+                sel.dataset.before = value; sel.dataset.beforeLabel = label;
+                const ot = inventorySaveTimers.get(other.id);
+                if (ot) clearTimeout(ot);
+                inventorySaveTimers.delete(other.id);
+                saveInventoryItem(other.id, castingId);
+                n++;
+            }
+            if (n) showToast(`${label || 'Color'} set on ${n + 1} ticked type${n + 1 === 1 ? '' : 's'}`, 'success');
+        }
     });
     // Flush inventory save immediately on blur so users see the count update without waiting.
     castingsList.addEventListener('focusout', (e) => {
