@@ -1809,7 +1809,9 @@ window.jsbWeekTickets = async (ids, printedOn = new Date(), castDates = {}) => {
         const tickets = getTicketList(id);
         const entries = tickets.map(tk => ({ ticket: tk, log: logById(tk.colorLogId), plan: planFor(tk) })).filter(e => e.plan?.batches?.length && e.log);
         const pages = ticketPagesHtml(c, tickets, printedOn, castDates[id] || null);
+        const diffs = tickets.flatMap(tk => staleDiffs(c, tk).map(([label, was, now]) => `${label} ${was} → ${now}`));
         return { id, castingNumber: c.casting_number, pages, rows: totalsRows(entries), batches: entries.reduce((n, e) => n + e.plan.batches.length, 0),
+                 stale: { verdict: reprintCheck(id), diffs },
                  reason: pages ? null : (tickets.length ? 'no batches (cu ft or color log sand missing)' : 'no batch ticket') };
     });
 };

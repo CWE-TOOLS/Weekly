@@ -644,6 +644,65 @@ export function buildTicketPages({ casting, projectName = '', tickets = [], logs
     return { pages, entries, batches: printable.reduce((n, p) => n + p.plan.batches.length, 0), reason: null };
 }
 
+// ---------------------------------------------------------------------------------------------------------------
+// "Batching out of date": does the ticket still match the Casting Inventory? (the portal's red banner, shared)
+// ---------------------------------------------------------------------------------------------------------------
+
+/** Cu ft / face sq ft the Casting Inventory adds up to for one ticket (with several colour tickets, only that colour's rows). */
+export function inventoryTotalsFor(rows, ticket, multiColor = false) {
+    let list = rows || [];
+    if (multiColor) list = list.filter(r => ticket?.colorLogId ? r.color_log_id === ticket.colorLogId : !r.color_log_id);
+    if (!list.length) return null;
+    const has = (v) => v !== null && v !== undefined && v !== '';
+    let cuFt = 0, ff = 0;
+    for (const r of list) {
+        const units = (Number(r.quantity) || 0) + (Number(r.extras) || 0);
+        cuFt += (Number(r.cu_ft) || 0) * units;
+        ff += (Number(r.ff_sq_ft) || 0) * units;
+    }
+    return { cuFt: roundSig(cuFt, 2), ff: roundSig(ff, 2), cuFtComplete: list.every(r => has(r.cu_ft)), ffComplete: list.every(r => has(r.ff_sq_ft)) };
+}
+
+/** What the ticket's batches would be for these totals — equal signatures = the printed tickets do not change. */
+export function planSignatureFor({ ticket, log, cuFt, faceSqFt }) {
+    const totalCuFt = parseFloat(cuFt);
+    if (!totalCuFt || totalCuFt <= 0) return 'none';
+    const sandLbs = getColorLogSandLbs(log);
+    if (!sandLbs) return 'none';
+    const plan = buildBatchPlan({
+        totalCuFt, faceSqFt: parseFloat(faceSqFt) || 0, cuFtPer250: parseFloat(ticket.cuFtPer250) || 4.28,
+        castMethod: log?.castMethod || 'sprayUp', colorLogSandLbs: sandLbs, manualOverrides: btOverrides(ticket)
+    });
+    return JSON.stringify([Math.round((plan.faceCuFt || 0) * 1000) / 1000, plan.batches.map(b => [b.batchSandLbs, b.type, Math.round(b.cuFt * 1000) / 1000])]);
+}
+
+/**
+ * The out-of-date verdict for a casting's tickets against its inventory rows:
+ *   { verdict: 'changed' | 'same' | 'none', diffs: ['Total Cu Ft 12 → 14', …] }
+ * 'changed' = at least one ticket would print different batches now (print it again after Import from Tracking);
+ * 'same' = the inventory moved but the batches come out the same (or nothing moved); 'none' = nothing to compare.
+ */
+export function staleVerdict({ tickets = [], rows = [], logFor }) {
+    const multi = tickets.length > 1;
+    const num = (v) => roundSig(parseFloat(v) || 0, 2);
+    const typed = (v) => String(v ?? '').trim() !== '';
+    let seen = false, changed = false;
+    const diffs = [];
+    for (const ticket of tickets) {
+        if (!typed(ticket.cuFt)) continue;
+        const t = inventoryTotalsFor(rows, ticket, multi);
+        if (!t) { changed = true; diffs.push('no Casting Inventory rows for this ticket'); continue; }
+        if (!t.cuFtComplete || !t.ffComplete) continue;
+        seen = true;
+        if (num(ticket.cuFt) !== t.cuFt) diffs.push(`Total Cu Ft ${ticket.cuFt} → ${t.cuFt}`);
+        if (typed(ticket.faceSqFt) && num(ticket.faceSqFt) !== t.ff) diffs.push(`Face Sq Ft ${ticket.faceSqFt} → ${t.ff}`);
+        const log = logFor(ticket);
+        const was = planSignatureFor({ ticket, log, cuFt: ticket.cuFt, faceSqFt: ticket.faceSqFt });
+        if (was === 'none' || was !== planSignatureFor({ ticket, log, cuFt: t.cuFt, faceSqFt: t.ff })) changed = true;
+    }
+    return { verdict: changed ? 'changed' : (seen ? 'same' : 'none'), diffs };
+}
+
 /** Material rows summed across several castings' totals rows (same name + unit merge). */
 export function sumTotalsRows(rowLists) {
     const totals = new Map();

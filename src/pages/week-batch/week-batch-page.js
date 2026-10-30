@@ -23,7 +23,7 @@ import { loadAllInventoryForProject } from '../../services/inventory-service.js'
 import { loadMilestonesForProjects, saveMilestone } from '../../services/milestones-service.js';
 import { MS, milestonesApply } from '../../config/milestones-config.js';
 import { getSpecialBatching } from '../../config/special-batching.js';
-import { buildTicketPages, batchTotalsRows, sumTotalsRows, renderTotalsTable, BATCH_PRINT_CSS, SLUMP_TARGET_DEFAULTS, clampSlumpTarget } from '../../services/batch-ticket-render.js';
+import { buildTicketPages, batchTotalsRows, sumTotalsRows, renderTotalsTable, BATCH_PRINT_CSS, SLUMP_TARGET_DEFAULTS, clampSlumpTarget, staleVerdict, activeColorLogFor } from '../../services/batch-ticket-render.js';
 import { EARLY_PRINT_NOTE, invEarlyMarksRows, withInvMark } from '../../services/inventory-marks.js';
 import { escapeHtml } from '../../utils/security-utils.js';
 import { logger } from '../../utils/logger.js';
@@ -139,6 +139,7 @@ async function build() {
                 const w = await specialFrame(it.projectNumber, d.special.href);
                 const [res] = await w.jsbWeekTickets([casting.id], S.printedOn, { [casting.id]: it.date });
                 r.pages = res?.pages || ''; r.rows = res?.rows || []; r.batches = res?.batches || 0; r.reason = res?.reason || (r.pages ? null : 'no batch ticket');
+                r.stale = res?.stale || { verdict: 'none', diffs: [] };
             } catch (err) { logger.error('[week-batch] special page failed', err); r.reason = 'the ' + d.special.label + ' page could not build the tickets'; }
         } else {
             const out = buildTicketPages({
@@ -146,6 +147,8 @@ async function build() {
                 slumpTargets: d.slump, printedOn: S.printedOn, castDate: it.date
             });
             r.pages = out.pages; r.rows = batchTotalsRows(out.entries); r.batches = out.batches; r.reason = out.reason;
+            const comps = d.comps.get(casting.id) || [];
+            r.stale = staleVerdict({ tickets: d.tickets.get(casting.id) || [], rows: r.invRows, logFor: (tk) => activeColorLogFor({ ticket: tk, components: comps, logs: d.logs }) });
         }
     }
     S.results = results;
@@ -155,7 +158,14 @@ async function build() {
 
 function coverHtml(results) {
     const printable = results.filter(r => r.pages);
-    const rows = results.map(r => `<tr class="${r.pages ? '' : 'wb-miss'}"><td>${escapeHtml(r.date || '')}</td><td>${escapeHtml(r.projectNumber)} · ${escapeHtml(r.projectName)}</td><td>Cast ${escapeHtml(r.castingNumber)}</td><td class="wb-num">${r.batches || ''}</td><td>${r.pages ? (r.onBoard && !r.ciFinal ? '<span class="wb-warn">inventory not final</span>' : 'tickets') : '<span class="wb-warn">no tickets — ' + escapeHtml(r.reason || '') + '</span>'}</td></tr>`).join('');
+    const statusOf = (r) => {
+        if (!r.pages) return '<span class="wb-warn">no tickets — ' + escapeHtml(r.reason || '') + '</span>';
+        const flags = [];
+        if (r.stale?.verdict === 'changed') flags.push('<span class="wb-bad">BATCHING OUT OF DATE' + (r.stale.diffs.length ? ' — ' + escapeHtml(r.stale.diffs.join(' · ')) : '') + '</span>');
+        if (r.onBoard && !r.ciFinal) flags.push('<span class="wb-warn">inventory not final</span>');
+        return flags.length ? flags.join('<br>') : 'tickets';
+    };
+    const rows = results.map(r => `<tr class="${r.pages ? '' : 'wb-miss'}"><td>${escapeHtml(r.date || '')}</td><td>${escapeHtml(r.projectNumber)} · ${escapeHtml(r.projectName)}</td><td>Cast ${escapeHtml(r.castingNumber)}</td><td class="wb-num">${r.batches || ''}</td><td>${statusOf(r)}</td></tr>`).join('');
     const totalBatches = printable.reduce((n, r) => n + r.batches, 0);
     return `<div class="bt-page wb-cover">
         <h1>Batch tickets — week of ${escapeHtml(weekLabel())}</h1>
@@ -219,8 +229,10 @@ function render(results) {
     const printable = results.filter(r => r.pages);
     $('wb-doc').innerHTML = coverHtml(results) + printable.map(r => r.pages).join('') + totalsHtml(results);
     const notFinal = printable.filter(r => r.onBoard && !r.ciFinal);
+    const stale = printable.filter(r => r.stale?.verdict === 'changed');
     const missing = results.filter(r => !r.pages);
     $('wb-summary').innerHTML = `${printable.length} casting${printable.length === 1 ? '' : 's'} with tickets`
+        + (stale.length ? ` · <span class="wb-bad">${stale.length} BATCHING OUT OF DATE</span>` : '')
         + (missing.length ? ` · <span class="wb-warn">${missing.length} without tickets</span>` : '')
         + (notFinal.length ? ` · <span class="wb-warn">${notFinal.length} printed before the Casting Inventory is final (orange on the board)</span>` : '');
     $('wb-print').disabled = !printable.length;
@@ -248,6 +260,8 @@ async function stampPrinted() {
 
 function wire() {
     $('wb-print').addEventListener('click', () => {
+        const stale = (S.results || []).filter(r => r.pages && r.stale?.verdict === 'changed');
+        if (stale.length && !window.confirm(`BATCHING OUT OF DATE for: ${stale.map(r => r.projectNumber + ' cast ' + r.castingNumber).join(', ')}.\n\nThe Casting Inventory changed since these tickets were made, and the batches would come out different now. In the portal, open the job's Batch Tickets tab and press Import from Tracking, then print again.\n\nOK = print the OLD tickets anyway.   Cancel = go back.`)) return;
         const notFinal = (S.results || []).filter(r => r.pages && r.onBoard && !r.ciFinal);
         if (notFinal.length && !window.confirm(`Casting Inventory is not final for: ${notFinal.map(r => r.projectNumber + ' cast ' + r.castingNumber).join(', ')}.\n\nThese tickets would be printed from an inventory engineering has not marked ready. They go ORANGE on the Releasability Board until it is.\n\nOK = print anyway.   Cancel = go back.`)) return;
         S.stamped = false;
