@@ -186,12 +186,13 @@ function totalsHtml(results) {
 /** The five materials the plant orders by (user 2026-10-30): Q-Rok sand, Cowbay (bulk sand), Pozzotive, Portland and
  *  Cemfil fibers — each summed across every spelling the colour logs use. Plain "Sand" is NOT Q-Rok: it is listed
  *  on its own line underneath so nothing is hidden. */
+// bucket = the weight of one bucket of that material (user 2026-10-30): the plant stages whole buckets before the week
 const KEY_MATERIALS = [
-    { key: 'qrok',      label: 'Q-Rok sand',     test: (n) => /q[\s\-_]*roc?k/i.test(n) },
-    { key: 'cowbay',    label: 'Cowbay (bulk sand)', test: (n) => /cowbay/i.test(n) },
-    { key: 'pozzotive', label: 'Pozzotive',      test: (n) => /pozz/i.test(n) },
-    { key: 'portland',  label: 'Portland',       test: (n) => /portland/i.test(n) && !/reducer/i.test(n) },
-    { key: 'cemfil',    label: 'Cemfil fibers',  test: (n) => /cemfil/i.test(n) }
+    { key: 'qrok',      label: 'Q-Rok sand',     bucket: 50, test: (n) => /q[\s\-_]*roc?k/i.test(n) },
+    { key: 'cowbay',    label: 'Cowbay (bulk sand)', bucket: 50, test: (n) => /cowbay/i.test(n) },
+    { key: 'pozzotive', label: 'Pozzotive',      bucket: 25, test: (n) => /pozz/i.test(n) },
+    { key: 'portland',  label: 'Portland',       bucket: 45, test: (n) => /portland/i.test(n) && !/reducer/i.test(n) },
+    { key: 'cemfil',    label: 'Cemfil fibers',  bucket: 18, test: (n) => /cemfil/i.test(n) }
 ];
 function keyMaterialsHtml(rows, title) {
     const sums = KEY_MATERIALS.map(m => ({ ...m, total: 0, unit: '', parts: [] }));
@@ -204,11 +205,14 @@ function keyMaterialsHtml(rows, title) {
         if (/^sand\b/i.test(name)) { otherSand.total += Number(r.total) || 0; otherSand.unit = otherSand.unit || r.unit; if (!otherSand.parts.includes(name)) otherSand.parts.push(name); }
     }
     const fmt = (n) => (Math.round(n * 100) / 100).toLocaleString('en-US');
-    const line = (label, m, cls = '') => `<tr class="${cls}"><td>${escapeHtml(label)}${m.parts.length ? ` <span class="wb-parts">(${escapeHtml(m.parts.join(' + '))})</span>` : ''}</td><td class="pp-bt-totals-num">${m.total > 0 ? fmt(m.total) : '—'}</td><td>${escapeHtml(m.unit || 'lbs')}</td></tr>`;
+    // buckets: whole buckets, always rounded up — a part bucket is still a bucket to stage
+    const buckets = (m) => (m.bucket && m.total > 0) ? Math.ceil(m.total / m.bucket - 1e-9) : null;
+    const line = (label, m, cls = '') => `<tr class="${cls}"><td>${escapeHtml(label)}${m.parts.length ? ` <span class="wb-parts">(${escapeHtml(m.parts.join(' + '))})</span>` : ''}</td><td class="pp-bt-totals-num wb-buckets">${buckets(m) != null ? buckets(m).toLocaleString('en-US') : '—'}</td><td class="wb-bucket-size">${m.bucket ? m.bucket + ' lb each' : ''}</td><td class="pp-bt-totals-num">${m.total > 0 ? fmt(m.total) : '—'}</td><td>${escapeHtml(m.unit || 'lbs')}</td></tr>`;
     let body = sums.map(m => line(m.label, m)).join('');
     if (otherSand.total > 0) body += line('Other sand (not Q-Rok)', otherSand, 'wb-key-other');
     return `<div class="pp-bt-totals-panel wb-key"><div class="pp-bt-totals-title">${escapeHtml(title)}</div>
-        <table class="pp-bt-totals-table wb-key-table"><thead><tr><th>Material</th><th class="pp-bt-totals-num">Total Qty</th><th>Unit</th></tr></thead><tbody>${body}</tbody></table></div>`;
+        <table class="pp-bt-totals-table wb-key-table"><thead><tr><th>Material</th><th class="pp-bt-totals-num">Buckets</th><th>Bucket</th><th class="pp-bt-totals-num">Total Qty</th><th>Unit</th></tr></thead><tbody>${body}</tbody></table>
+        <div class="wb-hint">Buckets are rounded up to whole buckets. Bucket weights: Q-Rok 50 lb, Cowbay 50 lb, Pozzotive 25 lb, Portland 45 lb, Cemfil 18 lb.</div></div>`;
 }
 
 function render(results) {
