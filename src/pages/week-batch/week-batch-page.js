@@ -175,9 +175,30 @@ function totalsHtml(results) {
         const table = renderTotalsTable(sumTotalsRows(list.map(r => r.rows)), `Mix Day Totals — ${longDay(day)} · ${list.map(r => r.projectNumber + ' cast ' + r.castingNumber).join(', ')}`);
         if (table) html += `<div class="bt-page wb-totals">${table}</div>`;
     }
-    const week = renderTotalsTable(sumTotalsRows(printable.map(r => r.rows)), `Materials for the week — ${weekLabel()} · ${printable.length} casting${printable.length === 1 ? '' : 's'}`);
-    if (week) html += `<div class="bt-page wb-totals wb-week">${week}</div>`;
+    const weekRows = sumTotalsRows(printable.map(r => r.rows));
+    const week = renderTotalsTable(weekRows, `Materials for the week — ${weekLabel()} · ${printable.length} casting${printable.length === 1 ? '' : 's'}`);
+    if (week) html += `<div class="bt-page wb-totals wb-week">${week}${combinedHtml(weekRows)}</div>`;
     return html;
+}
+
+/** Dry-batch materials merged by their base name — "Sand (Qrok)", "Sand (Q-Rok)" and "Sand" are one line here;
+ *  "Sand - Bulk (Cowbay)" stays its own. Pigments and additives are not merged (their names are the product). */
+function combinedHtml(rows) {
+    const groups = new Map();
+    for (const r of rows || []) {
+        if (!r || r.category !== 'dry' || !(r.total > 0)) continue;
+        const base = String(r.name).replace(/\s*\(.*\)\s*$/, '').trim();
+        const k = base.toLowerCase() + '__' + r.unit;
+        if (!groups.has(k)) groups.set(k, { name: base, unit: r.unit, category: 'dry', total: 0, parts: [] });
+        groups.get(k).total += Number(r.total) || 0;
+        groups.get(k).parts.push(r.name);
+    }
+    const merged = [...groups.values()].filter(g => g.parts.length > 1);
+    if (!merged.length) return '';
+    const lines = merged.map(g => `<tr><td>${escapeHtml(g.name)} <span class="wb-parts">(${escapeHtml([...new Set(g.parts)].join(' + '))})</span></td><td class="pp-bt-totals-num">${escapeHtml(String(Math.round(g.total * 100) / 100))}</td><td>${escapeHtml(g.unit)}</td></tr>`).join('');
+    return `<div class="pp-bt-totals-panel wb-combined"><div class="pp-bt-totals-title">Same materials combined</div>
+        <div class="wb-hint">The colour logs name these differently; here they are added up by material.</div>
+        <table class="pp-bt-totals-table"><thead><tr><th>Material</th><th class="pp-bt-totals-num">Total Qty</th><th>Unit</th></tr></thead><tbody>${lines}</tbody></table></div>`;
 }
 
 function render(results) {

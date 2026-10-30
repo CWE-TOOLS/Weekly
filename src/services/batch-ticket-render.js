@@ -431,7 +431,7 @@ export function batchTotalsRows(entries) {
 export function renderBatchTotals(entries, casting = null, { scrimHtml = '' } = {}) {
     entries = (entries || []).filter(e => e?.plan?.batches?.length && e.log);
     if (!entries.length) return '';
-    const items = batchTotalsRows(entries);
+    const all = batchTotalsRows(entries);
     const categories = [
         { key: 'dry', label: 'Dry Batch' },
         { key: 'pigment', label: 'Pigments' },
@@ -440,7 +440,7 @@ export function renderBatchTotals(entries, casting = null, { scrimHtml = '' } = 
 
     let rows = '';
     for (const cat of categories) {
-        const items = items.filter(t => t && t.category === cat.key && t.total > 0);
+        const items = all.filter(t => t && t.category === cat.key && t.total > 0);
         if (items.length === 0) continue;
         rows += `<tr class="pp-bt-totals-cat-row"><td colspan="3">${escapeHtml(cat.label)}</td></tr>`;
         for (const item of items) {
