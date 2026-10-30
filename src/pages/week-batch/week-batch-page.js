@@ -181,23 +181,30 @@ function totalsHtml(results) {
     return html;
 }
 
-/** Dry-batch materials merged by their base name — "Sand (Qrok)", "Sand (Q-Rok)" and "Sand" are one line here;
- *  "Sand - Bulk (Cowbay)" stays its own. Pigments and additives are not merged (their names are the product). */
+/** Dry-batch materials merged only when they are the SAME material spelt differently (user 2026-10-30: Q-Rok is a
+ *  specific sand, not "sand"): names are compared with case, spaces, hyphens and brackets removed, and known
+ *  aliases folded ("Q-Rock" = "Q-Rok", "Royal Cement" = "Royal"). "Sand" and "Sand (Q-Rok)" stay two lines.
+ *  Pigments and additives are never merged. */
+function materialKey(name) {
+    let k = String(name || '').toLowerCase().replace(/[\s\-_().,/]+/g, '');
+    k = k.replace(/qroc?k/g, 'qrok').replace(/royalcement/g, 'royal');
+    return k;
+}
 function combinedHtml(rows) {
     const groups = new Map();
     for (const r of rows || []) {
         if (!r || r.category !== 'dry' || !(r.total > 0)) continue;
-        const base = String(r.name).replace(/\s*\(.*\)\s*$/, '').trim();
-        const k = base.toLowerCase() + '__' + r.unit;
-        if (!groups.has(k)) groups.set(k, { name: base, unit: r.unit, category: 'dry', total: 0, parts: [] });
-        groups.get(k).total += Number(r.total) || 0;
-        groups.get(k).parts.push(r.name);
+        const k = materialKey(r.name) + '__' + r.unit;
+        if (!groups.has(k)) groups.set(k, { name: r.name, unit: r.unit, total: 0, parts: [] });
+        const g = groups.get(k);
+        g.total += Number(r.total) || 0;
+        if (!g.parts.includes(r.name)) g.parts.push(r.name);
     }
     const merged = [...groups.values()].filter(g => g.parts.length > 1);
     if (!merged.length) return '';
-    const lines = merged.map(g => `<tr><td>${escapeHtml(g.name)} <span class="wb-parts">(${escapeHtml([...new Set(g.parts)].join(' + '))})</span></td><td class="pp-bt-totals-num">${escapeHtml(String(Math.round(g.total * 100) / 100))}</td><td>${escapeHtml(g.unit)}</td></tr>`).join('');
-    return `<div class="pp-bt-totals-panel wb-combined"><div class="pp-bt-totals-title">Same materials combined</div>
-        <div class="wb-hint">The colour logs name these differently; here they are added up by material.</div>
+    const lines = merged.map(g => `<tr><td>${escapeHtml(g.name)} <span class="wb-parts">(${escapeHtml(g.parts.join(' + '))})</span></td><td class="pp-bt-totals-num">${escapeHtml(String(Math.round(g.total * 100) / 100))}</td><td>${escapeHtml(g.unit)}</td></tr>`).join('');
+    return `<div class="pp-bt-totals-panel wb-combined"><div class="pp-bt-totals-title">Same material, spelt differently — combined</div>
+        <div class="wb-hint">Only spelling variants of one material are added together here (Q-Rok sand is its own line, plain sand is another).</div>
         <table class="pp-bt-totals-table"><thead><tr><th>Material</th><th class="pp-bt-totals-num">Total Qty</th><th>Unit</th></tr></thead><tbody>${lines}</tbody></table></div>`;
 }
 
