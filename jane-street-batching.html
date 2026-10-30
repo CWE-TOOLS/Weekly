@@ -989,7 +989,7 @@ function renderBatchTicketCard({ colorLog, batch, project, castNumber, castDate,
     </div>`;
 }
 
-function ticketPagesHtml(casting, tickets, printedOn = null) {
+function ticketPagesHtml(casting, tickets, printedOn = null, castDate = null) {
     return tickets.map(ticket => {
         const plan = planFor(ticket);
         if (!plan) return '';
@@ -998,7 +998,7 @@ function ticketPagesHtml(casting, tickets, printedOn = null) {
             colorLog, batch: b, ticket, printedOn,
             project: S.project?.project_name || '',
             castNumber: casting.casting_number || '',
-            castDate: casting.casting_date || ''
+            castDate: castDate || casting.casting_date || ''
         })}</div>`).join('');
     }).join('');
 }
@@ -1014,9 +1014,9 @@ function scrimLineHtml(castingId) {
     if (!text) return '';
     return `<div class="totals-scrim${warn ? ' warn' : ''}" title="${esc(detail || '')}">${esc(text)}</div>`;
 }
-function renderTotals(entries, castingId = null) {
+function totalsRows(entries) {
     entries = entries.filter(e => e.plan?.batches?.length && e.log);
-    if (!entries.length) return '';
+    if (!entries.length) return [];
     const totals = {};
     const order = [];
     const addTotal = (key, name, qty, unit, category) => {
@@ -1078,13 +1078,19 @@ function renderTotals(entries, castingId = null) {
             }
         }
     }
+    return order.map(k => totals[k]);
+}
 
+function renderTotals(entries, castingId = null) {
+    entries = entries.filter(e => e.plan?.batches?.length && e.log);
+    if (!entries.length) return '';
+    const items = totalsRows(entries);
     let rows = '';
     for (const cat of [{ key: 'dry', label: 'Dry Batch' }, { key: 'pigment', label: 'Pigments' }, { key: 'additive', label: 'Additives' }]) {
-        const items = order.map(k => totals[k]).filter(t => t && t.category === cat.key && t.total > 0);
-        if (!items.length) continue;
+        const items2 = items.filter(t => t && t.category === cat.key && t.total > 0);
+        if (!items2.length) continue;
         rows += `<tr class="cat"><td colspan="3">${cat.label}</td></tr>`;
-        for (const it of items) rows += `<tr><td>${esc(it.name)}</td><td class="num">${roundSig(it.total, 2)}</td><td>${esc(it.unit)}</td></tr>`;
+        for (const it of items2) rows += `<tr><td>${esc(it.name)}</td><td class="num">${roundSig(it.total, 2)}</td><td>${esc(it.unit)}</td></tr>`;
     }
     if (!rows) return '';
     // Color Log finishing / sealing notes under the totals (2026-10-26) — same as the portal's standard batching tab.
@@ -1793,6 +1799,20 @@ async function boot() {
             <div class="hint" style="margin-top:8px">This page needs an internet connection — it reads the same data the Project Portal does.</div></div>`;
     }
 }
+// ---- Week batch print (2026-10-30): the weekly's week-batch-print.html loads this page hidden and asks for pages + totals
+window.jsbPrintCss = PRINT_CSS;
+window.jsbWeekTickets = async (ids, printedOn = new Date(), castDates = {}) => {
+    await bootReady;
+    return (ids || []).map(id => {
+        const c = S.castings.find(x => x.id === id);
+        if (!c) return { id, pages: '', rows: [], batches: 0, reason: 'casting not on this page' };
+        const tickets = getTicketList(id);
+        const entries = tickets.map(tk => ({ ticket: tk, log: logById(tk.colorLogId), plan: planFor(tk) })).filter(e => e.plan?.batches?.length && e.log);
+        const pages = ticketPagesHtml(c, tickets, printedOn, castDates[id] || null);
+        return { id, castingNumber: c.casting_number, pages, rows: totalsRows(entries), batches: entries.reduce((n, e) => n + e.plan.batches.length, 0),
+                 reason: pages ? null : (tickets.length ? 'no batches (cu ft or color log sand missing)' : 'no batch ticket') };
+    });
+};
 boot();
 </script>
 </body>

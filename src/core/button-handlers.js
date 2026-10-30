@@ -80,6 +80,32 @@ export function initializeButtonHandlers() {
         });
     }
 
+    // Batch tickets for the week on screen (user 2026-10-30): hand the week's Cast cards to week-batch-print.html
+    const weekBatchBtn = document.getElementById('week-batch-btn');
+    if (weekBatchBtn) {
+        weekBatchBtn.addEventListener('click', () => {
+            const monday = state.getCurrentWeekDate();
+            if (!monday) return;
+            const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            const start = new Date(monday); start.setHours(0, 0, 0, 0);
+            const end = new Date(start); end.setDate(end.getDate() + 6); end.setHours(23, 59, 59, 999);
+            const items = [];
+            for (const t of state.getAllTasks()) {
+                if (t.isManual || String(t.department || '') !== 'Cast') continue;
+                const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(t.date || '').trim());
+                if (!m) continue;
+                const d = new Date(Number(m[3]), Number(m[1]) - 1, Number(m[2]));
+                if (d < start || d > end) continue;
+                const pn = String(t.projectNumber || '').trim(), cn = String(t.castingNumber || '').trim();
+                if (!pn || !cn || items.some(i => i.projectNumber === pn && i.castingNumber === cn)) continue;
+                items.push({ projectNumber: pn, castingNumber: cn, date: t.date, projectName: t.resolvedProjectName || t.project || '' });
+            }
+            if (!items.length) { alert('No castings with a job and cast number are scheduled to cast in this week.'); return; }
+            try { sessionStorage.setItem('weekBatchPrint:' + iso(start), JSON.stringify(items)); } catch (_) { /* the page falls back to the scheduler's rows */ }
+            window.open('week-batch-print.html?week=' + iso(start), '_blank');
+        });
+    }
+
     // Revenue button (lazy loaded)
     const revenueBtn = document.getElementById('revenue-btn');
     if (revenueBtn) {
