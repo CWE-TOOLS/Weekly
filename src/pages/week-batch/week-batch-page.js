@@ -172,40 +172,43 @@ function totalsHtml(results) {
     let html = '';
     for (const day of days) {
         const list = printable.filter(r => mdyToIso(r.date) === day);
-        const table = renderTotalsTable(sumTotalsRows(list.map(r => r.rows)), `Mix Day Totals — ${longDay(day)} · ${list.map(r => r.projectNumber + ' cast ' + r.castingNumber).join(', ')}`);
-        if (table) html += `<div class="bt-page wb-totals">${table}</div>`;
+        const dayRows = sumTotalsRows(list.map(r => r.rows));
+        const who = list.map(r => r.projectNumber + ' cast ' + r.castingNumber).join(', ');
+        const table = renderTotalsTable(dayRows, `Mix Day Totals — ${longDay(day)} · ${who} — all materials`);
+        if (table) html += `<div class="bt-page wb-totals">${keyMaterialsHtml(dayRows, `Key materials — ${longDay(day)} · ${who}`)}${table}</div>`;
     }
     const weekRows = sumTotalsRows(printable.map(r => r.rows));
-    const week = renderTotalsTable(weekRows, `Materials for the week — ${weekLabel()} · ${printable.length} casting${printable.length === 1 ? '' : 's'}`);
-    if (week) html += `<div class="bt-page wb-totals wb-week">${week}${combinedHtml(weekRows)}</div>`;
+    const week = renderTotalsTable(weekRows, `All materials for the week — ${printable.length} casting${printable.length === 1 ? '' : 's'}`);
+    if (week) html += `<div class="bt-page wb-totals wb-week">${keyMaterialsHtml(weekRows, `Key materials for the week — ${weekLabel()}`)}${week}</div>`;
     return html;
 }
 
-/** Dry-batch materials merged only when they are the SAME material spelt differently (user 2026-10-30: Q-Rok is a
- *  specific sand, not "sand"): names are compared with case, spaces, hyphens and brackets removed, and known
- *  aliases folded ("Q-Rock" = "Q-Rok", "Royal Cement" = "Royal"). "Sand" and "Sand (Q-Rok)" stay two lines.
- *  Pigments and additives are never merged. */
-function materialKey(name) {
-    let k = String(name || '').toLowerCase().replace(/[\s\-_().,/]+/g, '');
-    k = k.replace(/qroc?k/g, 'qrok').replace(/royalcement/g, 'royal');
-    return k;
-}
-function combinedHtml(rows) {
-    const groups = new Map();
+/** The five materials the plant orders by (user 2026-10-30): Q-Rok sand, Cowbay (bulk sand), Pozzotive, Portland and
+ *  Cemfil fibers — each summed across every spelling the colour logs use. Plain "Sand" is NOT Q-Rok: it is listed
+ *  on its own line underneath so nothing is hidden. */
+const KEY_MATERIALS = [
+    { key: 'qrok',      label: 'Q-Rok sand',     test: (n) => /q[\s\-_]*roc?k/i.test(n) },
+    { key: 'cowbay',    label: 'Cowbay (bulk sand)', test: (n) => /cowbay/i.test(n) },
+    { key: 'pozzotive', label: 'Pozzotive',      test: (n) => /pozz/i.test(n) },
+    { key: 'portland',  label: 'Portland',       test: (n) => /portland/i.test(n) && !/reducer/i.test(n) },
+    { key: 'cemfil',    label: 'Cemfil fibers',  test: (n) => /cemfil/i.test(n) }
+];
+function keyMaterialsHtml(rows, title) {
+    const sums = KEY_MATERIALS.map(m => ({ ...m, total: 0, unit: '', parts: [] }));
+    const otherSand = { total: 0, unit: '', parts: [] };
     for (const r of rows || []) {
-        if (!r || r.category !== 'dry' || !(r.total > 0)) continue;
-        const k = materialKey(r.name) + '__' + r.unit;
-        if (!groups.has(k)) groups.set(k, { name: r.name, unit: r.unit, total: 0, parts: [] });
-        const g = groups.get(k);
-        g.total += Number(r.total) || 0;
-        if (!g.parts.includes(r.name)) g.parts.push(r.name);
+        if (!r || !(r.total > 0)) continue;
+        const name = String(r.name || '');
+        const hit = sums.find(m => m.test(name));
+        if (hit) { hit.total += Number(r.total) || 0; hit.unit = hit.unit || r.unit; if (!hit.parts.includes(name)) hit.parts.push(name); continue; }
+        if (/^sand\b/i.test(name)) { otherSand.total += Number(r.total) || 0; otherSand.unit = otherSand.unit || r.unit; if (!otherSand.parts.includes(name)) otherSand.parts.push(name); }
     }
-    const merged = [...groups.values()].filter(g => g.parts.length > 1);
-    if (!merged.length) return '';
-    const lines = merged.map(g => `<tr><td>${escapeHtml(g.name)} <span class="wb-parts">(${escapeHtml(g.parts.join(' + '))})</span></td><td class="pp-bt-totals-num">${escapeHtml(String(Math.round(g.total * 100) / 100))}</td><td>${escapeHtml(g.unit)}</td></tr>`).join('');
-    return `<div class="pp-bt-totals-panel wb-combined"><div class="pp-bt-totals-title">Same material, spelt differently — combined</div>
-        <div class="wb-hint">Only spelling variants of one material are added together here (Q-Rok sand is its own line, plain sand is another).</div>
-        <table class="pp-bt-totals-table"><thead><tr><th>Material</th><th class="pp-bt-totals-num">Total Qty</th><th>Unit</th></tr></thead><tbody>${lines}</tbody></table></div>`;
+    const fmt = (n) => (Math.round(n * 100) / 100).toLocaleString('en-US');
+    const line = (label, m, cls = '') => `<tr class="${cls}"><td>${escapeHtml(label)}${m.parts.length ? ` <span class="wb-parts">(${escapeHtml(m.parts.join(' + '))})</span>` : ''}</td><td class="pp-bt-totals-num">${m.total > 0 ? fmt(m.total) : '—'}</td><td>${escapeHtml(m.unit || 'lbs')}</td></tr>`;
+    let body = sums.map(m => line(m.label, m)).join('');
+    if (otherSand.total > 0) body += line('Other sand (not Q-Rok)', otherSand, 'wb-key-other');
+    return `<div class="pp-bt-totals-panel wb-key"><div class="pp-bt-totals-title">${escapeHtml(title)}</div>
+        <table class="pp-bt-totals-table wb-key-table"><thead><tr><th>Material</th><th class="pp-bt-totals-num">Total Qty</th><th>Unit</th></tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
 function render(results) {
