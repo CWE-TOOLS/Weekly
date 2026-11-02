@@ -178,6 +178,7 @@ let currentCastings = [];            // loaded for current project
 let currentOptCastingId = null;            // active casting in optimizer tab
 let currentCastingPhases = new Map();      // castingId -> Array<phase row>
 let copiedPhases = null;                   // Array<{phase_name, hours, sort_order, description}> from a copy action
+let copiedStaged = null;                   // { castNum, entries: [{ department, day, hours }] } — a casting's day hours (2026-11-02)
 let currentTrackExpanded = new Set();      // castingIds whose tracking sections are open
 let currentCastingComponents = new Map();  // castingId -> Array<component row>
 let currentCrates = [];                    // project_crates rows for current project (ordered)
@@ -3965,9 +3966,10 @@ function renderOptValue() {
     const alloc = optAllocated(castings), left = Math.round((hours - alloc) * 10) / 10;
     if (optLegacy) {
         const months = Array.isArray(optLegacy.months) && optLegacy.months.length ? optLegacy.months.join(' / ') : 'the Optimizer';
-        box.innerHTML = `<div class="pp-opt-val-head"><strong>Project value &rarr; Optimizer hours</strong><span class="pp-opt-val-hint">legacy project</span></div>
-            <div class="pp-opt-legacy-band">&#128230; <strong>Legacy project</strong> &mdash; its schedule and hours were brought in from the ${escapeHtml(months)} Optimizer sheet${/\//.test(months) ? 's' : ''}. No project value is needed: the castings can be marked ready for scheduling as they are.
-            <button type="button" class="pp-opt-legacy-off" data-val-legacy-off title="Switch this job to the new way: enter its value, allocate hours to every casting">Enter a project value instead</button></div>`;
+        // Legacy job (user 2026-11-02): the original way — type the hours per day, copy/paste them between castings;
+        // no project value, no allocated hours, nothing to add up.
+        box.innerHTML = `<div class="pp-opt-legacy-band pp-opt-legacy-band-compact">&#128230; <strong>Legacy project</strong> &mdash; hours came from the ${escapeHtml(months)} Optimizer sheet${/\//.test(months) ? 's' : ''}. Type the hours per day below (a column of numbers from a spreadsheet pastes straight down a casting) and use the copy / paste buttons to carry one casting's hours to another. No project value or allocation is needed.
+            <button type="button" class="pp-opt-legacy-off" data-val-legacy-off title="Switch this job to the project-value way: enter its value and allocate hours to every casting">Switch to project value</button></div>`;
         return;
     }
     if (optValueItems.length < OPT_FIXED_VALUES.length) optValueItems = normalizeOptValueItems(optValueItems);
@@ -4009,6 +4011,7 @@ function scheduleOptValueSave() {
     }, 500));
 }
 function optBudgetHtml(castingId) {
+    if (optLegacy) return '';   // legacy job: nothing to allocate (user 2026-11-02)
     const b = optBudgets.get(castingId);
     const c = currentCastings.find(x => x.id === castingId);
     const entered = c ? optHoursOf(c) : 0;
@@ -4156,7 +4159,7 @@ function renderOptColumn(casting) {
         }).join('');
     }
 
-    const hasClipboard = Array.isArray(copiedPhases) && copiedPhases.length > 0;
+    const hasClipboard = (Array.isArray(copiedPhases) && copiedPhases.length > 0) || !!copiedStaged;
     const copyTitle = `Copy hours from Cast ${casting.casting_number || ''}`;
     const pasteTitle = hasClipboard
         ? `Paste hours into Cast ${casting.casting_number || ''}`
@@ -4462,6 +4465,18 @@ async function handleSelectOptCasting(castingId) {
 }
 
 function handleCopyHours(castingId) {
+    const casting0 = currentCastings.find(c => c.id === castingId);
+    const castNum0 = String(casting0?.casting_number || '');
+    const cells = optStagedCells(castNum0);
+    if (cells.length) {
+        // the day grid is what shows: copy its hours (department + day), not the old task list
+        copiedStaged = { castNum: castNum0, entries: cells.map(c => ({ department: c.department, day: c.day, hours: c.hours == null ? null : Number(c.hours) })) };
+        copiedPhases = null;
+        showToast(`Copied the day hours of Cast ${castNum0} (${cells.length} day${cells.length === 1 ? '' : 's'}). Use Paste on another casting — matching departments and days get the hours.`);
+        renderOptColumns();
+        return;
+    }
+    copiedStaged = null;
     const phases = getPhasesFor(castingId);
     copiedPhases = phases.map(p => ({
         phase_name: p.phase_name,
@@ -4475,8 +4490,25 @@ function handleCopyHours(castingId) {
 }
 
 async function handlePasteHours(targetCastingId) {
-    if (!Array.isArray(copiedPhases) || copiedPhases.length === 0) return;
     if (!targetCastingId) return;
+    if (copiedStaged) {
+        const target = currentCastings.find(c => c.id === targetCastingId);
+        const tCast = String(target?.casting_number || '');
+        const scaffold = currentStagingScaffold.get(tCast) || [];
+        let pasted = 0, noDay = 0, locked = 0;
+        for (const e of copiedStaged.entries) {
+            const sec = scaffold.find(s => s.department === e.department);
+            if (!sec || e.day > sec.days) { noDay++; continue; }                  // the target has no such day on its Staging tab
+            if (optPastDays.get(`${tCast}|${e.department}|${e.day}`)) { locked++; continue; }   // already happened — locked
+            scheduleOptHoursSave(tCast, e.department, e.day, e.hours == null ? '' : String(e.hours));
+            pasted++;
+        }
+        renderOptimizer();
+        const why = [noDay ? `${noDay} skipped — Cast ${tCast} has no such day on the Staging tab` : '', locked ? `${locked} skipped — those days already happened` : ''].filter(Boolean).join('; ');
+        showToast(pasted ? `Pasted ${pasted} day${pasted === 1 ? '' : 's'} of hours from Cast ${copiedStaged.castNum} into Cast ${tCast}${why ? ' (' + why + ')' : ''}.` : `Nothing pasted into Cast ${tCast}${why ? ': ' + why : ''}.`, pasted ? 'success' : 'error');
+        return;
+    }
+    if (!Array.isArray(copiedPhases) || copiedPhases.length === 0) return;
     try {
         const inserted = await replaceCastingPhases(targetCastingId, copiedPhases);
         // Re-sort by sort_order to mirror DB ordering
@@ -8991,6 +9023,30 @@ function wireEvents() {
 
     // Optimizer: column container (event delegation across all visible columns)
     const optColumns = document.getElementById('pp-opt-columns');
+    // Paste a column of numbers (from a spreadsheet) into a day box: it fills that day and the days below it in the
+    // same casting, in the order the days are shown; locked (past) days are skipped (user 2026-11-02).
+    optColumns.addEventListener('paste', (e) => {
+        const inp = e.target.closest && e.target.closest('input[data-action="staged-hours"]');
+        if (!inp) return;
+        const text = (e.clipboardData || window.clipboardData)?.getData('text') || '';
+        const values = text.split(/[\r\n\t]+/).map(s => s.trim()).filter(s => s !== '');
+        if (values.length < 2) return;                                             // a single number pastes as usual
+        e.preventDefault();
+        const col = inp.closest('[data-casting-id]');
+        const boxes = col ? [...col.querySelectorAll('input[data-action="staged-hours"]')] : [inp];
+        let i = boxes.indexOf(inp), n = 0, locked = 0, bad = 0;
+        for (const raw of values) {
+            while (i < boxes.length && boxes[i].dataset.past) { i++; locked++; }
+            if (i >= boxes.length) break;
+            const num = Number(String(raw).replace(/[^0-9.\-]/g, ''));
+            if (!isFinite(num)) { bad++; i++; continue; }
+            const box = boxes[i++];
+            box.value = String(num);
+            scheduleOptHoursSave(box.dataset.castingNumber, box.dataset.department, parseInt(box.dataset.day, 10), box.value);
+            n++;
+        }
+        showToast(`Pasted ${n} day${n === 1 ? '' : 's'} of hours${locked ? ` (${locked} locked day${locked === 1 ? '' : 's'} skipped)` : ''}${bad ? ` (${bad} not a number)` : ''}.`, n ? 'success' : 'error');
+    });
     optColumns.addEventListener('input', (e) => {
         const inp = e.target.closest('input[data-action="staged-hours"]');
         if (inp && inp.dataset.past) { const cur = currentStagingDescriptions.get(`${inp.dataset.castingNumber}|${inp.dataset.department}|${inp.dataset.day}`); inp.value = cur && cur.hours != null ? String(cur.hours) : ''; showToast('That day already happened on the Plant Scheduler — its hours are locked. Only today and later days can be changed.', 'error'); return; }
