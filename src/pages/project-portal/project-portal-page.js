@@ -2263,6 +2263,24 @@ async function handleImportRemakesConfirm() {
     }
 }
 
+const castNumConflictShown = new Map();   // castingId -> the typed number the toast was last shown for (one toast per attempt)
+/** A cast number another casting on the job already has can never save: say so, and put the saved number back once
+ *  the PM leaves the box (not while typing, "1" on the way to "1A" must not be clobbered) (2026-11-03). */
+function castNumberConflict(id, numInput, typed) {
+    const saved = String(currentCastings.find(c => c.id === id)?.casting_number || '');
+    const leaving = document.activeElement !== numInput;
+    numInput.classList.add('pp-cast-num-conflict');
+    numInput.title = `Cast number "${typed}" is already used on this job — it cannot be saved${saved ? `; still "${saved}"` : ''}.`;
+    if (leaving) {
+        numInput.value = saved;
+        numInput.classList.remove('pp-cast-num-conflict'); numInput.removeAttribute('title');
+        castNumConflictShown.delete(id);
+        showToast(`Cast number "${typed}" is already used on this job — kept "${saved}". Rename the other casting first.`, 'error', 6000);
+    } else if (castNumConflictShown.get(id) !== typed) {
+        castNumConflictShown.set(id, typed);
+        showToast(`Cast number "${typed}" is already used on this job — it will not save.`, 'error', 4000);
+    }
+}
 async function handleSaveCasting(id) {
     const card = document.querySelector(`.pp-cast-card[data-casting-id="${id}"]`);
     if (!card) return;
@@ -2277,12 +2295,11 @@ async function handleSaveCasting(id) {
             const idx = currentCastings.findIndex(c => c.id === id);
             if (idx !== -1) currentCastings[idx] = updated;
         }
+        numInput.classList.remove('pp-cast-num-conflict'); numInput.removeAttribute('title');
+        castNumConflictShown.delete(id);
     } catch (err) {
         logger.error('[project-portal] save casting failed:', err);
-        if (err.code === '23505') {
-            // Conflict on casting_number — silent during typing; revert next render fixes it.
-            return;
-        }
+        if (err.code === '23505') { castNumberConflict(id, numInput, num); return; }   // a number another casting already has
         showToast('Save failed: ' + (err.message || err), 'error');
     }
 }
@@ -9837,6 +9854,15 @@ function wireEvents() {
         if (e.target.tagName === 'SELECT') e.target.dataset.beforeLabel = e.target.selectedOptions[0]?.text || '';
     });
     castingsList.addEventListener('focusout', (e) => { invRecordEdit(e.target); });
+    castingsList.addEventListener('focusout', (e) => {
+        if (!e.target.matches('.pp-cast-card-header input[data-field="casting_number"], .pp-cast-card-header input[data-field="description"]')) return;
+        const id = e.target.closest('.pp-cast-card[data-casting-id]')?.getAttribute('data-casting-id');
+        if (!id) return;
+        const t = castingSaveTimers.get(id);
+        if (t) clearTimeout(t);
+        castingSaveTimers.delete(id);
+        handleSaveCasting(id);   // the number is checked now; a conflicting one goes back to the saved value with a toast
+    });
     castingsList.addEventListener('click', (e) => {
         const btn = e.target.closest('[data-action="inv-undo"]');
         if (!btn) return;
