@@ -2281,7 +2281,10 @@ function castNumberConflict(id, numInput, typed) {
         showToast(`Cast number "${typed}" is already used on this job — it will not save.`, 'error', 4000);
     }
 }
-async function handleSaveCasting(id) {
+const savesInFlight = new Set();   // promises of casting / inventory saves still talking to the database (a live reload waits for them)
+function trackSave(p) { savesInFlight.add(p); p.finally(() => savesInFlight.delete(p)); return p; }
+function handleSaveCasting(id) { return trackSave(handleSaveCastingNow(id)); }
+async function handleSaveCastingNow(id) {
     const card = document.querySelector(`.pp-cast-card[data-casting-id="${id}"]`);
     if (!card) return;
     const numInput = card.querySelector('input[data-field="casting_number"]');
@@ -2382,7 +2385,8 @@ async function handleAddInventoryItem(castingId) {
     }
 }
 
-async function saveInventoryItem(itemId, castingId) {
+function saveInventoryItem(itemId, castingId) { return trackSave(saveInventoryItemNow(itemId, castingId)); }
+async function saveInventoryItemNow(itemId, castingId) {
     const row = document.querySelector(`.pp-inv-row[data-inventory-id="${itemId}"]`);
     if (!row) return;
     const casting = currentCastings.find(c => c.id === castingId);
@@ -6568,6 +6572,17 @@ function scheduleLiveReload(delay = 0) {
 }
 function armLiveReloadRetry() { scheduleLiveReload(1500); }   // after a blur: let the debounced save land first
 
+/** The user's own saves that are still waiting (debounced) or in flight: fire the waiting ones now and wait for all of
+ *  them, so a redraw from the database never overdraws what was typed a moment ago (2026-11-03). */
+async function flushPendingSaves() {
+    for (const [id, t] of [...castingSaveTimers]) { clearTimeout(t); castingSaveTimers.delete(id); handleSaveCasting(id); }
+    for (const [itemId, t] of [...inventorySaveTimers]) {
+        clearTimeout(t); inventorySaveTimers.delete(itemId);
+        const row = document.querySelector(`.pp-inv-row[data-inventory-id="${itemId}"]`);
+        if (row) saveInventoryItem(itemId, row.getAttribute('data-casting-id'));
+    }
+    if (savesInFlight.size) await Promise.allSettled([...savesInFlight]);
+}
 async function runLiveReload() {
     liveReloadTimer = null;
     if (!liveReloadPending.size || liveReloadRunning) return;
@@ -6577,6 +6592,7 @@ async function runLiveReload() {
     liveReloadPending.clear();
     liveReloadRunning = true;
     try {
+        await flushPendingSaves();   // what the user just typed lands first; the redraw reads it back
         if (wanted.has('*')) {
             await liveReloadProjectAndPhases();
             await loadAndRenderCastings();
