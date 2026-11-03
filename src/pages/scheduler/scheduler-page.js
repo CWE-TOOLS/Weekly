@@ -15,8 +15,8 @@ import { loadAllProjects } from '../../services/projects-service.js';
 import { loadAllCastingPhasesForProject } from '../../services/optimizer-hours-service.js';
 import {
     loadScheduleRange, loadScheduleForCastings, insertScheduleRows, updateScheduleRow, deleteScheduleRow, readyFromSettings,
-    deleteCastingSchedule, loadScheduleSettings, saveScheduleSetting, isScheduleMigrationPending
-} from '../../services/schedule-service.js?v=20261027-1';
+    deleteCastingSchedule, loadScheduleSettings, saveScheduleSetting, isScheduleMigrationPending, schedulerJobsFromSettings
+} from '../../services/schedule-service.js?v=20261103-1';
 import {
     DEPARTMENTS, DEPT_KEYS, TASKS, tasksForDept, teamAccepts, taskForPhase, SETTINGS_DEFAULTS, REVENUE_PER_HOUR, SCHEDULABLE_STATUSES, TEAM_DAY_LIMITS, teamOfDepartment, DEFAULT_CREW
 } from '../../config/scheduler-config.js?v=20261027-1';
@@ -45,6 +45,7 @@ const S = {
     unsSearch: '',                // the "Not yet scheduled" panel's own search box
     scheduledIds: new Set(),      // every casting with days anywhere on the scheduler (any month)
     ready: new Map(),             // castingId -> flag: "Ready for scheduling" clicked on the portal's Optimizer Hours tab
+    schedulerJobs: new Set(),     // project numbers on the Plant Scheduler way of Optimizer hours (opt_scheduler:<project>); the rest use the task list (user 2026-11-03)
     staging: new Map(),           // project_number -> Map("cast|weeklyDept|day" -> { description }) from the portal's Staging tab
     pinned: new Set(),            // castings shown even without rows in the window
     busy: false,
@@ -188,6 +189,7 @@ function unitOf(r) { const n = String(r.note || '').trim(); return r.phase_id ||
 /** A casting's staged days with hours (Staging tab task + Optimizer Hours per day), one unit each, in team order. */
 function stagedUnits(castingId) {
     const c = S.castingById.get(castingId);
+    if (!c || !S.schedulerJobs.has(String(c.project_number))) return [];   // original-way job: its hours are the task list (user 2026-11-03)
     const notes = c && S.staging.get(c.project_number);
     if (!notes) return [];
     const cells = [];
@@ -2000,7 +2002,7 @@ function wire() {
         if (tables.has('task_descriptions')) { try { S.staging = await fetchStagingForProjects(S.projects.map(p => p.project_number)); } catch (err) { logger.warn('[scheduler] staging reload failed', err); } }
         if (tables.has('plant_schedule_settings')) {
             resetWeeklySourceMemo(); refreshSourceBadge().catch(() => {});
-            try { const saved = await loadScheduleSettings(); S.ready = readyFromSettings(saved); S.sheetOrder = sheetOrderFrom(saved); if (Number(saved.target) > 0) S.settings.target = Number(saved.target); if (saved.costs) S.settings.costs = saved.costs; }
+            try { const saved = await loadScheduleSettings(); S.ready = readyFromSettings(saved); S.schedulerJobs = schedulerJobsFromSettings(saved); S.sheetOrder = sheetOrderFrom(saved); if (Number(saved.target) > 0) S.settings.target = Number(saved.target); if (saved.costs) S.settings.costs = saved.costs; }
             catch (err) { logger.warn('[scheduler] reload settings failed', err); }
         }
         if (tables.has('plant_schedule') || tables.has('plant_schedule_settings') || tables.has('casting_phases') || tables.has('project_castings') || tables.has('task_descriptions')) {
@@ -2031,6 +2033,7 @@ async function init() {
         S.settings.crew = (saved.crew && typeof saved.crew === 'object') ? saved.crew : JSON.parse(JSON.stringify(DEFAULT_CREW));
         if (Number(saved.target) > 0) S.settings.target = Number(saved.target);
         S.ready = readyFromSettings(saved);
+        S.schedulerJobs = schedulerJobsFromSettings(saved);
         await loadBase();
         await loadRows();
         render();

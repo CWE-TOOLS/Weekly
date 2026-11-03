@@ -94,6 +94,18 @@ export async function deleteCastingSchedule(castingId, all = false) {
 
 /** "Ready for scheduling" (set on the portal's Optimizer Hours tab): one settings row per casting, key "ready:<castingId>". */
 export const READY_PREFIX = 'ready:';
+/**
+ * Jobs on the Plant Scheduler way of Optimizer hours (user 2026-11-03): one settings row per job, key
+ * "opt_scheduler:<project>". Only those jobs get the days + tasks from the Staging tab with hours per day, the project
+ * value, the allocated hours and "Ready for scheduling". Every other job enters its hours the original way — a task
+ * list per casting — and the scheduler lays that list out as it did before.
+ */
+export const OPT_SCHEDULER_PREFIX = 'opt_scheduler:';
+export function schedulerJobsFromSettings(saved) {
+    const out = new Set();
+    for (const k of Object.keys(saved || {})) if (k.startsWith(OPT_SCHEDULER_PREFIX) && saved[k]) out.add(k.slice(OPT_SCHEDULER_PREFIX.length));
+    return out;
+}
 
 /** Any settings rows by key (project value items `value:<project>`, casting budgets `budget:<castingId>` …). */
 export async function loadSettingRows(keys) {

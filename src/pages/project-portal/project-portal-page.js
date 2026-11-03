@@ -134,7 +134,7 @@ import { SLUMP_TARGET_DEFAULTS, FINAL_BACKUP_PIG_REDUCTION_PCT, parsePigReductio
 import { invHash as invHashShared, invFingerprintRows, invColourFingerprintRows } from '../../services/inventory-marks.js';
 import { loadMilestonesForProject, saveMilestone, isMilestonesMigrationPending, loadLayoutConditions, LAYOUT_CONDITION_PREFIX, layoutConditionNote, parseLayoutCondition, sideWords } from '../../services/milestones-service.js';
 import { loadJigListsForProject as loadJigListsForScrim, scrimForInventory } from '../../services/jig-list-service.js';
-import { loadReadyFlags, setReadyFlag, loadSettingRows, setSettingRow, loadScheduleForCastings } from '../../services/schedule-service.js?v=20261027-1';
+import { loadReadyFlags, setReadyFlag, loadSettingRows, setSettingRow, loadScheduleForCastings, OPT_SCHEDULER_PREFIX } from '../../services/schedule-service.js?v=20261103-1';
 import { tasksForDepartment, teamOfDepartment, taskForPhase, STAGING_NAME_OF_TEAM, REVENUE_PER_HOUR } from '../../config/scheduler-config.js?v=20261027-1';
 import {
     loadLayoutPositions,
@@ -1083,8 +1083,9 @@ async function refreshInfoValue(projectNumber) {
     if (!box) return;
     if (!pn) { box.innerHTML = ''; return; }
     try {
-        const rows = await loadSettingRows([`value:${pn}`, `legacy:${pn}`]);
+        const rows = await loadSettingRows([`value:${pn}`, `legacy:${pn}`, OPT_SCHEDULER_PREFIX + pn]);
         if (infoValueFor !== pn) return;   // another job was opened meanwhile
+        if (!rows.get(OPT_SCHEDULER_PREFIX + pn)) { box.innerHTML = ''; return; }   // original way: no project value on this job (user 2026-11-03)
         const v = rows.get(`value:${pn}`), lg = rows.get(`legacy:${pn}`);
         let names = null;
         try { const cs = (currentCastings.length && currentCastings[0].project_number === pn) ? currentCastings : await loadCastings(pn); names = new Map((cs || []).map(c => [c.id, String(c.casting_number || '')])); } catch (e) { /* names stay generic */ }
@@ -2841,7 +2842,7 @@ function optStagedCells(castNum) {
 function optStagedHours(castNum) { return optStagedCells(castNum).reduce((n, c) => n + (Number(c.hours) || 0), 0); }
 /** Total hours of a casting: the staged days when any carry hours, else the previous task list. */
 function optHoursOf(casting) {
-    const staged = optStagedHours(String(casting.casting_number || ''));
+    const staged = optScheduler ? optStagedHours(String(casting.casting_number || '')) : 0;
     if (staged > 0) return staged;
     return getPhasesFor(casting.id).reduce((n, p) => n + (typeof p.hours === 'number' ? p.hours : 0), 0);
 }
@@ -3808,7 +3809,10 @@ async function loadAllPhasesForProject() {
 }
 
 function renderOptimizer() {
-    const mig = document.getElementById('pp-opt-migration'); if (mig) mig.hidden = !isStagingTaskHoursMigrationPending();
+    const mig = document.getElementById('pp-opt-migration'); if (mig) mig.hidden = !optScheduler || !isStagingTaskHoursMigrationPending();
+    const sub = document.querySelector('[data-panel="optimizer"] .pp-opt-sub');
+    if (sub) sub.textContent = optScheduler ? 'The days and tasks come from the Staging tab; enter the hours for each day here. The Plant Scheduler uses both.'
+                                            : 'Tasks and hours per casting. Add tasks, type the hours, and use copy / paste to carry one casting\'s list to another.';
     renderOptValue();
     renderOptReadyBar();
     renderOptPills();
@@ -3875,6 +3879,7 @@ function optReadyBlocker() {
     return null;
 }
 function optReadyHtml(castingId) {
+    if (!optScheduler) return '';   // original way: nothing to mark ready (user 2026-11-03)
     const on = optReady.has(castingId);
     const blocker = on ? null : optReadyBlocker();
     if (blocker) return `<button type="button" class="pp-opt-ready pp-opt-ready-blocked" data-action="toggle-ready" data-casting-id="${escapeAttr(castingId)}" title="${escapeAttr(blocker)}">&#128274; Ready for scheduling</button>`;
@@ -3951,12 +3956,14 @@ function optCoSplitHtml(it, i) {
 }
 let optBudgets = new Map();      // castingId -> hours
 let optLegacy = null;            // { source, months, imported_at } when the job's schedule came from the Optimizer sheets — no project value needed
+let optScheduler = false;        // true = this job is on the Plant Scheduler way (flag opt_scheduler:<project>); false = the original task list (user 2026-11-03)
 const optValueSaveTimers = new Map();
 async function loadOptValue() {
-    optValueItems = []; optBudgets = new Map(); optLegacy = null;
+    optValueItems = []; optBudgets = new Map(); optLegacy = null; optScheduler = false;
     if (!currentProjectNumber) return;
     try {
-        const rows = await loadSettingRows([`value:${currentProjectNumber}`, `legacy:${currentProjectNumber}`, ...currentCastings.map(c => `budget:${c.id}`)]);
+        const rows = await loadSettingRows([`value:${currentProjectNumber}`, `legacy:${currentProjectNumber}`, OPT_SCHEDULER_PREFIX + currentProjectNumber, ...currentCastings.map(c => `budget:${c.id}`)]);
+        optScheduler = !!rows.get(OPT_SCHEDULER_PREFIX + currentProjectNumber);
         const lg = rows.get(`legacy:${currentProjectNumber}`);
         optLegacy = lg && typeof lg === 'object' ? lg : null;
         const v = rows.get(`value:${currentProjectNumber}`);
@@ -3986,11 +3993,12 @@ function renderOptValue() {
     const total = optTotalValue(), hours = optJobHours();
     const castings = getCastingsForActivePhase();
     const alloc = optAllocated(castings), left = Math.round((hours - alloc) * 10) / 10;
+    if (!optScheduler) { box.innerHTML = optModeBandHtml(); return; }
     if (optLegacy) {
         const months = Array.isArray(optLegacy.months) && optLegacy.months.length ? optLegacy.months.join(' / ') : 'the Optimizer';
         // Legacy job (user 2026-11-02): the original way — type the hours per day, copy/paste them between castings;
         // no project value, no allocated hours, nothing to add up.
-        box.innerHTML = `<div class="pp-opt-legacy-band pp-opt-legacy-band-compact">&#128230; <strong>Legacy project</strong> &mdash; hours came from the ${escapeHtml(months)} Optimizer sheet${/\//.test(months) ? 's' : ''}. Type the hours per day below (a column of numbers from a spreadsheet pastes straight down a casting) and use the copy / paste buttons to carry one casting's hours to another. No project value or allocation is needed.
+        box.innerHTML = optModeBandHtml() + `<div class="pp-opt-legacy-band pp-opt-legacy-band-compact">&#128230; <strong>Legacy project</strong> &mdash; hours came from the ${escapeHtml(months)} Optimizer sheet${/\//.test(months) ? 's' : ''}. Type the hours per day below (a column of numbers from a spreadsheet pastes straight down a casting) and use the copy / paste buttons to carry one casting's hours to another. No project value or allocation is needed.
             <button type="button" class="pp-opt-legacy-off" data-val-legacy-off title="Switch this job to the project-value way: enter its value and allocate hours to every casting">Switch to project value</button></div>`;
         return;
     }
@@ -3999,10 +4007,32 @@ function renderOptValue() {
     const rows = optValueItems.map((it, i) => i < OPT_FIXED_VALUES.length
         ? `<div class="pp-opt-val-row pp-opt-val-fixed"><label for="pp-opt-val-${i}">${escapeHtml(it.name)} =</label>${amount(it, i)}<span></span></div>`
         : `<div class="pp-opt-val-row pp-opt-val-co"><span class="pp-opt-val-co-wrap"><input type="text" data-val-name="${i}" value="${escapeAttr(it.name)}" placeholder="Change Order #${i - OPT_FIXED_VALUES.length + 1} — type a name" title="Name this change order"><span class="pp-opt-val-eq">=</span></span>${amount(it, i)}<button type="button" class="pp-opt-val-del" data-val-del="${i}" title="Remove this change order">&times;</button></div>${optCoSplitHtml(it, i)}`).join('');
-    box.innerHTML = `<div class="pp-opt-val-head"><strong>Project value &rarr; Optimizer hours</strong><span class="pp-opt-val-hint">value &divide; $${REVENUE_PER_HOUR}/h</span></div>
+    box.innerHTML = optModeBandHtml() + `<div class="pp-opt-val-head"><strong>Project value &rarr; Optimizer hours</strong><span class="pp-opt-val-hint">value &divide; $${REVENUE_PER_HOUR}/h</span></div>
         <div class="pp-opt-val-rows">${rows}</div>
         <button type="button" class="pp-opt-val-add" data-val-add>+ Add Change Order value</button>
         ${optValueTotalsHtml()}`;
+}
+/** Which way this job enters its Optimizer hours, with the button to change it (user 2026-11-03). */
+function optModeBandHtml() {
+    return optScheduler
+        ? `<div class="pp-opt-mode pp-opt-mode-new">&#128197; <strong>Plant Scheduler job</strong> &mdash; the days and tasks come from the Staging tab and the hours go on each day here.
+            <button type="button" class="pp-opt-mode-btn" data-opt-mode="task-list" title="Go back to the original way on this job: a task list per casting">Back to the original task list</button></div>`
+        : `<div class="pp-opt-mode pp-opt-mode-old">&#128203; <strong>Original way</strong> &mdash; a task list per casting: add tasks, type the hours, copy / paste between castings.
+            <button type="button" class="pp-opt-mode-btn" data-opt-mode="scheduler" title="Put this job on the Plant Scheduler way: Staging days + hours per day, project value, ready for scheduling">Use the Plant Scheduler way for this job</button></div>`;
+}
+async function handleOptModeSwitch(toScheduler) {
+    if (!currentProjectNumber) return;
+    const q = toScheduler
+        ? `Put ${currentProjectNumber} on the Plant Scheduler way?\n\nThe hours then go on the Staging tab's days (per day), with the project value and "Ready for scheduling". The task list stays saved but is read only.`
+        : `Take ${currentProjectNumber} back to the original task list?\n\nThe hours are then entered per task on each casting, as before the Plant Scheduler. Hours already typed on the staged days stay saved but are not used.`;
+    if (!window.confirm(q)) return;
+    try {
+        await setSettingRow(OPT_SCHEDULER_PREFIX + currentProjectNumber, toScheduler ? { since: new Date().toISOString() } : null);
+        optScheduler = toScheduler;
+        renderOptimizer();
+        refreshInfoValue(currentProjectNumber);
+        showToast(toScheduler ? `${currentProjectNumber} is on the Plant Scheduler way.` : `${currentProjectNumber} is back on the original task list.`);
+    } catch (err) { showToast('Could not save: ' + (err.message || err), 'error'); }
 }
 function optValueTotalsHtml() {
     const initial = optInitialValue(), co = optChangeOrderValue(), total = optTotalValue();
@@ -4033,7 +4063,7 @@ function scheduleOptValueSave() {
     }, 500));
 }
 function optBudgetHtml(castingId) {
-    if (optLegacy) return '';   // legacy job: nothing to allocate (user 2026-11-02)
+    if (!optScheduler || optLegacy) return '';   // original way / legacy job: nothing to allocate
     const b = optBudgets.get(castingId);
     const c = currentCastings.find(x => x.id === castingId);
     const entered = c ? optHoursOf(c) : 0;
@@ -4069,7 +4099,7 @@ function renderOptReadyBar() {
     const bar = document.getElementById('pp-opt-ready-bar');
     if (!bar) return;
     const list = getCastingsForActivePhase();
-    if (!list.length) { bar.innerHTML = ''; return; }
+    if (!list.length || !optScheduler) { bar.innerHTML = ''; return; }   // original way: no ready bar (user 2026-11-03)
     const n = list.filter(c => optReady.has(c.id)).length;
     const pullable = list.filter(c => optStagedHours(String(c.casting_number || '')) <= 0 && getPhasesFor(c.id).some(p => Number(p.hours) > 0)).length;
     bar.innerHTML = `${pullable ? `<button type="button" class="pp-opt-pull pp-opt-pull-all" data-action="pull-legacy-all" title="Put every casting's previous task list hours onto its staged days">&#8681; Pull previous hours into ${pullable} casting${pullable === 1 ? '' : 's'}</button>` : ''}<span class="pp-opt-ready-count"><strong>${n} of ${list.length}</strong> casting${list.length === 1 ? '' : 's'} ready for scheduling</span>
@@ -4211,13 +4241,16 @@ function renderOptColumn(casting) {
                 ${optMsCellHtml(casting.id)}
                 ${optReadyHtml(casting.id)}
             </div>
-            ${optBudgetHtml(casting.id)}
+            ${!optScheduler ? `<div class="pp-opt-cards" data-casting-id="${escapeAttr(casting.id)}">
+                ${cardsHtml}
+            </div>
+            <button type="button" class="pp-add-btn pp-opt-col-add" data-action="add-task" data-casting-id="${escapeAttr(casting.id)}">+ Add Task</button>` : `${optBudgetHtml(casting.id)}
             <div class="pp-opt-staged" data-casting-id="${escapeAttr(casting.id)}">${renderOptStagedGrid(casting)}</div>
             ${phases.some(p => Number(p.hours) > 0) && optStagedHours(String(casting.casting_number || '')) <= 0 ? `<button type="button" class="pp-opt-pull" data-action="pull-legacy" data-casting-id="${escapeAttr(casting.id)}" title="Put the previous task list's hours onto this casting's staged days, team by team">&#8681; Pull hours from the previous task list</button>` : ''}
             ${phases.length ? `<details class="pp-opt-legacy"><summary>Previous task list (${phases.length} task${phases.length === 1 ? '' : 's'} · ${phases.reduce((s, p) => s + (typeof p.hours === 'number' ? p.hours : 0), 0)} hrs) — read only</summary>
             <div class="pp-opt-cards pp-opt-cards-legacy" data-casting-id="${escapeAttr(casting.id)}">
                 ${cardsHtml}
-            </div></details>` : ''}
+            </div></details>` : ''}`}
             <div class="pp-opt-col-total">
                 <span class="pp-opt-col-total-label">Total</span>
                 <span class="pp-opt-col-total-value"><strong data-col-total="${escapeAttr(casting.id)}">0</strong> hrs</span>
@@ -4489,7 +4522,7 @@ async function handleSelectOptCasting(castingId) {
 function handleCopyHours(castingId) {
     const casting0 = currentCastings.find(c => c.id === castingId);
     const castNum0 = String(casting0?.casting_number || '');
-    const cells = optStagedCells(castNum0);
+    const cells = optScheduler ? optStagedCells(castNum0) : [];
     if (cells.length) {
         // the day grid is what shows: copy its hours (department + day), not the old task list
         copiedStaged = { castNum: castNum0, entries: cells.map(c => ({ department: c.department, day: c.day, taskName: c.taskName || '', hours: c.hours == null ? null : Number(c.hours) })) };
@@ -9110,6 +9143,8 @@ function wireEvents() {
     const optValue = document.getElementById('pp-opt-value');
     if (optValue) {
         optValue.addEventListener('click', async (e) => {
+            const mode = e.target.closest('[data-opt-mode]');
+            if (mode) { handleOptModeSwitch(mode.dataset.optMode === 'scheduler'); return; }
             if (!e.target.closest('[data-val-legacy-off]') || !currentProjectNumber) return;
             if (!window.confirm('Switch this job to the project-value way? From then on the castings\' allocated hours must add up to the job\'s Optimizer hours before they can be marked ready.')) return;
             try { await setSettingRow(`legacy:${currentProjectNumber}`, null); optLegacy = null; renderOptimizer(); showToast('Legacy flag removed — enter the project value.'); }
@@ -13847,7 +13882,7 @@ function buildOptPrintPage(casting, phases, projectNumber, projectName) {
     const projectLabel = [projectNumber, projectName].filter(Boolean).map(s => escapeHtml(s)).join(' — ');
     const castLabel = phaseName ? `${escapeHtml(phaseName)} &middot; Cast ${escapeHtml(num)}` : `Cast ${escapeHtml(num)}`;
 
-    const stagedCells = optStagedCells(String(num)).filter(c => c.hours != null || c.taskName);
+    const stagedCells = optScheduler ? optStagedCells(String(num)).filter(c => c.hours != null || c.taskName) : [];
     if (stagedCells.some(c => Number(c.hours) > 0)) {
         phases = stagedCells.map(c => ({ phase_name: `${c.department} · Day ${c.day}${c.taskName ? ' · ' + c.taskName.toLowerCase() : ''}`, hours: Number(c.hours) || 0, description: c.description }));
     }

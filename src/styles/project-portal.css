@@ -6784,6 +6784,11 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
 .pp-opt-ready-locked { font-size: 12px; font-weight: 700; color: #92400e; background: #fef3c7; border-radius: 6px; padding: 3px 8px; }
 .pp-opt-legacy-band { margin-top: 6px; padding: 8px 10px; border-radius: 8px; background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; font-size: 13px; line-height: 1.4; }
 .pp-opt-legacy-band-compact { margin-top: 0; }
+.pp-opt-mode { margin: 0 0 8px; padding: 7px 10px; border-radius: 8px; font-size: 13px; line-height: 1.4; }
+.pp-opt-mode-old { background: #f3f4f6; border: 1px solid #d1d5db; color: #374151; }
+.pp-opt-mode-new { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e3a8a; }
+.pp-opt-mode-btn { margin-left: 8px; font-size: 11px; padding: 2px 8px; border: 1px solid #9ca3af; border-radius: 6px; background: #fff; color: inherit; cursor: pointer; opacity: .85; }
+.pp-opt-mode-btn:hover { opacity: 1; background: #f9fafb; }
 .pp-opt-legacy-band-compact .pp-opt-legacy-off { font-size: 11px; opacity: .8; }
 .pp-opt-legacy-off { margin-left: 8px; font-size: 12px; padding: 2px 8px; border: 1px solid #6ee7b7; border-radius: 6px; background: #fff; color: #065f46; cursor: pointer; }
 .pp-opt-legacy-off:hover { background: #d1fae5; }
