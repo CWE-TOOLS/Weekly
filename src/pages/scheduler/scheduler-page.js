@@ -23,6 +23,7 @@ import {
 import { logger } from '../../utils/logger.js';
 import { getWeeklySource, setWeeklySource, resetWeeklySourceMemo, SOURCE_SCHEDULER, sourceLabel } from '../../services/weekly-source-service.js';
 import { fetchForProject as fetchStagingNotes, fetchForProjects as fetchStagingForProjects, upsertOne as saveStagingNote } from '../../services/task-descriptions-service.js?v=20261022-2';
+import '../../utils/number-wheel-guard.js';   // the mouse wheel must not change a focused hour box (user 2026-11-03)
 
 // ---------------------------------------------------------------------------
 // state

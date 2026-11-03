@@ -10,6 +10,7 @@ import { initializeApp, setupBackwardCompatibility, getAppStatus } from './core/
 import { initializeErrorHandler } from './core/error-handler.js';
 import { logger } from './utils/logger.js';
 import { initFreshnessLabel, startVisiblePolling } from './utils/auto-refresh.js';
+import './utils/number-wheel-guard.js';   // the mouse wheel must not change a focused number box (user 2026-11-03)
 logger.debug('📋 Weekly Schedule Viewer - Phase 8');
 logger.debug('⚡ ES6 Modules: Loading...');
 
