@@ -4506,6 +4506,7 @@ async function handlePasteHours(targetCastingId) {
         const lastWith = new Map();
         for (const e of copiedStaged.entries) if (e.hours != null || e.taskName) lastWith.set(e.department, Math.max(lastWith.get(e.department) || 0, e.day));
         const entries = copiedStaged.entries.filter(e => e.day <= (lastWith.get(e.department) || 0));
+        if (!entries.length) { showToast(`Cast ${copiedStaged.castNum} has no task words or hours on its days — there is nothing to paste. Fill its days first (Staging tab + hours here).`, 'error'); return; }
         let pasted = 0, locked = 0, created = 0, failed = 0;
         for (const e of entries) {
             if (optPastDays.get(`${tCast}|${e.department}|${e.day}`)) { locked++; continue; }   // already happened — locked
