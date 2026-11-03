@@ -5423,8 +5423,8 @@ async function activateTrackingTab() {
         ensureCratesLoaded()
     ]);
     renderTracking();
-    // Defensive sync — covers external edits or out-of-band state.
-    syncTrackingFromInventory();
+    // Every open re-reads the Casting Inventory and checks the list against it (out-of-band writes included).
+    syncTrackingFromInventory({ fresh: true });
 }
 
 async function ensureCratesLoaded() {
@@ -6024,6 +6024,7 @@ function renderTracking() {
     const list = document.getElementById('pp-track-list');
     if (!list) return;
     pruneSelectedComponentIds();
+    renderTrackingMismatchBanner();
     list.innerHTML = getCastingsForActivePhase().map(c => renderTrackSection(c)).join('');
     // <input> doesn't have an :indeterminate attribute, so set it via JS.
     list.querySelectorAll('.pp-track-select-all[data-indeterminate="true"]').forEach(cb => {
@@ -6231,8 +6232,9 @@ function renderTrackSection(casting) {
         </div>
     ` : '';
 
+    const mismatchBand = renderTrackingMismatchBand(casting);
     return `
-        <div class="pp-track-section${isOpen ? ' pp-track-section-open' : ''}" data-casting-id="${escapeAttr(casting.id)}">
+        <div class="pp-track-section${isOpen ? ' pp-track-section-open' : ''}${mismatchBand ? ' pp-track-section-bad' : ''}" data-casting-id="${escapeAttr(casting.id)}">
             <div class="pp-track-section-header">
                 <button type="button" class="pp-track-section-toggle" data-action="toggle-section" aria-expanded="${isOpen}">
                     <span class="pp-track-chevron" aria-hidden="true">
@@ -6266,6 +6268,7 @@ function renderTrackSection(casting) {
                 ${rejectedBadge}
                 ${trackMsHtml(casting.id)}
             </div>
+            ${mismatchBand}
             ${body}
         </div>
     `;
@@ -6348,26 +6351,126 @@ function handleToggleTrackSection(castingId) {
 // (e.g. A.01, A.02), then any "extras" as `${type}.EXTRA` rows.
 let syncInFlight = false;
 let syncPending = false;
+let syncFreshPending = false;
 
-async function syncTrackingFromInventory() {
+// Castings whose Tracking list does NOT match the Casting Inventory and could not be rebuilt (2026-11-03):
+// castingId -> { invTypes, invPcs, panels, missing: [[type, n]], extra: [[type, n]], same: bool, reason: 'locked'|'failed', msg }.
+// Shown as a red band on the Tracking tab (per cast + banner) so a silent skip can never hide a stale list again.
+const trackingMismatch = new Map();
+let trackingMismatchProject = null;
+let trackingMismatchToasted = '';
+
+/** Count pieces per type (quantity + extras) so a difference can be named. */
+function trackingTypeCounts(rows, pcsOf) {
+    const m = new Map();
+    for (const r of rows) {
+        const t = r.type || '?';
+        m.set(t, (m.get(t) || 0) + pcsOf(r));
+    }
+    return m;
+}
+function trackingDiff(current, expected) {
+    const inv = trackingTypeCounts(expected, () => 1);
+    const trk = trackingTypeCounts(current, () => 1);
+    const missing = [], extra = [];
+    for (const [t, n] of inv) { const k = trk.get(t) || 0; if (n > k) missing.push([t, n - k]); }
+    for (const [t, n] of trk) { const k = inv.get(t) || 0; if (n > k) extra.push([t, n - k]); }
+    const same = !missing.length && !extra.length;
+    // Same pieces: say which field differs, on how many panels, with the first example (panel ids most often:
+    // an earlier cast's count changed after this one was locked, so its numbering moved on without it).
+    const detail = [];
+    if (same) {
+        const norm = v => (v === undefined || v === '' ? null : v);
+        const fields = [['panel_id', 'Panel ids'], ['width', 'Widths'], ['length', 'Lengths'], ['color_log_id', 'Colours'], ['color', 'Colour names'], ['sealer', 'Sealers']];
+        for (const [f, label] of fields) {
+            let n = 0, first = null;
+            for (let i = 0; i < Math.min(current.length, expected.length); i++) {
+                if (norm(current[i][f]) === norm(expected[i][f])) continue;
+                n++;
+                if (!first) first = [current[i][f], expected[i][f]];
+            }
+            if (!n) continue;
+            const ex = f === 'panel_id' || f === 'width' || f === 'length'
+                ? ` (Tracking has ${escapeHtml(String(first[0] ?? '—'))}, the inventory gives ${escapeHtml(String(first[1] ?? '—'))}${n > 1 ? ', and so on' : ''})`
+                : '';
+            detail.push(`${label} differ on ${n} panel${n === 1 ? '' : 's'}${ex}`);
+        }
+    }
+    return { missing, extra, same, detail };
+}
+function trackingMismatchList(pairs) {
+    const shown = pairs.slice(0, 8).map(([t, n]) => `${escapeHtml(t)}${n > 1 ? ` ×${n}` : ''}`).join(', ');
+    return pairs.length > 8 ? `${shown} … and ${pairs.length - 8} more` : shown;
+}
+function trackingMismatchFix(casting, m) {
+    if (m.reason === 'failed') return `The rebuild failed${m.msg ? ` (${escapeHtml(m.msg)})` : ''}. Reload the page and open Tracking again; if it stays red, tell Sergejs.`;
+    if (ciLockedById(casting.id)) return `The list is rebuilt from the inventory every time this tab opens, but this cast's Casting Inventory is locked (ready), so it was left as is. <b>Fix:</b> Castings tab → press <b>Make changes</b> on this cast's Casting Inventory → open Tracking again (it rebuilds) → set the Casting Inventory ready again. Stickers and tracking sheets printed from this list are out of date.`;
+    return `The list is rebuilt from the inventory every time this tab opens, but a later cast already has tracking state (complete / rejected / crated), which freezes this one. The inventory change needs to be undone, or that tracking state cleared first; tell Sergejs if unsure.`;
+}
+function renderTrackingMismatchBanner() {
+    const el = document.getElementById('pp-track-mismatch');
+    if (!el) return;
+    const bad = currentCastings.filter(c => trackingMismatch.has(c.id)).sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+    if (!bad.length) { el.hidden = true; el.innerHTML = ''; return; }
+    const nums = bad.map(c => escapeHtml(c.casting_number || '?')).join(', ');
+    el.innerHTML = `<b>⚠ TRACKING DOES NOT MATCH THE CASTING INVENTORY</b> on cast ${nums}. Each cast below says what differs and how to fix it. Do not print stickers or tracking sheets from a red cast.`;
+    el.hidden = false;
+}
+function renderTrackingMismatchBand(casting) {
+    const m = trackingMismatch.get(casting.id);
+    if (!m) return '';
+    const what = m.same
+        ? `Same pieces, but ${m.detail.length ? m.detail.join('; ') : 'details differ'}.`
+        : `${m.missing.length ? `<b>Not in Tracking:</b> ${trackingMismatchList(m.missing)}. ` : ''}${m.extra.length ? `<b>Not in the Casting Inventory:</b> ${trackingMismatchList(m.extra)}.` : ''}`;
+    return `<div class="pp-track-section-mismatch" role="alert">
+        <div class="pp-track-mismatch-head">⚠ TRACKING DOES NOT MATCH THE CASTING INVENTORY <span class="pp-track-mismatch-nums">Casting Inventory ${m.invTypes} type${m.invTypes === 1 ? '' : 's'} · ${m.invPcs} pcs (incl. extras) · Tracking ${m.panels} panel${m.panels === 1 ? '' : 's'}</span></div>
+        <div class="pp-track-mismatch-what">${what}</div>
+        <div class="pp-track-mismatch-fix">${trackingMismatchFix(casting, m)}</div>
+    </div>`;
+}
+function noteTrackingMismatch(casting, current, expected, reason, msg) {
+    const d = trackingDiff(current, expected);
+    trackingMismatch.set(casting.id, {
+        invTypes: new Set(expected.map(e => e.type || '?')).size, invPcs: expected.length, panels: current.length,
+        missing: d.missing, extra: d.extra, same: d.same, detail: d.detail, reason, msg: msg || ''
+    });
+}
+function toastTrackingMismatch() {
+    const bad = currentCastings.filter(c => trackingMismatch.has(c.id)).sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+    const key = bad.length ? `${currentProjectNumber}:${bad.map(c => c.id).join(',')}` : '';
+    if (!key || key === trackingMismatchToasted) { if (!key) trackingMismatchToasted = ''; return; }
+    trackingMismatchToasted = key;
+    showToast(`Tracking does not match the Casting Inventory on cast ${bad.map(c => c.casting_number || '?').join(', ')} — see the red band on the Tracking tab.`, 'error', 9000);
+}
+
+/** @param {{fresh?: boolean}} [opts] fresh: re-read the Casting Inventory from the database first (the Tracking
+ *  tab does this on every open, so an inventory written outside the portal is caught too; 2026-11-03). */
+async function syncTrackingFromInventory(opts = {}) {
     if (!currentProjectNumber) return;
+    if (opts.fresh) syncFreshPending = true;
     if (syncInFlight) { syncPending = true; return; }
     syncInFlight = true;
     try {
         do {
             syncPending = false;
-            await runTrackingSync();
+            const fresh = syncFreshPending; syncFreshPending = false;
+            await runTrackingSync({ fresh });
         } while (syncPending);
     } finally {
         syncInFlight = false;
     }
 }
 
-async function runTrackingSync() {
+async function runTrackingSync(opts = {}) {
     if (!currentProjectNumber || currentCastings.length === 0) return;
+    if (trackingMismatchProject !== currentProjectNumber) { trackingMismatch.clear(); trackingMismatchProject = currentProjectNumber; }
 
     if (currentCastingInventoryLoadedFor !== currentProjectNumber) {
         await loadAllInventoryForCurrentProject();
+    } else if (opts.fresh) {
+        // Re-read without touching the Castings tab's edit marks / tick boxes (a plain data refresh).
+        try { currentCastingInventory = await loadAllInventoryForProject(currentCastings.map(c => c.id)); }
+        catch (err) { logger.error('[project-portal] fresh inventory read for the tracking check failed:', err); }
     }
     if (currentCastingComponents.size === 0) {
         await loadAllComponentsForCurrentProject();
@@ -6435,14 +6538,15 @@ async function runTrackingSync() {
         }
 
         const current = getComponentsFor(casting.id);
-        if (componentsMatchExpected(current, expected)) continue;
+        if (componentsMatchExpected(current, expected)) { trackingMismatch.delete(casting.id); continue; }
 
         // Defense in depth: if a UI guard ever lets an inventory mutation
-        // through on a locked casting, refuse to wipe and rebuild its
-        // components here. The handler that triggered the sync has already
-        // toasted (or should have), so abort silently with a logger warning.
+        // through on a locked casting (or the inventory was written outside the
+        // portal), refuse to wipe and rebuild its components here. Not silent
+        // any more (2026-11-03): the Tracking tab shows a red band for the cast.
         if (isCastingInventoryLocked(casting)) {
             logger.warn('[project-portal] runTrackingSync: skipping locked casting', casting.casting_number || casting.id);
+            noteTrackingMismatch(casting, current, expected, 'locked');
             continue;
         }
 
@@ -6458,7 +6562,8 @@ async function runTrackingSync() {
         } catch (err) {
             logger.error('[project-portal] snapshot tracking state failed for casting', casting.id, err);
             showToast('Tracking sync failed: ' + (err.message || err), 'error');
-            return;
+            noteTrackingMismatch(casting, current, expected, 'failed', err.message || String(err));
+            break;
         }
 
         try {
@@ -6476,13 +6581,16 @@ async function runTrackingSync() {
                 const refreshed = await loadAllComponentsForProject([casting.id]);
                 setComponentsFor(casting.id, refreshed.get(casting.id) || created || []);
             }
+            trackingMismatch.delete(casting.id);
         } catch (err) {
             logger.error('[project-portal] sync tracking failed for casting', casting.id, err);
             showToast('Tracking sync failed: ' + (err.message || err), 'error');
-            return;
+            noteTrackingMismatch(casting, getComponentsFor(casting.id), expected, 'failed', err.message || String(err));
+            break;
         }
     }
 
+    toastTrackingMismatch();
     if (currentTab === 'tracking') renderTracking();
 }
 

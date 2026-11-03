@@ -6814,3 +6814,13 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
 
 /* a cast number another casting on the job already has: cannot save (2026-11-03) */
 .pp-cast-card-num-input.pp-cast-num-conflict { outline: 2px solid #dc2626; outline-offset: -1px; background: #fef2f2; color: #991b1b; }
+
+/* Tracking list ≠ Casting Inventory and it could not be rebuilt (2026-11-03) */
+.pp-track-mismatch { margin: 0 0 12px; padding: 10px 14px; border: 2px solid #dc2626; border-radius: 8px; background: #fef2f2; color: #7f1d1d; font-size: 13px; line-height: 1.4; }
+.pp-track-section-bad { border-color: #dc2626 !important; box-shadow: 0 0 0 1px #dc2626; }
+.pp-track-section-bad .pp-track-section-header { background: #fee2e2; }
+.pp-track-section-mismatch { padding: 8px 14px 10px; background: #fef2f2; border-top: 1px solid #fca5a5; border-bottom: 1px solid #fca5a5; color: #7f1d1d; font-size: 12.5px; line-height: 1.45; }
+.pp-track-mismatch-head { font-weight: 800; color: #b91c1c; letter-spacing: 0.02em; display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; }
+.pp-track-mismatch-nums { font-weight: 600; color: #7f1d1d; letter-spacing: 0; }
+.pp-track-mismatch-what { margin-top: 4px; }
+.pp-track-mismatch-fix { margin-top: 4px; color: #991b1b; }
