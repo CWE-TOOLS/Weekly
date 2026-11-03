@@ -4471,9 +4471,9 @@ function handleCopyHours(castingId) {
     const cells = optStagedCells(castNum0);
     if (cells.length) {
         // the day grid is what shows: copy its hours (department + day), not the old task list
-        copiedStaged = { castNum: castNum0, entries: cells.map(c => ({ department: c.department, day: c.day, hours: c.hours == null ? null : Number(c.hours) })) };
+        copiedStaged = { castNum: castNum0, entries: cells.map(c => ({ department: c.department, day: c.day, taskName: c.taskName || '', hours: c.hours == null ? null : Number(c.hours) })) };
         copiedPhases = null;
-        showToast(`Copied the day hours of Cast ${castNum0} (${cells.length} day${cells.length === 1 ? '' : 's'}). Use Paste on another casting — matching departments and days get the hours.`);
+        showToast(`Copied Cast ${castNum0}'s days (${cells.length}). Use Paste on another casting — it gets the same days, task words and hours.`);
         renderOptColumns();
         return;
     }
@@ -4493,20 +4493,38 @@ function handleCopyHours(castingId) {
 async function handlePasteHours(targetCastingId) {
     if (!targetCastingId) return;
     if (copiedStaged) {
+        // The target casting gets the source's days, task words and hours (user 2026-11-03): days it does not have
+        // yet are created (the same as "+ Day" on the Staging tab), days that already happened are left alone, and
+        // the target's own extra days keep what they had.
         const target = currentCastings.find(c => c.id === targetCastingId);
         const tCast = String(target?.casting_number || '');
-        const scaffold = currentStagingScaffold.get(tCast) || [];
-        let pasted = 0, noDay = 0, locked = 0;
-        for (const e of copiedStaged.entries) {
-            const sec = scaffold.find(s => s.department === e.department);
-            if (!sec || e.day > sec.days) { noDay++; continue; }                  // the target has no such day on its Staging tab
+        if (!tCast) return;
+        if (tCast === copiedStaged.castNum) { showToast(`Those are Cast ${tCast}'s own hours — paste them on another casting.`, 'error'); return; }
+        let scaffold = currentStagingScaffold.get(tCast);
+        if (!scaffold) { scaffold = []; currentStagingScaffold.set(tCast, scaffold); }
+        // only days up to the last day with a task or hours in each department — trailing empty days are not copied
+        const lastWith = new Map();
+        for (const e of copiedStaged.entries) if (e.hours != null || e.taskName) lastWith.set(e.department, Math.max(lastWith.get(e.department) || 0, e.day));
+        const entries = copiedStaged.entries.filter(e => e.day <= (lastWith.get(e.department) || 0));
+        let pasted = 0, locked = 0, created = 0, failed = 0;
+        for (const e of entries) {
             if (optPastDays.get(`${tCast}|${e.department}|${e.day}`)) { locked++; continue; }   // already happened — locked
-            scheduleOptHoursSave(tCast, e.department, e.day, e.hours == null ? '' : String(e.hours));
-            pasted++;
+            let sec = scaffold.find(s => s.department === e.department);
+            if (!sec) { sec = { department: e.department, days: 0 }; scaffold.push(sec); }
+            if (e.day > sec.days) { created += e.day - sec.days; sec.days = e.day; }
+            const key = `${tCast}|${e.department}|${e.day}`;
+            const cur = currentStagingDescriptions.get(key) || { description: '', castingSide: null };
+            currentStagingDescriptions.set(key, { ...cur, taskName: e.taskName || '', hours: e.hours });
+            try {
+                await upsertTaskDescription({ projectNumber: currentProjectNumber, castingNumber: tCast, department: e.department, dayNumber: String(e.day), taskName: e.taskName || null, hours: e.hours });
+                pasted++;
+            } catch (err) { failed++; logger.error('[project-portal] paste day failed:', err); }
         }
+        scaffold.sort((a, b) => DEPARTMENT_ORDER.indexOf(a.department) - DEPARTMENT_ORDER.indexOf(b.department));
+        deriveStagingMilestones();
         renderOptimizer();
-        const why = [noDay ? `${noDay} skipped — Cast ${tCast} has no such day on the Staging tab` : '', locked ? `${locked} skipped — those days already happened` : ''].filter(Boolean).join('; ');
-        showToast(pasted ? `Pasted ${pasted} day${pasted === 1 ? '' : 's'} of hours from Cast ${copiedStaged.castNum} into Cast ${tCast}${why ? ' (' + why + ')' : ''}.` : `Nothing pasted into Cast ${tCast}${why ? ': ' + why : ''}.`, pasted ? 'success' : 'error');
+        const why = [created ? `${created} day${created === 1 ? '' : 's'} added` : '', locked ? `${locked} skipped — those days already happened` : '', failed ? `${failed} FAILED to save` : ''].filter(Boolean).join('; ');
+        showToast(pasted ? `Pasted ${pasted} day${pasted === 1 ? '' : 's'} (tasks + hours) from Cast ${copiedStaged.castNum} into Cast ${tCast}${why ? ' (' + why + ')' : ''}.` : `Nothing pasted into Cast ${tCast}${why ? ': ' + why : ''}.`, pasted && !failed ? 'success' : 'error');
         return;
     }
     if (!Array.isArray(copiedPhases) || copiedPhases.length === 0) return;
