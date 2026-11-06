@@ -391,6 +391,15 @@ export function rectsOverlap(a, b) {
  * @param {Array<Object>} tableDefs
  * @returns {boolean}
  */
+/** True if `rect` overlaps any table at all (an oversize form hangs past an edge but still sits on a table; 2026-11-06). */
+export function rectTouchesTables(rect, tableDefs) {
+  for (const t of tableDefs) {
+    const r = getTableScreenRect(t);
+    if (rectsOverlap(rect, { sx: r.x, sy: r.y, sw: r.w, sh: r.h })) return true;
+  }
+  return false;
+}
+
 export function isRectInsideTables(rect, tableDefs) {
   const EPS = 0.01;
   for (const t of tableDefs) {
@@ -645,6 +654,8 @@ export function renderCastingLayout({ container, errorEl, components, title, are
     : layoutAuto(molds, tableDefs, gapBetween, area === 'A', blocked);
   // A saved (manual) layout can sit on top of the other job's forms: those molds get a red outline.
   const clashes = blocked.length ? placed.filter(r => blocked.some(b => rectsOverlap(r, b))) : [];
+  // Forms placed past a table edge on purpose (confirmed oversize placement, 2026-11-06): dashed orange outline.
+  const oversize = placed.filter(r => !isRectInsideTables(r, tableDefs));
 
   const pageW = 750;
   const pageH = 1000;
@@ -750,6 +761,7 @@ export function renderCastingLayout({ container, errorEl, components, title, are
   for (const rec of placed) {
     const g = buildMoldGroup(NS, rec, tx, ty, ts, fontSize, offsetPerSide);
     if (clashes.includes(rec)) g.classList.add('clay-mold-clash');
+    if (oversize.includes(rec)) g.classList.add('clay-mold-oversize');
     svg.appendChild(g);
   }
 
@@ -806,7 +818,8 @@ export function renderCastingLayout({ container, errorEl, components, title, are
         + (staged.length > 0 ? (hideOverflow ? ` — ${staged.length} continue on the other side` : ` — ${staged.length} overflow`) : ''))
     + ` — +${frac(offsetPerSide)}/side mold offset`
     + (blocked.length ? ` — SHARED WITH ${[...new Set(blocked.map(b => b.label).filter(Boolean))].join(', ')} (hatched)` : '')
-    + (clashes.length ? ` — ${clashes.length} OVERLAP` : ''));
+    + (clashes.length ? ` — ${clashes.length} OVERLAP` : '')
+    + (oversize.length ? ` — ${oversize.length} OVERSIZE` : ''));
   const summaryColor = (staged.length > 0 || clashes.length > 0) ? '#dc2626' : (blocked.length ? '#b45309' : (totalMolds === 0 ? '#9ca3af' : '#555'));
   if (sideLabel) {
     // SIDE A / SIDE B first, on its own line, then the usual title and summary.
@@ -825,9 +838,10 @@ export function renderCastingLayout({ container, errorEl, components, title, are
     const parts = [];
     if (staged.length > 0) parts.push(`${staged.length} mold(s) not on a table — drag them from the overflow strip onto a table.`);
     if (clashes.length > 0) parts.push(`${clashes.length} form(s) sit on top of the other job's forms (red outline) — move them, or pick the other side.`);
+    if (oversize.length > 0) parts.push(`${oversize.length} form(s) hang past a table edge (dashed orange) — oversize placement, confirmed on the drag.`);
     if (skipped.length > 0) parts.push(`${skipped.length} panel(s) skipped — missing or unreadable dimensions.`);
     errorEl.textContent = parts.join(' ');
   }
 
-  return { mode, area, svg, transform: { scale, offsetX, offsetY }, tableDefs, placed, staged, unplaced: staged, blocked, clashes, own: totalMolds > 0 };
+  return { mode, area, svg, transform: { scale, offsetX, offsetY }, tableDefs, placed, staged, unplaced: staged, blocked, clashes, oversize, own: totalMolds > 0 };
 }

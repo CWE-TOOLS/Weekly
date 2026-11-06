@@ -19,7 +19,7 @@
  * @module pages/project-portal/casting-layout-drag
  */
 
-import { rectsOverlap, isRectInsideTables } from './casting-layout.js?v=20261106-5';
+import { rectsOverlap, isRectInsideTables, rectTouchesTables } from './casting-layout.js?v=20261106-6';
 
 /** Pixels the pointer must travel before a press counts as a drag. */
 const DRAG_THRESHOLD = 3;
@@ -64,11 +64,24 @@ function toRow(ctx, r) {
   };
 }
 
-/** True if `rect` clears every other mold and sits on a table. */
+/**
+ * 'ok' when `rect` clears every other mold and sits inside a table; 'oversize' when it clears everything but hangs
+ * past a table edge (the drop asks first; 2026-11-06); 'bad' when it overlaps a form, another job's form, or no table.
+ */
+export function placementVerdict(ctx, rect, movedRec) {
+  if ((ctx.blocked || []).some(b => rectsOverlap(rect, b))) return 'bad';   // another job's forms, same cast day
+  if (ctx.placed.some(other => other !== movedRec && rectsOverlap(rect, other))) return 'bad';
+  if (isRectInsideTables(rect, ctx.tableDefs)) return 'ok';
+  return rectTouchesTables(rect, ctx.tableDefs) ? 'oversize' : 'bad';
+}
+/** True if `rect` clears every other mold and sits on a table, or the user accepts it hanging past the edge. */
 function isValidPlacement(ctx, rect, movedRec) {
-  if (!isRectInsideTables(rect, ctx.tableDefs)) return false;
-  if ((ctx.blocked || []).some(b => rectsOverlap(rect, b))) return false;   // another job's forms, same cast day (2026-11-06)
-  return !ctx.placed.some(other => other !== movedRec && rectsOverlap(rect, other));
+  const v = placementVerdict(ctx, rect, movedRec);
+  if (v === 'ok') return true;
+  if (v !== 'oversize') return false;
+  const label = movedRec?.mold?.label || 'This form';
+  const size = movedRec ? `${Math.round(rect.sw * 100) / 100}″ × ${Math.round(rect.sh * 100) / 100}″ mold` : '';
+  return window.confirm(`OVERSIZE PLACEMENT\n\n${label}${size ? ` (${size})` : ''} does not fit inside the table: it will hang past the table edge.\n\nPlace it there anyway?`);
 }
 
 /** Persist a change — the whole layout the first time, one mold thereafter. */

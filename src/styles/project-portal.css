@@ -6875,3 +6875,5 @@ body.pp-clay-zoom-open { overflow: hidden; }
 @media (min-width: 1100px) {
   body.pp-float-open .pp-form-shell { padding-right: 356px; box-sizing: border-box; }
 }
+/* a form placed past a table edge on purpose (confirmed oversize placement, 2026-11-06) */
+.clay-mold-oversize > rect { stroke: #ea580c !important; stroke-width: 1.2 !important; stroke-dasharray: 2.5 1.5; }
