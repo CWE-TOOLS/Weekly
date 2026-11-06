@@ -324,7 +324,11 @@ const MOLD_COLORS = ['#93c5fd', '#86efac', '#fcd34d', '#fca5a5', '#c4b5fd', '#fd
  * @param {number} offsetPerSide - inches the mold base extends past concrete, per edge
  * @returns {{molds:Array<Object>, skipped:Array<Object>}}
  */
-function buildMolds(components, offsetPerSide) {
+/**
+ * @param {Object<string,{w:number,l:number}>} [bases] - real mold BASE sizes by type (inches), set by the user when the
+ *        base is not inventory size + offset (2026-11-06); a type with an entry uses it as its outer size, offset ignored
+ */
+function buildMolds(components, offsetPerSide, bases = null) {
   const molds = [];
   const skipped = [];
   const colorByType = new Map();
@@ -340,6 +344,8 @@ function buildMolds(components, offsetPerSide) {
     if (!colorByType.has(typeKey)) {
       colorByType.set(typeKey, MOLD_COLORS[colorByType.size % MOLD_COLORS.length]);
     }
+    const base = bases && bases[(c.type || '').trim() || typeKey];
+    const baseSet = !!(base && base.w > 0 && base.l > 0);
     molds.push({
       componentId: c.id || null,
       type: (c.type || '').trim(),
@@ -347,8 +353,9 @@ function buildMolds(components, offsetPerSide) {
       color: colorByType.get(typeKey),
       concreteW: w,
       concreteL: l,
-      outerW: w + offsetPerSide * 2,
-      outerL: l + offsetPerSide * 2
+      outerW: baseSet ? base.w : w + offsetPerSide * 2,
+      outerL: baseSet ? base.l : l + offsetPerSide * 2,
+      baseSet
     });
   });
 
@@ -608,9 +615,9 @@ function buildMoldGroup(NS, rec, tx, ty, ts, fontSize, offsetPerSide) {
  * whose forms block the tables for this one (2026-11-06). Saved positions win; otherwise the auto-pack.
  * @returns {{placed:Array<Object>, staged:Array<Object>}} rects in table inches
  */
-export function computeLayoutRects({ components, area = 'B', offsetPerSide = 4, gapBetween = 0, positions = null, blocked = [] }) {
+export function computeLayoutRects({ components, area = 'B', offsetPerSide = 4, gapBetween = 0, positions = null, blocked = [], bases = null }) {
   const tableDefs = (CASTING_AREAS[area] || CASTING_AREAS.B).tables;
-  const { molds } = buildMolds(components, offsetPerSide);
+  const { molds } = buildMolds(components, offsetPerSide, bases);
   if (!molds.length) return { placed: [], staged: [] };
   const posForArea = (positions || []).filter(p => (p.area === 'A' ? 'A' : 'B') === area);
   return posForArea.length > 0
@@ -624,13 +631,13 @@ export function computeLayoutRects({ components, area = 'B', offsetPerSide = 4, 
  *        overlaps them is flagged (2026-11-06)
  */
 /** @param {string} [opts.sideLabel] - "SIDE A" / "SIDE B …": its own centred line at the very top of the page (2026-11-06) */
-export function renderCastingLayout({ container, errorEl, components, title, area = 'B', offsetPerSide = 4, gapBetween = 0, positions = null, overflowLabel = null, hideOverflow = false, blocked = [], allowEmpty = false, sideLabel = '' }) {
+export function renderCastingLayout({ container, errorEl, components, title, area = 'B', offsetPerSide = 4, gapBetween = 0, positions = null, overflowLabel = null, hideOverflow = false, blocked = [], allowEmpty = false, sideLabel = '', bases = null }) {
   if (!container) return null;
   container.innerHTML = '';
   if (errorEl) errorEl.textContent = '';
 
   const tableDefs = (CASTING_AREAS[area] || CASTING_AREAS.B).tables;
-  const { molds, skipped } = buildMolds(components, offsetPerSide);
+  const { molds, skipped } = buildMolds(components, offsetPerSide, bases);
 
   // allowEmpty (2026-11-06): the side this casting is NOT on still draws — the tables and the other jobs' forms.
   if (molds.length === 0 && !allowEmpty) {
@@ -836,7 +843,9 @@ export function renderCastingLayout({ container, errorEl, components, title, are
   // Status line
   if (errorEl) {
     const parts = [];
-    if (staged.length > 0) parts.push(`${staged.length} mold(s) not on a table — drag them from the overflow strip onto a table.`);
+    if (staged.length > 0) parts.push(`${staged.length} mold(s) not on a table — drag them from the overflow strip onto a table, or click one to set its real base size.`);
+    const basesUsed = molds.filter(m => m.baseSet).length;
+    if (basesUsed > 0) parts.push(`${basesUsed} form(s) drawn at a custom base size.`);
     if (clashes.length > 0) parts.push(`${clashes.length} form(s) sit on top of the other job's forms (red outline) — move them, or pick the other side.`);
     if (oversize.length > 0) parts.push(`${oversize.length} form(s) hang past a table edge (dashed orange) — oversize placement, confirmed on the drag.`);
     if (skipped.length > 0) parts.push(`${skipped.length} panel(s) skipped — missing or unreadable dimensions.`);

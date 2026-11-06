@@ -6877,3 +6877,11 @@ body.pp-clay-zoom-open { overflow: hidden; }
 }
 /* a form placed past a table edge on purpose (confirmed oversize placement, 2026-11-06) */
 .clay-mold-oversize > rect { stroke: #ea580c !important; stroke-width: 1.2 !important; stroke-dasharray: 2.5 1.5; }
+/* Casting Layout: base sizes + check fitment (2026-11-06) */
+.pp-clay-fit { margin-left: auto; }
+.pp-clay-print { margin-left: 0; }
+.pp-clay-fit-result { font-size: 13px; font-weight: 600; color: #1e3a8a; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 6px 10px; margin: 0 0 8px; }
+.pp-clay-fit-result:empty { display: none; }
+.pp-clay-base-row { display: flex; gap: 12px; }
+.pp-clay-base-row .pp-field { flex: 1 1 0; }
+.clay-mold-overflow { cursor: pointer; }

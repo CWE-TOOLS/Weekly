@@ -126,6 +126,23 @@ export async function snapshotLayout(positions) {
  * @param {string} area - 'A' or 'B'
  * @returns {Promise<boolean>}
  */
+/** Forget one form's saved spot on one side (dragged off the tables back to overflow, 2026-11-06). */
+export async function deleteLayoutPosition(componentId, area) {
+    if (!componentId) return false;
+    const client = await getClient();
+    if (!client) return false;
+    const { error } = await client
+        .from(POSITIONS_TABLE)
+        .delete()
+        .eq('component_id', componentId)
+        .eq('area', area === 'A' ? 'A' : 'B');
+    if (error) {
+        logger.error('[casting-layout-service] deleteLayoutPosition error:', error);
+        throw error;
+    }
+    return true;
+}
+
 export async function clearLayoutPositions(castingId, area) {
     if (!castingId) return false;
     const client = await getClient();

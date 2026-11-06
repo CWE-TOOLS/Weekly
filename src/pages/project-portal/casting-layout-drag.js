@@ -19,7 +19,7 @@
  * @module pages/project-portal/casting-layout-drag
  */
 
-import { rectsOverlap, isRectInsideTables, rectTouchesTables } from './casting-layout.js?v=20261106-6';
+import { rectsOverlap, isRectInsideTables, rectTouchesTables } from './casting-layout.js?v=20261106-7';
 
 /** Pixels the pointer must travel before a press counts as a drag. */
 const DRAG_THRESHOLD = 3;
@@ -219,12 +219,25 @@ function attachMoldHandlers(ctx, g, rec) {
     g.classList.remove('clay-mold-dragging');
     try { g.releasePointerCapture(evt.pointerId); } catch (_) { /* noop */ }
 
-    if (!d.moved) { g.removeAttribute('transform'); return; }
+    if (!d.moved) {
+      g.removeAttribute('transform');
+      // a plain click on an overflow form: the page opens its base-size editor (2026-11-06)
+      if (rec.staged && typeof ctx.onStagedClick === 'function') ctx.onStagedClick(rec);
+      return;
+    }
 
     d.lastUser = toUserPoint(ctx.svg, evt);
     const dxIn = (d.lastUser.x - d.startUser.x) / ctx.scale;
     const dyIn = (d.lastUser.y - d.startUser.y) / ctx.scale;
     const finalRect = { sx: rec.sx + dxIn, sy: rec.sy + dyIn, sw: rec.sw, sh: rec.sh };
+
+    // A placed form dropped off every table goes back to the overflow strip (2026-11-06).
+    if (!rec.staged && !rectTouchesTables(finalRect, ctx.tableDefs) && typeof ctx.onUnplace === 'function') {
+      Object.assign(rec, d.original);
+      g.removeAttribute('transform');
+      ctx.onUnplace(rec, ctx);
+      return;
+    }
 
     if (!isValidPlacement(ctx, finalRect, rec)) {
       Object.assign(rec, d.original); // revert position AND rotation
@@ -309,6 +322,8 @@ export function attachLayoutDrag(handle, opts) {
     castingId: opts && opts.castingId,
     area: opts && opts.area,
     onCommit: opts && opts.onCommit,
+    onStagedClick: opts && opts.onStagedClick,   // (rec) — click on an overflow form
+    onUnplace: opts && opts.onUnplace,           // (rec, ctx) — placed form dragged off the tables
     recById,
   };
   activeContext = ctx;

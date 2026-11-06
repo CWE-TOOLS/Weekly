@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="src/styles/variables.css">
     <link rel="stylesheet" href="src/styles/base.css">
     <link rel="stylesheet" href="src/styles/buttons.css">
-    <link rel="stylesheet" href="src/styles/project-portal.css?v=20261106-11">
+    <link rel="stylesheet" href="src/styles/project-portal.css?v=20261106-12">
 
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 </head>
@@ -544,10 +544,12 @@
                                     <span>Space between forms (in)</span>
                                     <input type="number" id="pp-clay-gap" class="pp-clay-offset" min="0" step="0.25" value="0" />
                                 </label>
+                                <button id="pp-clay-fit-btn" class="pp-secondary-btn pp-clay-fit" type="button" title="Auto-pack this casting with its current base sizes, around the other jobs' forms, and say what fits on its side. Click a form in the overflow strip to set the real base size of its type.">Check fitment</button>
                                 <button id="pp-clay-print-btn" class="pp-secondary-btn pp-clay-print" type="button">Print Layout</button>
                                 <button id="pp-clay-reset-btn" class="pp-secondary-btn pp-clay-reset" type="button" hidden>Reset to auto-pack</button>
                             </div>
 
+                            <div id="pp-clay-fit-result" class="pp-clay-fit-result"></div>
                             <div id="pp-clay-error" class="pp-clay-error"></div>
 
                             <div id="pp-clay-viewer" class="pp-clay-viewer" hidden>
@@ -1283,7 +1285,7 @@
         <div id="pp-toast" class="pp-toast" hidden></div>
     </div>
 
-    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20261106-17"></script>
+    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20261106-18"></script>
     <script type="module" src="src/utils/auto-update.js?v=20261023-1"></script>
 </body>
 </html>

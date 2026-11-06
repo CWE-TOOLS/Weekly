@@ -127,8 +127,8 @@ import {
     deleteClassroomTask,
     setClassroomTasksOrder
 } from '../../services/classroom-tasks-service.js';
-import { renderCastingLayout, computeLayoutRects } from './casting-layout.js?v=20261106-6';
-import { attachLayoutDrag } from './casting-layout-drag.js?v=20261106-5';
+import { renderCastingLayout, computeLayoutRects, parseDimension } from './casting-layout.js?v=20261106-7';
+import { attachLayoutDrag } from './casting-layout-drag.js?v=20261106-6';
 import { activateJigListTab } from './jig-list.js?v=20261106-1';
 import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, APPROVALS_TAB_ITEMS } from '../../config/milestones-config.js?v=20261027-2';
 import { SLUMP_TARGET_DEFAULTS, FINAL_BACKUP_PIG_REDUCTION_PCT, parsePigReduction, BT_IMPORT_META, btOverrides, btImportStamp, btStampDate, additiveAmount, batchTotalsRows, renderBatchTotals, clampSlumpTarget, formatSlumpLabel, renderSlumpGraphic, renderBatchTicketCard, BATCH_PRINT_CSS } from '../../services/batch-ticket-render.js';   // moved out 2026-10-30 so the weekly's week print shares the ticket code
@@ -140,7 +140,8 @@ import { tasksForDepartment, teamOfDepartment, taskForPhase, STAGING_NAME_OF_TEA
 import {
     loadLayoutPositions,
     snapshotLayout,
-    clearLayoutPositions
+    clearLayoutPositions,
+    deleteLayoutPosition,
 } from '../../services/casting-layout-service.js';
 import { registerRefreshHandler, isPortalChange, isOwnSignal, signalInfo } from '../../services/supabase-service.js';
 import '../../utils/number-wheel-guard.js';   // the mouse wheel must not change a focused hour box (user 2026-11-03)
@@ -5759,6 +5760,135 @@ let clDay = { castingId: null, dates: [], source: '', others: [] };   // others:
 let clProjectNames = null;    // project_number -> project_name, every job, loaded once
 let clFloatEl = null;
 let clFitInfo = null;         // { placed, total, clashes } from the last draw of this casting's own side(s)
+// Real mold BASE sizes by type for the selected casting (2026-11-06): plant_schedule_settings "layout_bases:<castingId>"
+// = { "<type>": { w, l } } in inches. Set by clicking a form in the overflow strip; applies to every form of the type.
+const CL_BASES_PREFIX = 'layout_bases:';
+let clBases = {};
+let clBasesOthers = new Map();   // castingId -> bases of the other castings of the cast day (their estimates use them too)
+async function loadLayoutBasesFor(ids) {
+    const out = new Map();
+    if (!ids.length) return out;
+    try {
+        const rows = await loadSettingRows(ids.map(id => CL_BASES_PREFIX + id));
+        for (const [k, v] of rows) if (v && typeof v === 'object') out.set(k.slice(CL_BASES_PREFIX.length), v);
+    } catch (e) { logger.warn('[project-portal] layout bases unavailable', e); }
+    return out;
+}
+async function saveLayoutBases() {
+    try { await setSettingRow(CL_BASES_PREFIX + clSelectedCastingId, Object.keys(clBases).length ? clBases : null); }
+    catch (e) { logger.error('[project-portal] save layout bases failed:', e); showToast('Base size not saved: ' + (e.message || e), 'error'); }
+}
+function inchesText(v) { const n = Math.round(Number(v) * 16) / 16; return Number.isInteger(n) ? String(n) : String(n); }
+let clBaseModalEl = null, clBaseModalType = '';
+/** Click on an overflow form: set the real base size of its type (all forms of that type). */
+function openBaseModal(rec) {
+    const mold = rec && rec.mold;
+    const type = (mold?.type || '').trim() || (mold?.label || '').trim();
+    if (!type) return;
+    clBaseModalType = type;
+    const comps = currentCastingComponents.get(clSelectedCastingId) || [];
+    const n = comps.filter(c => ((c.type || '').trim() || (c.panel_id || '').trim()) === type).length;
+    const cur = clBases[type];
+    if (!clBaseModalEl) {
+        clBaseModalEl = document.createElement('div');
+        clBaseModalEl.id = 'pp-clay-base-modal';
+        clBaseModalEl.className = 'pp-modal-backdrop';
+        clBaseModalEl.hidden = true;
+        clBaseModalEl.innerHTML = `<div class="pp-modal" role="dialog" aria-modal="true" aria-labelledby="pp-clay-base-title">
+            <div class="pp-modal-header"><h2 id="pp-clay-base-title">Base size</h2><button type="button" class="pp-modal-close" data-base="cancel" aria-label="Close">&times;</button></div>
+            <form class="pp-modal-body" id="pp-clay-base-form">
+                <p class="pp-muted" id="pp-clay-base-info"></p>
+                <div class="pp-clay-base-row">
+                    <label class="pp-field"><span class="pp-field-label">Base width (in)</span><input type="text" id="pp-clay-base-w" autocomplete="off" placeholder="e.g. 25-1/4"></label>
+                    <label class="pp-field"><span class="pp-field-label">Base length (in)</span><input type="text" id="pp-clay-base-l" autocomplete="off" placeholder="e.g. 64"></label>
+                </div>
+                <span class="pp-field-error" id="pp-clay-base-err" hidden></span>
+                <div class="pp-modal-actions">
+                    <button type="button" class="pp-secondary-btn" data-base="reset">Use inventory size</button>
+                    <button type="button" class="pp-secondary-btn" data-base="cancel">Cancel</button>
+                    <button type="submit" class="pp-primary-btn">Apply to all of this type</button>
+                </div>
+            </form></div>`;
+        document.body.appendChild(clBaseModalEl);
+        clBaseModalEl.addEventListener('click', async (e) => {
+            if (e.target === clBaseModalEl || e.target.closest('[data-base="cancel"]')) { clBaseModalEl.hidden = true; return; }
+            if (e.target.closest('[data-base="reset"]')) {
+                delete clBases[clBaseModalType];
+                clBaseModalEl.hidden = true;
+                await saveLayoutBases();
+                renderCastingLayoutTab();
+                checkFitment();
+            }
+        });
+        clBaseModalEl.querySelector('#pp-clay-base-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const w = parseDimension(document.getElementById('pp-clay-base-w').value);
+            const l = parseDimension(document.getElementById('pp-clay-base-l').value);
+            const err = document.getElementById('pp-clay-base-err');
+            if (w === null || l === null || w <= 0 || l <= 0) { err.textContent = 'Enter both sizes in inches (fractions like 25-1/4 are fine).'; err.hidden = false; return; }
+            err.hidden = true;
+            clBases[clBaseModalType] = { w: Math.round(w * 16) / 16, l: Math.round(l * 16) / 16 };
+            clBaseModalEl.hidden = true;
+            await saveLayoutBases();
+            renderCastingLayoutTab();
+            checkFitment();
+        });
+    }
+    document.getElementById('pp-clay-base-title').textContent = `Base size — ${type}`;
+    document.getElementById('pp-clay-base-info').textContent =
+        `Concrete ${inchesText(mold.concreteW)} × ${inchesText(mold.concreteL)}″. Mold drawn now: ${inchesText(mold.outerW)} × ${inchesText(mold.outerL)}″ `
+        + (cur ? '(custom base size).' : `(inventory size + ${inchesText(clOffsetPerSide)}″ per side).`)
+        + ` ${n} form${n === 1 ? '' : 's'} of this type — the base size applies to all of them.`;
+    document.getElementById('pp-clay-base-w').value = inchesText(cur ? cur.w : mold.outerW);
+    document.getElementById('pp-clay-base-l').value = inchesText(cur ? cur.l : mold.outerL);
+    document.getElementById('pp-clay-base-err').hidden = true;
+    clBaseModalEl.hidden = false;
+    document.getElementById('pp-clay-base-w').focus();
+}
+/** A placed form dragged off the tables: forget its spot so it goes back to the overflow strip. */
+async function unplaceForm(rec, ctx) {
+    const label = rec.mold?.label || 'Form';
+    try {
+        if (ctx.mode === 'manual') {
+            await deleteLayoutPosition(rec.componentId, ctx.area);
+        } else {
+            // auto layout: every other form keeps its spot (the layout becomes manual); this one has none
+            const rows = ctx.placed.filter(r => r !== rec).map(r => ({ component_id: r.componentId, casting_id: ctx.castingId, area: ctx.area, pos_x: r.sx, pos_y: r.sy, rotation: r.rotation || 0 }));
+            if (!rows.length) { showToast(`${label} is the only form on the table — the auto layout would put it straight back.`, 'error'); return; }
+            await snapshotLayout(rows);
+        }
+        markWorking(clSelectedCastingId, 'Casting Layout', 'Forms laid out');
+        await loadLayoutPositionsForSelected();
+    } catch (e) {
+        logger.error('[project-portal] unplaceForm failed:', e);
+        alert('Could not move the form to overflow. Please try again.');
+    }
+    renderCastingLayoutTab();
+    showToast(`${label} moved to the overflow strip`);
+}
+/** "Check fitment": auto-pack this casting with its current base sizes around the other jobs' forms and say what fits. */
+function checkFitment() {
+    const casting = currentCastings.find(c => c.id === clSelectedCastingId);
+    const out = document.getElementById('pp-clay-fit-result');
+    if (!casting) return;
+    const components = currentCastingComponents.get(clSelectedCastingId) || [];
+    const sides = clSelectedArea === 'AB' ? ['B', 'A'] : [clSelectedArea === 'A' ? 'A' : 'B'];
+    let comps = components;
+    const lines = [];
+    for (const area of sides) {
+        const r = computeLayoutRects({ components: comps, area, offsetPerSide: clOffsetPerSide, gapBetween: clGapBetween, positions: null, blocked: clBlockedFor(area), bases: clBases });
+        const total = r.placed.length + r.staged.length;
+        lines.push(`Side ${area}: ${r.placed.length} of ${total} fit${r.staged.length ? ` — ${r.staged.length} overflow` : ''}`);
+        const left = new Set(r.staged.map(x => x.componentId));
+        comps = comps.filter(c => left.has(c.id));
+        if (!comps.length) break;
+    }
+    const nBases = Object.keys(clBases).length;
+    const msg = `Check fitment — auto-pack${nBases ? ` with ${nBases} custom base size${nBases === 1 ? '' : 's'}` : ' at inventory size + offset'}, around the other jobs' forms: ${lines.join(' · ')}.`
+        + (nBases ? ` Custom bases: ${Object.entries(clBases).map(([t, b]) => `${t} ${inchesText(b.w)}×${inchesText(b.l)}″`).join(', ')}.` : '');
+    if (out) out.textContent = msg;
+    showToast(lines.join(' · '), 'info', 6000);
+}
 
 function isoOfDate(v) {
     const str = String(v || '').trim();
@@ -5805,6 +5935,7 @@ function clShortLabel(o) { return `${o.project_number || o.projectName} · Cast 
 async function loadCastDayContext() {
     const id = clSelectedCastingId;
     clDay = { castingId: id, dates: [], source: '', others: [] };
+    clBasesOthers = new Map();
     const casting = currentCastings.find(c => c.id === id);
     if (!casting) return;
     try {
@@ -5860,6 +5991,7 @@ async function loadCastDayContext() {
             Promise.all(sided.map(o => loadLayoutPositions(o.id).catch(() => [])))
         ]);
         const posBy = new Map(sided.map((o, i) => [o.id, posList[i] || []]));
+        clBasesOthers = await loadLayoutBasesFor(sided.map(o => o.id));
         for (const o of others) {
             if (!o.id) continue;
             o.cond = condBy.get(o.id) || null;
@@ -5881,7 +6013,7 @@ function clBlockedFor(area) {
         if (!o.components.length) continue;
         const label = clShortLabel(o);
         let comps = o.components;
-        const common = { offsetPerSide: clOffsetPerSide, gapBetween: clGapBetween, positions: o.positions };
+        const common = { offsetPerSide: clOffsetPerSide, gapBetween: clGapBetween, positions: o.positions, bases: clBasesOthers.get(o.id) || null };
         if (o.casting_side === 'AB') {
             // Both sides: their Side B is packed first, the leftover continues on Side A (this tab's own rule).
             const rB = computeLayoutRects({ ...common, components: comps, area: 'B', blocked: area === 'B' ? out : [] });
@@ -6092,6 +6224,7 @@ async function loadLayoutPositionsForSelected() {
         clLayoutPositions = clSelectedCastingId
             ? await loadLayoutPositions(clSelectedCastingId)
             : [];
+        clBases = clSelectedCastingId ? ((await loadLayoutBasesFor([clSelectedCastingId])).get(clSelectedCastingId) || {}) : {};
         if (Array.isArray(clLayoutPositions) && clLayoutPositions.length) markWorking(clSelectedCastingId, 'Casting Layout', 'Forms laid out', true);
     } catch (e) {
         logger.error('[project-portal] loadLayoutPositions failed:', e);
@@ -6121,7 +6254,7 @@ function renderCastingLayoutTab() {
     const cardB = document.createElement('div'); cardB.className = 'pp-clay-card-side'; cardB.dataset.side = 'B';
     card.append(cardA, cardB);
     const quiet = document.createElement('div');
-    const common = { offsetPerSide: clOffsetPerSide, gapBetween: clGapBetween, positions: clLayoutPositions, title };
+    const common = { offsetPerSide: clOffsetPerSide, gapBetween: clGapBetween, positions: clLayoutPositions, title, bases: clBases };
     if (clSelectedArea === 'AB') {
         // Both sides: Side B is packed first, whatever does not fit continues onto Side A.
         const hB = renderCastingLayout({ ...common, container: cardB, errorEl: quiet, components, sideLabel: 'SIDE B', area: 'B', overflowLabel: 'CONTINUE ON SIDE A', hideOverflow: true, blocked: clBlockedFor('B') });
@@ -6160,7 +6293,9 @@ function renderCastingLayoutTab() {
         attachLayoutDrag(handle, {
             castingId: clSelectedCastingId,
             area: handle.area,
-            onCommit: commitLayoutPositions
+            onCommit: commitLayoutPositions,
+            onStagedClick: openBaseModal,
+            onUnplace: unplaceForm
         });
     }
     // The reset button only makes sense once a layout has been customized.
@@ -9322,8 +9457,10 @@ function wireEvents() {
     });
 
     // ----- Casting Layout: control wiring -----
+    document.getElementById('pp-clay-fit-btn')?.addEventListener('click', checkFitment);
     document.getElementById('pp-clay-casting')?.addEventListener('change', async (e) => {
         clSelectedCastingId = e.target.value;
+        const fr = document.getElementById('pp-clay-fit-result'); if (fr) fr.textContent = '';
         setCastingInUrl(clSelectedCastingId);
         syncClaySideSelect();
         await loadLayoutPositionsForSelected();
