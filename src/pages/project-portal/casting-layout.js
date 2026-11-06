@@ -39,10 +39,10 @@ const AREA_B_TABLES = [
  *
  * Source: "Casting Layout 2026-04-13-CAST #1.pdf" (SIDE A).
  */
+// 2026-11-06 (user): Table 2 removed from the floor; Table 3 cut down to 8 ft (96"), still bottom-aligned with Table 1.
 const AREA_A_TABLES = [
-  { id: 1, name: 'Table 1', narrow: 60, long: 1170, x: 144, y: 0,   packAxis: 'y' }, // right side
-  { id: 2, name: 'Table 2', narrow: 72, long: 351,  x: 0,   y: 564, packAxis: 'y' }, // left upper
-  { id: 3, name: 'Table 3', narrow: 60, long: 255,  x: 0,   y: 915, packAxis: 'y' }, // left lower
+  { id: 1, name: 'Table 1', narrow: 60, long: 1170, x: 144, y: 0,    packAxis: 'y' }, // right side
+  { id: 3, name: 'Table 3', narrow: 60, long: 96,   x: 0,   y: 1074, packAxis: 'y' }, // left, bottom-aligned
 ];
 
 /** Selectable casting areas, keyed by the value used in the area <select>. */
