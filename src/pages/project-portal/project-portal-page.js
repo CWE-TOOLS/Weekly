@@ -21,8 +21,7 @@ import {
     updateCasting,
     deleteCasting,
     setCastingsOrder,
-    loadCastingsByIds,
-    loadCastingsByDates,
+    loadCastingsForProjects,
 } from '../../services/castings-service.js';
 import {
     loadAllCastingPhasesForProject,
@@ -136,7 +135,7 @@ import { SLUMP_TARGET_DEFAULTS, FINAL_BACKUP_PIG_REDUCTION_PCT, parsePigReductio
 import { invHash as invHashShared, invFingerprintRows, invColourFingerprintRows } from '../../services/inventory-marks.js';
 import { loadMilestonesForProject, saveMilestone, isMilestonesMigrationPending, loadLayoutConditions, loadLayoutConditionsForCastings, LAYOUT_CONDITION_PREFIX, layoutConditionNote, parseLayoutCondition, sideWords } from '../../services/milestones-service.js';
 import { loadJigListsForProject as loadJigListsForScrim, scrimForInventory } from '../../services/jig-list-service.js';
-import { loadReadyFlags, setReadyFlag, loadSettingRows, setSettingRow, loadScheduleForCastings, loadScheduleRange, OPT_SCHEDULER_PREFIX } from '../../services/schedule-service.js?v=20261106-1';
+import { loadReadyFlags, setReadyFlag, loadSettingRows, setSettingRow, loadScheduleForCastings, OPT_SCHEDULER_PREFIX } from '../../services/schedule-service.js?v=20261106-1';
 import { tasksForDepartment, teamOfDepartment, taskForPhase, STAGING_NAME_OF_TEAM, REVENUE_PER_HOUR } from '../../config/scheduler-config.js?v=20261027-1';
 import {
     loadLayoutPositions,
@@ -5758,10 +5757,12 @@ function clDayLabel(iso) {
     const [y, m, d] = iso.split('-').map(Number);
     return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 }
-function clOtherLabel(o) { return `${o.project_number} ${o.projectName || ''}`.trim() + ` · Cast ${o.casting_number || '?'}`; }
-function clShortLabel(o) { return `${o.project_number} · Cast ${o.casting_number || '?'}`; }
+function clOtherLabel(o) { return `${o.project_number} ${o.projectName || ''}`.trim() + (o.casting_number ? ` · Cast ${o.casting_number}` : '') + (o.inPortal === false ? ' (not in the portal)' : ''); }
+function clShortLabel(o) { return `${o.project_number || o.projectName} · Cast ${o.casting_number || '?'}`; }
 
-/** This casting's cast days (Plant Scheduler Cast rows, else the portal cast date) and every other casting on them. */
+/** This casting's cast days as the WEEKLY shows them (its Cast cards, whatever source the weekly is on), and every
+ *  other casting the weekly has in Cast on those days. The portal cast date only stands in for this casting when the
+ *  weekly has no Cast card for it yet. */
 async function loadCastDayContext() {
     const id = clSelectedCastingId;
     clDay = { castingId: id, dates: [], source: '', others: [] };
@@ -5772,41 +5773,61 @@ async function loadCastDayContext() {
             const rows = allProjectRows.length ? allProjectRows : await loadAllProjects();
             clProjectNames = new Map(rows.map(p => [String(p.project_number || '').trim(), String(p.project_name || '').trim()]));
         }
-        let dates = [], source = '';
-        try {
-            const mine = await loadScheduleForCastings([id]);
-            dates = [...new Set(mine.filter(r => String(r.department || '').trim() === 'Cast').map(r => isoOfDate(r.date)).filter(Boolean))].sort();
-            if (dates.length) source = 'scheduler';
-        } catch (e) { logger.warn('[project-portal] cast-day: scheduler rows unavailable', e); }
+        const pn = String(currentProjectNumber || '').trim();
+        const cn = String(casting.casting_number || '').trim();
+        let tasks = [];
+        try { tasks = (await fetchAllTasks()) || []; }
+        catch (e) { logger.warn('[project-portal] cast-day: weekly tasks unavailable', e); }
+        const castTasks = tasks.filter(t => t.department === 'Cast' && parseDate(t.date));
+        const isMine = t => String(t.projectNumber || '').trim() === pn && String(t.castingNumber || '').trim() === cn;
+        let dates = [...new Set(castTasks.filter(isMine).map(t => isoDay(parseDate(t.date))))].sort();
+        let source = dates.length ? 'weekly' : '';
         if (!dates.length && isoOfDate(casting.casting_date)) { dates = [isoOfDate(casting.casting_date)]; source = 'portal'; }
         clDay.dates = dates; clDay.source = source;
         if (!dates.length) return;
-        const ids = new Set();
-        try {
-            const rows = await loadScheduleRange(dates[0], dates[dates.length - 1]);
-            for (const r of rows) {
-                if (String(r.department || '').trim() !== 'Cast' || !dates.includes(isoOfDate(r.date))) continue;
-                if (r.casting_id && r.casting_id !== id) ids.add(r.casting_id);
-            }
-        } catch (e) { logger.warn('[project-portal] cast-day: schedule range unavailable', e); }
-        for (const c of await loadCastingsByDates(dates)) if (c.id !== id) ids.add(c.id);
-        if (!ids.size) return;
-        const list = await loadCastingsByIds([...ids]);
-        const conds = await loadLayoutConditionsForCastings([...ids]);
+        // Everyone else the weekly has in Cast on those days: one entry per job + cast number.
+        const byKey = new Map();
+        for (const t of castTasks) {
+            if (isMine(t) || !dates.includes(isoDay(parseDate(t.date)))) continue;
+            const tpn = String(t.projectNumber || '').trim(), tcn = String(t.castingNumber || '').trim();
+            const key = tpn ? `${tpn}|${tcn}` : `name|${String(t.project || '').trim().toLowerCase()}`;
+            const e = byKey.get(key) || { key, project_number: tpn, casting_number: tcn, taskName: String(t.resolvedProjectName || t.project || '').trim(), taskSide: null };
+            if (!e.taskSide && ['A', 'B', 'AB'].includes(t.castingSide)) e.taskSide = t.castingSide;
+            byKey.set(key, e);
+        }
+        if (!byKey.size) return;
+        // Portal records of those castings (side, forms, saved layout, special condition) by job + cast number.
+        const pns = [...new Set([...byKey.values()].map(e => e.project_number).filter(Boolean))];
+        const recs = pns.length ? await loadCastingsForProjects(pns) : [];
+        const recBy = new Map(recs.map(r => [`${String(r.project_number || '').trim()}|${String(r.casting_number || '').trim()}`, r]));
+        const others = [...byKey.values()].map(e => {
+            const r = e.project_number ? recBy.get(e.key) : null;
+            return {
+                id: r ? r.id : null,
+                project_number: e.project_number || '',
+                casting_number: e.casting_number,
+                projectName: e.project_number ? (clProjectNames.get(e.project_number) || e.taskName) : e.taskName,
+                casting_side: ['A', 'B', 'AB'].includes(r?.casting_side) ? r.casting_side : e.taskSide,
+                inPortal: !!r,
+                cond: null, components: [], positions: []
+            };
+        });
+        const ids = others.filter(o => o.id).map(o => o.id);
+        const conds = ids.length ? await loadLayoutConditionsForCastings(ids) : [];
         const condBy = new Map(conds.map(c => [c.casting_id, c]));
-        const sided = list.filter(c => ['A', 'B', 'AB'].includes(c.casting_side));
+        const sided = others.filter(o => o.id && ['A', 'B', 'AB'].includes(o.casting_side));
         const [compsMap, posList] = await Promise.all([
-            sided.length ? loadAllComponentsForProject(sided.map(c => c.id)) : new Map(),
-            Promise.all(sided.map(c => loadLayoutPositions(c.id).catch(() => [])))
+            sided.length ? loadAllComponentsForProject(sided.map(o => o.id)) : new Map(),
+            Promise.all(sided.map(o => loadLayoutPositions(o.id).catch(() => [])))
         ]);
-        const posBy = new Map(sided.map((c, i) => [c.id, posList[i] || []]));
-        clDay.others = list.map(c => ({
-            ...c,
-            projectName: clProjectNames.get(String(c.project_number || '').trim()) || '',
-            cond: condBy.get(c.id) || null,
-            components: (compsMap && compsMap.get && compsMap.get(c.id)) || [],
-            positions: posBy.get(c.id) || []
-        })).sort((a, b) => String(a.project_number).localeCompare(String(b.project_number)) || String(a.casting_number).localeCompare(String(b.casting_number)));
+        const posBy = new Map(sided.map((o, i) => [o.id, posList[i] || []]));
+        for (const o of others) {
+            if (!o.id) continue;
+            o.cond = condBy.get(o.id) || null;
+            o.components = (compsMap && compsMap.get && compsMap.get(o.id)) || [];
+            o.positions = posBy.get(o.id) || [];
+        }
+        clDay.others = others.sort((x, y) => String(x.project_number).localeCompare(String(y.project_number)) || String(x.casting_number).localeCompare(String(y.casting_number)));
     } catch (e) {
         logger.error('[project-portal] cast-day context failed:', e);
     }
@@ -5850,17 +5871,17 @@ function renderClayFloat() {
     if (!clDay.dates.length) {
         tone = 'none';
         html = `<div class="pp-clay-float-title">CAST DAY — NOT KNOWN</div>
-            <div class="pp-clay-float-text">This casting has no Cast day on the Plant Scheduler and no cast date in the portal, so the sides cannot be checked. Schedule it, or enter a Cast Date on the Casting Inventory tab.</div>`;
+            <div class="pp-clay-float-text">This casting has no Cast card on the weekly and no cast date in the portal, so the sides cannot be checked. Schedule it, or enter a Cast Date on the Casting Inventory tab.</div>`;
     } else {
         const days = clDay.dates.map(clDayLabel).join(', ');
-        const src = clDay.source === 'scheduler' ? 'Plant Scheduler' : 'portal cast date';
+        const src = clDay.source === 'weekly' ? 'weekly' : 'portal cast date — this casting has no Cast card on the weekly yet';
         const sideHtml = (area) => {
             const taken = clTakenBy(area);
             const conds = clDay.others.filter(o => o.cond && (o.cond.side === area || o.cond.side === 'AB'));
             const cls = taken.length ? (mine(area) ? 'taken-mine' : 'taken') : 'free';
             return `<div class="pp-clay-float-side pp-clay-float-${cls}">
                 <div class="pp-clay-float-side-head"><span>SIDE ${area}</span><span>${taken.length ? 'TAKEN' : 'FREE'}${mine(area) ? ' · THIS CASTING' : ''}</span></div>
-                ${taken.map(o => `<div class="pp-clay-float-line">${escapeHtml(clOtherLabel(o))}${o.casting_side === 'AB' ? ' (both sides)' : ''}${o.components.length ? '' : ' — no forms on file'}</div>`).join('')}
+                ${taken.map(o => `<div class="pp-clay-float-line">${escapeHtml(clOtherLabel(o))}${o.casting_side === 'AB' ? ' (both sides)' : ''}${o.components.length ? '' : (o.inPortal === false ? '' : ' — no forms on file')}</div>`).join('')}
                 ${conds.map(o => `<div class="pp-clay-float-cond">Special condition: ${escapeHtml(o.cond.name)} — ${escapeHtml(clOtherLabel(o))}</div>`).join('')}
             </div>`;
         };
