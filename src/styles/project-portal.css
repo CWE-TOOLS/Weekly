@@ -6885,3 +6885,4 @@ body.pp-clay-zoom-open { overflow: hidden; }
 .pp-clay-base-row { display: flex; gap: 12px; }
 .pp-clay-base-row .pp-field { flex: 1 1 0; }
 .clay-mold-overflow { cursor: pointer; }
+.pp-clay-float-cond-inline { color: #6d28d9; font-weight: 700; }

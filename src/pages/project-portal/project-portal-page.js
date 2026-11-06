@@ -5951,6 +5951,10 @@ async function loadCastDayContext() {
         let tasks = [];
         try { tasks = (await fetchAllTasks()) || []; }
         catch (e) { logger.warn('[project-portal] cast-day: weekly tasks unavailable', e); }
+        if (!tasks.length) {   // the weekly can still be warming up right after the portal opened: one more try
+            await new Promise(r => setTimeout(r, 1500));
+            try { tasks = (await fetchAllTasks()) || []; } catch (e) { /* reported above */ }
+        }
         const castTasks = tasks.filter(t => t.department === 'Cast' && parseDate(t.date));
         const isMine = t => String(t.projectNumber || '').trim() === pn && String(t.castingNumber || '').trim() === cn;
         let dates = [...new Set(castTasks.filter(isMine).map(t => isoDay(parseDate(t.date))))].sort();
@@ -6101,7 +6105,9 @@ function renderClayFloat() {
     } else {
         const days = clDay.dates.map(clDayLabel).join(', ');
         const src = clDay.source === 'weekly' ? 'weekly' : 'portal cast date — this casting has no Cast card on the weekly yet';
-        const condOn = (o, area) => !!(o.cond && (o.cond.side === area || o.cond.side === 'AB'));
+        // a condition without a side of its own counts on its casting's side; one with neither shows under "side not set"
+        const condOn = (o, area) => { if (!o.cond) return false; const sd = o.cond.side || o.casting_side; return sd === area || sd === 'AB'; };
+        const condText = (o) => `special condition: ${escapeHtml(o.cond.name)}${o.cond.side ? ` (Side ${sideWords(o.cond.side)})` : o.casting_side ? '' : ' (side not set)'}`;
         const sideHtml = (area) => {
             const taken = clTakenBy(area);
             // a condition belongs under its casting; one whose casting sits on the other side gets its own line
@@ -6128,7 +6134,7 @@ function renderClayFloat() {
         html = `<div class="pp-clay-float-title">CAST DAY · ${escapeHtml(days)}</div>
             <div class="pp-clay-float-text">${clDay.others.length ? `${clDay.others.length} other casting${clDay.others.length === 1 ? '' : 's'} that day` : 'No other casting that day'} (from the ${src})${mySide ? '' : ' — pick this casting\'s side'}.</div>
             ${sideHtml('A')}${sideHtml('B')}
-            ${unset.length ? `<div class="pp-clay-float-unset">Side not set yet: ${unset.map(o => clOtherLink(o)).join('; ')}</div>` : ''}
+            ${unset.length ? `<div class="pp-clay-float-unset">Side not set yet: ${unset.map(o => clOtherLink(o) + (o.cond && !o.cond.side ? ` — <span class="pp-clay-float-cond-inline">${condText(o)}</span>` : '')).join('; ')}</div>` : ''}
             ${notPortal.length ? `<div class="pp-clay-float-also">Also on the weekly's Cast row that day (not portal castings): ${notPortal.map(o => escapeHtml(o.projectName || o.project_number || '?')).join('; ')}</div>` : ''}
             ${fit}`;
     }
