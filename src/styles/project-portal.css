@@ -6848,3 +6848,5 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
 .pp-clay-float-fit.ok { background: #fef3c7; color: #92400e; }
 .clay-blocked text { pointer-events: none; }
 .clay-mold-clash > rect { stroke: #dc2626 !important; stroke-width: 1.4 !important; }
+.pp-clay-swap { margin-left: 8px; background: #1d4ed8; color: #fff; border: none; border-radius: 999px; padding: 2px 9px; font-size: 11px; font-weight: 700; cursor: pointer; vertical-align: middle; }
+.pp-clay-swap:hover { background: #1e40af; }

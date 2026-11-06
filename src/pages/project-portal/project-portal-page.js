@@ -5853,6 +5853,44 @@ function clBlockedFor(area) {
     }
     return out;
 }
+/** Where the other casting goes in a swap: this casting's side, or the other side when this casting has none. */
+function clSwapTarget(area, mySide) { return (mySide === 'A' || mySide === 'B') ? mySide : (area === 'A' ? 'B' : 'A'); }
+function clSwapAllowed(o, area, mySide) {
+    return !!o.id && o.casting_side === area && mySide !== 'AB' && mySide !== area;
+}
+function clSwapTitle(o, area, mySide) {
+    const casting = currentCastings.find(c => c.id === clSelectedCastingId);
+    return `Cast ${casting?.casting_number || ''} takes Side ${area}; ${clOtherLabel(o)} moves to Side ${clSwapTarget(area, mySide)}. Both are saved and the weekly's Cast cards follow.`;
+}
+/** Swap sides with another casting of the cast day (2026-11-06): this casting takes theirs, they take this one's. */
+async function clSwapSides(otherId) {
+    const casting = currentCastings.find(c => c.id === clSelectedCastingId);
+    const other = clDay.others.find(o => o.id === otherId);
+    if (!casting || !other) return;
+    const mySide = ['A', 'B', 'AB'].includes(casting.casting_side) ? casting.casting_side : '';
+    const take = other.casting_side, give = clSwapTarget(take, mySide);
+    if (!clSwapAllowed(other, take, mySide)) return;
+    const alsoThere = clTakenBy(give).filter(o => o.id !== other.id && o.id !== casting.id);
+    const days = clDay.dates.map(clDayLabel).join(', ');
+    const msg = `Swap sides on ${days}?\n\n` +
+        `Cast ${casting.casting_number || ''} (this job) → Side ${take}\n${clOtherLabel(other)} → Side ${give}` +
+        (alsoThere.length ? `\n\nNote: Side ${give} is also used that day by ${alsoThere.map(clOtherLabel).join(', ')}.` : '') +
+        `\n\nBoth are saved now and the weekly's Cast cards follow on their next refresh.`;
+    if (!window.confirm(msg)) return;
+    try {
+        await updateCasting(other.id, { casting_side: give });
+        await updateCasting(casting.id, { casting_side: take });
+    } catch (err) {
+        logger.error('[project-portal] swap sides failed:', err);
+        showToast('Sides not swapped — ' + (err.message || err), 'error');
+        return;
+    }
+    other.casting_side = give;
+    casting.casting_side = take;
+    showToast(`Swapped: Cast ${casting.casting_number || ''} → Side ${take}, ${clOtherLabel(other)} → Side ${give}`, 'success');
+    syncClaySideSelect();
+    renderCastingLayoutTab();
+}
 /** The floating box: cast day, Side A / Side B free or taken (by whom), special conditions, and whether this casting fits. */
 function renderClayFloat() {
     const controls = document.getElementById('pp-clay-controls');
@@ -5863,6 +5901,10 @@ function renderClayFloat() {
         clFloatEl.id = 'pp-clay-float';
         clFloatEl.setAttribute('role', 'status');
         document.body.appendChild(clFloatEl);
+        clFloatEl.addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-clay-swap]');
+            if (btn) clSwapSides(btn.dataset.claySwap);
+        });
     }
     const casting = currentCastings.find(c => c.id === clSelectedCastingId);
     const mySide = ['A', 'B', 'AB'].includes(casting?.casting_side) ? casting.casting_side : '';
@@ -5881,7 +5923,7 @@ function renderClayFloat() {
             const cls = taken.length ? (mine(area) ? 'taken-mine' : 'taken') : 'free';
             return `<div class="pp-clay-float-side pp-clay-float-${cls}">
                 <div class="pp-clay-float-side-head"><span>SIDE ${area}</span><span>${taken.length ? 'TAKEN' : 'FREE'}${mine(area) ? ' · THIS CASTING' : ''}</span></div>
-                ${taken.map(o => `<div class="pp-clay-float-line">${escapeHtml(clOtherLabel(o))}${o.casting_side === 'AB' ? ' (both sides)' : ''}${o.components.length ? '' : (o.inPortal === false ? '' : ' — no forms on file')}</div>`).join('')}
+                ${taken.map(o => `<div class="pp-clay-float-line">${escapeHtml(clOtherLabel(o))}${o.casting_side === 'AB' ? ' (both sides)' : ''}${o.components.length ? '' : (o.inPortal === false ? '' : ' — no forms on file')}${clSwapAllowed(o, area, mySide) ? ` <button type="button" class="pp-clay-swap" data-clay-swap="${escapeAttr(o.id)}" title="${escapeAttr(clSwapTitle(o, area, mySide))}">Swap sides</button>` : ''}</div>`).join('')}
                 ${conds.map(o => `<div class="pp-clay-float-cond">Special condition: ${escapeHtml(o.cond.name)} — ${escapeHtml(clOtherLabel(o))}</div>`).join('')}
             </div>`;
         };
