@@ -46,7 +46,7 @@ export const MILESTONE_HOW = {
     'Labels': "Green when the labels are printed from the Tracking tab. Orange if they were printed before the inventory was final, or the inventory's types, sizes or quantities changed after: print them again.",
     'Final Tracking': 'Green when the Final Tracking sheet is printed from the Tracking tab. Orange if it was printed before the inventory was final, or the inventory changed after: print it again.',
     'Batching Sheets': 'Green when the batch tickets are printed (Batch Tickets tab or the Jane Street page). Orange while the inventory is being changed, or if it changed after printing. When engineering marks the inventory ready, the portal checks whether the tickets really change and turns this back to green if they do not.',
-    'Casting Layout': 'Orange once forms are laid out on the Casting Layout tab. Green when the layout is printed, or when a special condition is set for the casting.',
+    'Casting Layout': 'Orange once forms are laid out on the Casting Layout tab, or once a special condition is set. Green when the layout is printed, or when the special-condition notice is printed (Print Layout on the Casting Layout tab).',
     'Shop Folder Cover': 'Orange when Print INITIAL Cover is printed (step 1). Green when Print FINAL Cover is printed for that casting (step 2).',
     'Mitti QC Template': 'Click the cell to change it (nothing in the portal sets it yet).',
     'Inflow Sales Ticket': 'Click the cell to change it (nothing in the portal sets it yet).',

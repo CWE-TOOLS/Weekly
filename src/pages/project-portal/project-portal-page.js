@@ -130,7 +130,7 @@ import {
 import { renderCastingLayout, computeLayoutRects, parseDimension } from './casting-layout.js?v=20261106-7';
 import { attachLayoutDrag } from './casting-layout-drag.js?v=20261106-6';
 import { activateJigListTab } from './jig-list.js?v=20261106-1';
-import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, APPROVALS_TAB_ITEMS } from '../../config/milestones-config.js?v=20261027-2';
+import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, APPROVALS_TAB_ITEMS } from '../../config/milestones-config.js?v=20261106-1';
 import { SLUMP_TARGET_DEFAULTS, FINAL_BACKUP_PIG_REDUCTION_PCT, parsePigReduction, BT_IMPORT_META, btOverrides, btImportStamp, btStampDate, additiveAmount, batchTotalsRows, renderBatchTotals, clampSlumpTarget, formatSlumpLabel, renderSlumpGraphic, renderBatchTicketCard, BATCH_PRINT_CSS } from '../../services/batch-ticket-render.js';   // moved out 2026-10-30 so the weekly's week print shares the ticket code
 import { invHash as invHashShared, invFingerprintRows, invColourFingerprintRows } from '../../services/inventory-marks.js';
 import { loadMilestonesForProject, saveMilestone, isMilestonesMigrationPending, loadLayoutConditions, loadLayoutConditionsForCastings, LAYOUT_CONDITION_PREFIX, layoutConditionNote, parseLayoutCondition, sideWords } from '../../services/milestones-service.js';
@@ -5252,10 +5252,11 @@ function layoutConditionHtml(castingId) {
 async function handleLayoutConditionSide(castingId, side) {
     const name = layoutConditionOf(castingId);
     if (!castingId || !name || !['A', 'B', 'AB'].includes(side)) return;
-    await msSet(castingId, 'Casting Layout', MS.GREEN, { note: layoutConditionNote(name, side), stamp: true });
+    // Orange until the special-condition notice is printed (user 2026-11-06: green means something was printed).
+    await msSet(castingId, 'Casting Layout', MS.ORANGE, { note: layoutConditionNote(name, side), stamp: true });
     msFloatEl && (msFloatEl.dataset.key = '');
     updateMsFloat();
-    showToast(`Cast ${currentCastings.find(c => c.id === castingId)?.casting_number || ''}: special condition "${name}" now on Side ${sideWords(side)}.`);
+    showToast(`Cast ${currentCastings.find(c => c.id === castingId)?.casting_number || ''}: special condition "${name}" now on Side ${sideWords(side)} — print the notice (Print Layout) to turn the step green.`);
 }
 async function handleLayoutConditionPick(castingId, value) {
     if (!castingId) return;
@@ -5275,7 +5276,9 @@ async function handleLayoutConditionPick(castingId, value) {
         return;
     }
     if (!msLayoutConditions.includes(name)) msLayoutConditions = [...msLayoutConditions, name].sort((a, b) => a.localeCompare(b));
-    await msSet(castingId, 'Casting Layout', MS.GREEN, { note: layoutConditionNote(name, side), stamp: true });
+    // Orange until the special-condition notice is printed (user 2026-11-06: green means something was printed).
+    await msSet(castingId, 'Casting Layout', MS.ORANGE, { note: layoutConditionNote(name, side), stamp: true });
+    showToast(`Special condition "${name}" set — print the notice from the Casting Layout tab (Print Layout) to turn the step green.`);
     msFloatEl && (msFloatEl.dataset.key = '');
     updateMsFloat();
     showToast(`Cast ${currentCastings.find(c => c.id === castingId)?.casting_number || ''}: Casting Layout green — special condition "${name}" on Side ${sideWords(side)}.`);
@@ -6434,7 +6437,7 @@ function printLayoutConditionNotice(castingId, cond) {
     w.document.open();
     w.document.write(html.replace('</body>', '<script>window.addEventListener("load",()=>{setTimeout(()=>window.print(),200);});</script></body>'));
     w.document.close();
-    msSet(castingId, 'Casting Layout', MS.GREEN, { note: LAYOUT_CONDITION_PREFIX + cond, stamp: true });
+    msSet(castingId, 'Casting Layout', MS.GREEN, { note: layoutConditionNote(cond, layoutConditionSideOf(castingId)), stamp: true });   // the notice is printed: green (side kept)
 }
 function printCastingLayoutNow() {
     let svgEls = [...document.querySelectorAll('#pp-clay-card svg')];   // both sides are drawn; print the ones with this casting's forms
