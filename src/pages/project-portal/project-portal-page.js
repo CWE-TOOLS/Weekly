@@ -5860,22 +5860,25 @@ async function loadCastDayContext() {
     }
 }
 function clTakenBy(area) { return clDay.others.filter(o => o.casting_side === area || o.casting_side === 'AB'); }
-/** The other castings' forms on one side, as blocked rectangles for the packer and the drawing. */
+/** The other castings' forms on one side, as blocked rectangles for the packer and the drawing. With several other
+ *  jobs on the side, each estimate is packed around the ones before it (box order), as the floor would do it;
+ *  a saved layout always sits where it was saved. */
 function clBlockedFor(area) {
     const out = [];
     for (const o of clTakenBy(area)) {
         if (!o.components.length) continue;
         const label = clShortLabel(o);
         let comps = o.components;
+        const common = { offsetPerSide: clOffsetPerSide, gapBetween: clGapBetween, positions: o.positions };
         if (o.casting_side === 'AB') {
             // Both sides: their Side B is packed first, the leftover continues on Side A (this tab's own rule).
-            const rB = computeLayoutRects({ components: comps, area: 'B', offsetPerSide: clOffsetPerSide, gapBetween: clGapBetween, positions: o.positions });
+            const rB = computeLayoutRects({ ...common, components: comps, area: 'B', blocked: area === 'B' ? out : [] });
             if (area === 'B') { rB.placed.forEach(p => out.push({ sx: p.sx, sy: p.sy, sw: p.sw, sh: p.sh, label })); continue; }
             const left = new Set(rB.staged.map(r => r.componentId));
             comps = comps.filter(c => left.has(c.id));
             if (!comps.length) continue;
         }
-        const r = computeLayoutRects({ components: comps, area, offsetPerSide: clOffsetPerSide, gapBetween: clGapBetween, positions: o.positions });
+        const r = computeLayoutRects({ ...common, components: comps, area, blocked: out.slice() });
         r.placed.forEach(p => out.push({ sx: p.sx, sy: p.sy, sw: p.sw, sh: p.sh, label }));
     }
     return out;
@@ -5898,9 +5901,11 @@ async function clSwapSides(otherId) {
     const take = other.casting_side, give = clSwapTarget(take, mySide);
     if (!clSwapAllowed(other, take, mySide)) return;
     const alsoThere = clTakenBy(give).filter(o => o.id !== other.id && o.id !== casting.id);
+    const stillThere = clTakenBy(take).filter(o => o.id !== other.id && o.id !== casting.id);
     const days = clDay.dates.map(clDayLabel).join(', ');
     const msg = `Swap sides on ${days}?\n\n` +
         `Cast ${casting.casting_number || ''} (this job) → Side ${take}\n${clOtherLabel(other)} → Side ${give}` +
+        (stillThere.length ? `\n\nNote: Cast ${casting.casting_number || ''} will share Side ${take} with ${stillThere.map(clOtherLabel).join(', ')}.` : '') +
         (alsoThere.length ? `\n\nNote: Side ${give} is also used that day by ${alsoThere.map(clOtherLabel).join(', ')}.` : '') +
         `\n\nBoth are saved now and the weekly's Cast cards follow on their next refresh.`;
     if (!window.confirm(msg)) return;
