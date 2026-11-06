@@ -333,11 +333,22 @@ function invReviewListHtml() {
 }
 // ---- Floating "changes to review" box on the Castings tab: there as soon as a field is marked, stays
 // put while scrolling, so the marks can be accepted or rejected without leaving the tab.
+// ---- Room for a floating box (2026-11-06): while any right-side box shows, the page content moves left to clear it ----
+const FLOAT_BOX_IDS = ['pp-clay-float', 'pp-inv-float', 'pp-bt-stale-float', 'pp-bt-casts-float'];
+let floatShiftTimer = 0;
+function syncFloatShift() {
+    const open = FLOAT_BOX_IDS.some(id => { const el = document.getElementById(id); return !!el && !el.hidden; });
+    if (document.body.classList.contains('pp-float-open') === open) return;
+    document.body.classList.toggle('pp-float-open', open);
+    // the Releasability bar and the layout pair size themselves to the content column: re-measure once it moved
+    clearTimeout(floatShiftTimer);
+    floatShiftTimer = setTimeout(() => { updateMsFloat(); fitClayCard(); placeClayFloat(); }, 0);
+}
 let invFloatEl = null;
 function updateInvFloat() {
     const n = invEdits.size;
     const show = n > 0 && currentTab === 'castings';
-    if (!show) { if (invFloatEl) invFloatEl.hidden = true; return; }
+    if (!show) { if (invFloatEl) invFloatEl.hidden = true; syncFloatShift(); return; }
     if (!invFloatEl) {
         invFloatEl = document.createElement('div');
         invFloatEl.id = 'pp-inv-float';
@@ -360,6 +371,7 @@ function updateInvFloat() {
         </div>`;
     invFloatEl.style.top = Math.round(headerBottom() + 12) + 'px';
     invFloatEl.hidden = false;
+    syncFloatShift();
 }
 window.addEventListener('resize', updateInvFloat, { passive: true });
 
@@ -5927,7 +5939,7 @@ async function clSwapSides(otherId) {
 function renderClayFloat() {
     const controls = document.getElementById('pp-clay-controls');
     const show = currentTab === 'casting-layout' && !!clSelectedCastingId && controls && !controls.hidden && controls.offsetParent !== null;
-    if (!show) { if (clFloatEl) clFloatEl.hidden = true; return; }
+    if (!show) { if (clFloatEl) clFloatEl.hidden = true; syncFloatShift(); return; }
     if (!clFloatEl) {
         clFloatEl = document.createElement('div');
         clFloatEl.id = 'pp-clay-float';
@@ -5988,6 +6000,7 @@ function renderClayFloat() {
     clFloatEl.className = `pp-clay-float pp-clay-float-${tone}`;
     clFloatEl.innerHTML = html;
     clFloatEl.hidden = false;
+    syncFloatShift();
     placeClayFloat();
     requestAnimationFrame(() => requestAnimationFrame(() => { placeClayFloat(); fitClayCard(); }));   // the Releasability bar sizes itself a frame later
 }
@@ -11000,7 +11013,7 @@ function castsAnchor() {
 function updateCastsFloat() {
     const a = castsAnchor();
     const show = !!a && a.bottom < headerBottom() + 4;
-    if (!show) { if (castsFloatEl) castsFloatEl.hidden = true; return; }
+    if (!show) { if (castsFloatEl) castsFloatEl.hidden = true; syncFloatShift(); return; }
     if (!castsFloatEl) {
         castsFloatEl = document.createElement('div');
         castsFloatEl.id = 'pp-bt-casts-float';
@@ -11029,6 +11042,7 @@ function updateCastsFloat() {
     const below = (staleFloatEl && !staleFloatEl.hidden) ? staleFloatEl.getBoundingClientRect().bottom + 8 : msTopOffset() + 12;
     castsFloatEl.style.top = Math.round(below) + 'px';
     castsFloatEl.hidden = false;
+    syncFloatShift();
 }
 function updateFloats() { updateStaleFloat(); updateCastsFloat(); updateMsFloat(); }
 
@@ -11073,7 +11087,7 @@ function staleFloatHtml(diffs, source, fresh = false, info = null) {
 function updateStaleFloat() {
     const a = staleAnchor();
     const show = !!a && a.bottom < headerBottom() + 4;
-    if (!show) { if (staleFloatEl) staleFloatEl.hidden = true; return; }
+    if (!show) { if (staleFloatEl) staleFloatEl.hidden = true; syncFloatShift(); return; }
     if (!staleFloatEl) {
         staleFloatEl = document.createElement('div');
         staleFloatEl.id = 'pp-bt-stale-float';
@@ -11095,6 +11109,7 @@ function updateStaleFloat() {
     staleFloatEl.classList.toggle('pp-bt-fresh', !!a.fresh);
     staleFloatEl.style.top = Math.round(msTopOffset() + 12) + 'px';
     staleFloatEl.hidden = false;
+    syncFloatShift();
 }
 window.addEventListener('scroll', updateFloats, { passive: true });
 window.addEventListener('resize', updateFloats, { passive: true });

@@ -6871,3 +6871,7 @@ body.pp-clay-zoom-open { overflow: hidden; }
 .pp-clay-float-link:hover { text-decoration: underline; color: #1d4ed8; }
 .pp-clay-float-cond-under { margin: 0 0 4px 14px; font-weight: 600; }
 .pp-clay-float-also { color: #64748b; font-weight: 600; }
+/* While a right-side floating box shows, the content column moves left to clear it (2026-11-06) */
+@media (min-width: 1100px) {
+  body.pp-float-open .pp-form-shell { padding-right: 356px; box-sizing: border-box; }
+}
