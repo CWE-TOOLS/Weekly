@@ -127,8 +127,8 @@ import {
     deleteClassroomTask,
     setClassroomTasksOrder
 } from '../../services/classroom-tasks-service.js';
-import { renderCastingLayout, computeLayoutRects } from './casting-layout.js?v=20261106-3';
-import { attachLayoutDrag } from './casting-layout-drag.js?v=20261106-2';
+import { renderCastingLayout, computeLayoutRects } from './casting-layout.js?v=20261106-4';
+import { attachLayoutDrag } from './casting-layout-drag.js?v=20261106-3';
 import { activateJigListTab } from './jig-list.js?v=20261106-1';
 import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, APPROVALS_TAB_ITEMS } from '../../config/milestones-config.js?v=20261027-2';
 import { SLUMP_TARGET_DEFAULTS, FINAL_BACKUP_PIG_REDUCTION_PCT, parsePigReduction, BT_IMPORT_META, btOverrides, btImportStamp, btStampDate, additiveAmount, batchTotalsRows, renderBatchTotals, clampSlumpTarget, formatSlumpLabel, renderSlumpGraphic, renderBatchTicketCard, BATCH_PRINT_CSS } from '../../services/batch-ticket-render.js';   // moved out 2026-10-30 so the weekly's week print shares the ticket code
@@ -811,6 +811,7 @@ function setActiveTab(tab) {
     if (tab !== 'castings' && invEdits.size) invEdits.clear();   // leaving the Castings tab accepts every inventory edit
     if (tab !== 'castings') invSelected.clear();
     updateInvFloat();
+    if (tab !== 'casting-layout' && clZoomSide) { clZoomSide = null; applyClayZoom(); }
     renderClayFloat();
     document.querySelectorAll('.pp-tab-btn').forEach(btn => {
         btn.classList.toggle('pp-tab-active', btn.dataset.tab === tab);
@@ -6061,25 +6062,32 @@ function renderCastingLayoutTab() {
     const cardB = document.createElement('div'); cardB.className = 'pp-clay-card-side'; cardB.dataset.side = 'B';
     card.append(cardA, cardB);
     const quiet = document.createElement('div');
-    const common = { offsetPerSide: clOffsetPerSide, gapBetween: clGapBetween, positions: clLayoutPositions };
-    const sideTitle = (area) => `${title} — SIDE ${area}`;
+    const common = { offsetPerSide: clOffsetPerSide, gapBetween: clGapBetween, positions: clLayoutPositions, title };
     if (clSelectedArea === 'AB') {
         // Both sides: Side B is packed first, whatever does not fit continues onto Side A.
-        const hB = renderCastingLayout({ ...common, container: cardB, errorEl: quiet, components, title: sideTitle('B'), area: 'B', overflowLabel: 'CONTINUE ON SIDE A', hideOverflow: true, blocked: clBlockedFor('B') });
+        const hB = renderCastingLayout({ ...common, container: cardB, errorEl: quiet, components, sideLabel: 'SIDE B', area: 'B', overflowLabel: 'CONTINUE ON SIDE A', hideOverflow: true, blocked: clBlockedFor('B') });
         const leftover = new Set((hB?.staged || []).map(r => r.componentId));
         const compsA = hB ? components.filter(c => leftover.has(c.id)) : [];
-        const hA = renderCastingLayout({ ...common, container: cardA, errorEl, components: compsA, title: sideTitle('A'), area: 'A', blocked: clBlockedFor('A'), allowEmpty: true });
+        const hA = renderCastingLayout({ ...common, container: cardA, errorEl, components: compsA, sideLabel: 'SIDE A', area: 'A', blocked: clBlockedFor('A'), allowEmpty: true });
         if (hB) handles.push(hB);
         if (hA) handles.push(hA);
         if (!compsA.length && errorEl) errorEl.textContent = hB?.staged?.length ? '' : 'Every form fits on Side B.';
     } else {
         const own = clSelectedArea === 'A' ? 'A' : 'B';
         const other = own === 'A' ? 'B' : 'A';
-        const hOwn = renderCastingLayout({ ...common, container: own === 'A' ? cardA : cardB, errorEl, components, title: sideTitle(own), area: own, blocked: clBlockedFor(own) });
-        const hOther = renderCastingLayout({ ...common, container: other === 'A' ? cardA : cardB, errorEl: quiet, components: [], title: sideTitle(other) + ' — other jobs', area: other, blocked: clBlockedFor(other), allowEmpty: true });
+        const hOwn = renderCastingLayout({ ...common, container: own === 'A' ? cardA : cardB, errorEl, components, sideLabel: `SIDE ${own}`, area: own, blocked: clBlockedFor(own) });
+        const hOther = renderCastingLayout({ ...common, container: other === 'A' ? cardA : cardB, errorEl: quiet, components: [], sideLabel: `SIDE ${other} — OTHER JOBS`, area: other, blocked: clBlockedFor(other), allowEmpty: true });
         if (hOwn) handles.push(hOwn);
         if (hOther) handles.push(hOther);
     }
+    // Zoom: click a side (or its button) to fill the screen top to bottom; a redraw keeps the zoomed side.
+    for (const el of [cardA, cardB]) {
+        const btn = document.createElement('button');
+        btn.type = 'button'; btn.className = 'pp-clay-zoom-btn'; btn.dataset.clayZoom = el.dataset.side;
+        el.appendChild(btn);
+    }
+    bindClayZoom();
+    applyClayZoom();
     fitClayCard();
     const ownHandles = handles.filter(h => h.own);
     if (ownHandles.length) {
@@ -6100,6 +6108,37 @@ function renderCastingLayoutTab() {
     const resetBtn = document.getElementById('pp-clay-reset-btn');
     if (resetBtn) resetBtn.hidden = !ownHandles.some(h => h.mode === 'manual');
 }
+// ---- Zoom one side to the screen (2026-11-06) ----
+let clZoomSide = null;      // 'A' | 'B' | null — survives redraws (a drag commit redraws the pair)
+let clZoomBound = false;
+function bindClayZoom() {
+    if (clZoomBound) return;
+    clZoomBound = true;
+    const card = document.getElementById('pp-clay-card');
+    if (!card) return;
+    card.addEventListener('click', (e) => {
+        const side = e.target.closest('.pp-clay-card-side');
+        if (!side || !card.classList.contains('pp-clay-card-pair')) return;
+        if (e.target.closest('g.clay-mold')) return;          // a form: drag / rotate, not zoom
+        clZoomSide = clZoomSide === side.dataset.side ? null : side.dataset.side;
+        applyClayZoom();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && clZoomSide) { clZoomSide = null; applyClayZoom(); }
+    });
+}
+function applyClayZoom() {
+    const card = document.getElementById('pp-clay-card');
+    if (!card) return;
+    for (const el of card.querySelectorAll('.pp-clay-card-side')) {
+        const on = clZoomSide === el.dataset.side;
+        el.classList.toggle('pp-clay-zoomed', on);
+        const btn = el.querySelector('.pp-clay-zoom-btn');
+        if (btn) { btn.textContent = on ? '✕ Close (Esc)' : '⤢ Zoom'; btn.title = on ? 'Back to both sides' : `Zoom Side ${el.dataset.side} to the screen (or click anywhere on it)`; }
+    }
+    document.body.classList.toggle('pp-clay-zoom-open', !!clZoomSide);
+}
+
 /** Size the side-by-side pair to the window: as tall as the space under it allows, clear of the cast-day box. */
 function fitClayCard() {
     const card = document.getElementById('pp-clay-card');

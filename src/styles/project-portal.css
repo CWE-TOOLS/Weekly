@@ -6859,3 +6859,11 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
 .pp-clay-compact .pp-clay-sub { display: none; }
 .pp-clay-compact .pp-clay-header { margin-bottom: 8px; }
 .pp-clay-compact .pp-clay-controls { margin-bottom: 8px; }
+/* Casting Layout: zoom one side to the screen (2026-11-06) */
+.pp-clay-card-pair .pp-clay-card-side { position: relative; cursor: zoom-in; }
+.pp-clay-zoom-btn { position: absolute; top: 6px; right: 6px; z-index: 2; background: #1d4ed8; color: #fff; border: none; border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 700; cursor: pointer; opacity: 0.85; }
+.pp-clay-zoom-btn:hover { opacity: 1; }
+.pp-clay-card-pair .pp-clay-card-side.pp-clay-zoomed { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 55; height: auto; margin: 0; padding: 8px; background: #fff; border: none; border-radius: 0; cursor: zoom-out; align-items: center; justify-content: center; box-sizing: border-box; }
+.pp-clay-card-pair .pp-clay-card-side.pp-clay-zoomed svg { width: auto; height: 100%; max-width: 100%; }
+.pp-clay-card-pair .pp-clay-card-side.pp-clay-zoomed .pp-clay-zoom-btn { top: 12px; right: 12px; font-size: 13px; padding: 6px 14px; }
+body.pp-clay-zoom-open { overflow: hidden; }

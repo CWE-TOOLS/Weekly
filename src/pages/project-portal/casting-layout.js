@@ -614,7 +614,8 @@ export function computeLayoutRects({ components, area = 'B', offsetPerSide = 4, 
  *        ({sx, sy, sw, sh, label}); drawn hatched grey, the auto-pack goes around them, a saved layout that
  *        overlaps them is flagged (2026-11-06)
  */
-export function renderCastingLayout({ container, errorEl, components, title, area = 'B', offsetPerSide = 4, gapBetween = 0, positions = null, overflowLabel = null, hideOverflow = false, blocked = [], allowEmpty = false }) {
+/** @param {string} [opts.sideLabel] - "SIDE A" / "SIDE B …": its own centred line at the very top of the page (2026-11-06) */
+export function renderCastingLayout({ container, errorEl, components, title, area = 'B', offsetPerSide = 4, gapBetween = 0, positions = null, overflowLabel = null, hideOverflow = false, blocked = [], allowEmpty = false, sideLabel = '' }) {
   if (!container) return null;
   container.innerHTML = '';
   if (errorEl) errorEl.textContent = '';
@@ -806,8 +807,16 @@ export function renderCastingLayout({ container, errorEl, components, title, are
     + ` — +${frac(offsetPerSide)}/side mold offset`
     + (blocked.length ? ` — SHARED WITH ${[...new Set(blocked.map(b => b.label).filter(Boolean))].join(', ')} (hatched)` : '')
     + (clashes.length ? ` — ${clashes.length} OVERLAP` : ''));
-  svg.appendChild(svgText(NS, pageW / 2, 18, title || 'Casting Layout', fontSize * 1.5, '#222', 'bold'));
-  svg.appendChild(svgText(NS, pageW / 2, 38, summaryStr, fontSize, (staged.length > 0 || clashes.length > 0) ? '#dc2626' : (blocked.length ? '#b45309' : (totalMolds === 0 ? '#9ca3af' : '#555')), 'normal'));
+  const summaryColor = (staged.length > 0 || clashes.length > 0) ? '#dc2626' : (blocked.length ? '#b45309' : (totalMolds === 0 ? '#9ca3af' : '#555'));
+  if (sideLabel) {
+    // SIDE A / SIDE B first, on its own line, then the usual title and summary.
+    svg.appendChild(svgText(NS, pageW / 2, 14, sideLabel, fontSize * 1.9, '#111', 'bold'));
+    svg.appendChild(svgText(NS, pageW / 2, 34, title || 'Casting Layout', fontSize * 1.3, '#222', 'bold'));
+    svg.appendChild(svgText(NS, pageW / 2, 50, summaryStr, fontSize * 0.95, summaryColor, 'normal'));
+  } else {
+    svg.appendChild(svgText(NS, pageW / 2, 18, title || 'Casting Layout', fontSize * 1.5, '#222', 'bold'));
+    svg.appendChild(svgText(NS, pageW / 2, 38, summaryStr, fontSize, summaryColor, 'normal'));
+  }
 
   container.appendChild(svg);
 
