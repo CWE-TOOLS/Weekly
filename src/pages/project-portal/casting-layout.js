@@ -614,7 +614,7 @@ export function computeLayoutRects({ components, area = 'B', offsetPerSide = 4, 
  *        ({sx, sy, sw, sh, label}); drawn hatched grey, the auto-pack goes around them, a saved layout that
  *        overlaps them is flagged (2026-11-06)
  */
-export function renderCastingLayout({ container, errorEl, components, title, area = 'B', offsetPerSide = 4, gapBetween = 0, positions = null, overflowLabel = null, hideOverflow = false, blocked = [] }) {
+export function renderCastingLayout({ container, errorEl, components, title, area = 'B', offsetPerSide = 4, gapBetween = 0, positions = null, overflowLabel = null, hideOverflow = false, blocked = [], allowEmpty = false }) {
   if (!container) return null;
   container.innerHTML = '';
   if (errorEl) errorEl.textContent = '';
@@ -622,7 +622,8 @@ export function renderCastingLayout({ container, errorEl, components, title, are
   const tableDefs = (CASTING_AREAS[area] || CASTING_AREAS.B).tables;
   const { molds, skipped } = buildMolds(components, offsetPerSide);
 
-  if (molds.length === 0) {
+  // allowEmpty (2026-11-06): the side this casting is NOT on still draws — the tables and the other jobs' forms.
+  if (molds.length === 0 && !allowEmpty) {
     const msg = document.createElement('p');
     msg.className = 'pp-clay-empty';
     msg.textContent = (components && components.length > 0)
@@ -638,7 +639,7 @@ export function renderCastingLayout({ container, errorEl, components, title, are
   // Manual mode whenever saved positions exist for this area; otherwise auto-pack.
   const posForArea = (positions || []).filter(p => (p.area === 'A' ? 'A' : 'B') === area);
   const mode = posForArea.length > 0 ? 'manual' : 'auto';
-  const { placed, staged } = mode === 'manual'
+  const { placed, staged } = molds.length === 0 ? { placed: [], staged: [] } : mode === 'manual'
     ? layoutManual(molds, posForArea, tableDefs)
     : layoutAuto(molds, tableDefs, gapBetween, area === 'A', blocked);
   // A saved (manual) layout can sit on top of the other job's forms: those molds get a red outline.
@@ -795,16 +796,18 @@ export function renderCastingLayout({ container, errorEl, components, title, are
     place(callouts.filter(r => tx(r.sx + r.sw / 2) >= mid), 'right');
   }
   const totalMolds = molds.length;
-  const summaryStr = (mode === 'manual'
+  const summaryStr = totalMolds === 0
+    ? (blocked.length ? `No forms of this casting on this side — ${[...new Set(blocked.map(b => b.label).filter(Boolean))].join(', ')} (hatched)` : 'Nothing on this side that day')
+    : ((mode === 'manual'
       ? `${totalMolds} molds — manual layout`
         + (staged.length > 0 ? ` — ${staged.length} not placed` : '')
       : `${totalMolds} molds — ${totalMolds - staged.length} on tables`
         + (staged.length > 0 ? (hideOverflow ? ` — ${staged.length} continue on the other side` : ` — ${staged.length} overflow`) : ''))
     + ` — +${frac(offsetPerSide)}/side mold offset`
     + (blocked.length ? ` — SHARED WITH ${[...new Set(blocked.map(b => b.label).filter(Boolean))].join(', ')} (hatched)` : '')
-    + (clashes.length ? ` — ${clashes.length} OVERLAP` : '');
+    + (clashes.length ? ` — ${clashes.length} OVERLAP` : ''));
   svg.appendChild(svgText(NS, pageW / 2, 18, title || 'Casting Layout', fontSize * 1.5, '#222', 'bold'));
-  svg.appendChild(svgText(NS, pageW / 2, 38, summaryStr, fontSize, (staged.length > 0 || clashes.length > 0) ? '#dc2626' : (blocked.length ? '#b45309' : '#555'), 'normal'));
+  svg.appendChild(svgText(NS, pageW / 2, 38, summaryStr, fontSize, (staged.length > 0 || clashes.length > 0) ? '#dc2626' : (blocked.length ? '#b45309' : (totalMolds === 0 ? '#9ca3af' : '#555')), 'normal'));
 
   container.appendChild(svg);
 
@@ -817,5 +820,5 @@ export function renderCastingLayout({ container, errorEl, components, title, are
     errorEl.textContent = parts.join(' ');
   }
 
-  return { mode, area, svg, transform: { scale, offsetX, offsetY }, tableDefs, placed, staged, unplaced: staged, blocked, clashes };
+  return { mode, area, svg, transform: { scale, offsetX, offsetY }, tableDefs, placed, staged, unplaced: staged, blocked, clashes, own: totalMolds > 0 };
 }

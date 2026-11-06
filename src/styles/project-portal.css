@@ -6850,3 +6850,12 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
 .clay-mold-clash > rect { stroke: #dc2626 !important; stroke-width: 1.4 !important; }
 .pp-clay-swap { margin-left: 8px; background: #1d4ed8; color: #fff; border: none; border-radius: 999px; padding: 2px 9px; font-size: 11px; font-weight: 700; cursor: pointer; vertical-align: middle; }
 .pp-clay-swap:hover { background: #1e40af; }
+/* Casting Layout: both sides side by side, scaled to the window (2026-11-06) */
+.pp-clay-card.pp-clay-card-pair { max-width: none; display: flex; gap: 12px; align-items: stretch; box-sizing: border-box; padding: 8px; }
+.pp-clay-card-pair .pp-clay-card-side { flex: 1 1 0; min-width: 0; height: 100%; display: flex; align-items: flex-start; justify-content: center; border: 1px dashed #cbd5e1; border-radius: 6px; margin: 0; padding: 0; }
+.pp-clay-card-pair .pp-clay-card-side + .pp-clay-card-side { margin-top: 0; border-top: 1px dashed #cbd5e1; padding-top: 0; }
+.pp-clay-card-pair .pp-clay-card-side svg { width: 100%; height: 100%; display: block; }
+.pp-clay-card-pair .pp-clay-empty { align-self: center; }
+.pp-clay-compact .pp-clay-sub { display: none; }
+.pp-clay-compact .pp-clay-header { margin-bottom: 8px; }
+.pp-clay-compact .pp-clay-controls { margin-bottom: 8px; }

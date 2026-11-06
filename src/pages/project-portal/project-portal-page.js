@@ -127,8 +127,8 @@ import {
     deleteClassroomTask,
     setClassroomTasksOrder
 } from '../../services/classroom-tasks-service.js';
-import { renderCastingLayout, computeLayoutRects } from './casting-layout.js?v=20261106-1';
-import { attachLayoutDrag } from './casting-layout-drag.js?v=20261106-1';
+import { renderCastingLayout, computeLayoutRects } from './casting-layout.js?v=20261106-3';
+import { attachLayoutDrag } from './casting-layout-drag.js?v=20261106-2';
 import { activateJigListTab } from './jig-list.js?v=20261106-1';
 import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, APPROVALS_TAB_ITEMS } from '../../config/milestones-config.js?v=20261027-2';
 import { SLUMP_TARGET_DEFAULTS, FINAL_BACKUP_PIG_REDUCTION_PCT, parsePigReduction, BT_IMPORT_META, btOverrides, btImportStamp, btStampDate, additiveAmount, batchTotalsRows, renderBatchTotals, clampSlumpTarget, formatSlumpLabel, renderSlumpGraphic, renderBatchTicketCard, BATCH_PRINT_CSS } from '../../services/batch-ticket-render.js';   // moved out 2026-10-30 so the weekly's week print shares the ticket code
@@ -5947,7 +5947,7 @@ function renderClayFloat() {
     clFloatEl.innerHTML = html;
     clFloatEl.hidden = false;
     placeClayFloat();
-    requestAnimationFrame(() => requestAnimationFrame(placeClayFloat));   // the Releasability bar sizes itself a frame later
+    requestAnimationFrame(() => requestAnimationFrame(() => { placeClayFloat(); fitClayCard(); }));   // the Releasability bar sizes itself a frame later
 }
 /** Under the Releasability bar when it is showing, else under the portal header. */
 function placeClayFloat() {
@@ -6051,43 +6051,45 @@ function renderCastingLayoutTab() {
         ? `${currentProjectNumber} — ${castingLayoutLabel(casting)}`
         : 'Casting Layout';
 
+    // Both sides, side by side, always (2026-11-06): this casting's forms on its side(s), the other jobs' forms of the
+    // cast day hatched on both; the pair is scaled to the window (fitClayCard) so nothing scrolls.
     const handles = [];
+    card.innerHTML = '';
+    card.classList.add('pp-clay-card-pair');
+    document.querySelector('.pp-tab-panel[data-panel="casting-layout"]')?.classList.add('pp-clay-compact');   // the how-to text folds into the title's tooltip
+    const cardA = document.createElement('div'); cardA.className = 'pp-clay-card-side'; cardA.dataset.side = 'A';
+    const cardB = document.createElement('div'); cardB.className = 'pp-clay-card-side'; cardB.dataset.side = 'B';
+    card.append(cardA, cardB);
+    const quiet = document.createElement('div');
+    const common = { offsetPerSide: clOffsetPerSide, gapBetween: clGapBetween, positions: clLayoutPositions };
+    const sideTitle = (area) => `${title} — SIDE ${area}`;
     if (clSelectedArea === 'AB') {
-        // Both sides (2026-10-23): Side B is packed first, whatever does not fit continues onto Side A.
-        // Each side is its own diagram with its own saved positions, drawn one above the other.
-        card.innerHTML = '';
-        const cardB = document.createElement('div'); cardB.className = 'pp-clay-card-side';
-        const cardA = document.createElement('div'); cardA.className = 'pp-clay-card-side';
-        card.append(cardB, cardA);
-        const quiet = document.createElement('div');
-        const hB = renderCastingLayout({ container: cardB, errorEl: quiet, components, title: `${title} — SIDE B`, area: 'B', offsetPerSide: clOffsetPerSide, gapBetween: clGapBetween, positions: clLayoutPositions, overflowLabel: 'CONTINUE ON SIDE A', hideOverflow: true, blocked: clBlockedFor('B') });
+        // Both sides: Side B is packed first, whatever does not fit continues onto Side A.
+        const hB = renderCastingLayout({ ...common, container: cardB, errorEl: quiet, components, title: sideTitle('B'), area: 'B', overflowLabel: 'CONTINUE ON SIDE A', hideOverflow: true, blocked: clBlockedFor('B') });
         const leftover = new Set((hB?.staged || []).map(r => r.componentId));
         const compsA = hB ? components.filter(c => leftover.has(c.id)) : [];
-        const hA = compsA.length ? renderCastingLayout({ container: cardA, errorEl, components: compsA, title: `${title} — SIDE A`, area: 'A', offsetPerSide: clOffsetPerSide, gapBetween: clGapBetween, positions: clLayoutPositions, blocked: clBlockedFor('A') }) : null;
-        if (!compsA.length) { cardA.innerHTML = '<p class="pp-clay-empty">Side A: nothing left over — every form fits on Side B.</p>'; if (errorEl) errorEl.textContent = ''; }
+        const hA = renderCastingLayout({ ...common, container: cardA, errorEl, components: compsA, title: sideTitle('A'), area: 'A', blocked: clBlockedFor('A'), allowEmpty: true });
         if (hB) handles.push(hB);
         if (hA) handles.push(hA);
+        if (!compsA.length && errorEl) errorEl.textContent = hB?.staged?.length ? '' : 'Every form fits on Side B.';
     } else {
-        const h = renderCastingLayout({
-            container: card,
-            errorEl,
-            components,
-            title,
-            area: clSelectedArea,
-            offsetPerSide: clOffsetPerSide,
-            gapBetween: clGapBetween,
-            positions: clLayoutPositions,
-            blocked: clBlockedFor(clSelectedArea)
-        });
-        if (h) handles.push(h);
+        const own = clSelectedArea === 'A' ? 'A' : 'B';
+        const other = own === 'A' ? 'B' : 'A';
+        const hOwn = renderCastingLayout({ ...common, container: own === 'A' ? cardA : cardB, errorEl, components, title: sideTitle(own), area: own, blocked: clBlockedFor(own) });
+        const hOther = renderCastingLayout({ ...common, container: other === 'A' ? cardA : cardB, errorEl: quiet, components: [], title: sideTitle(other) + ' — other jobs', area: other, blocked: clBlockedFor(other), allowEmpty: true });
+        if (hOwn) handles.push(hOwn);
+        if (hOther) handles.push(hOther);
     }
-    if (handles.length) {
-        const last = handles[handles.length - 1];
-        const placedN = handles.reduce((n, h) => n + h.placed.length, 0);
-        clFitInfo = { placed: placedN, total: placedN + (last.staged || []).length, clashes: handles.reduce((n, h) => n + (h.clashes || []).length, 0) };
+    fitClayCard();
+    const ownHandles = handles.filter(h => h.own);
+    if (ownHandles.length) {
+        // In AB mode Side B's staged forms moved on to Side A, so only the last own side's leftovers count as overflow.
+        const last = ownHandles[ownHandles.length - 1];
+        const placedN = ownHandles.reduce((n, h) => n + h.placed.length, 0);
+        clFitInfo = { placed: placedN, total: placedN + (last.staged || []).length, clashes: ownHandles.reduce((n, h) => n + (h.clashes || []).length, 0) };
     } else clFitInfo = null;
     renderClayFloat();
-    for (const handle of handles) {
+    for (const handle of ownHandles) {
         attachLayoutDrag(handle, {
             castingId: clSelectedCastingId,
             area: handle.area,
@@ -6096,8 +6098,29 @@ function renderCastingLayoutTab() {
     }
     // The reset button only makes sense once a layout has been customized.
     const resetBtn = document.getElementById('pp-clay-reset-btn');
-    if (resetBtn) resetBtn.hidden = !handles.some(h => h.mode === 'manual');
+    if (resetBtn) resetBtn.hidden = !ownHandles.some(h => h.mode === 'manual');
 }
+/** Size the side-by-side pair to the window: as tall as the space under it allows, clear of the cast-day box. */
+function fitClayCard() {
+    const card = document.getElementById('pp-clay-card');
+    if (!card || !card.classList.contains('pp-clay-card-pair') || card.offsetParent === null) return;
+    const top = card.getBoundingClientRect().top;
+    let h = Math.max(220, window.innerHeight - top - 16);
+    card.style.height = h + 'px';
+    // If the card itself is what runs past the window (page padding under it), take that off the height too.
+    // A page that is taller for another reason (a short window where the shell's own minimum height rules) is left alone.
+    const over = document.documentElement.scrollHeight - window.innerHeight;
+    const gap = document.documentElement.scrollHeight - (window.scrollY + card.getBoundingClientRect().bottom);
+    if (over > 0 && gap <= 24 && h - over >= 220) { h -= over; card.style.height = h + 'px'; }
+    // keep the diagrams out from under the floating cast-day box
+    let padRight = 0;
+    if (clFloatEl && !clFloatEl.hidden) {
+        const f = clFloatEl.getBoundingClientRect(), c = card.getBoundingClientRect();
+        if (f.left < c.right && f.bottom > c.top) padRight = Math.ceil(c.right - f.left) + 12;
+    }
+    card.style.paddingRight = padRight ? padRight + 'px' : '';
+}
+window.addEventListener('resize', fitClayCard, { passive: true });
 
 /**
  * Persist dragged mold positions, then reload and re-render. The first commit
@@ -6181,7 +6204,9 @@ function printLayoutConditionNotice(castingId, cond) {
     msSet(castingId, 'Casting Layout', MS.GREEN, { note: LAYOUT_CONDITION_PREFIX + cond, stamp: true });
 }
 function printCastingLayoutNow() {
-    const svgEls = [...document.querySelectorAll('#pp-clay-card svg')];   // one per side when the casting is on both
+    let svgEls = [...document.querySelectorAll('#pp-clay-card svg')];   // both sides are drawn; print the ones with this casting's forms
+    const withOwn = svgEls.filter(el => el.querySelector('g.clay-mold'));
+    if (withOwn.length) svgEls = withOwn;
     if (!svgEls.length) { alert('No layout to print yet.'); return false; }
     // Print on 11x17 (tabloid) portrait so the layout scales up and stays readable; each SVG is cropped to
     // its drawn content and gets its own page.

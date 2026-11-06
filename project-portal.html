@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="src/styles/variables.css">
     <link rel="stylesheet" href="src/styles/base.css">
     <link rel="stylesheet" href="src/styles/buttons.css">
-    <link rel="stylesheet" href="src/styles/project-portal.css?v=20261106-3">
+    <link rel="stylesheet" href="src/styles/project-portal.css?v=20261106-5">
 
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 </head>
@@ -509,7 +509,7 @@
                     <div class="pp-tab-panel" data-panel="casting-layout" hidden>
                         <div class="pp-clay-wrap">
                             <div class="pp-clay-header">
-                                <h2 class="pp-clay-title">Casting Layout</h2>
+                                <h2 class="pp-clay-title" title="Auto-arranges a casting's panels onto the shop-floor tables. Panel sizes come from the Tracking sheet; the mold footprint adds the offset to every edge. Drag a form to fine-tune its spot; double-click it or hover and press R to rotate. The first change saves a manual layout. Both sides are shown: this casting's forms on its side, the other jobs of the cast day hatched grey.">Casting Layout</h2>
                                 <p class="pp-muted pp-clay-sub">Auto-arranges a casting's panels onto the shop-floor tables. Panel sizes come from the Tracking sheet; the mold footprint adds the offset below to every edge. Drag a form to fine-tune its spot; double-click it or hover and press R to rotate. The first change saves a manual layout. The box on the right shows who else the weekly has casting on this casting's cast day and which side they take; another job's forms on the same side are hatched grey and this casting is packed into the room they leave.</p>
                             </div>
 
@@ -530,7 +530,7 @@
                                 <label class="pp-clay-ctrl" title="Side A / Side B of this casting — the weekly's Cast cards show and edit the same value">
                                     <span>Casting side</span>
                                     <select id="pp-clay-side" class="pp-clay-select">
-                                        <option value="">— not set (shows Side B) —</option>
+                                        <option value="">— not set (forms shown on Side B) —</option>
                                         <option value="A">Side A</option>
                                         <option value="B">Side B</option>
                                         <option value="AB">Both — A and B</option>
@@ -1283,7 +1283,7 @@
         <div id="pp-toast" class="pp-toast" hidden></div>
     </div>
 
-    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20261106-4"></script>
+    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20261106-8"></script>
     <script type="module" src="src/utils/auto-update.js?v=20261023-1"></script>
 </body>
 </html>
