@@ -6869,3 +6869,5 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
 body.pp-clay-zoom-open { overflow: hidden; }
 .pp-clay-float-link { color: inherit; text-decoration: underline dotted; text-underline-offset: 2px; }
 .pp-clay-float-link:hover { text-decoration: underline; color: #1d4ed8; }
+.pp-clay-float-cond-under { margin: 0 0 4px 14px; font-weight: 600; }
+.pp-clay-float-also { color: #64748b; font-weight: 600; }

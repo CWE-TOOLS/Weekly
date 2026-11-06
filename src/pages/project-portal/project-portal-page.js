@@ -5954,17 +5954,21 @@ function renderClayFloat() {
     } else {
         const days = clDay.dates.map(clDayLabel).join(', ');
         const src = clDay.source === 'weekly' ? 'weekly' : 'portal cast date — this casting has no Cast card on the weekly yet';
+        const condOn = (o, area) => !!(o.cond && (o.cond.side === area || o.cond.side === 'AB'));
         const sideHtml = (area) => {
             const taken = clTakenBy(area);
-            const conds = clDay.others.filter(o => o.cond && (o.cond.side === area || o.cond.side === 'AB'));
+            // a condition belongs under its casting; one whose casting sits on the other side gets its own line
+            const condElsewhere = clDay.others.filter(o => condOn(o, area) && !taken.includes(o));
             const cls = taken.length ? (mine(area) ? 'taken-mine' : 'taken') : 'free';
             return `<div class="pp-clay-float-side pp-clay-float-${cls}">
                 <div class="pp-clay-float-side-head"><span>SIDE ${area}</span><span>${taken.length ? 'TAKEN' : 'FREE'}${mine(area) ? ' · THIS CASTING' : ''}</span></div>
-                ${taken.map(o => `<div class="pp-clay-float-line">${clOtherLink(o)}${o.casting_side === 'AB' ? ' (both sides)' : ''}${o.components.length ? '' : (o.inPortal === false ? '' : ' — no forms on file')}${clSwapAllowed(o, area, mySide) ? ` <button type="button" class="pp-clay-swap" data-clay-swap="${escapeAttr(o.id)}" title="${escapeAttr(clSwapTitle(o, area, mySide))}">Swap sides</button>` : ''}</div>`).join('')}
-                ${conds.map(o => `<div class="pp-clay-float-cond">Special condition: ${escapeHtml(o.cond.name)} — ${clOtherLink(o)}</div>`).join('')}
+                ${taken.map(o => `<div class="pp-clay-float-line">${clOtherLink(o)}${o.casting_side === 'AB' ? ' (both sides)' : ''}${o.components.length ? '' : (o.inPortal === false ? '' : ' — no forms on file')}${clSwapAllowed(o, area, mySide) ? ` <button type="button" class="pp-clay-swap" data-clay-swap="${escapeAttr(o.id)}" title="${escapeAttr(clSwapTitle(o, area, mySide))}">Swap sides</button>` : ''}</div>${condOn(o, area) ? `<div class="pp-clay-float-cond pp-clay-float-cond-under">↳ special condition: ${escapeHtml(o.cond.name)}</div>` : ''}`).join('')}
+                ${condElsewhere.map(o => `<div class="pp-clay-float-cond">Special condition here: ${escapeHtml(o.cond.name)} — ${clOtherLink(o)}${['A', 'B'].includes(o.casting_side) ? ` (that casting is on Side ${o.casting_side})` : ''}</div>`).join('')}
             </div>`;
         };
-        const unset = clDay.others.filter(o => !['A', 'B', 'AB'].includes(o.casting_side));
+        const unsetAll = clDay.others.filter(o => !['A', 'B', 'AB'].includes(o.casting_side));
+        const unset = unsetAll.filter(o => o.inPortal !== false);
+        const notPortal = unsetAll.filter(o => o.inPortal === false);
         let fit = '';
         if (mySide && clFitInfo) {
             const shared = (mySide === 'AB' ? [...clTakenBy('A'), ...clTakenBy('B')] : clTakenBy(mySide)).filter(o => o.components.length);
@@ -5978,6 +5982,7 @@ function renderClayFloat() {
             <div class="pp-clay-float-text">${clDay.others.length ? `${clDay.others.length} other casting${clDay.others.length === 1 ? '' : 's'} that day` : 'No other casting that day'} (from the ${src})${mySide ? '' : ' — pick this casting\'s side'}.</div>
             ${sideHtml('A')}${sideHtml('B')}
             ${unset.length ? `<div class="pp-clay-float-unset">Side not set yet: ${unset.map(o => clOtherLink(o)).join('; ')}</div>` : ''}
+            ${notPortal.length ? `<div class="pp-clay-float-also">Also on the weekly's Cast row that day (not portal castings): ${notPortal.map(o => escapeHtml(o.projectName || o.project_number || '?')).join('; ')}</div>` : ''}
             ${fit}`;
     }
     clFloatEl.className = `pp-clay-float pp-clay-float-${tone}`;
