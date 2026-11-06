@@ -195,3 +195,33 @@ export async function deleteCasting(id) {
     }
     return true;
 }
+
+/** Castings by id, any project — the Casting Layout cast-day check (2026-11-06). */
+export async function loadCastingsByIds(ids) {
+    if (!Array.isArray(ids) || ids.length === 0) return [];
+    const client = await getClient();
+    if (!client) return [];
+    const out = [];
+    for (let i = 0; i < ids.length; i += 80) {
+        const { data, error } = await client
+            .from(CASTINGS_TABLE)
+            .select('id, project_number, casting_number, description, casting_side, casting_date')
+            .in('id', ids.slice(i, i + 80));
+        if (error) { logger.error('[castings-service] loadCastingsByIds error:', error); throw error; }
+        out.push(...(data || []));
+    }
+    return out;
+}
+
+/** Castings whose portal cast date is one of the given ISO dates, any project (2026-11-06). */
+export async function loadCastingsByDates(dates) {
+    if (!Array.isArray(dates) || dates.length === 0) return [];
+    const client = await getClient();
+    if (!client) return [];
+    const { data, error } = await client
+        .from(CASTINGS_TABLE)
+        .select('id, project_number, casting_number, description, casting_side, casting_date')
+        .in('casting_date', dates);
+    if (error) { logger.error('[castings-service] loadCastingsByDates error:', error); throw error; }
+    return data || [];
+}

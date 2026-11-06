@@ -112,6 +112,24 @@ const LAYOUT_SIDE_RE = /\s*\(Side (A \+ B|AB|A|B)\)\s*$/;
 export function sideWords(side) { return side === 'AB' ? 'A + B' : side; }
 
 /** Note text for a special layout condition: "Special condition: <name> (Side A)". */
+/** Special layout conditions of the given castings: [{ casting_id, name, side }] (2026-11-06). */
+export async function loadLayoutConditionsForCastings(castingIds) {
+    if (!Array.isArray(castingIds) || castingIds.length === 0) return [];
+    const client = await getClient();
+    if (!client) return [];
+    const { data, error } = await client
+        .from(TABLE)
+        .select('casting_id, note')
+        .eq('milestone', 'Casting Layout')
+        .like('note', LAYOUT_CONDITION_PREFIX + '%')
+        .in('casting_id', castingIds);
+    if (error) {
+        if (isMissingTable(error)) { notePending(); return []; }
+        logger.error('[milestones] loadLayoutConditionsForCastings failed:', error);
+        return [];
+    }
+    return (data || []).map(r => ({ casting_id: r.casting_id, ...(parseLayoutCondition(r.note) || {}) })).filter(r => r.name);
+}
 export function layoutConditionNote(name, side) {
     const s = (side === 'A' || side === 'B' || side === 'AB') ? ` (Side ${sideWords(side)})` : '';
     return LAYOUT_CONDITION_PREFIX + String(name || '').trim() + s;

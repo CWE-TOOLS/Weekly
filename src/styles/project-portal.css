@@ -6826,3 +6826,25 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
 .pp-track-mismatch-nums { font-weight: 600; color: #7f1d1d; letter-spacing: 0; }
 .pp-track-mismatch-what { margin-top: 4px; }
 .pp-track-mismatch-fix { margin-top: 4px; color: #991b1b; }
+
+/* Casting Layout: cast-day side check (2026-11-06) */
+.pp-clay-float { position: fixed; right: 16px; width: 330px; max-width: calc(100vw - 32px); z-index: 60; border: 3px solid #15803d; border-radius: 8px; background: #f0fdf4; color: #14532d; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.25); font-size: 12px; box-sizing: border-box; }
+.pp-clay-float[hidden] { display: none; }
+.pp-clay-float-warn { border-color: #d97706; background: #fffbeb; color: #78350f; }
+.pp-clay-float-bad { border-color: #dc2626; background: #fef2f2; color: #7f1d1d; }
+.pp-clay-float-none { border-color: #64748b; background: #f8fafc; color: #334155; }
+.pp-clay-float-title { font-size: 15px; font-weight: 900; letter-spacing: 0.04em; }
+.pp-clay-float-text { font-weight: 600; line-height: 1.35; }
+.pp-clay-float-side { border: 1px solid rgba(0, 0, 0, 0.15); border-radius: 6px; padding: 6px 8px; background: rgba(255, 255, 255, 0.75); color: #1f2937; }
+.pp-clay-float-side-head { display: flex; justify-content: space-between; gap: 8px; font-weight: 900; letter-spacing: 0.04em; }
+.pp-clay-float-free .pp-clay-float-side-head { color: #15803d; }
+.pp-clay-float-taken .pp-clay-float-side-head { color: #b45309; }
+.pp-clay-float-taken-mine .pp-clay-float-side-head { color: #b91c1c; }
+.pp-clay-float-line { font-weight: 700; margin-top: 2px; }
+.pp-clay-float-cond { margin-top: 3px; color: #6d28d9; font-weight: 700; }
+.pp-clay-float-unset { color: #92400e; font-weight: 600; }
+.pp-clay-float-fit { font-weight: 700; padding: 6px 8px; border-radius: 6px; line-height: 1.35; }
+.pp-clay-float-fit.bad { background: #fee2e2; color: #991b1b; }
+.pp-clay-float-fit.ok { background: #fef3c7; color: #92400e; }
+.clay-blocked text { pointer-events: none; }
+.clay-mold-clash > rect { stroke: #dc2626 !important; stroke-width: 1.4 !important; }

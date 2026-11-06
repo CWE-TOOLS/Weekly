@@ -153,13 +153,20 @@ function svgText(ns, x, y, content, fontSize, fill, weight) {
  *        the right-side Table 1 visually bottom-aligns with the L-shape on the left).
  * @returns {{tables:Array<Object>, unplaced:Array<Object>}}
  */
-function placeMoldsOnTables(molds, tableDefs, gapBetween = 0, bottomJustify = false) {
-  const tables = tableDefs.map(t => ({
-    ...t,
-    longUsed: 0,     // long-axis inches consumed by rows so far
-    shelves: [],     // rows packed onto this table
-    placedMolds: [], // {mold, sx, sy, sw, sh} screen rectangles for rendering
-  }));
+function placeMoldsOnTables(molds, tableDefs, gapBetween = 0, bottomJustify = false, blocked = []) {
+  const tables = tableDefs.map(t => {
+    // Another casting's forms on this side (same cast day) block part of the table: pack into the largest
+    // free stretch of its long axis (2026-11-06).
+    const win = freeWindow(t, blocked, gapBetween);
+    return {
+      ...t,
+      longUsed: win.start,   // long-axis inches consumed by rows so far (starts past the blocked stretch)
+      longEnd: win.end,      // where this casting's rows must stop
+      afterBlocked: win.start > 0,
+      shelves: [],           // rows packed onto this table
+      placedMolds: [],       // {mold, sx, sy, sw, sh} screen rectangles for rendering
+    };
+  });
   const unplaced = [];
 
   // Longest-side-first: the molds that need the deepest rows go down first.
@@ -188,7 +195,7 @@ function placeMoldsOnTables(molds, tableDefs, gapBetween = 0, bottomJustify = fa
   // Used only for areas where bottom-alignment is the desired reading (Area A).
   if (bottomJustify) {
     for (const table of tables) {
-      const slack = table.long - table.longUsed;
+      const slack = table.longEnd - table.longUsed;
       if (slack <= 0) continue;
       for (const rec of table.placedMolds) {
         if (table.packAxis === 'x') rec.sx += slack;
@@ -230,11 +237,11 @@ function placeOneMold(mold, tables, gap) {
   //    smaller `across` span, which leaves more room for molds beside it.
   const byAcross = [...orientations].sort((a, b) => a.across - b.across);
   for (const table of tables) {
-    const g = table.shelves.length > 0 ? gap : 0;
+    const g = (table.shelves.length > 0 || table.afterBlocked) ? gap : 0;
     const rowStart = table.longUsed + g;
     for (const { across, depth } of byAcross) {
       if (across > table.narrow) continue;
-      if (rowStart + depth > table.long) continue;
+      if (rowStart + depth > table.longEnd) continue;
       const shelf = { longStart: rowStart, depth, narrowUsed: 0, recs: [] };
       table.shelves.push(shelf);
       table.longUsed = rowStart + depth;
@@ -244,6 +251,38 @@ function placeOneMold(mold, tables, gap) {
   }
 
   return false;
+}
+
+/**
+ * The largest stretch of a table's long axis not covered by another casting's forms (blocked rects in table
+ * inches, same space as the placed molds), with the gap kept clear on both sides of them (2026-11-06).
+ * @returns {{start:number, end:number}} inches along the long axis, from the table's start
+ */
+function freeWindow(t, blocked, gap) {
+  const r = getTableScreenRect(t);
+  const tableRect = { sx: r.x, sy: r.y, sw: r.w, sh: r.h };
+  const spans = [];
+  for (const b of blocked || []) {
+    if (!rectsOverlap(b, tableRect)) continue;
+    const lo = t.packAxis === 'x' ? b.sx - r.x : b.sy - r.y;
+    const hi = lo + (t.packAxis === 'x' ? b.sw : b.sh);
+    spans.push([Math.max(0, lo - gap), Math.min(t.long, hi + gap)]);
+  }
+  if (!spans.length) return { start: 0, end: t.long };
+  spans.sort((a, b) => a[0] - b[0]);
+  const merged = [];
+  for (const sp of spans) {
+    const m = merged[merged.length - 1];
+    if (m && sp[0] <= m[1]) m[1] = Math.max(m[1], sp[1]);
+    else merged.push([sp[0], sp[1]]);
+  }
+  let best = { start: 0, end: 0 }, cur = 0;
+  for (const [lo, hi] of merged) {
+    if (lo - cur > best.end - best.start) best = { start: cur, end: lo };
+    cur = Math.max(cur, hi);
+  }
+  if (t.long - cur > best.end - best.start) best = { start: cur, end: t.long };
+  return best;
 }
 
 /**
@@ -373,8 +412,8 @@ export function isRectInsideTables(rect, tableDefs) {
  * Auto layout — run the shelf packer and flatten the result into one flat list
  * of placed molds (inch-space rects + the rotation each ended up at).
  */
-function layoutAuto(molds, tableDefs, gapBetween, bottomJustify = false) {
-  const { tables, unplaced } = placeMoldsOnTables(molds, tableDefs, gapBetween, bottomJustify);
+function layoutAuto(molds, tableDefs, gapBetween, bottomJustify = false, blocked = []) {
+  const { tables, unplaced } = placeMoldsOnTables(molds, tableDefs, gapBetween, bottomJustify, blocked);
   const placed = [];
   for (const t of tables) {
     for (const rec of t.placedMolds) {
@@ -555,7 +594,27 @@ function buildMoldGroup(NS, rec, tx, ty, ts, fontSize, offsetPerSide) {
  * @returns {Object|null} layout handle {mode, area, svg, transform, tableDefs,
  *        placed, unplaced}, or null when there is nothing to draw
  */
-export function renderCastingLayout({ container, errorEl, components, title, area = 'B', offsetPerSide = 4, gapBetween = 0, positions = null, overflowLabel = null, hideOverflow = false }) {
+/**
+ * Where a casting's forms land on one side, without drawing — used for the OTHER castings of the same cast day,
+ * whose forms block the tables for this one (2026-11-06). Saved positions win; otherwise the auto-pack.
+ * @returns {{placed:Array<Object>, staged:Array<Object>}} rects in table inches
+ */
+export function computeLayoutRects({ components, area = 'B', offsetPerSide = 4, gapBetween = 0, positions = null, blocked = [] }) {
+  const tableDefs = (CASTING_AREAS[area] || CASTING_AREAS.B).tables;
+  const { molds } = buildMolds(components, offsetPerSide);
+  if (!molds.length) return { placed: [], staged: [] };
+  const posForArea = (positions || []).filter(p => (p.area === 'A' ? 'A' : 'B') === area);
+  return posForArea.length > 0
+    ? layoutManual(molds, posForArea, tableDefs)
+    : layoutAuto(molds, tableDefs, gapBetween, area === 'A', blocked);
+}
+
+/**
+ * @param {Array<Object>} [opts.blocked] - another casting's forms on this side the same cast day, in table inches
+ *        ({sx, sy, sw, sh, label}); drawn hatched grey, the auto-pack goes around them, a saved layout that
+ *        overlaps them is flagged (2026-11-06)
+ */
+export function renderCastingLayout({ container, errorEl, components, title, area = 'B', offsetPerSide = 4, gapBetween = 0, positions = null, overflowLabel = null, hideOverflow = false, blocked = [] }) {
   if (!container) return null;
   container.innerHTML = '';
   if (errorEl) errorEl.textContent = '';
@@ -581,7 +640,9 @@ export function renderCastingLayout({ container, errorEl, components, title, are
   const mode = posForArea.length > 0 ? 'manual' : 'auto';
   const { placed, staged } = mode === 'manual'
     ? layoutManual(molds, posForArea, tableDefs)
-    : layoutAuto(molds, tableDefs, gapBetween, area === 'A');
+    : layoutAuto(molds, tableDefs, gapBetween, area === 'A', blocked);
+  // A saved (manual) layout can sit on top of the other job's forms: those molds get a red outline.
+  const clashes = blocked.length ? placed.filter(r => blocked.some(b => rectsOverlap(r, b))) : [];
 
   const pageW = 750;
   const pageH = 1000;
@@ -658,9 +719,36 @@ export function renderCastingLayout({ container, errorEl, components, title, are
     svg.appendChild(svgText(NS, tx(r.x) + ts(r.w) / 2, ty(r.y) + ts(r.h) + fontSize * 1.2, dimStr, fontSize * 0.7, '#888', 'normal'));
   }
 
+  // The other job's forms on this side (same cast day): hatched grey, labelled with job · cast (2026-11-06).
+  if (blocked.length) {
+    const defs = document.createElementNS(NS, 'defs');
+    const patId = `clay-hatch-${area}-${Math.random().toString(36).slice(2, 7)}`;
+    const pat = document.createElementNS(NS, 'pattern');
+    pat.setAttribute('id', patId); pat.setAttribute('patternUnits', 'userSpaceOnUse');
+    pat.setAttribute('width', 6); pat.setAttribute('height', 6); pat.setAttribute('patternTransform', 'rotate(45)');
+    const stripe = document.createElementNS(NS, 'rect');
+    stripe.setAttribute('width', 2); stripe.setAttribute('height', 6); stripe.setAttribute('fill', '#9ca3af');
+    pat.appendChild(stripe); defs.appendChild(pat); svg.appendChild(defs);
+    for (const b of blocked) {
+      const g = document.createElementNS(NS, 'g');
+      g.setAttribute('class', 'clay-blocked');
+      g.appendChild(svgRect(NS, tx(b.sx), ty(b.sy), ts(b.sw), ts(b.sh), '#e5e7eb', '#6b7280', 0.5));
+      g.appendChild(svgRect(NS, tx(b.sx), ty(b.sy), ts(b.sw), ts(b.sh), `url(#${patId})`, 'none', 0));
+      if (ts(b.sw) > fontSize * 2.4 && ts(b.sh) > fontSize * 1.1) {
+        g.appendChild(svgText(NS, tx(b.sx + b.sw / 2), ty(b.sy + b.sh / 2), b.label || '', Math.min(fontSize * 0.8, ts(b.sh) * 0.6), '#374151', 'bold'));
+      }
+      const tt = document.createElementNS(NS, 'title');
+      tt.textContent = `${b.label || 'Another casting'} — on this side the same cast day`;
+      g.appendChild(tt);
+      svg.appendChild(g);
+    }
+  }
+
   // Draw placed molds — each as a <g class="clay-mold"> so the drag layer can grab it.
   for (const rec of placed) {
-    svg.appendChild(buildMoldGroup(NS, rec, tx, ty, ts, fontSize, offsetPerSide));
+    const g = buildMoldGroup(NS, rec, tx, ty, ts, fontSize, offsetPerSide);
+    if (clashes.includes(rec)) g.classList.add('clay-mold-clash');
+    svg.appendChild(g);
   }
 
   // Draw the overflow staging strip: a label plus each unplaced mold as a
@@ -712,9 +800,11 @@ export function renderCastingLayout({ container, errorEl, components, title, are
         + (staged.length > 0 ? ` — ${staged.length} not placed` : '')
       : `${totalMolds} molds — ${totalMolds - staged.length} on tables`
         + (staged.length > 0 ? (hideOverflow ? ` — ${staged.length} continue on the other side` : ` — ${staged.length} overflow`) : ''))
-    + ` — +${frac(offsetPerSide)}/side mold offset`;
+    + ` — +${frac(offsetPerSide)}/side mold offset`
+    + (blocked.length ? ` — SHARED WITH ${[...new Set(blocked.map(b => b.label).filter(Boolean))].join(', ')} (hatched)` : '')
+    + (clashes.length ? ` — ${clashes.length} OVERLAP` : '');
   svg.appendChild(svgText(NS, pageW / 2, 18, title || 'Casting Layout', fontSize * 1.5, '#222', 'bold'));
-  svg.appendChild(svgText(NS, pageW / 2, 38, summaryStr, fontSize, staged.length > 0 ? '#dc2626' : '#555', 'normal'));
+  svg.appendChild(svgText(NS, pageW / 2, 38, summaryStr, fontSize, (staged.length > 0 || clashes.length > 0) ? '#dc2626' : (blocked.length ? '#b45309' : '#555'), 'normal'));
 
   container.appendChild(svg);
 
@@ -722,9 +812,10 @@ export function renderCastingLayout({ container, errorEl, components, title, are
   if (errorEl) {
     const parts = [];
     if (staged.length > 0) parts.push(`${staged.length} mold(s) not on a table — drag them from the overflow strip onto a table.`);
+    if (clashes.length > 0) parts.push(`${clashes.length} form(s) sit on top of the other job's forms (red outline) — move them, or pick the other side.`);
     if (skipped.length > 0) parts.push(`${skipped.length} panel(s) skipped — missing or unreadable dimensions.`);
     errorEl.textContent = parts.join(' ');
   }
 
-  return { mode, area, svg, transform: { scale, offsetX, offsetY }, tableDefs, placed, staged, unplaced: staged };
+  return { mode, area, svg, transform: { scale, offsetX, offsetY }, tableDefs, placed, staged, unplaced: staged, blocked, clashes };
 }

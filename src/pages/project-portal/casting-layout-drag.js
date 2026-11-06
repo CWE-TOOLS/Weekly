@@ -19,7 +19,7 @@
  * @module pages/project-portal/casting-layout-drag
  */
 
-import { rectsOverlap, isRectInsideTables } from './casting-layout.js?v=20260701-01';
+import { rectsOverlap, isRectInsideTables } from './casting-layout.js?v=20261106-1';
 
 /** Pixels the pointer must travel before a press counts as a drag. */
 const DRAG_THRESHOLD = 3;
@@ -67,6 +67,7 @@ function toRow(ctx, r) {
 /** True if `rect` clears every other mold and sits on a table. */
 function isValidPlacement(ctx, rect, movedRec) {
   if (!isRectInsideTables(rect, ctx.tableDefs)) return false;
+  if ((ctx.blocked || []).some(b => rectsOverlap(rect, b))) return false;   // another job's forms, same cast day (2026-11-06)
   return !ctx.placed.some(other => other !== movedRec && rectsOverlap(rect, other));
 }
 
@@ -291,6 +292,7 @@ export function attachLayoutDrag(handle, opts) {
     offsetX: transform.offsetX || 0,
     offsetY: transform.offsetY || 0,
     mode: handle.mode,
+    blocked: Array.isArray(handle.blocked) ? handle.blocked : [],
     castingId: opts && opts.castingId,
     area: opts && opts.area,
     onCommit: opts && opts.onCommit,

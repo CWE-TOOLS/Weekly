@@ -20,7 +20,9 @@ import {
     createCasting,
     updateCasting,
     deleteCasting,
-    setCastingsOrder
+    setCastingsOrder,
+    loadCastingsByIds,
+    loadCastingsByDates,
 } from '../../services/castings-service.js';
 import {
     loadAllCastingPhasesForProject,
@@ -126,15 +128,15 @@ import {
     deleteClassroomTask,
     setClassroomTasksOrder
 } from '../../services/classroom-tasks-service.js';
-import { renderCastingLayout } from './casting-layout.js?v=20261023-2';
-import { attachLayoutDrag } from './casting-layout-drag.js?v=20260701-01';
+import { renderCastingLayout, computeLayoutRects } from './casting-layout.js?v=20261106-1';
+import { attachLayoutDrag } from './casting-layout-drag.js?v=20261106-1';
 import { activateJigListTab } from './jig-list.js?v=20261106-1';
 import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, APPROVALS_TAB_ITEMS } from '../../config/milestones-config.js?v=20261027-2';
 import { SLUMP_TARGET_DEFAULTS, FINAL_BACKUP_PIG_REDUCTION_PCT, parsePigReduction, BT_IMPORT_META, btOverrides, btImportStamp, btStampDate, additiveAmount, batchTotalsRows, renderBatchTotals, clampSlumpTarget, formatSlumpLabel, renderSlumpGraphic, renderBatchTicketCard, BATCH_PRINT_CSS } from '../../services/batch-ticket-render.js';   // moved out 2026-10-30 so the weekly's week print shares the ticket code
 import { invHash as invHashShared, invFingerprintRows, invColourFingerprintRows } from '../../services/inventory-marks.js';
-import { loadMilestonesForProject, saveMilestone, isMilestonesMigrationPending, loadLayoutConditions, LAYOUT_CONDITION_PREFIX, layoutConditionNote, parseLayoutCondition, sideWords } from '../../services/milestones-service.js';
+import { loadMilestonesForProject, saveMilestone, isMilestonesMigrationPending, loadLayoutConditions, loadLayoutConditionsForCastings, LAYOUT_CONDITION_PREFIX, layoutConditionNote, parseLayoutCondition, sideWords } from '../../services/milestones-service.js';
 import { loadJigListsForProject as loadJigListsForScrim, scrimForInventory } from '../../services/jig-list-service.js';
-import { loadReadyFlags, setReadyFlag, loadSettingRows, setSettingRow, loadScheduleForCastings, OPT_SCHEDULER_PREFIX } from '../../services/schedule-service.js?v=20261103-1';
+import { loadReadyFlags, setReadyFlag, loadSettingRows, setSettingRow, loadScheduleForCastings, loadScheduleRange, OPT_SCHEDULER_PREFIX } from '../../services/schedule-service.js?v=20261106-1';
 import { tasksForDepartment, teamOfDepartment, taskForPhase, STAGING_NAME_OF_TEAM, REVENUE_PER_HOUR } from '../../config/scheduler-config.js?v=20261027-1';
 import {
     loadLayoutPositions,
@@ -810,6 +812,7 @@ function setActiveTab(tab) {
     if (tab !== 'castings' && invEdits.size) invEdits.clear();   // leaving the Castings tab accepts every inventory edit
     if (tab !== 'castings') invSelected.clear();
     updateInvFloat();
+    renderClayFloat();
     document.querySelectorAll('.pp-tab-btn').forEach(btn => {
         btn.classList.toggle('pp-tab-active', btn.dataset.tab === tab);
     });
@@ -5340,6 +5343,7 @@ function updateMsFloat() {
         msFloatEl.dataset.key = key;
     }
     msFloatEl.hidden = false;
+    requestAnimationFrame(placeClayFloat);
     // Pinned under the portal header, as wide as the tab's content; the tab makes room for it.
     let r = panel.getBoundingClientRect();
     if (r.width < 50 && panel.parentElement) r = panel.parentElement.getBoundingClientRect();   // tab not painted yet: use the content column
@@ -5737,6 +5741,159 @@ function castingLayoutLabel(c) {
 }
 
 /** The Casting Layout tab's "Casting side" select shows the selected casting's own Side A/B (shared with the weekly). */
+// ---- Cast-day side check (2026-11-06): who else casts on this casting's cast day, and which side they take ----
+let clDay = { castingId: null, dates: [], source: '', others: [] };   // others: castings of other jobs that day
+let clProjectNames = null;    // project_number -> project_name, every job, loaded once
+let clFloatEl = null;
+let clFitInfo = null;         // { placed, total, clashes } from the last draw of this casting's own side(s)
+
+function isoOfDate(v) {
+    const str = String(v || '').trim();
+    const m = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+    const d = new Date(str);
+    return isNaN(d) ? '' : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function clDayLabel(iso) {
+    const [y, m, d] = iso.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+}
+function clOtherLabel(o) { return `${o.project_number} ${o.projectName || ''}`.trim() + ` · Cast ${o.casting_number || '?'}`; }
+function clShortLabel(o) { return `${o.project_number} · Cast ${o.casting_number || '?'}`; }
+
+/** This casting's cast days (Plant Scheduler Cast rows, else the portal cast date) and every other casting on them. */
+async function loadCastDayContext() {
+    const id = clSelectedCastingId;
+    clDay = { castingId: id, dates: [], source: '', others: [] };
+    const casting = currentCastings.find(c => c.id === id);
+    if (!casting) return;
+    try {
+        if (!clProjectNames) {
+            const rows = allProjectRows.length ? allProjectRows : await loadAllProjects();
+            clProjectNames = new Map(rows.map(p => [String(p.project_number || '').trim(), String(p.project_name || '').trim()]));
+        }
+        let dates = [], source = '';
+        try {
+            const mine = await loadScheduleForCastings([id]);
+            dates = [...new Set(mine.filter(r => String(r.department || '').trim() === 'Cast').map(r => isoOfDate(r.date)).filter(Boolean))].sort();
+            if (dates.length) source = 'scheduler';
+        } catch (e) { logger.warn('[project-portal] cast-day: scheduler rows unavailable', e); }
+        if (!dates.length && isoOfDate(casting.casting_date)) { dates = [isoOfDate(casting.casting_date)]; source = 'portal'; }
+        clDay.dates = dates; clDay.source = source;
+        if (!dates.length) return;
+        const ids = new Set();
+        try {
+            const rows = await loadScheduleRange(dates[0], dates[dates.length - 1]);
+            for (const r of rows) {
+                if (String(r.department || '').trim() !== 'Cast' || !dates.includes(isoOfDate(r.date))) continue;
+                if (r.casting_id && r.casting_id !== id) ids.add(r.casting_id);
+            }
+        } catch (e) { logger.warn('[project-portal] cast-day: schedule range unavailable', e); }
+        for (const c of await loadCastingsByDates(dates)) if (c.id !== id) ids.add(c.id);
+        if (!ids.size) return;
+        const list = await loadCastingsByIds([...ids]);
+        const conds = await loadLayoutConditionsForCastings([...ids]);
+        const condBy = new Map(conds.map(c => [c.casting_id, c]));
+        const sided = list.filter(c => ['A', 'B', 'AB'].includes(c.casting_side));
+        const [compsMap, posList] = await Promise.all([
+            sided.length ? loadAllComponentsForProject(sided.map(c => c.id)) : new Map(),
+            Promise.all(sided.map(c => loadLayoutPositions(c.id).catch(() => [])))
+        ]);
+        const posBy = new Map(sided.map((c, i) => [c.id, posList[i] || []]));
+        clDay.others = list.map(c => ({
+            ...c,
+            projectName: clProjectNames.get(String(c.project_number || '').trim()) || '',
+            cond: condBy.get(c.id) || null,
+            components: (compsMap && compsMap.get && compsMap.get(c.id)) || [],
+            positions: posBy.get(c.id) || []
+        })).sort((a, b) => String(a.project_number).localeCompare(String(b.project_number)) || String(a.casting_number).localeCompare(String(b.casting_number)));
+    } catch (e) {
+        logger.error('[project-portal] cast-day context failed:', e);
+    }
+}
+function clTakenBy(area) { return clDay.others.filter(o => o.casting_side === area || o.casting_side === 'AB'); }
+/** The other castings' forms on one side, as blocked rectangles for the packer and the drawing. */
+function clBlockedFor(area) {
+    const out = [];
+    for (const o of clTakenBy(area)) {
+        if (!o.components.length) continue;
+        const label = clShortLabel(o);
+        let comps = o.components;
+        if (o.casting_side === 'AB') {
+            // Both sides: their Side B is packed first, the leftover continues on Side A (this tab's own rule).
+            const rB = computeLayoutRects({ components: comps, area: 'B', offsetPerSide: clOffsetPerSide, gapBetween: clGapBetween, positions: o.positions });
+            if (area === 'B') { rB.placed.forEach(p => out.push({ sx: p.sx, sy: p.sy, sw: p.sw, sh: p.sh, label })); continue; }
+            const left = new Set(rB.staged.map(r => r.componentId));
+            comps = comps.filter(c => left.has(c.id));
+            if (!comps.length) continue;
+        }
+        const r = computeLayoutRects({ components: comps, area, offsetPerSide: clOffsetPerSide, gapBetween: clGapBetween, positions: o.positions });
+        r.placed.forEach(p => out.push({ sx: p.sx, sy: p.sy, sw: p.sw, sh: p.sh, label }));
+    }
+    return out;
+}
+/** The floating box: cast day, Side A / Side B free or taken (by whom), special conditions, and whether this casting fits. */
+function renderClayFloat() {
+    const controls = document.getElementById('pp-clay-controls');
+    const show = currentTab === 'casting-layout' && !!clSelectedCastingId && controls && !controls.hidden && controls.offsetParent !== null;
+    if (!show) { if (clFloatEl) clFloatEl.hidden = true; return; }
+    if (!clFloatEl) {
+        clFloatEl = document.createElement('div');
+        clFloatEl.id = 'pp-clay-float';
+        clFloatEl.setAttribute('role', 'status');
+        document.body.appendChild(clFloatEl);
+    }
+    const casting = currentCastings.find(c => c.id === clSelectedCastingId);
+    const mySide = ['A', 'B', 'AB'].includes(casting?.casting_side) ? casting.casting_side : '';
+    const mine = (area) => mySide === area || mySide === 'AB';
+    let tone = 'free', html = '';
+    if (!clDay.dates.length) {
+        tone = 'none';
+        html = `<div class="pp-clay-float-title">CAST DAY — NOT KNOWN</div>
+            <div class="pp-clay-float-text">This casting has no Cast day on the Plant Scheduler and no cast date in the portal, so the sides cannot be checked. Schedule it, or enter a Cast Date on the Casting Inventory tab.</div>`;
+    } else {
+        const days = clDay.dates.map(clDayLabel).join(', ');
+        const src = clDay.source === 'scheduler' ? 'Plant Scheduler' : 'portal cast date';
+        const sideHtml = (area) => {
+            const taken = clTakenBy(area);
+            const conds = clDay.others.filter(o => o.cond && (o.cond.side === area || o.cond.side === 'AB'));
+            const cls = taken.length ? (mine(area) ? 'taken-mine' : 'taken') : 'free';
+            return `<div class="pp-clay-float-side pp-clay-float-${cls}">
+                <div class="pp-clay-float-side-head"><span>SIDE ${area}</span><span>${taken.length ? 'TAKEN' : 'FREE'}${mine(area) ? ' · THIS CASTING' : ''}</span></div>
+                ${taken.map(o => `<div class="pp-clay-float-line">${escapeHtml(clOtherLabel(o))}${o.casting_side === 'AB' ? ' (both sides)' : ''}${o.components.length ? '' : ' — no forms on file'}</div>`).join('')}
+                ${conds.map(o => `<div class="pp-clay-float-cond">Special condition: ${escapeHtml(o.cond.name)} — ${escapeHtml(clOtherLabel(o))}</div>`).join('')}
+            </div>`;
+        };
+        const unset = clDay.others.filter(o => !['A', 'B', 'AB'].includes(o.casting_side));
+        let fit = '';
+        if (mySide && clFitInfo) {
+            const shared = (mySide === 'AB' ? [...clTakenBy('A'), ...clTakenBy('B')] : clTakenBy(mySide)).filter(o => o.components.length);
+            if (shared.length) {
+                if (clFitInfo.clashes) { tone = 'bad'; fit = `<div class="pp-clay-float-fit bad">${clFitInfo.clashes} of this casting's forms sit on top of the other job's forms — drag them clear, or pick the other side.</div>`; }
+                else if (clFitInfo.placed < clFitInfo.total) { tone = 'bad'; fit = `<div class="pp-clay-float-fit bad">Only ${clFitInfo.placed} of ${clFitInfo.total} forms fit in the room left on this side — ${clFitInfo.total - clFitInfo.placed} overflow.</div>`; }
+                else { tone = 'warn'; fit = `<div class="pp-clay-float-fit ok">Shared side: all ${clFitInfo.total} forms fit in the room the other job leaves. Their forms are hatched grey — an estimate unless they saved a layout.</div>`; }
+            }
+        } else if (!mySide) tone = 'warn';
+        html = `<div class="pp-clay-float-title">CAST DAY · ${escapeHtml(days)}</div>
+            <div class="pp-clay-float-text">${clDay.others.length ? `${clDay.others.length} other casting${clDay.others.length === 1 ? '' : 's'} that day` : 'No other casting that day'} (from the ${src})${mySide ? '' : ' — pick this casting\'s side'}.</div>
+            ${sideHtml('A')}${sideHtml('B')}
+            ${unset.length ? `<div class="pp-clay-float-unset">Side not set yet: ${unset.map(o => escapeHtml(clOtherLabel(o))).join('; ')}</div>` : ''}
+            ${fit}`;
+    }
+    clFloatEl.className = `pp-clay-float pp-clay-float-${tone}`;
+    clFloatEl.innerHTML = html;
+    clFloatEl.hidden = false;
+    placeClayFloat();
+    requestAnimationFrame(() => requestAnimationFrame(placeClayFloat));   // the Releasability bar sizes itself a frame later
+}
+/** Under the Releasability bar when it is showing, else under the portal header. */
+function placeClayFloat() {
+    if (!clFloatEl || clFloatEl.hidden) return;
+    const msBottom = (msFloatEl && !msFloatEl.hidden) ? msFloatEl.getBoundingClientRect().bottom : 0;
+    clFloatEl.style.top = Math.round(Math.max(headerBottom(), msBottom) + 12) + 'px';
+}
+window.addEventListener('resize', placeClayFloat, { passive: true });
+
 function syncClaySideSelect() {
     const casting = currentCastings.find(c => c.id === clSelectedCastingId);
     const side = ['A', 'B', 'AB'].includes(casting?.casting_side) ? casting.casting_side : '';
@@ -5802,6 +5959,7 @@ async function activateCastingLayoutTab() {
     if (gapInput) gapInput.value = clGapBetween;
 
     await loadLayoutPositionsForSelected();
+    await loadCastDayContext();
     renderCastingLayoutTab();
 }
 
@@ -5839,10 +5997,10 @@ function renderCastingLayoutTab() {
         const cardA = document.createElement('div'); cardA.className = 'pp-clay-card-side';
         card.append(cardB, cardA);
         const quiet = document.createElement('div');
-        const hB = renderCastingLayout({ container: cardB, errorEl: quiet, components, title: `${title} — SIDE B`, area: 'B', offsetPerSide: clOffsetPerSide, gapBetween: clGapBetween, positions: clLayoutPositions, overflowLabel: 'CONTINUE ON SIDE A', hideOverflow: true });
+        const hB = renderCastingLayout({ container: cardB, errorEl: quiet, components, title: `${title} — SIDE B`, area: 'B', offsetPerSide: clOffsetPerSide, gapBetween: clGapBetween, positions: clLayoutPositions, overflowLabel: 'CONTINUE ON SIDE A', hideOverflow: true, blocked: clBlockedFor('B') });
         const leftover = new Set((hB?.staged || []).map(r => r.componentId));
         const compsA = hB ? components.filter(c => leftover.has(c.id)) : [];
-        const hA = compsA.length ? renderCastingLayout({ container: cardA, errorEl, components: compsA, title: `${title} — SIDE A`, area: 'A', offsetPerSide: clOffsetPerSide, gapBetween: clGapBetween, positions: clLayoutPositions }) : null;
+        const hA = compsA.length ? renderCastingLayout({ container: cardA, errorEl, components: compsA, title: `${title} — SIDE A`, area: 'A', offsetPerSide: clOffsetPerSide, gapBetween: clGapBetween, positions: clLayoutPositions, blocked: clBlockedFor('A') }) : null;
         if (!compsA.length) { cardA.innerHTML = '<p class="pp-clay-empty">Side A: nothing left over — every form fits on Side B.</p>'; if (errorEl) errorEl.textContent = ''; }
         if (hB) handles.push(hB);
         if (hA) handles.push(hA);
@@ -5855,10 +6013,17 @@ function renderCastingLayoutTab() {
             area: clSelectedArea,
             offsetPerSide: clOffsetPerSide,
             gapBetween: clGapBetween,
-            positions: clLayoutPositions
+            positions: clLayoutPositions,
+            blocked: clBlockedFor(clSelectedArea)
         });
         if (h) handles.push(h);
     }
+    if (handles.length) {
+        const last = handles[handles.length - 1];
+        const placedN = handles.reduce((n, h) => n + h.placed.length, 0);
+        clFitInfo = { placed: placedN, total: placedN + (last.staged || []).length, clashes: handles.reduce((n, h) => n + (h.clashes || []).length, 0) };
+    } else clFitInfo = null;
+    renderClayFloat();
     for (const handle of handles) {
         attachLayoutDrag(handle, {
             castingId: clSelectedCastingId,
@@ -8975,12 +9140,22 @@ function wireEvents() {
         clSelectedCastingId = e.target.value;
         syncClaySideSelect();
         await loadLayoutPositionsForSelected();
+        await loadCastDayContext();
         renderCastingLayoutTab();
     });
     document.getElementById('pp-clay-side')?.addEventListener('change', async (e) => {
         const side = ['A', 'B', 'AB'].includes(e.target.value) ? e.target.value : null;
         const casting = currentCastings.find(c => c.id === clSelectedCastingId);
         if (!casting) return;
+        // A side another job already casts on that day: say who, and ask (2026-11-06). The layout then packs this
+        // casting into the room they leave.
+        const prevSide = ['A', 'B', 'AB'].includes(casting.casting_side) ? casting.casting_side : '';
+        const areas = side === 'AB' ? ['A', 'B'] : side ? [side] : [];
+        const taken = [...new Set(areas.flatMap(a => clTakenBy(a).map(o => `Side ${a}: ${clOtherLabel(o)}`)))];
+        if (taken.length && clDay.dates.length) {
+            const ok = window.confirm(`On ${clDay.dates.map(clDayLabel).join(', ')} this side is already in use:\n\n${taken.join('\n')}\n\nPut Cast ${casting.casting_number || ''} there too? The layout will pack its forms into the room they leave; their forms show hatched grey.`);
+            if (!ok) { e.target.value = prevSide; return; }
+        }
         try {
             await updateCasting(casting.id, { casting_side: side });
             casting.casting_side = side;
