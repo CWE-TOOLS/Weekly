@@ -6886,3 +6886,12 @@ body.pp-clay-zoom-open { overflow: hidden; }
 .pp-clay-base-row .pp-field { flex: 1 1 0; }
 .clay-mold-overflow { cursor: pointer; }
 .pp-clay-float-cond-inline { color: #6d28d9; font-weight: 700; }
+/* Mix Day Totals: finishing & sealing products off the colour-log notes (2026-11-06) */
+.pp-bt-totals-fin { margin-top: 10px; padding-top: 8px; border-top: 1px dashed #e2e8f0; font-size: 13px; color: #0f172a; }
+.pp-bt-totals-fin-title { font-weight: 700; margin-bottom: 4px; }
+.pp-bt-totals-fin-list { margin: 0; padding-left: 18px; }
+.pp-bt-totals-fin-row { margin: 2px 0; }
+.pp-bt-totals-fin-how { color: #475569; font-size: 12px; }
+.pp-bt-totals-fin-note { display: block; color: #6d28d9; font-size: 11.5px; }
+.pp-bt-totals-fin-norate { color: #b45309; font-weight: 700; }
+.pp-bt-totals-fin-foot { margin-top: 4px; color: #64748b; font-size: 11px; }

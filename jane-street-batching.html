@@ -49,6 +49,14 @@ button, select, input, textarea { font: inherit; }
 .totals-note-body { font-size: 13px; line-height: 1.4; white-space: pre-wrap; }
 .totals-note-body.empty { color: #94a3b8; font-style: italic; }
 .totals-scrim { margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--line); font-size: 13px; font-weight: 700; }
+.totals-fin { margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--line); font-size: 13px; }
+.totals-fin-title { font-weight: 700; margin-bottom: 4px; }
+.totals-fin-list { margin: 0; padding-left: 18px; }
+.totals-fin-row { margin: 2px 0; }
+.totals-fin-how { color: #475569; font-size: 12px; }
+.totals-fin-note { display: block; color: #6d28d9; font-size: 11.5px; }
+.totals-fin-norate { color: #b45309; font-weight: 700; }
+.totals-fin-foot { margin-top: 4px; color: #64748b; font-size: 11px; }
 .totals-scrim.warn { color: #b45309; }
 @media (max-width: 700px) { .totals-notes { grid-template-columns: 1fr; } }
 .note { background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: 10px 12px; font-size: 13px; margin-bottom: 14px; }
@@ -615,11 +623,11 @@ function describeSizes(plan) {
 // Data loading — via the portal's own service modules
 // ======================================================================
 async function loadData() {
-    const [ps, cs, cl, bt, tr, inv, jig] = await Promise.all(
-        ['projects-service.js', 'castings-service.js', 'color-log-service.js', 'batch-ticket-service.js', 'tracking-service.js', 'inventory-service.js', 'jig-list-service.js']
+    const [ps, cs, cl, bt, tr, inv, jig, fin] = await Promise.all(
+        ['projects-service.js', 'castings-service.js', 'color-log-service.js', 'batch-ticket-service.js', 'tracking-service.js', 'inventory-service.js', 'jig-list-service.js', 'finishing-products.js?v=20261106-1']
             .map(f => import(SERVICES + f))
     );
-    S.svc = { ps, bt, inv, jig };
+    S.svc = { ps, bt, inv, jig, fin };
     if (!S.sizingLoaded) {
         S.sizingLoaded = true;
         const cfg = await import(SITE + 'src/config/special-batching.js').then(m => m.getSpecialBatching(PROJECT_NUMBER)).catch(() => undefined);
@@ -1007,6 +1015,12 @@ function ticketPagesHtml(casting, tickets, printedOn = null, castDate = null) {
 // ======================================================================
 // Mix Day Totals — ported from the portal's renderBatchTotals()
 // ======================================================================
+/** Finishing & sealing products off the colour logs' notes at the shop rates, for the casting's finished face (2026-11-06). */
+function finishingLineHtml(castingId, logs) {
+    if (!S.svc?.fin || !logs?.length) return '';
+    const { face, partial } = S.svc.fin.faceSqFtOfInventory(S.inv.get(castingId) || []);
+    return S.svc.fin.finishingProductsHtml(logs, face, { cls: 'totals-fin', partial });
+}
 /** Scrim line under Mix Day Totals: face sq ft of the casting's whole inventory × the Jig List's scrim layers. */
 function scrimLineHtml(castingId) {
     const rows = S.inv.get(castingId) || [];
@@ -1103,7 +1117,7 @@ function renderTotals(entries, castingId = null) {
         return `<div class="totals-notes">${noteBlock('Color Log finishing notes' + suffix, String(log.finishingNotes || '').trim())}${noteBlock('Color Log sealing notes' + suffix, String(log.sealingNotes || '').trim())}</div>`;
     }).join('');
     return `<div class="card"><h2>Mix Day Totals — ${entries.length > 1 ? 'all colors &amp; batches' : 'all batches'}</h2>
-        <table class="tbl"><thead><tr><th>Material</th><th class="num">Total Qty</th><th>Unit</th></tr></thead><tbody>${rows}</tbody></table>${notesHtml}${castingId ? scrimLineHtml(castingId) : ''}</div>`;
+        <table class="tbl"><thead><tr><th>Material</th><th class="num">Total Qty</th><th>Unit</th></tr></thead><tbody>${rows}</tbody></table>${notesHtml}${castingId ? finishingLineHtml(castingId, logs) : ''}${castingId ? scrimLineHtml(castingId) : ''}</div>`;
 }
 
 // ======================================================================

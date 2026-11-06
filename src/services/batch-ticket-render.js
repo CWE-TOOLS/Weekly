@@ -428,7 +428,8 @@ export function batchTotalsRows(entries) {
     return orderKeys.map(k => totals[k]);
 }
 
-export function renderBatchTotals(entries, casting = null, { scrimHtml = '' } = {}) {
+/** @param {string} [opts.finishingHtml] - the finishing & sealing products block (finishing-products.js), under the notes, before the scrim (2026-11-06) */
+export function renderBatchTotals(entries, casting = null, { scrimHtml = '', finishingHtml = '' } = {}) {
     entries = (entries || []).filter(e => e?.plan?.batches?.length && e.log);
     if (!entries.length) return '';
     const all = batchTotalsRows(entries);
@@ -468,6 +469,7 @@ export function renderBatchTotals(entries, casting = null, { scrimHtml = '' } = 
                 <tbody>${rows}</tbody>
             </table>
             ${notesHtml}
+            ${finishingHtml}
             ${scrimHtml}
         </div>
     `;

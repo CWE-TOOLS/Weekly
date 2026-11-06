@@ -131,7 +131,8 @@ import { renderCastingLayout, computeLayoutRects, parseDimension } from './casti
 import { attachLayoutDrag } from './casting-layout-drag.js?v=20261106-6';
 import { activateJigListTab } from './jig-list.js?v=20261106-1';
 import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, APPROVALS_TAB_ITEMS } from '../../config/milestones-config.js?v=20261106-1';
-import { SLUMP_TARGET_DEFAULTS, FINAL_BACKUP_PIG_REDUCTION_PCT, parsePigReduction, BT_IMPORT_META, btOverrides, btImportStamp, btStampDate, additiveAmount, batchTotalsRows, renderBatchTotals, clampSlumpTarget, formatSlumpLabel, renderSlumpGraphic, renderBatchTicketCard, BATCH_PRINT_CSS } from '../../services/batch-ticket-render.js';   // moved out 2026-10-30 so the weekly's week print shares the ticket code
+import { SLUMP_TARGET_DEFAULTS, FINAL_BACKUP_PIG_REDUCTION_PCT, parsePigReduction, BT_IMPORT_META, btOverrides, btImportStamp, btStampDate, additiveAmount, batchTotalsRows, renderBatchTotals, clampSlumpTarget, formatSlumpLabel, renderSlumpGraphic, renderBatchTicketCard, BATCH_PRINT_CSS } from '../../services/batch-ticket-render.js';
+import { finishingProductsHtml, faceSqFtOfInventory } from '../../services/finishing-products.js?v=20261106-1';   // moved out 2026-10-30 so the weekly's week print shares the ticket code
 import { invHash as invHashShared, invFingerprintRows, invColourFingerprintRows } from '../../services/inventory-marks.js';
 import { loadMilestonesForProject, saveMilestone, isMilestonesMigrationPending, loadLayoutConditions, loadLayoutConditionsForCastings, LAYOUT_CONDITION_PREFIX, layoutConditionNote, parseLayoutCondition, sideWords } from '../../services/milestones-service.js';
 import { loadJigListsForProject as loadJigListsForScrim, scrimForInventory } from '../../services/jig-list-service.js';
@@ -10846,6 +10847,15 @@ async function ensureJigListsForScrim() {
     }
 }
 /** The scrim line for a casting: face sq ft from the Casting Inventory × scrim layers from the Jig List cross-section. */
+/** Finishing & sealing products for the casting's finished face, off its colour logs' notes (2026-11-06). */
+function finishingLineHtml(casting, entries) {
+    if (!casting) return '';
+    const logs = [];
+    for (const e of entries || []) if (e.log && !logs.some(l => l.id === e.log.id)) logs.push(e.log);
+    if (!logs.length) return '';
+    const { face, partial } = faceSqFtOfInventory(getInventoryFor(casting.id));
+    return finishingProductsHtml(logs, face, { partial });
+}
 function scrimLineHtml(casting) {
     if (!casting) return '';
     const rows = getInventoryFor(casting.id);
@@ -11462,7 +11472,8 @@ function renderBatchPreview(casting, ticket) {
     const sectionHeader = renderBatchSectionHeader(plan);
     const assign = renderBatchAssignTable(plan);
     // Day totals combine every color ticket on this casting, not just the one being viewed.
-    const totalsPanel = renderBatchTotals(buildBatchTotalsEntries(casting), casting, { scrimHtml: scrimLineHtml(casting) });
+    const totalsEntries = buildBatchTotalsEntries(casting);
+    const totalsPanel = renderBatchTotals(totalsEntries, casting, { scrimHtml: scrimLineHtml(casting), finishingHtml: finishingLineHtml(casting, totalsEntries) });
     const tickets = renderBatchTicketCards(casting, ticket, plan);
 
     return `
