@@ -5765,7 +5765,25 @@ function clOtherLink(o) {
     const label = escapeHtml(clOtherLabel(o));
     if (!o.id || !o.project_number) return label;
     const href = `project-portal.html?project=${encodeURIComponent(o.project_number)}&tab=casting-layout&casting=${encodeURIComponent(o.id)}`;
-    return `<a class="pp-clay-float-link" href="${escapeAttr(href)}" target="_blank" rel="noopener" title="Open ${escapeAttr(clOtherLabel(o))} on its Casting Layout tab in a new window">${label}</a>`;
+    return `<a class="pp-clay-float-link" href="${escapeAttr(href)}" data-project="${escapeAttr(o.project_number)}" data-casting="${escapeAttr(o.id)}" title="Open ${escapeAttr(clOtherLabel(o))} on its Casting Layout tab here (Back returns; Ctrl+click for a new tab)">${label}</a>`;
+}
+/** Switch to another job's casting on this tab, in this window (2026-11-06): the portal's own project open, no reload. */
+async function clOpenOtherCasting(projectNumber, castingId) {
+    if (!projectNumber) return;
+    if (clZoomSide) { clZoomSide = null; applyClayZoom(); }
+    clUrlCastingId = castingId || null;          // activateCastingLayoutTab picks it up once the castings are loaded
+    clSelectedCastingId = null;
+    await showFormView(projectNumber);           // pushes ?project=…, keeps tab=casting-layout, activates the tab
+    setCastingInUrl(clSelectedCastingId);
+}
+/** ?casting=<id> in the address (replaceState), so Back / Forward and a copied link land on the same casting. */
+function setCastingInUrl(castingId) {
+    try {
+        const url = new URL(window.location);
+        if (castingId && currentTab === 'casting-layout') url.searchParams.set('casting', castingId);
+        else url.searchParams.delete('casting');
+        history.replaceState(history.state, '', url);
+    } catch (_) { /* no history API */ }
 }
 function clShortLabel(o) { return `${o.project_number || o.projectName} · Cast ${o.casting_number || '?'}`; }
 
@@ -5912,7 +5930,12 @@ function renderClayFloat() {
         document.body.appendChild(clFloatEl);
         clFloatEl.addEventListener('click', (e) => {
             const btn = e.target.closest('[data-clay-swap]');
-            if (btn) clSwapSides(btn.dataset.claySwap);
+            if (btn) { clSwapSides(btn.dataset.claySwap); return; }
+            const a = e.target.closest('a.pp-clay-float-link');
+            if (a && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey && e.button === 0) {
+                e.preventDefault();
+                clOpenOtherCasting(a.dataset.project, a.dataset.casting);
+            }
         });
     }
     const casting = currentCastings.find(c => c.id === clSelectedCastingId);
@@ -6009,13 +6032,14 @@ async function activateCastingLayoutTab() {
 
     // Keep the selected casting valid as projects/castings change.
     const validIds = new Set(currentCastings.map(c => c.id));
-    if (clUrlCastingId) {   // opened from another casting's cast-day box: start on that casting
+    if (clUrlCastingId) {   // opened from another casting's cast-day box, a link, or Back / Forward: start on that casting
         if (validIds.has(clUrlCastingId)) clSelectedCastingId = clUrlCastingId;
         clUrlCastingId = null;
     }
     if (!clSelectedCastingId || !validIds.has(clSelectedCastingId)) {
         clSelectedCastingId = currentCastings[0].id;
     }
+    setCastingInUrl(clSelectedCastingId);
 
     const sel = document.getElementById('pp-clay-casting');
     if (sel) {
@@ -9277,6 +9301,7 @@ function wireEvents() {
     // ----- Casting Layout: control wiring -----
     document.getElementById('pp-clay-casting')?.addEventListener('change', async (e) => {
         clSelectedCastingId = e.target.value;
+        setCastingInUrl(clSelectedCastingId);
         syncClaySideSelect();
         await loadLayoutPositionsForSelected();
         await loadCastDayContext();
@@ -10424,6 +10449,8 @@ function wireEvents() {
     // Browser back/forward
     window.addEventListener('popstate', () => {
         const num = getProjectFromUrl();
+        clUrlCastingId = new URLSearchParams(window.location.search).get('casting') || null;   // the casting of that history entry (2026-11-06)
+        if (clUrlCastingId) clSelectedCastingId = null;
         if (num !== null) {
             showFormView(num);
         } else {
