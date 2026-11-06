@@ -136,6 +136,10 @@ function createPrintTaskCard(task, departmentClass) {
     const castingSideHtml = castingSideText(task.castingSide)
         ? `<div class="print-task-casting-side">${escapeHtml(castingSideText(task.castingSide))}</div>`
         : '';
+    // The casting's description from the Casting Inventory header (2026-11-06), e.g. "LH Broadway".
+    const castingDescHtml = String(task.castingDescription || '').trim()
+        ? `<div class="print-task-casting-desc">${escapeHtml(String(task.castingDescription).trim())}</div>`
+        : '';
 
     // Cast-department cards linked to a portal casting show explicit "Missing …"
     // placeholders when a readout has no data — mirrors the on-screen card.
@@ -180,6 +184,7 @@ function createPrintTaskCard(task, departmentClass) {
         <div class="print-task-title" style="background-color: ${colors.bg} !important; color: ${colors.text} !important;">
             ${task.project || 'Unknown Project'}
         </div>
+        ${castingDescHtml}
         ${castingSideHtml}
         ${task.department === 'Cast' && layoutConditionText(task) ? `<div class="print-task-layout-cond">${escapeHtml(layoutConditionText(task))}</div>` : ''}
         <div class="print-task-day-counter">

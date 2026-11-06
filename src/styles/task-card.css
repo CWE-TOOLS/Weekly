@@ -551,3 +551,13 @@ body.dragging-active .task-card-placeholder {
 
 /* Task Card (Base styles - NOT from components.css, already here) */
 /* The following styles were already in this file and are kept as-is */
+
+/* The casting's description (Casting Inventory header), under the cast number (2026-11-06) */
+.task-casting-desc {
+  font-weight: 600;
+  font-size: 0.85rem;
+  font-style: italic;
+  margin-bottom: 0.25rem;
+  color: inherit;
+  text-align: center;
+}

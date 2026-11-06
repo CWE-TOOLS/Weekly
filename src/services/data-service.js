@@ -482,10 +482,12 @@ export async function enrichTasksWithPieces(tasks) {
 
         const idByKey = new Map();
         const sideById = new Map();   // the casting's own Side A/B (project_castings.casting_side)
+        const descById = new Map();   // the casting's description from the Casting Inventory header (2026-11-06)
         for (const c of castings) {
             const key = `${String(c.project_number || '').trim()}|${String(c.casting_number || '').trim()}`;
             if (c.id) idByKey.set(key, c.id);
             if (c.id && ['A', 'B', 'AB'].includes(c.casting_side)) sideById.set(c.id, c.casting_side);
+            if (c.id && String(c.description || '').trim()) descById.set(c.id, String(c.description).trim());
         }
 
         // Only fetch inventory for castings actually referenced by a task in view.
@@ -613,6 +615,7 @@ export async function enrichTasksWithPieces(tasks) {
             const id = idByKey.get(`${String(t.projectNumber).trim()}|${String(t.castingNumber).trim()}`);
             t.castingInPortal = !!id;   // false = no casting with this job + cast number in the portal (name mismatch, or not entered yet)
             if (id) t.castingId = id;
+            if (id && descById.has(id)) t.castingDescription = descById.get(id);   // shows on the card and the prints
             // The casting's Side A/B lives on the casting itself (portal + weekly keep it in sync); it wins over the old per-day value.
             if (id && sideById.has(id) && (t.department === 'Cast' || t.department === 'Demold')) t.castingSide = sideById.get(id);
             // Special layout condition (Casting Layout milestone note) shows on the Cast cards.

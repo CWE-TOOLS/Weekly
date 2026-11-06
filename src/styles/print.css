@@ -337,6 +337,16 @@ li:last-child {
         background: #fee2e2 !important;
     }
 
+    /* The casting's description (Casting Inventory header), just under the title (2026-11-06). */
+    .print-task-casting-desc {
+        font-size: 0.95em !important;
+        font-weight: 600 !important;
+        font-style: italic;
+        text-align: center;
+        margin-bottom: 0.15em;
+        color: #111 !important;
+    }
+
     /* Casting side row — Cast department only, sits just under the title. */
     .print-task-casting-side {
         font-size: 1.0em !important;

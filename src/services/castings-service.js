@@ -64,13 +64,13 @@ export async function loadCastingsForProjects(projectNumbers) {
     try {
         let { data, error } = await client
             .from(CASTINGS_TABLE)
-            .select('id, project_number, casting_number, casting_side')
+            .select('id, project_number, casting_number, casting_side, description')
             .in('project_number', projectNumbers);
         if (error && /casting_side/.test(String(error.message || ''))) {
             // migration/casting-side.sql not run yet: read without the column
             ({ data, error } = await client
                 .from(CASTINGS_TABLE)
-                .select('id, project_number, casting_number')
+                .select('id, project_number, casting_number, description')
                 .in('project_number', projectNumbers));
         }
 

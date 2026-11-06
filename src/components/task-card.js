@@ -75,6 +75,13 @@ export function createTaskCard(task, rowClass, isEditingUnlocked) {
         castDiv.textContent = `Cast ${task.castingNumber}`;
         card.appendChild(castDiv);
     }
+    // The casting's description from the Casting Inventory header (2026-11-06), e.g. "LH Broadway".
+    if (task.castingDescription) {
+        const descDiv = document.createElement('div');
+        descDiv.className = 'task-casting-desc';
+        descDiv.textContent = task.castingDescription;
+        card.appendChild(descDiv);
+    }
 
     // Casting side (A/B) — Cast-department only, rendered when a side has been
     // selected for this task. Stored in task_descriptions.casting_side.
