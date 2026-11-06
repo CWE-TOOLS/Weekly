@@ -5725,6 +5725,7 @@ async function loadAllComponentsForCurrentProject() {
 // UI state for the Casting Layout tab. The mold offset is the only editable
 // control — everything else on the tab is generated from the casting data.
 let clSelectedCastingId = null;
+let clUrlCastingId = new URLSearchParams(window.location.search).get('casting') || null;   // ?casting=<id>: pre-select once (links from the cast-day box, 2026-11-06)
 let clSelectedArea = 'B';
 let clOffsetPerSide = 4;
 let clGapBetween = 0;
@@ -5759,6 +5760,13 @@ function clDayLabel(iso) {
     return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 }
 function clOtherLabel(o) { return `${o.project_number} ${o.projectName || ''}`.trim() + (o.casting_number ? ` · Cast ${o.casting_number}` : '') + (o.inPortal === false ? ' (not in the portal)' : ''); }
+/** The other job's name as a link: a new window on its Casting Layout tab with that casting selected (2026-11-06). */
+function clOtherLink(o) {
+    const label = escapeHtml(clOtherLabel(o));
+    if (!o.id || !o.project_number) return label;
+    const href = `project-portal.html?project=${encodeURIComponent(o.project_number)}&tab=casting-layout&casting=${encodeURIComponent(o.id)}`;
+    return `<a class="pp-clay-float-link" href="${escapeAttr(href)}" target="_blank" rel="noopener" title="Open ${escapeAttr(clOtherLabel(o))} on its Casting Layout tab in a new window">${label}</a>`;
+}
 function clShortLabel(o) { return `${o.project_number || o.projectName} · Cast ${o.casting_number || '?'}`; }
 
 /** This casting's cast days as the WEEKLY shows them (its Cast cards, whatever source the weekly is on), and every
@@ -5924,8 +5932,8 @@ function renderClayFloat() {
             const cls = taken.length ? (mine(area) ? 'taken-mine' : 'taken') : 'free';
             return `<div class="pp-clay-float-side pp-clay-float-${cls}">
                 <div class="pp-clay-float-side-head"><span>SIDE ${area}</span><span>${taken.length ? 'TAKEN' : 'FREE'}${mine(area) ? ' · THIS CASTING' : ''}</span></div>
-                ${taken.map(o => `<div class="pp-clay-float-line">${escapeHtml(clOtherLabel(o))}${o.casting_side === 'AB' ? ' (both sides)' : ''}${o.components.length ? '' : (o.inPortal === false ? '' : ' — no forms on file')}${clSwapAllowed(o, area, mySide) ? ` <button type="button" class="pp-clay-swap" data-clay-swap="${escapeAttr(o.id)}" title="${escapeAttr(clSwapTitle(o, area, mySide))}">Swap sides</button>` : ''}</div>`).join('')}
-                ${conds.map(o => `<div class="pp-clay-float-cond">Special condition: ${escapeHtml(o.cond.name)} — ${escapeHtml(clOtherLabel(o))}</div>`).join('')}
+                ${taken.map(o => `<div class="pp-clay-float-line">${clOtherLink(o)}${o.casting_side === 'AB' ? ' (both sides)' : ''}${o.components.length ? '' : (o.inPortal === false ? '' : ' — no forms on file')}${clSwapAllowed(o, area, mySide) ? ` <button type="button" class="pp-clay-swap" data-clay-swap="${escapeAttr(o.id)}" title="${escapeAttr(clSwapTitle(o, area, mySide))}">Swap sides</button>` : ''}</div>`).join('')}
+                ${conds.map(o => `<div class="pp-clay-float-cond">Special condition: ${escapeHtml(o.cond.name)} — ${clOtherLink(o)}</div>`).join('')}
             </div>`;
         };
         const unset = clDay.others.filter(o => !['A', 'B', 'AB'].includes(o.casting_side));
@@ -5941,7 +5949,7 @@ function renderClayFloat() {
         html = `<div class="pp-clay-float-title">CAST DAY · ${escapeHtml(days)}</div>
             <div class="pp-clay-float-text">${clDay.others.length ? `${clDay.others.length} other casting${clDay.others.length === 1 ? '' : 's'} that day` : 'No other casting that day'} (from the ${src})${mySide ? '' : ' — pick this casting\'s side'}.</div>
             ${sideHtml('A')}${sideHtml('B')}
-            ${unset.length ? `<div class="pp-clay-float-unset">Side not set yet: ${unset.map(o => escapeHtml(clOtherLabel(o))).join('; ')}</div>` : ''}
+            ${unset.length ? `<div class="pp-clay-float-unset">Side not set yet: ${unset.map(o => clOtherLink(o)).join('; ')}</div>` : ''}
             ${fit}`;
     }
     clFloatEl.className = `pp-clay-float pp-clay-float-${tone}`;
@@ -6001,6 +6009,10 @@ async function activateCastingLayoutTab() {
 
     // Keep the selected casting valid as projects/castings change.
     const validIds = new Set(currentCastings.map(c => c.id));
+    if (clUrlCastingId) {   // opened from another casting's cast-day box: start on that casting
+        if (validIds.has(clUrlCastingId)) clSelectedCastingId = clUrlCastingId;
+        clUrlCastingId = null;
+    }
     if (!clSelectedCastingId || !validIds.has(clSelectedCastingId)) {
         clSelectedCastingId = currentCastings[0].id;
     }

@@ -6867,3 +6867,5 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
 .pp-clay-card-pair .pp-clay-card-side.pp-clay-zoomed svg { width: auto; height: 100%; max-width: 100%; }
 .pp-clay-card-pair .pp-clay-card-side.pp-clay-zoomed .pp-clay-zoom-btn { top: 12px; right: 12px; font-size: 13px; padding: 6px 14px; }
 body.pp-clay-zoom-open { overflow: hidden; }
+.pp-clay-float-link { color: inherit; text-decoration: underline dotted; text-underline-offset: 2px; }
+.pp-clay-float-link:hover { text-decoration: underline; color: #1d4ed8; }
