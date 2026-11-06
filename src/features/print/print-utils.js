@@ -254,6 +254,17 @@ function executePrint(printContent, printType = 'week', orientation = null) {
  * @param {Date} weekStart - Start date of the week (Monday)
  * @param {Date} weekEnd - End date of the week (Saturday)
  */
+/**
+ * The name the weekly card shows for a task: the portal's project name plus the cast number when the task's
+ * project number resolved to a portal project, otherwise the raw sheet / scheduler text (2026-11-06).
+ */
+function taskDisplayName(task) {
+    const name = String(task.resolvedProjectName || '').trim();
+    if (!name) return task.project;
+    const cast = String(task.castingNumber || '').trim();
+    return cast ? `${name} · Cast ${cast}` : name;
+}
+
 function detectPhaseStarts(weekTasks, allTasks, weekStart, weekEnd) {
     const phaseStarts = new Map();
 
@@ -297,7 +308,7 @@ function detectPhaseStarts(weekTasks, allTasks, weekStart, weekEnd) {
                 phaseStarts.set(task.department, []);
             }
             phaseStarts.get(task.department).push({
-                project: task.project,
+                project: taskDisplayName(task),      // as the weekly card names it
                 date: task.date
             });
             processed.add(key);
@@ -335,7 +346,7 @@ function detectPhaseStarts(weekTasks, allTasks, weekStart, weekEnd) {
             }
 
             phaseStarts.get(task.department).push({
-                project: task.project,
+                project: taskDisplayName(task),      // as the weekly card names it
                 date: earliestTask.date
             });
 
@@ -424,6 +435,7 @@ window.PrintUtils = {
     generateBatchTasks,  // Re-export from schedule-utils.js
     generateLayoutTasks,  // Re-export from schedule-utils.js
     detectPhaseStarts,
+    taskDisplayName,
     applyScaling,
     PRINT_UTILS
 };

@@ -11,7 +11,7 @@ import { logger } from '../../utils/logger.js';
 import { escapeHtml } from '../../utils/security-utils.js';
 
 // Import print utilities to ensure they're loaded and exposed globally
-import '../../features/print/print-utils.js';
+import '../../features/print/print-utils.js?v=20261106-1';
 
 import {
     getCurrentPrintType,
