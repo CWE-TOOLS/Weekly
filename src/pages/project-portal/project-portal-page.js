@@ -47,6 +47,7 @@ import {
     deleteAllComponentsForCasting,
     loadTrackingStateForCasting,
     applyTrackingStateForCasting,
+    updateComponent,
     setComponentProduced,
     setComponentsProducedBulk,
     setComponentRejected
@@ -1657,12 +1658,10 @@ function ensureCastingsSortable() {
             // marks to the wrong physical panel.
             const moved = currentCastings[oldIdx];
             const neighbor = currentCastings[newIdx];
-            if (isCastingInventoryLocked(moved) || isCastingInventoryLocked(neighbor)) {
-                const locked = isCastingInventoryLocked(moved) ? moved : neighbor;
-                showCastingLockedToast(locked);
-                renderCastings();
-                return;
-            }
+            // Simulated (2026-11-09): refused only when the new order would renumber a marked panel.
+            if (inventoryEditBlocked(moved, sim => {
+                const re = currentCastings.slice(); const [m] = re.splice(oldIdx, 1); re.splice(newIdx, 0, m); sim.order = re;
+            })) { renderCastings(); return; }
 
             const reordered = currentCastings.slice();
             const [movedRow] = reordered.splice(oldIdx, 1);
@@ -2336,10 +2335,7 @@ function scheduleCastingSave(id) {
 async function handleDeleteCasting(id) {
     const c = currentCastings.find(x => x.id === id);
     if (!c) return;
-    if (isCastingInventoryLocked(c)) {
-        showCastingLockedToast(c);
-        return;
-    }
+    if (inventoryEditBlocked(c, sim => { sim.order = sim.order.filter(x => x.id !== id); sim.inv.delete(id); })) return;
     if (!confirm(`Delete casting ${c.casting_number}?`)) return;
     try {
         await deleteCasting(id);
@@ -2371,10 +2367,7 @@ function handleToggleCastInventory(castingId) {
 async function handleAddInventoryItem(castingId) {
     if (!currentProjectNumber || !castingId) return;
     const casting = currentCastings.find(c => c.id === castingId);
-    if (isCastingInventoryLocked(casting)) {
-        showCastingLockedToast(casting);
-        return;
-    }
+    if (inventoryEditBlocked(casting)) return;   // a new row has no type yet: it numbers nothing until one is typed
     if (!currentCastInvExpanded.has(castingId)) currentCastInvExpanded.add(castingId);
     try {
         // Auto-link to the project's first color log (if any) so new
@@ -2408,10 +2401,7 @@ async function saveInventoryItemNow(itemId, castingId) {
     const row = document.querySelector(`.pp-inv-row[data-inventory-id="${itemId}"]`);
     if (!row) return;
     const casting = currentCastings.find(c => c.id === castingId);
-    if (isCastingInventoryLocked(casting)) {
-        showCastingLockedToast(casting);
-        return;
-    }
+    if (inventoryEditBlocked(casting)) { renderCastings(); return; }   // final (ready) inventory
     const list = getInventoryFor(castingId);
     const item = list.find(c => c.id === itemId);
     if (!item) return;
@@ -2451,6 +2441,12 @@ async function saveInventoryItemNow(itemId, castingId) {
         if (cur !== next) changed[k] = fields[k];
     }
     if (Object.keys(changed).length === 0) return;
+    // Count or type changes renumber panels: simulate first (2026-11-09). Colour, sealer, sizes, cu ft, sq ft never do.
+    if (['quantity', 'extras', 'type'].some(k => k in changed)
+        && inventoryEditBlocked(casting, sim => { const r = (sim.inv.get(castingId) || []).find(x => x.id === itemId); if (r) Object.assign(r, changed); })) {
+        renderCastings();                  // put the stored values back in the boxes
+        return;
+    }
     Object.assign(item, changed);          // the value changed in the user's hands
     ciEntered(castingId);                  // first entry: the board's Casting Inventory cell goes orange by itself
     msInventoryChanged(castingId);         // linked prints go orange — or back to green when the inventory is back as printed
@@ -2510,10 +2506,7 @@ function updateCastingInventoryCount(castingId) {
 
 async function handleDeleteInventoryItem(castingId, itemId) {
     const casting = currentCastings.find(c => c.id === castingId);
-    if (isCastingInventoryLocked(casting)) {
-        showCastingLockedToast(casting);
-        return;
-    }
+    if (inventoryEditBlocked(casting, sim => { sim.inv.set(castingId, (sim.inv.get(castingId) || []).filter(x => x.id !== itemId)); })) return;
     try {
         const t = inventorySaveTimers.get(itemId);
         if (t) { clearTimeout(t); inventorySaveTimers.delete(itemId); }
@@ -2562,11 +2555,9 @@ function ensureInventorySortables() {
                 const newIdx = evt.newIndex;
                 if (oldIdx === newIdx || oldIdx === undefined || newIdx === undefined) return;
                 const casting = currentCastings.find(c => c.id === castingId);
-                if (isCastingInventoryLocked(casting)) {
-                    showCastingLockedToast(casting);
-                    renderCastings();
-                    return;
-                }
+                if (inventoryEditBlocked(casting, sim => {
+                    const rows = sim.inv.get(castingId) || []; const [m] = rows.splice(oldIdx, 1); rows.splice(newIdx, 0, m);
+                })) { renderCastings(); return; }
                 const list = getInventoryFor(castingId).slice();
                 const [moved] = list.splice(oldIdx, 1);
                 list.splice(newIdx, 0, moved);
@@ -4630,8 +4621,9 @@ function handleCopyComponents(castingId) {
 /** Cut = copy to the clipboard, then remove here. Paste puts them into another casting. */
 async function cutInventoryItems(castingId, items, label) {
     const casting = currentCastings.find(c => c.id === castingId);
-    if (isCastingInventoryLocked(casting)) { showCastingLockedToast(casting); return; }
     if (!items.length) return;
+    const cutIds = new Set(items.map(it => it.id));
+    if (inventoryEditBlocked(casting, sim => { sim.inv.set(castingId, (sim.inv.get(castingId) || []).filter(x => !cutIds.has(x.id))); })) return;
     copiedComponents = items.map(inventoryClipItem);
     try {
         for (const it of items) {
@@ -4684,10 +4676,9 @@ async function handlePasteComponents(targetCastingId) {
     if (!Array.isArray(copiedComponents) || copiedComponents.length === 0) return;
     if (!targetCastingId) return;
     const targetCasting = currentCastings.find(c => c.id === targetCastingId);
-    if (isCastingInventoryLocked(targetCasting)) {
-        showCastingLockedToast(targetCasting);
-        return;
-    }
+    if (inventoryEditBlocked(targetCasting, sim => {
+        const rows = sim.inv.get(targetCastingId) || []; for (const it of copiedComponents) rows.push({ ...it, id: null }); sim.inv.set(targetCastingId, rows);
+    })) return;
     if (!currentCastInvExpanded.has(targetCastingId)) currentCastInvExpanded.add(targetCastingId);
     try {
         const existing = getInventoryFor(targetCastingId);
@@ -4785,13 +4776,13 @@ function compareCastingNumber(a, b) {
 
 // Inventory edits to an earlier casting can shift panel_id numbering inside
 // later castings (panel_ids are assigned by a per-type running counter across
-// all castings in sort order — see runTrackingSync). Once any tracking state
-// (rejected / produced / crate_id) exists, a renumber would re-attach those
-// marks to the wrong physical panel. To prevent silent corruption, once a
-// casting has any tracking state on it, that casting AND every casting with
-// a lower casting_number become inventory-read-only. Tracking operations
-// (reject / produced / crate toggles) stay fully live so the user can keep
-// marking production progress on locked castings.
+// all castings in sort order — see runTrackingSync). A renumber would re-attach
+// tracking marks (rejected / produced / crate_id) to the wrong physical panel.
+// Until 2026-11-09 one mark anywhere made that casting AND every casting above it
+// inventory-read-only, and stopped their tracking refresh (so colours never came
+// through). Now each edit is SIMULATED on a copy of the inventory: it is refused
+// only when a marked panel would get a different number or disappear, and the
+// toast names those panels. Colours, sealers and sizes never renumber anything.
 /* ===================== Releasability milestones (2026-10-15) =====================
    The board's AUTO columns live in casting_milestones (one row per casting per column):
    red / orange / green. Prints stamp them green (orange when the inventory was not final),
@@ -5371,62 +5362,126 @@ function updateMsFloat() {
     if (panel.style.paddingTop !== want) panel.style.paddingTop = want;
 }
 
-function isCastingInventoryLocked(casting) {
-    if (!casting) return false;
-    if (ciLockedById(casting.id)) return true;   // engineering lock (Releasability box)
-    // Find the highest sort_order among castings that have any tracking state.
-    // Use sort_order (database-canonical drag-order) NOT casting_number — that's
-    // a user-editable display string and names like "1A Remake" parse to int 1
-    // even when they're the latest casting in the project, which would lock
-    // them incorrectly.
-    let cap = null;
-    for (const c of currentCastings) {
-        const comps = currentCastingComponents.get(c.id) || [];
-        const hasState = comps.some(p =>
-            p.rejected === true || p.produced === true || p.crate_id != null
-        );
-        if (!hasState) continue;
-        const ord = c.sort_order ?? -Infinity;
-        if (cap === null || ord > cap) cap = ord;
+/** Panel ids every casting should have, from the inventory: Map casting id → expected rows (the Tracking mirror). */
+function expectedPanelsFor(castingsInOrder, invOf) {
+    const typeTotals = new Map();
+    for (const casting of castingsInOrder) {
+        for (const inv of invOf(casting.id)) {
+            if (!inv.type) continue;
+            const qty = Math.max(1, parseInt(inv.quantity, 10) || 1);
+            typeTotals.set(inv.type, (typeTotals.get(inv.type) || 0) + qty);
+        }
     }
-    if (cap === null) return false;
-    return (casting.sort_order ?? -Infinity) <= cap;
+    const padLenFor = (type) => Math.max(2, String(typeTotals.get(type) || 0).length);
+    const counters = new Map();
+    const nextPanelId = (type) => {
+        if (!type) return null;
+        const next = (counters.get(type) || 0) + 1;
+        counters.set(type, next);
+        return `${type}.${String(next).padStart(padLenFor(type), '0')}`;
+    };
+    const out = new Map();
+    for (const casting of castingsInOrder) {
+        const expected = [];
+        for (const inv of invOf(casting.id)) {
+            const qty = Math.max(1, parseInt(inv.quantity, 10) || 1);
+            const extras = Math.max(0, parseInt(inv.extras, 10) || 0);
+            // A remake row re-casts several rejected panels (one id per piece): each piece points back at its own one.
+            const remakeIds = inv.remake_of_casting_id ? invRemakeIds(inv) : [];
+            for (let i = 0; i < qty; i++) {
+                const remakeId = remakeIds[i] || null;
+                expected.push({
+                    type: inv.type || null, width: inv.width || null, length: inv.length || null,
+                    panel_id: nextPanelId(inv.type), color: inv.color || null, color_log_id: inv.color_log_id || null,
+                    sealer: inv.sealer || null, remake_of_panel_id: remakeId, remake_of_casting_id: remakeId ? inv.remake_of_casting_id : null
+                });
+            }
+            for (let i = 0; i < extras; i++) {
+                expected.push({
+                    type: inv.type || null, width: inv.width || null, length: inv.length || null,
+                    panel_id: inv.type ? `${inv.type}.EXTRA` : null, color: inv.color || null, color_log_id: inv.color_log_id || null,
+                    sealer: inv.sealer || null, remake_of_panel_id: null, remake_of_casting_id: null
+                });
+            }
+        }
+        out.set(casting.id, expected);
+    }
+    return out;
+}
+/** Each row keyed by its physical place: the n-th panel of its type inside the casting ("P1#3"). */
+function panelPlaceKeys(rows) {
+    const seen = new Map();
+    return rows.map(r => { const t = r.type || '?'; const n = seen.get(t) || 0; seen.set(t, n + 1); return `${t}#${n}`; });
+}
+const panelMark = p => p.rejected === true ? 'rejected' : p.produced === true ? 'produced' : p.crate_id != null ? 'in a crate' : null;
+/**
+ * The marked panels whose number would change (or vanish) if the inventory became `invOf` in `castingsInOrder`,
+ * compared with the numbers the current inventory gives them: [{ casting_number, casting_id, panel_id, mark }].
+ * A panel is followed by its physical place (n-th of its type in its casting), not by its id.
+ */
+function renumberBlockers(castingsInOrder, invOf) {
+    const nowOrder = currentCastings.slice().sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+    const now = expectedPanelsFor(nowOrder, id => getInventoryFor(id));
+    const then = expectedPanelsFor(castingsInOrder, invOf);
+    const out = [];
+    for (const c of nowOrder) {
+        const current = getComponentsFor(c.id);
+        const keys = panelPlaceKeys(current);
+        const nowIds = new Map(), thenIds = new Map();
+        panelPlaceKeys(now.get(c.id) || []).forEach((k, i) => nowIds.set(k, (now.get(c.id) || [])[i].panel_id));
+        panelPlaceKeys(then.get(c.id) || []).forEach((k, i) => thenIds.set(k, (then.get(c.id) || [])[i].panel_id));
+        current.forEach((p, i) => {
+            const mark = panelMark(p);
+            if (!mark) return;
+            const a = nowIds.get(keys[i]), b = thenIds.get(keys[i]);
+            if (a === b) return;                      // same number before and after: the mark stays on its panel
+            if (a === undefined) return;              // a stale panel (no number under today's inventory) is not made worse
+            out.push({ casting_number: c.casting_number || '?', casting_id: c.id, panel_id: p.panel_id, mark });
+        });
+    }
+    return out;
+}
+/**
+ * Guard for an inventory edit (2026-11-09): `mutate(sim)` applies the proposed change to a copy of the castings order
+ * (sim.order) and inventory rows (sim.inv: casting id → rows). Returns true, after the toast, when the change would
+ * renumber or drop a marked panel, or when the casting's inventory is final (ready). Colour / sealer / size edits
+ * need no simulation: they never renumber anything.
+ */
+function inventoryEditBlocked(casting, mutate = null) {
+    if (!casting) return false;
+    if (ciLockedById(casting.id)) { showCastingLockedToast(casting); return true; }
+    if (!mutate) return false;
+    const sim = {
+        order: currentCastings.slice().sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)),
+        inv: new Map(currentCastings.map(c => [c.id, getInventoryFor(c.id).map(r => ({ ...r }))]))
+    };
+    try { mutate(sim); } catch (err) { logger.warn('[project-portal] edit simulation failed, allowing the edit:', err); return false; }
+    const blockers = renumberBlockers(sim.order, id => sim.inv.get(id) || []);
+    if (!blockers.length) return false;
+    showCastingLockedToast(casting, blockers);
+    return true;
+}
+/** Kept for the Tracking tab's band wording: true when the inventory is final (ready) — the mark lock is gone (2026-11-09). */
+function isCastingInventoryLocked(casting) {
+    return !!casting && ciLockedById(casting.id);
 }
 
 // Shared error toast for inventory-mutation guards. The wording calls out the
 // "why" (a later casting has tracking state) so the user knows it's not just
 // a generic lock.
-function showCastingLockedToast(casting) {
+function showCastingLockedToast(casting, blockers = null) {
     const num = casting?.casting_number || '?';
     if (ciLockedById(casting?.id)) {
         showToast(`Casting ${num} inventory is ready (final) — press "Make changes" on the casting to edit it.`, 'error');
         return;
     }
-    // 2026-11-09: name the casting(s) and the marks that hold the lock, so "locked" is never a mystery.
-    const holders = castingLockHolders(casting);
-    if (!holders.length) { showToast(`Casting ${num} is locked: a later casting has rejected/produced/crated panels.`, 'error'); return; }
-    const who = holders.map(h => `${h.self ? 'its own panels' : 'Cast ' + h.casting_number} (${h.parts.join(', ')})`).join(' and ');
-    showToast(`Casting ${num} inventory is locked because of ${who}. Panel numbers run across castings, so an edit could move those marks onto the wrong panel. `
-        + `To edit: on the Tracking tab clear those marks (take the panel out of its crate / untick produced or rejected), make the change, then mark them again.`, 'error', 9000);
-}
-/** The castings at or after `casting` whose panels carry tracking marks: [{ casting_number, self, parts: ['1 panel in a crate', …] }]. */
-function castingLockHolders(casting) {
-    const out = [];
-    const myOrd = casting?.sort_order ?? -Infinity;
-    for (const c of currentCastings) {
-        if ((c.sort_order ?? -Infinity) < myOrd) continue;
-        const comps = currentCastingComponents.get(c.id) || [];
-        const rej = comps.filter(p => p.rejected === true).length;
-        const prod = comps.filter(p => p.produced === true).length;
-        const crated = comps.filter(p => p.crate_id != null).length;
-        if (!rej && !prod && !crated) continue;
-        const parts = [];
-        if (crated) parts.push(`${crated} in a crate`);
-        if (prod) parts.push(`${prod} marked produced`);
-        if (rej) parts.push(`${rej} rejected`);
-        out.push({ casting_number: c.casting_number || '?', self: c.id === casting?.id, parts });
-    }
-    return out;
+    // 2026-11-09: name the panels the change would renumber, so "locked" is never a mystery.
+    const list = Array.isArray(blockers) ? blockers : [];
+    if (!list.length) { showToast(`Casting ${num}: this change would renumber panels that carry tracking marks.`, 'error', 6000); return; }
+    const shown = list.slice(0, 6).map(b => `${b.casting_id === casting?.id ? 'its own' : 'Cast ' + b.casting_number} ${b.panel_id} (${b.mark})`).join(', ')
+        + (list.length > 6 ? ` and ${list.length - 6} more` : '');
+    showToast(`Casting ${num}: this change would renumber panels that carry tracking marks — ${shown}. `
+        + `Clear those marks on the Tracking tab (take the panel out of its crate / untick produced or rejected), make the change, then mark them again.`, 'error', 9000);
 }
 
 async function activateTrackingTab() {
@@ -6924,8 +6979,12 @@ function trackingMismatchList(pairs) {
 }
 function trackingMismatchFix(casting, m) {
     if (m.reason === 'failed') return `The rebuild failed${m.msg ? ` (${escapeHtml(m.msg)})` : ''}. Reload the page and open Tracking again; if it stays red, tell Sergejs.`;
-    if (ciLockedById(casting.id)) return `The list is rebuilt from the inventory every time this tab opens, but this cast's Casting Inventory is locked (ready), so it was left as is. <b>Fix:</b> Castings tab → press <b>Make changes</b> on this cast's Casting Inventory → open Tracking again (it rebuilds) → set the Casting Inventory ready again. Stickers and tracking sheets printed from this list are out of date.`;
-    return `The list is rebuilt from the inventory every time this tab opens, but a later cast already has tracking state (complete / rejected / crated), which freezes this one. The inventory change needs to be undone, or that tracking state cleared first; tell Sergejs if unsure.`;
+    if (m.reason === 'protected') {
+        const list = (m.protectedPanels || []).slice(0, 8).map(p => `<b>${escapeHtml(p.panel_id)}</b> (${escapeHtml(p.mark)})`).join(', ')
+            + ((m.protectedPanels || []).length > 8 ? ` and ${m.protectedPanels.length - 8} more` : '');
+        return `Colours, sealers and sizes were updated from the inventory. The panel numbers were kept, because these marked panels would get a different number or be dropped: ${list}. <b>To renumber:</b> clear those marks on this tab, open Tracking again (it rebuilds), then set the marks back. Stickers printed with the old numbers are out of date.`;
+    }
+    return `The list is rebuilt from the inventory every time this tab opens, but this cast could not be rebuilt. Reload the page and open Tracking again; if it stays red, tell Sergejs.`;
 }
 function renderTrackingMismatchBanner() {
     const el = document.getElementById('pp-track-mismatch');
@@ -6948,11 +7007,11 @@ function renderTrackingMismatchBand(casting) {
         <div class="pp-track-mismatch-fix">${trackingMismatchFix(casting, m)}</div>
     </div>`;
 }
-function noteTrackingMismatch(casting, current, expected, reason, msg) {
+function noteTrackingMismatch(casting, current, expected, reason, msg, protectedPanels = []) {
     const d = trackingDiff(current, expected);
     trackingMismatch.set(casting.id, {
         invTypes: new Set(expected.map(e => e.type || '?')).size, invPcs: expected.length, panels: current.length,
-        missing: d.missing, extra: d.extra, same: d.same, detail: d.detail, reason, msg: msg || ''
+        missing: d.missing, extra: d.extra, same: d.same, detail: d.detail, reason, msg: msg || '', protectedPanels
     });
 }
 function toastTrackingMismatch() {
@@ -7000,73 +7059,25 @@ async function runTrackingSync(opts = {}) {
         (a.sort_order ?? 0) - (b.sort_order ?? 0)
     );
 
-    // Compute padLen per type from the project-wide qty total so all panel_ids
-    // for a given type share the same zero-pad width.
-    const typeTotals = new Map();
+    const expectedByCasting = expectedPanelsFor(sortedCastings, id => getInventoryFor(id));
     for (const casting of sortedCastings) {
-        for (const inv of getInventoryFor(casting.id)) {
-            if (!inv.type) continue;
-            const qty = Math.max(1, parseInt(inv.quantity, 10) || 1);
-            typeTotals.set(inv.type, (typeTotals.get(inv.type) || 0) + qty);
-        }
-    }
-    const padLenFor = (type) => Math.max(2, String(typeTotals.get(type) || 0).length);
-
-    // Per-type running counter across castings in sort order.
-    const counters = new Map();
-    const nextPanelId = (type) => {
-        if (!type) return null;
-        const next = (counters.get(type) || 0) + 1;
-        counters.set(type, next);
-        return `${type}.${String(next).padStart(padLenFor(type), '0')}`;
-    };
-
-    for (const casting of sortedCastings) {
-        const expected = [];
-        for (const inv of getInventoryFor(casting.id)) {
-            const qty = Math.max(1, parseInt(inv.quantity, 10) || 1);
-            const extras = Math.max(0, parseInt(inv.extras, 10) || 0);
-            // A remake row re-casts several rejected panels (one id per piece): each piece points back at its own one.
-            const remakeIds = inv.remake_of_casting_id ? invRemakeIds(inv) : [];
-            for (let i = 0; i < qty; i++) {
-                const remakeId = remakeIds[i] || null;
-                expected.push({
-                    type: inv.type || null,
-                    width: inv.width || null,
-                    length: inv.length || null,
-                    panel_id: nextPanelId(inv.type),
-                    color: inv.color || null,
-                    color_log_id: inv.color_log_id || null,
-                    sealer: inv.sealer || null,
-                    remake_of_panel_id: remakeId,
-                    remake_of_casting_id: remakeId ? inv.remake_of_casting_id : null
-                });
-            }
-            for (let i = 0; i < extras; i++) {
-                expected.push({
-                    type: inv.type || null,
-                    width: inv.width || null,
-                    length: inv.length || null,
-                    panel_id: inv.type ? `${inv.type}.EXTRA` : null,
-                    color: inv.color || null,
-                    color_log_id: inv.color_log_id || null,
-                    sealer: inv.sealer || null,
-                    remake_of_panel_id: null,
-                    remake_of_casting_id: null
-                });
-            }
-        }
-
+        const expected = expectedByCasting.get(casting.id) || [];
         const current = getComponentsFor(casting.id);
         if (componentsMatchExpected(current, expected)) { trackingMismatch.delete(casting.id); continue; }
 
-        // Defense in depth: if a UI guard ever lets an inventory mutation
-        // through on a locked casting (or the inventory was written outside the
-        // portal), refuse to wipe and rebuild its components here. Not silent
-        // any more (2026-11-03): the Tracking tab shows a red band for the cast.
-        if (isCastingInventoryLocked(casting)) {
-            logger.warn('[project-portal] runTrackingSync: skipping locked casting', casting.casting_number || casting.id);
-            noteTrackingMismatch(casting, current, expected, 'locked');
+        // Every casting refreshes from its own inventory (2026-11-09). The rebuild below restores marks by panel id,
+        // so it is only safe while every marked panel keeps its number: otherwise copy colours / sealers / sizes
+        // onto the existing rows in place, keep the numbers, and show the band naming the panels that hold them.
+        const keysNow = panelPlaceKeys(current), keysExp = panelPlaceKeys(expected);
+        const expIdByKey = new Map(keysExp.map((k, i) => [k, expected[i].panel_id]));
+        const protectedPanels = current.filter((p, i) => panelMark(p) && expIdByKey.get(keysNow[i]) !== p.panel_id)
+            .map(p => ({ casting_number: casting.casting_number || '?', casting_id: casting.id, panel_id: p.panel_id, mark: panelMark(p) }));
+        if (protectedPanels.length) {
+            try { await patchComponentFieldsInPlace(current, expected); }
+            catch (err) { logger.error('[project-portal] in-place tracking update failed for casting', casting.id, err); }
+            if (componentsMatchExpected(current, expected)) { trackingMismatch.delete(casting.id); continue; }
+            logger.warn('[project-portal] runTrackingSync: panel numbers kept on casting', casting.casting_number || casting.id, protectedPanels);
+            noteTrackingMismatch(casting, current, expected, 'protected', '', protectedPanels);
             continue;
         }
 
@@ -7114,6 +7125,24 @@ async function runTrackingSync(opts = {}) {
     if (currentTab === 'tracking') renderTracking();
 }
 
+/** Copy the fields that never renumber anything (sizes, colour, sealer) from the expected rows onto the live rows, by physical place. */
+async function patchComponentFieldsInPlace(current, expected) {
+    const keysExp = panelPlaceKeys(expected), byKey = new Map(keysExp.map((k, i) => [k, expected[i]]));
+    const keysNow = panelPlaceKeys(current);
+    const norm = v => (v === undefined || v === '' ? null : v);
+    let n = 0;
+    for (let i = 0; i < current.length; i++) {
+        const c = current[i], e = byKey.get(keysNow[i]);
+        if (!e) continue;
+        const fields = {};
+        for (const f of ['width', 'length', 'color', 'color_log_id', 'sealer']) if (norm(c[f]) !== norm(e[f])) fields[f] = e[f] ?? null;
+        if (!Object.keys(fields).length) continue;
+        await updateComponent(c.id, fields);
+        Object.assign(c, fields);
+        n++;
+    }
+    return n;
+}
 function componentsMatchExpected(current, expected) {
     if (current.length !== expected.length) return false;
     const norm = v => (v === undefined || v === '' ? null : v);
@@ -10607,7 +10636,7 @@ function wireEvents() {
         // keeps its own red mark + undo and saves on its own, exactly as if it had been picked there.
         if (e.target.dataset.field === 'color_log_id' && invSelected.has(itemId)) {
             const casting = currentCastings.find(c => c.id === castingId);
-            if (isCastingInventoryLocked(casting)) return;     // the first save already showed the lock toast
+            if (ciLockedById(castingId)) return;              // final inventory: the first save already showed the toast
             const value = e.target.value, label = e.target.selectedOptions[0]?.text || '';
             let n = 0;
             for (const other of invSelectedIn(castingId)) {
