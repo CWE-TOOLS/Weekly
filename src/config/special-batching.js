@@ -28,13 +28,14 @@
 const JANE_STREET = {
     href: 'jane-street-batching.html',
     label: 'Jane Street Batching',
-    version: '20261103-1',   // bumped whenever jane-street-batching.html changes, so the tab's frame skips the old cached copy
+    version: '20261109-1',   // bumped whenever jane-street-batching.html changes, so the tab's frame skips the old cached copy
     sizing: { face: 100, backup: 200, firstBackUp: false, backupType: 'firstBackUp', faceThicknessIn: 1 / 4 }   // 1/4" face (2026-10-07)
 };
 
 export const SPECIAL_BATCHING = {
     '0860': JANE_STREET,   // Jane Street 11th & 12th Floor
-    '0892': JANE_STREET    // Jane St. 14th Floor Tile (Full Scope) — same rules, added 2026-09-23
+    '0892': JANE_STREET,   // Jane St. 14th Floor Tile (Full Scope) — same rules, added 2026-09-23
+    '0896': JANE_STREET    // Jane St. 15th & 16th Floor — same rules, added 2026-11-09
 };
 
 /** @returns {{href:string,label:string,sizing:{face:number,backup:number,firstBackUp:boolean}}|null} */
