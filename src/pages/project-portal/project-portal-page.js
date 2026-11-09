@@ -5402,7 +5402,31 @@ function showCastingLockedToast(casting) {
         showToast(`Casting ${num} inventory is ready (final) — press "Make changes" on the casting to edit it.`, 'error');
         return;
     }
-    showToast(`Casting ${num} is locked: a later casting has rejected/produced/crated panels.`, 'error');
+    // 2026-11-09: name the casting(s) and the marks that hold the lock, so "locked" is never a mystery.
+    const holders = castingLockHolders(casting);
+    if (!holders.length) { showToast(`Casting ${num} is locked: a later casting has rejected/produced/crated panels.`, 'error'); return; }
+    const who = holders.map(h => `${h.self ? 'its own panels' : 'Cast ' + h.casting_number} (${h.parts.join(', ')})`).join(' and ');
+    showToast(`Casting ${num} inventory is locked because of ${who}. Panel numbers run across castings, so an edit could move those marks onto the wrong panel. `
+        + `To edit: on the Tracking tab clear those marks (take the panel out of its crate / untick produced or rejected), make the change, then mark them again.`, 'error', 9000);
+}
+/** The castings at or after `casting` whose panels carry tracking marks: [{ casting_number, self, parts: ['1 panel in a crate', …] }]. */
+function castingLockHolders(casting) {
+    const out = [];
+    const myOrd = casting?.sort_order ?? -Infinity;
+    for (const c of currentCastings) {
+        if ((c.sort_order ?? -Infinity) < myOrd) continue;
+        const comps = currentCastingComponents.get(c.id) || [];
+        const rej = comps.filter(p => p.rejected === true).length;
+        const prod = comps.filter(p => p.produced === true).length;
+        const crated = comps.filter(p => p.crate_id != null).length;
+        if (!rej && !prod && !crated) continue;
+        const parts = [];
+        if (crated) parts.push(`${crated} in a crate`);
+        if (prod) parts.push(`${prod} marked produced`);
+        if (rej) parts.push(`${rej} rejected`);
+        out.push({ casting_number: c.casting_number || '?', self: c.id === casting?.id, parts });
+    }
+    return out;
 }
 
 async function activateTrackingTab() {

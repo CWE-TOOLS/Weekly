@@ -688,6 +688,8 @@ body { overflow: visible; }
     font-size: 13px;
     box-shadow: 0 10px 25px rgba(15, 23, 42, 0.15);
     z-index: 100;
+    max-width: min(560px, calc(100vw - 48px));   /* long lock explanations wrap instead of spanning the screen (2026-11-09) */
+    line-height: 1.4;
 }
 .pp-toast.pp-toast-error { background: #b91c1c; }
 .pp-toast.pp-toast-info { background: #1d4ed8; font-size: 16px; font-weight: 600; padding: 16px 26px; border-radius: 8px; box-shadow: 0 14px 32px rgba(29, 78, 216, 0.35); }
