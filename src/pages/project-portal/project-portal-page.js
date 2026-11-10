@@ -84,7 +84,7 @@ import {
     updateInventoryItem,
     deleteInventoryItem,
     setInventoryOrder
-} from '../../services/inventory-service.js?v=20261020-2';
+} from '../../services/inventory-service.js?v=20261110-1';
 import {
     loadColorLogForProject,
     loadColorLogsForProject,
@@ -289,7 +289,7 @@ function invUndo(el) {
 }
 
 // ---- Leaving the Castings tab with marks pending: accept them, put every old value back, or look first.
-const INV_FIELD_LABELS = { quantity: 'QTY', extras: 'EXTRAS', type: 'TYPE', width: 'WIDTH', length: 'LENGTH', color_log_id: 'COLOR', cu_ft: 'CU FT', ff_sq_ft: 'FF SQ FT' };
+const INV_FIELD_LABELS = { quantity: 'QTY', extras: 'EXTRAS', type: 'TYPE', description: 'DESCRIPTION', width: 'WIDTH', length: 'LENGTH', color_log_id: 'COLOR', cu_ft: 'CU FT', ff_sq_ft: 'FF SQ FT' };
 let invReviewThen = null;   // what to do once the user has accepted or rejected (e.g. finish the tab switch)
 
 /** Every pending change: where it is, what it was first, what it is now. */
@@ -454,7 +454,7 @@ function invRefreshTitleButtons(card, castingId) {
     } else if (cut) cut.remove();
 }
 function inventoryClipItem(it) {
-    return { type: it.type, width: it.width, length: it.length, color: it.color, sealer: it.sealer,
+    return { type: it.type, description: it.description, width: it.width, length: it.length, color: it.color, sealer: it.sealer,
              quantity: it.quantity, extras: it.extras, cu_ft: it.cu_ft, ff_sq_ft: it.ff_sq_ft };
 }
 let currentColorLog = null;                // form-shaped record (id null = unsaved) — currently active log when multi-color on
@@ -1507,7 +1507,7 @@ function renderInventoryBody(casting, items) {
         : items.map(item => renderInventoryRow(item, casting.id)).join('');
 
     const headerRow = `
-        <div class="pp-inv-legend"><span class="pp-inv-legend-pm" title="Qty, Extras, Type, Width, Length, Color, Remake Of — the PM enters these, then presses Ready for engineering">PM fields</span><span class="pp-inv-legend-eng" title="Cu Ft, FF Sq Ft — engineering enters these, then presses Casting Inventory ready">Engineering fields</span></div>
+        <div class="pp-inv-legend"><span class="pp-inv-legend-pm" title="Qty, Extras, Type, Description, Width, Length, Color, Remake Of — the PM enters these, then presses Ready for engineering">PM fields</span><span class="pp-inv-legend-eng" title="Cu Ft, FF Sq Ft — engineering enters these, then presses Casting Inventory ready">Engineering fields</span></div>
         <div class="pp-inv-header-row">
             <input type="checkbox" class="pp-inv-row-select pp-inv-select-all" data-select-all aria-label="Select every component on this casting" title="Select all / none" ${items.length && items.every(it => invSelected.has(it.id)) ? 'checked' : ''} ${items.length ? '' : 'disabled'}>
             <div class="pp-inv-header-grip-spacer"></div>
@@ -1515,6 +1515,7 @@ function renderInventoryBody(casting, items) {
                 <span class="pp-inv-header-qty pp-inv-h-pm">Qty</span>
                 <span class="pp-inv-header-qty pp-inv-h-pm">Extras</span>
                 <span class="pp-inv-h-pm">Type</span>
+                <span class="pp-inv-h-pm" title="A short description of the part, for example: flat. Tick several rows (Shift+click for a range), then type it on any ticked row: it goes on all of them. It prints on the tracking sheet.">Description</span>
                 <span class="pp-inv-h-pm">Width</span>
                 <span class="pp-inv-h-pm">Length</span>
                 <span class="pp-inv-h-pm" title="Tick several rows (Shift+click for a range), then pick the colour on any ticked row: it goes on all of them.">Color</span>
@@ -1592,7 +1593,7 @@ function renderInventoryRow(item, castingId) {
     }
     return `
         <div class="pp-inv-row${remakeIds.length ? ' pp-inv-row-remake' : ''}${invSelected.has(item.id) ? ' pp-inv-row-selected' : ''}" data-inventory-id="${escapeAttr(item.id)}" data-casting-id="${escapeAttr(castingId)}">
-            <input type="checkbox" class="pp-inv-row-select" data-select-row aria-label="Select component" title="Tick to copy, cut or colour several components at once. Shift+click ticks every row from the last ticked one to this one." ${invSelected.has(item.id) ? 'checked' : ''}>
+            <input type="checkbox" class="pp-inv-row-select" data-select-row aria-label="Select component" title="Tick to copy, cut, colour or describe several components at once. Shift+click ticks every row from the last ticked one to this one." ${invSelected.has(item.id) ? 'checked' : ''}>
             <div class="pp-inv-row-grip" aria-hidden="true" title="Drag to reorder">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/>
@@ -1603,6 +1604,7 @@ function renderInventoryRow(item, castingId) {
                 ${invCell(item.id, 'quantity', `<input type="number" class="pp-inv-input pp-inv-pm pp-inv-input-qty${invEditedCls(item.id, 'quantity')}" data-field="quantity" min="1" step="1" value="${escapeAttr(item.quantity ?? 1)}"${invEditedTitle(item.id, 'quantity')} />`)}
                 ${invCell(item.id, 'extras', `<input type="number" class="pp-inv-input pp-inv-pm pp-inv-input-qty${invEditedCls(item.id, 'extras')}" data-field="extras" min="0" step="1" placeholder="0" value="${escapeAttr(item.extras ?? 0)}"${invEditedTitle(item.id, 'extras')} />`)}
                 ${invCell(item.id, 'type', `<input type="text" class="pp-inv-input pp-inv-pm${invEditedCls(item.id, 'type')}" data-field="type" placeholder="Type" value="${escapeAttr(item.type || '')}"${invEditedTitle(item.id, 'type')} />`)}
+                ${invCell(item.id, 'description', `<input type="text" class="pp-inv-input pp-inv-pm pp-inv-input-desc${invEditedCls(item.id, 'description')}" data-field="description" placeholder="Description" maxlength="120" value="${escapeAttr(item.description || '')}"${invEditedTitle(item.id, 'description') || (item.description ? ` title="${escapeAttr(item.description)}"` : '')} />`)}
                 ${invCell(item.id, 'width', `<input type="text" class="pp-inv-input pp-inv-pm${invEditedCls(item.id, 'width')}" data-field="width" placeholder="Width" value="${escapeAttr(item.width || '')}"${invEditedTitle(item.id, 'width')} />`)}
                 ${invCell(item.id, 'length', `<input type="text" class="pp-inv-input pp-inv-pm${invEditedCls(item.id, 'length')}" data-field="length" placeholder="Length" value="${escapeAttr(item.length || '')}"${invEditedTitle(item.id, 'length')} />`)}
                 ${invCell(item.id, 'color_log_id', buildColorLogSelectHtml(item.color_log_id, {
@@ -2242,6 +2244,7 @@ async function handleImportRemakesConfirm() {
                 const srcInv = srcRows.find(r => same(r.type, src.type) && same(r.width, src.width) && same(r.length, src.length)) || srcRows.find(r => same(r.type, src.type)) || null;
                 await createInventoryItem(targetCastingId, {
                     type: src.type || null,
+                    description: srcInv?.description || null,
                     width: src.width || null,
                     length: src.length || null,
                     color: src.color || null,
@@ -2461,7 +2464,8 @@ async function saveInventoryItemNow(itemId, castingId) {
         syncTrackingFromInventory();
     } catch (err) {
         logger.error('[project-portal] updateInventoryItem failed:', err);
-        showToast('Save failed: ' + (err.message || err), 'error');
+        if ('description' in changed && /description/i.test(String(err.message || err))) showToast('The Description column is not in the database yet — run the one-line SQL from the READ ME first.', 'error');
+        else showToast('Save failed: ' + (err.message || err), 'error');
     }
 }
 
@@ -4713,6 +4717,7 @@ function handleCopyInventoryRow(castingId, itemId) {
     if (!item) return;
     copiedComponents = [{
         type: item.type,
+        description: item.description,
         width: item.width,
         length: item.length,
         color: item.color,
@@ -10711,6 +10716,32 @@ function wireEvents() {
             if (n) showToast(`${label || 'Color'} set on ${n + 1} ticked type${n + 1 === 1 ? '' : 's'}`, 'success');
         }
     });
+    // A description typed on a TICKED row goes on every other ticked row of the casting too (2026-11-10), like the
+    // colour: each row keeps its own red mark + undo and saves on its own.
+    castingsList.addEventListener('change', (e) => {
+        if (!e.target.matches('.pp-inv-row[data-inventory-id] input[data-field="description"]')) return;
+        const invRow = e.target.closest('.pp-inv-row[data-inventory-id]');
+        const itemId = invRow.getAttribute('data-inventory-id');
+        const castingId = invRow.getAttribute('data-casting-id');
+        if (!invSelected.has(itemId) || ciLockedById(castingId)) return;
+        const value = e.target.value.trim();
+        let n = 0;
+        for (const other of invSelectedIn(castingId)) {
+            if (other.id === itemId) continue;
+            const inp = document.querySelector(`.pp-inv-row[data-inventory-id="${other.id}"] input[data-field="description"]`);
+            if (!inp || inp.disabled || inp.value.trim() === value) continue;
+            inp.dataset.before = inp.value;
+            inp.value = value;
+            invRecordEdit(inp);
+            if (value && !inp.getAttribute('title')) inp.setAttribute('title', value);
+            const ot = inventorySaveTimers.get(other.id);
+            if (ot) clearTimeout(ot);
+            inventorySaveTimers.delete(other.id);
+            saveInventoryItem(other.id, castingId);
+            n++;
+        }
+        if (n) showToast(value ? `Description set on ${n + 1} ticked types` : `Description cleared on ${n + 1} ticked types`, 'success');
+    });
     // Flush inventory save immediately on blur so users see the count update without waiting.
     castingsList.addEventListener('focusout', (e) => {
         const invRow = e.target.closest('.pp-inv-row[data-inventory-id]');
@@ -12772,6 +12803,17 @@ table.tp-table {
     color: #5b6470;
     background: #f7f9fc;
 }
+.tp-table thead th.tp-col-desc { text-align: left; padding-left: 5pt; }
+.tp-table tbody td.tp-col-desc {
+    text-align: left;
+    padding: 2pt 4pt 2pt 5pt;
+    font-family: "Segoe UI", Arial, sans-serif;
+    font-size: 8.5pt;
+    line-height: 1.15;
+    color: #1a1d21;
+    background: #f7f9fc;
+    overflow-wrap: anywhere;
+}
 .tp-table tbody td.tp-hold {
     border-left: 2px solid #c0392b;
     border-right: 2px solid #c0392b;
@@ -12779,6 +12821,7 @@ table.tp-table {
 }
 .tp-table tbody tr.tp-band td { background: #eef2f7; }
 .tp-table tbody tr.tp-band td.tp-col-panel,
+.tp-table tbody tr.tp-band td.tp-col-desc,
 .tp-table tbody tr.tp-band td.tp-col-color { background: #eef1f6; }
 .tp-table tbody tr.tp-band td.tp-hold { background: #fde6e0; }
 
@@ -12798,7 +12841,8 @@ table.tp-table {
     font-size: 9pt;
     line-height: 1.1;
 }
-.tp-table tbody tr.tp-example td.tp-col-color { background: #fff7d1; }
+.tp-table tbody tr.tp-example td.tp-col-color,
+.tp-table tbody tr.tp-example td.tp-col-desc { background: #fff7d1; }
 
 /* ---------- Footer note ---------- */
 .tp-note {
@@ -12809,6 +12853,19 @@ table.tp-table {
     line-height: 1.4;
 }
 `;
+
+/** The Casting Inventory description of a tracked panel (2026-11-10): the inventory row of the same type in its casting, same size first. */
+function componentDescription(comp) {
+    const key = (v) => String(v == null ? '' : v).trim().toLowerCase();
+    const rows = getInventoryFor(comp.casting_id).filter(r => key(r.type) === key(comp.type) && key(r.description));
+    if (!rows.length) return '';
+    const hit = rows.find(r => key(r.width) === key(comp.width) && key(r.length) === key(comp.length)) || rows[0];
+    return String(hit.description || '').trim();
+}
+/** Printed description: the column has a fixed width and wraps; every comma starts a new line so a long one stays tidy. */
+function descriptionLinesHtml(text) {
+    return String(text || '').split(',').map(x => x.trim()).filter(Boolean).map(escapeHtml).join('<br>');
+}
 
 function buildTrackPrintHtml(casting, components, projectNumber, projectName) {
     const num = casting.casting_number || '';
@@ -12848,11 +12905,12 @@ function buildTrackPrintHtml(casting, components, projectNumber, projectName) {
     const dateLabel = `${d.getMonth() + 1}/${d.getDate()}/${String(d.getFullYear()).slice(-2)}`;
 
     // ---------- Column widths ----------
-    // Panel ID 6%, Color 8%, phases split the remainder evenly.
+    // Panel ID 6%, Description 9% (always printed, 2026-11-10), Color 8%, phases split the remainder evenly.
     const panelIdPct = 6;
+    const descPct = 9;
     const colorPct = 8;
     const phasePct = selectedPhases.length > 0
-        ? (100 - panelIdPct - colorPct) / selectedPhases.length
+        ? (100 - panelIdPct - descPct - colorPct) / selectedPhases.length
         : 0;
 
     // ---------- LOAD/CRATE # leads the table ----------
@@ -12873,6 +12931,7 @@ function buildTrackPrintHtml(casting, components, projectNumber, projectName) {
     const headerCells = [
         loadHeaderCell,
         `<th class="tp-col-panel" style="width:${panelIdPct}%;">Panel ID</th>`,
+        `<th class="tp-col-desc" style="width:${descPct}%;">Description</th>`,
         `<th class="tp-col-color" style="width:${colorPct}%;">Color</th>`,
         ...gridPhases.map((p, i) => {
             const isFinal = p === 'FINAL';
@@ -12925,12 +12984,13 @@ function buildTrackPrintHtml(casting, components, projectNumber, projectName) {
         <tr class="tp-group tp-example">
             ${loadBodyCell}
             <td class="tp-col-panel">EXAMPLE<br><span style="font-weight:400;font-style:italic;color:#5b6470;">EJEMPLO</span></td>
+            <td class="tp-col-desc"></td>
             <td class="tp-col-color">${exampleColor}</td>
             ${exampleCells}
         </tr>
     `;
 
-    const totalCols = 2 + selectedPhases.length;
+    const totalCols = 3 + selectedPhases.length;
 
     // ---------- Build the single continuous body ----------
     let bodyRows = exampleRow;
@@ -12961,6 +13021,7 @@ function buildTrackPrintHtml(casting, components, projectNumber, projectName) {
                 <tr${rowClass}>
                     ${loadBodyCell}
                     <td class="tp-col-panel">${escapeHtml(comp.panel_id || '')}</td>
+                    <td class="tp-col-desc">${descriptionLinesHtml(componentDescription(comp))}</td>
                     <td class="tp-col-color">${escapeHtml(resolveComponentColorName(comp) || '')}</td>
                     ${phaseCells}
                 </tr>

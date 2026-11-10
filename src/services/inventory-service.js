@@ -114,6 +114,8 @@ export async function createInventoryItem(castingId, fields = {}) {
         remake_of_casting_id: cleanUuid(fields.remake_of_casting_id),
         sort_order: order
     };
+    // Description (2026-11-10): only sent when there is one, so rows can still be added before the column exists.
+    if (cleanText(fields.description)) payload.description = cleanText(fields.description);
 
     const { data, error } = await client
         .from(TABLE)
@@ -140,6 +142,7 @@ export async function updateInventoryItem(itemId, fields) {
 
     const payload = {};
     if (fields.type !== undefined) payload.type = cleanText(fields.type);
+    if (fields.description !== undefined) payload.description = cleanText(fields.description);
     if (fields.width !== undefined) payload.width = cleanText(fields.width);
     if (fields.length !== undefined) payload.length = cleanText(fields.length);
     if (fields.color !== undefined) payload.color = cleanText(fields.color);

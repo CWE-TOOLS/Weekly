@@ -1080,7 +1080,7 @@ body.pp-inv-dragging, body.pp-inv-dragging * { user-select: none !important; -we
 .pp-inv-header-fields {
     flex: 1 1 auto;
     display: grid;
-    grid-template-columns: 0.45fr 0.45fr 1.0fr 0.55fr 0.55fr 1.4fr 0.55fr 0.65fr 0.7fr;
+    grid-template-columns: 0.4fr 0.4fr 0.65fr 1.45fr 0.6fr 0.6fr 1.25fr 0.55fr 0.6fr 0.65fr;   /* + Description after Type (2026-11-10) */
     gap: 6px;
 }
 .pp-inv-header-fields span {
@@ -1131,7 +1131,7 @@ body.pp-inv-dragging, body.pp-inv-dragging * { user-select: none !important; -we
 .pp-inv-row-fields {
     flex: 1 1 auto;
     display: grid;
-    grid-template-columns: 0.45fr 0.45fr 1.0fr 0.55fr 0.55fr 1.4fr 0.55fr 0.65fr 0.7fr;
+    grid-template-columns: 0.4fr 0.4fr 0.65fr 1.45fr 0.6fr 0.6fr 1.25fr 0.55fr 0.6fr 0.65fr;   /* + Description after Type (2026-11-10) */
     gap: 6px;
 }
 .pp-inv-remake-cell {
@@ -1294,6 +1294,7 @@ body.pp-inv-dragging, body.pp-inv-dragging * { user-select: none !important; -we
     text-align: center;
     font-weight: 600;
 }
+.pp-inv-input.pp-inv-input-desc { text-align: left; text-overflow: ellipsis; }
 .pp-inv-input-num {
     text-align: center;
 }
