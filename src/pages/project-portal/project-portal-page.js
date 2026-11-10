@@ -1593,7 +1593,7 @@ function renderInventoryRow(item, castingId) {
     }
     return `
         <div class="pp-inv-row${remakeIds.length ? ' pp-inv-row-remake' : ''}${invSelected.has(item.id) ? ' pp-inv-row-selected' : ''}" data-inventory-id="${escapeAttr(item.id)}" data-casting-id="${escapeAttr(castingId)}">
-            <input type="checkbox" class="pp-inv-row-select" data-select-row aria-label="Select component" title="Tick to copy, cut, colour or describe several components at once. Shift+click ticks every row from the last ticked one to this one." ${invSelected.has(item.id) ? 'checked' : ''}>
+            <input type="checkbox" class="pp-inv-row-select" data-select-row aria-label="Select component" title="Tick to copy, cut, colour or describe several components at once. Esc unticks everything. Shift+click ticks every row from the last ticked one to this one." ${invSelected.has(item.id) ? 'checked' : ''}>
             <div class="pp-inv-row-grip" aria-hidden="true" title="Drag to reorder">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/>
@@ -9501,6 +9501,17 @@ function wireEvents() {
         if (ae && ae.matches('input, textarea, select')) ae.blur();   // leave the field first; the selection clears too
         selectedComponentIds.clear();
         renderTracking();
+    });
+    // Esc on the Castings tab unticks every Casting Inventory row (2026-11-10, PM request). The boxes are unticked in
+    // place, with no redraw, so a value being typed stays in its box and saves on its own row only.
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape' || currentTab !== 'castings' || !invSelected.size) return;
+        if (document.querySelector('.pp-modal-backdrop:not([hidden])')) return;   // a dialog owns Esc
+        invSelected.clear();
+        invLastTick = null;
+        document.querySelectorAll('.pp-inv-row.pp-inv-row-selected').forEach(r => r.classList.remove('pp-inv-row-selected'));
+        document.querySelectorAll('.pp-inv-row-select:checked').forEach(cb => { cb.checked = false; });
+        document.querySelectorAll('.pp-cast-card[data-casting-id]').forEach(card => invRefreshTitleButtons(card, card.getAttribute('data-casting-id')));
     });
     document.getElementById('pp-track-print-modal-list').addEventListener('click', (e) => {
         const btn = e.target.closest('button[data-casting-id]');
