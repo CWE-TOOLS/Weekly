@@ -9,6 +9,7 @@ import { getAllTasks, getIsEditingUnlocked } from '../../core/state.js';
 import { on, emit, EVENTS } from '../../core/event-bus.js';
 import { saveToStaging } from '../../services/sheets-service.js';
 import { parseDate } from '../../utils/date-utils.js';
+import { cardNameOf } from '../../utils/card-name.js';
 import { DEPARTMENT_ORDER } from '../../config/department-config.js';
 import { showPasswordModal } from './password-modal.js';
 
@@ -150,7 +151,11 @@ export function showProjectModal(projectName) {
     const totalHours = calculateTotalHours(projectTasks);
 
     // Update title using field module
-    titleElement.textContent = formatProjectTitle(projectName, totalHours);
+    // Named like the weekly card (portal project name, Cast N), not the raw schedule text (2026-11-10)
+    const cardName = projectTasks.length ? cardNameOf(projectTasks).full : projectName;
+    const scheduleName = String(projectName || '').replace(/\s+/g, ' ').trim();
+    titleElement.textContent = formatProjectTitle(cardName, totalHours);
+    titleElement.title = cardName !== scheduleName ? `In the schedule: ${scheduleName}` : '';
 
     // Clear grid
     gridElement.innerHTML = '';
