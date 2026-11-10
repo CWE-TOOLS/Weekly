@@ -1062,7 +1062,7 @@ body { overflow: visible; }
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 0 4px 6px 4px;
+    padding: 0 5px 6px 5px;   /* = the row's 1px border + 4px padding, so the columns line up */
     border-bottom: 1.5px solid #64748b;
     margin-bottom: 6px;
 }
@@ -1080,7 +1080,9 @@ body.pp-inv-dragging, body.pp-inv-dragging * { user-select: none !important; -we
 .pp-inv-header-fields {
     flex: 1 1 auto;
     display: grid;
-    grid-template-columns: 0.4fr 0.4fr 0.65fr 1.45fr 0.6fr 0.6fr 1.25fr 0.55fr 0.6fr 0.65fr;   /* + Description after Type (2026-11-10) */
+    /* + Description after Type (2026-11-10). minmax(0, ...) on BOTH the header and the rows: a long title can no longer
+       widen its own column, so every title sits centred over its boxes. */
+    grid-template-columns: minmax(0, 0.4fr) minmax(0, 0.4fr) minmax(0, 0.65fr) minmax(0, 1.45fr) minmax(0, 0.6fr) minmax(0, 0.6fr) minmax(0, 1.25fr) minmax(0, 0.55fr) minmax(0, 0.6fr) minmax(0, 0.65fr);
     gap: 6px;
 }
 .pp-inv-header-fields span {
@@ -1089,7 +1091,11 @@ body.pp-inv-dragging, body.pp-inv-dragging * { user-select: none !important; -we
     color: #334155;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    padding: 0 6px;
+    padding: 0;
+    min-width: 0;
+    display: flex;              /* a title wider than its column spills evenly to both sides, so it stays centred */
+    justify-content: center;
+    align-items: center;
     text-align: center;
 }
 
@@ -1131,7 +1137,9 @@ body.pp-inv-dragging, body.pp-inv-dragging * { user-select: none !important; -we
 .pp-inv-row-fields {
     flex: 1 1 auto;
     display: grid;
-    grid-template-columns: 0.4fr 0.4fr 0.65fr 1.45fr 0.6fr 0.6fr 1.25fr 0.55fr 0.6fr 0.65fr;   /* + Description after Type (2026-11-10) */
+    /* + Description after Type (2026-11-10). minmax(0, ...) on BOTH the header and the rows: a long title can no longer
+       widen its own column, so every title sits centred over its boxes. */
+    grid-template-columns: minmax(0, 0.4fr) minmax(0, 0.4fr) minmax(0, 0.65fr) minmax(0, 1.45fr) minmax(0, 0.6fr) minmax(0, 0.6fr) minmax(0, 1.25fr) minmax(0, 0.55fr) minmax(0, 0.6fr) minmax(0, 0.65fr);
     gap: 6px;
 }
 .pp-inv-remake-cell {
