@@ -13218,6 +13218,22 @@ body { font-family: 'Segoe UI', Arial, sans-serif; color: #000; background: #fff
     overflow: hidden;
     white-space: nowrap;
 }
+/* The type description in small print, in the free space right of the panel number (2026-11-10). The number keeps
+   its full size: the description only gets what is left over, and shrinks or disappears before the number would. */
+.sticker-content.has-desc .sticker-bottom { flex: 0 1 auto; padding-right: 0.07in; }
+.sticker-desc {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    font-size: 8pt;
+    font-weight: 600;
+    line-height: 1.08;
+    padding: 0.02in 0.05in 0.03in 0.07in;
+    border-left: 1px solid #ccc;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+}
 .sticker-inventory {
     display: flex;
     flex-direction: row;
@@ -13265,6 +13281,15 @@ const STICKER_PRINT_AUTOFIT_JS = `
             size -= 1;
             bottom.style.fontSize = size + 'pt';
         }
+    });
+    document.querySelectorAll('.sticker-desc').forEach(desc => {
+        let size = 8;
+        desc.style.fontSize = size + 'pt';
+        while ((desc.scrollHeight > desc.clientHeight || desc.scrollWidth > desc.clientWidth) && size > 5) {
+            size -= 0.5;
+            desc.style.fontSize = size + 'pt';
+        }
+        if (desc.clientWidth < 44) desc.style.display = 'none';   // under about half an inch left: no room for it
     });
 })();
 `;
@@ -13326,11 +13351,13 @@ function buildStickerPrintHtml(casting, components, projectName) {
     const panelStickers = [...components].reverse().map(c => {
         const panel = (c.panel_id || '').trim();
         const panelColor = resolveComponentColorName(c) || titleColor;
+        const panelDesc = componentDescription(c);   // Casting Inventory description of its type ('' = the label is as before)
         return `
             <div class="sticker">
                 <div class="sticker-top">${escapeHtml(headerText)}</div>
-                <div class="sticker-content">
+                <div class="sticker-content${panelDesc ? ' has-desc' : ''}">
                     <div class="sticker-bottom">${escapeHtml(panel)}</div>
+                    ${panelDesc ? `<div class="sticker-desc"><span>${escapeHtml(panelDesc)}</span></div>` : ''}
                 </div>
                 <div class="sticker-finish">${escapeHtml(panelColor)}</div>
             </div>
