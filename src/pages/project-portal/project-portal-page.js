@@ -488,6 +488,8 @@ const STG_DEPARTMENT_SEQUENCE_MILL = ['Mill', 'Form Out', 'Cast', 'Demold', 'Fin
 let currentStagingCastingId = null;          // active casting column in the Staging tab
 let currentStagingDescriptions = new Map();  // `${castingNumber}|${dept}|${day}` -> {description, castingSide}
 let currentStagingScaffold = new Map();      // castingNumber -> Array<{ department, days:number }>
+let currentStagingDates = new Map();         // `${castingNumber}|${dept}|${day}` -> ['YYYY-MM-DD', ...] the day(s) the schedule has that staged day on (2026-11-10)
+let currentStagingDatesOk = false;           // false = the schedule could not be read, so no date (and no "no date") is shown
 
 // ---- Releasability milestones (2026-10-15): the board's AUTO columns, driven from here ----
 let msByCasting = new Map();          // castingId -> Map(milestone -> row)
@@ -3081,12 +3083,15 @@ async function loadStagingDescriptions() {
     const pn = String(currentProjectNumber || '').trim();
 
     let scheduled = [];
+    currentStagingDatesOk = false;
     try {
         const all = await fetchAllTasks();
         scheduled = (all || []).filter(t => !t.isManual && String(t.projectNumber || '').trim() === pn);
+        currentStagingDatesOk = true;
     } catch (err) {
         logger.error('[project-portal] fetchAllTasks (staging) failed:', err);
     }
+    currentStagingDates = computeStagingDayDates(scheduled);
 
     // Per-casting day index, computed locally so Staging doesn't depend on the shared task
     // cache already carrying castingDayNumber (it won't until the cache refreshes after a
@@ -3145,6 +3150,56 @@ function computeCastingDays(tasks) {
         list.forEach((t, idx) => dayByTask.set(t, String(idx + 1)));
     }
     return dayByTask;
+}
+
+// The date under each "Day N" on the Staging tab (2026-11-10): the day the schedule has that staged day on.
+// Same pairing as the weekly cards (data-service computeCastingDayMap): the staging department a task belongs
+// to, and the Staging-tab day a Plant Scheduler task carries wins over a recount by date.
+function computeStagingDayDates(tasks) {
+    const groups = new Map();
+    for (const t of tasks) {
+        const cast = String(t.castingNumber || '').trim();
+        const dept = t.stagingDepartment || t.department;
+        if (!cast || !dept) continue;
+        const key = cast + '|' + dept;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(t);
+    }
+    const out = new Map();
+    for (const [key, list] of groups) {
+        list.sort((a, b) => {
+            const da = Date.parse(a.date) || 0;
+            const db = Date.parse(b.date) || 0;
+            if (da !== db) return da - db;
+            const ai = parseInt((a.id || '').replace('task-', ''), 10) || 0;
+            const bi = parseInt((b.id || '').replace('task-', ''), 10) || 0;
+            return ai - bi;
+        });
+        list.forEach((t, idx) => {
+            const day = String(t.stagingDayNumber || idx + 1);
+            const d = parseDate(t.date);
+            if (!d) return;
+            const k = key + '|' + day, iso = isoDay(d);
+            if (!out.has(k)) out.set(k, []);
+            if (!out.get(k).includes(iso)) out.get(k).push(iso);
+        });
+    }
+    for (const arr of out.values()) arr.sort();
+    return out;
+}
+function stgDayDateHtml(castNum, department, day) {
+    if (!currentStagingDatesOk) return '';
+    const dates = currentStagingDates.get(`${castNum}|${department}|${day}`);
+    if (!dates || !dates.length) return `<span class="pp-stg-day-date pp-stg-day-date-none" title="This day is not on the schedule yet">no date</span>`;
+    const at = (iso) => new Date(iso + 'T00:00:00');
+    const short = (iso) => at(iso).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }).replace(',', '');
+    const long = (iso) => at(iso).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    const today = isoDay(new Date());
+    const first = dates[0];
+    const cls = first === today ? ' pp-stg-day-date-today' : first < today ? ' pp-stg-day-date-past' : '';
+    const more = dates.length > 1 ? ` +${dates.length - 1}` : '';
+    const tip = `On the schedule: ${dates.map(long).join(' and ')}${first === today ? ' (today)' : first < today ? ' (already happened)' : ''}`;
+    return `<span class="pp-stg-day-date${cls}" title="${escapeAttr(tip)}">${escapeHtml(short(first) + more)}</span>`;
 }
 
 // Scaffold = the standard department sequence (each with at least Day 1) unioned with every
@@ -3292,7 +3347,7 @@ function renderStgColumn(casting) {
                 : `<span class="pp-opt-day-remove-spacer" aria-hidden="true"></span>`;
             dayRows.push(`
                 <div class="pp-opt-day-row pp-stg-day-row" data-department="${escapeAttr(department)}" data-day="${d}">
-                    <span class="pp-opt-day-label">Day ${d}</span>
+                    <span class="pp-opt-day-label pp-stg-day-label">Day ${d}${stgDayDateHtml(castNum, department, d)}</span>
                     <div class="pp-stg-day-cell">
                         ${taskSel}
                         <textarea class="pp-opt-grid-desc" data-action="grid-desc" data-casting-number="${escapeAttr(castNum)}" data-department="${escapeAttr(department)}" data-day="${d}" rows="2" placeholder="Description…">${escapeHtml(desc)}</textarea>

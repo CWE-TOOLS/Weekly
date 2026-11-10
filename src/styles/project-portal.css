@@ -6719,6 +6719,13 @@ body.pp-printing .pp-tab-panel[data-panel="batch-tickets"] { display: none !impo
 
 /* Staging: Task box per day; Optimizer Hours: staged days with hours (2026-10-22) */
 .pp-stg-day-cell { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
+/* the scheduled date under each Day label (2026-11-10) */
+.pp-stg-day-row { grid-template-columns: 72px 1fr 22px; }
+.pp-stg-day-label { display: flex; flex-direction: column; gap: 2px; white-space: normal; }
+.pp-stg-day-date { font-size: 11px; font-weight: 700; color: #0f172a; text-transform: none; letter-spacing: 0; white-space: nowrap; }
+.pp-stg-day-date-past { color: #94a3b8; font-weight: 600; }
+.pp-stg-day-date-today { color: #1d4ed8; }
+.pp-stg-day-date-none { color: #cbd5e1; font-weight: 500; font-style: italic; }
 .pp-stg-task { align-self: flex-start; font-size: 12px; font-weight: 700; padding: 3px 6px; border: 1px solid #93c5fd; border-radius: 6px; background: #eff6ff; color: #1e3a8a; text-transform: lowercase; }
 .pp-stg-task.pp-stg-task-missing { border-color: #f59e0b; background: #fffbeb; color: #92400e; }
 .pp-stg-task-fixed { font-size: 12px; font-weight: 700; color: #1e3a8a; }
