@@ -12,7 +12,11 @@
  *    (a row that deliberately differs is never overwritten without a question). Ready (final) castings are skipped
  *    and named.
  *
- * Stored as ONE row of plant_schedule_settings: key "type_master:<project number>", value { v: 1, types: [...] }.
+ * A phased job keeps one list PER PHASE (user rule 2026-11-11): the list, its counts, the dropdowns and the values
+ * that follow across castings all stay inside the phase picked at the top of the portal.
+ *
+ * Stored as ONE row of plant_schedule_settings per list: key "type_master:<project number>" — or
+ * "type_master:<project number>:<phase id>" on a phased job — value { v: 1, types: [...] }.
  * No table or column was added. Every save re-reads the row and replays this page's own edits on it, so two PMs
  * working on the list at the same time do not wipe each other's lines.
  *
@@ -33,6 +37,7 @@ const OPEN_LIMIT = 10;          // longer lists start folded, like a casting wit
 
 let ctx = null;
 let project = null;
+let storeKey = null;            // the settings row of the list on screen (job, or job + phase); null = no list here
 let types = [];                 // [{ id, type, qty, description, width, length, color_log_id, cu_ft, ff_sq_ft }]
 let loadedOk = false;
 let openState = null;           // null = follow OPEN_LIMIT; true / false once the user has clicked the header
@@ -82,33 +87,41 @@ async function client() {
     if (!c) throw new Error('no database connection');
     return c;
 }
-async function readRow(pn) {
+async function readRow(key) {
     const c = await client();
-    const { data, error } = await c.from(TABLE).select('key, value').eq('key', keyFor(pn));
+    const { data, error } = await c.from(TABLE).select('key, value').eq('key', key);
     if (error) throw error;
     return listOf(data && data[0] ? data[0].value : null);
 }
-async function writeRow(pn, list) {
+async function writeRow(key, list) {
     const c = await client();
-    const key = keyFor(pn);
     const { error } = list.length
         ? await c.from(TABLE).upsert({ key, value: { v: 1, types: list }, updated_at: new Date().toISOString() }, { onConflict: 'key' })
         : await c.from(TABLE).delete().eq('key', key);
     if (error) throw error;
 }
 
-/** Load the job's list (called with the castings). Edits of ours that are not saved yet stay on screen. */
+/** The scope right now: { suffix, label } for the whole job or one phase of a phased job; null = no phase picked. */
+const scopeNow = () => (ctx && project) ? ctx.scope() : null;
+const wantedKey = () => { const sc = scopeNow(); return sc ? keyFor(project) + sc.suffix : null; };
+const scopeWord = () => (scopeNow()?.suffix ? 'phase' : 'job');
+
+/** Load the list of the job (or of its active phase). Edits of ours that are not saved yet stay on screen. */
 export async function loadTypeMaster(pn) {
-    if ((pn || null) !== project) { pendingOps = []; openState = null; types = []; loadedOk = false; }
     project = pn || null;
-    if (!project || pendingOps.length) return;
+    const key = wantedKey();
+    if (key !== storeKey) {
+        if (pendingOps.length && storeKey) flush();          // the list being left: its edits are captured and saved now
+        pendingOps = []; openState = null; types = []; loadedOk = false; storeKey = key;
+    }
+    if (!key || pendingOps.length) return;
     try {
-        const list = await readRow(pn);
-        if (pn !== project || pendingOps.length) return;
+        const list = await readRow(key);
+        if (key !== storeKey || pendingOps.length) return;
         types = list; loadedOk = true;
     } catch (err) {
         logger.warn('[type-master] load failed:', err);
-        if (pn === project) { types = []; loadedOk = false; }
+        if (key === storeKey) { types = []; loadedOk = false; }
     }
 }
 
@@ -121,27 +134,27 @@ function mutate(op) {
 }
 async function flush() {
     clearTimeout(saveTimer); saveTimer = null;
-    if (flushing) { try { await flushing; } catch (_) { /* reported there */ } }
-    if (!pendingOps.length || !project) return;
-    const pn = project, ops = pendingOps;
+    if (!pendingOps.length || !storeKey) return;
+    const key = storeKey, ops = pendingOps, before = flushing;   // captured at once: the list may change under us (phase switch)
     pendingOps = [];
-    flushing = (async () => {
+    const p = (async () => {
+        if (before) { try { await before; } catch (_) { /* reported there */ } }
         try {
-            const fresh = await readRow(pn);
+            const fresh = await readRow(key);
             for (const op of ops) op(fresh);
             const keep = fresh.filter(e => !blank(e.type));
-            await writeRow(pn, keep);
-            if (pn === project && !pendingOps.length) {
+            await writeRow(key, keep);
+            if (key === storeKey && !pendingOps.length) {
                 const unnamed = types.filter(e => blank(e.type) && !keep.some(k => k.id === e.id));
                 types = keep.concat(unnamed);
             }
         } catch (err) {
             logger.error('[type-master] save failed:', err);
-            if (pn === project) pendingOps = ops.concat(pendingOps);
+            if (key === storeKey) pendingOps = ops.concat(pendingOps);
             ctx.toast('The type master list could not be saved: ' + (err.message || err), 'error', 6000);
         }
     })();
-    const p = flushing;
+    flushing = p;
     try { ctx.trackSave?.(p); } catch (_) { /* optional */ }
     await p;
     if (flushing === p) flushing = null;
@@ -266,14 +279,16 @@ function summaryHtml() {
 export function renderTypeMaster() {
     const wrap = document.getElementById('pp-type-master');
     if (!wrap || !ctx) return;
-    if (!project || !loadedOk) { wrap.hidden = true; wrap.innerHTML = ''; return; }
+    // Another phase (or job) than the list in memory: switch at once, draw when its list has arrived.
+    if (wantedKey() !== storeKey) loadTypeMaster(project).then(() => ctx.renderCastings());
+    if (!storeKey || !loadedOk) { wrap.hidden = true; wrap.innerHTML = ''; return; }
     wrap.hidden = false;
     if (wrap.contains(document.activeElement) && document.activeElement.matches('[data-tm-field]')) { refreshTypeMasterStatus(); return; }
     const isOpen = openState ?? (types.length <= OPEN_LIMIT);
     const stray = typesNotListed();
     const body = !isOpen ? '' : `
         <div class="pp-tm-body">
-            ${types.length ? '' : `<p class="pp-tm-hint">Enter every type of this job with the total quantity the job needs. <b>Type</b> and <b>Qty</b> are enough: the other boxes can be filled in later, here or in a casting. Once a type is on the list, the castings pick their types from it and a type can no longer go past its total by accident.</p>`}
+            ${types.length ? '' : `<p class="pp-tm-hint">Enter every type of this ${scopeWord()} with the total quantity the ${scopeWord()} needs. <b>Type</b> and <b>Qty</b> are enough: the other boxes can be filled in later, here or in a casting. Once a type is on the list, the castings pick their types from it and a type can no longer go past its total by accident.</p>`}
             ${types.length ? `<div class="pp-tm-row pp-tm-headrow"><span>Type</span><span>Qty</span><span>Description</span><span>Width</span><span>Length</span><span>Color</span><span>Cu Ft</span><span>FF Sq Ft</span><span>In the castings</span><span></span></div>` : ''}
             ${types.map(rowHtml).join('')}
             <div class="pp-tm-actions">
@@ -286,7 +301,7 @@ export function renderTypeMaster() {
         <div class="pp-tm-card${isOpen ? ' pp-tm-open' : ''}">
             <button type="button" class="pp-tm-head" data-tm="toggle" aria-expanded="${isOpen}">
                 <span class="pp-cast-sum-chev" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
-                <span class="pp-tm-title">Type master list</span>
+                <span class="pp-tm-title">Type master list${scopeNow()?.label ? ` \u00b7 ${esc(scopeNow().label)}` : ''}</span>
                 <span class="pp-tm-headsum" data-tm-sum>${summaryHtml()}</span>
             </button>${body}
         </div>`;
@@ -420,7 +435,8 @@ async function commitTypeName(e, el) {
         const final = casts.filter(c => ctx.isFinal(c.id));
         if (final.length) { el.value = before; ctx.toast(`${before} cannot be renamed: the inventory of Cast ${final.map(c => c.casting_number).join(', ')} is ready (final). Press "Make changes" there first.`, 'error', 8000); return; }
         if (!window.confirm(`Rename ${before} to ${val} on ${plural(rows.length, 'row')} in ${plural(casts.length, 'casting')}?\n\nPanel numbers on the Tracking tab follow the new name.`)) { el.value = before; return; }
-        if (ctx.editBlocked(casts[0], sim => { for (const list of sim.inv.values()) for (const r of list) if (norm(r.type) === norm(before)) r.type = val; })) { el.value = before; return; }
+        const mine = new Set(ctx.castings().map(c => c.id));     // a phased job: only this phase's castings are renamed
+        if (ctx.editBlocked(casts[0], sim => { for (const [cid, list] of sim.inv) if (mine.has(cid)) for (const r of list) if (norm(r.type) === norm(before)) r.type = val; })) { el.value = before; return; }
         let failed = 0;
         for (const { row } of rows) {
             try { const updated = await ctx.updateItem(row.id, { type: val }); row.type = val; if (updated) Object.assign(row, updated); }
@@ -533,7 +549,7 @@ async function askNewType() {
         title: 'Create a type',
         bodyHtml: `<p>The type goes on the master list and can then be picked in every casting.</p>
             <label class="pp-tm-dialog-row"><span>Type</span><input type="text" id="pp-tm-new-type" maxlength="40" autocomplete="off"></label>
-            <label class="pp-tm-dialog-row"><span>Total quantity for the job</span><input type="number" id="pp-tm-new-qty" min="0" step="1"></label>
+            <label class="pp-tm-dialog-row"><span>Total quantity for the ${scopeWord()}</span><input type="number" id="pp-tm-new-qty" min="0" step="1"></label>
             <p class="pp-tm-dialog-note" id="pp-tm-new-note"></p>`,
         buttons: [
             { label: 'Cancel', value: null },
@@ -570,7 +586,7 @@ export async function typeMasterOverCheck(item, next) {
     const room = Math.max(0, e.qty - others.placed), over = nextQ - room;
     const mine = ctx.castings().find(c => ctx.inventoryOf(c.id).some(r => r.id === item.id));
     const answer = await dialog({
-        title: room ? `More ${esc(e.type)} than the job needs` : `${esc(e.type)} is already at its total`,
+        title: room ? `More ${esc(e.type)} than the ${scopeWord()} needs` : `${esc(e.type)} is already at its total`,
         bodyHtml: `<p>The master list asks for <b>${e.qty}</b> × <b>${esc(e.type)}</b>.</p>
             <p>The other rows already hold <b>${others.placed}</b>${others.by.length ? ` <span class="pp-tm-dialog-dim">(${esc(byText(others.by))})</span>` : ''}.</p>
             <p>This row${mine ? ` in Cast ${esc(mine.casting_number || '?')}` : ''} asks for <b>${nextQ}</b>, which makes <b>${total}</b>: <b class="pp-tm-dialog-over">${over} over</b>.</p>
@@ -654,7 +670,7 @@ async function commitTypePick(sel) {
 // ---------------------------------------------------------------- wiring
 
 /**
- * @param {Object} c page hooks: castings(), inventoryOf(id), colorLogs(), colorSelectHtml(id, opts), isFinal(castingId),
+ * @param {Object} c page hooks: castings() (those of the active phase on a phased job), scope(), inventoryOf(id), colorLogs(), colorSelectHtml(id, opts), isFinal(castingId),
  *   updateItem(rowId, fields), editBlocked(casting, mutate), afterChange(castingId), syncTracking(), renderCastings(),
  *   saveRow(rowId, castingId), recordEdit(el), toast(msg, kind, ms), escapeHtml(s), trackSave(promise)
  */

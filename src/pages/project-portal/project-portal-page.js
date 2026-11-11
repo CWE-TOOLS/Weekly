@@ -147,7 +147,7 @@ import {
 } from '../../services/casting-layout-service.js';
 import { registerRefreshHandler, isPortalChange, isOwnSignal, signalInfo } from '../../services/supabase-service.js';
 // Type master list (2026-11-11): the job's types + totals above the castings; casting rows pick their type from it.
-import { initTypeMaster, loadTypeMaster, renderTypeMaster, refreshTypeMasterStatus, typeMasterActive, typeCellHtml, typeMasterOverCheck, TM_NEW } from './type-master.js?v=20261111-4';
+import { initTypeMaster, loadTypeMaster, renderTypeMaster, refreshTypeMasterStatus, typeMasterActive, typeCellHtml, typeMasterOverCheck, TM_NEW } from './type-master.js?v=20261111-5';
 import '../../utils/number-wheel-guard.js';   // the mouse wheel must not change a focused hour box (user 2026-11-03)
 
 const STATUS_SORT_ORDER = {
@@ -10772,7 +10772,11 @@ function wireEvents() {
     document.getElementById('pp-castings-summary')?.addEventListener('click', handleCastingsSummaryToggle);
     // Type master list (2026-11-11): its own card + the type dropdown and cross-casting values of the rows below.
     initTypeMaster({
-        castings: () => currentCastings, inventoryOf: getInventoryFor, colorLogs: () => currentColorLogs, colorSelectHtml: buildColorLogSelectHtml,
+        // A phased job keeps one list per phase: the module only ever sees the active phase's castings.
+        castings: getCastingsForActivePhase,
+        scope: () => !currentPhasesEnabled ? { suffix: '', label: '' }
+            : (currentPhaseId ? { suffix: ':' + currentPhaseId, label: currentPhases.find(ph => ph.id === currentPhaseId)?.phase_name || '' } : null),
+        inventoryOf: getInventoryFor, colorLogs: () => currentColorLogs, colorSelectHtml: buildColorLogSelectHtml,
         isFinal: ciLockedById, updateItem: updateInventoryItem, editBlocked: inventoryEditBlocked,
         afterChange: (castingId) => { msInventoryChanged(castingId); updateCastingInventoryCount(castingId); },
         syncTracking: syncTrackingFromInventory, renderCastings,
