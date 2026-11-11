@@ -2414,7 +2414,7 @@ async function handleAddInventoryItem(castingId) {
         renderCastings();
         // Focus the type input on the newest row
         const card = document.querySelector(`.pp-cast-card[data-casting-id="${castingId}"]`);
-        const last = card?.querySelector('.pp-inv-row:last-of-type input[data-field="type"]');
+        const last = card?.querySelector('.pp-inv-row:last-of-type [data-field="type"]');   // text box, or the type dropdown of a job with a master list
         last?.focus();
         ciEntered(castingId);
         syncTrackingFromInventory();
