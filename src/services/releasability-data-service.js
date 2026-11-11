@@ -561,6 +561,25 @@ export async function loadProjectsFromSheets(forceRefresh = false) {
 }
 
 /**
+ * Samples need no release steps (2026-11-11, user rule): a schedule entry whose casting designation is "CS"
+ * (CS, cs, CS1, CS-2 ...) shows every board column checked off green by itself.
+ * The NAME is deliberately not looked at: the word "sample" also sits in real jobs that must still be tracked
+ * ("JANE ST - TILE SAMPLES - MOCK UP"), so the user kept the rule to the casting designation only.
+ * @param {string|null} castingNumber - the casting designation from the schedule
+ * @returns {boolean}
+ */
+export function isSampleCasting(castingNumber) {
+  return /^cs\s*[-#.]?\s*\d*[a-z]?$/i.test(String(castingNumber || '').trim());
+}
+
+/** Every board column complete: what a sample row shows. Nothing is written to the database for it. */
+function allCompleteTrackingStatus() {
+  const done = {};
+  Object.keys(DEFAULT_TRACKING_STATUS).forEach(item => { done[item] = STATUS.COMPLETE; });
+  return done;
+}
+
+/**
  * Get the most common department from a list of tasks
  * @param {Array<Object>} tasks - Array of task objects
  * @returns {string|null} Most common department name or null
@@ -1121,11 +1140,15 @@ export async function loadAllReleasabilityData(forceRefresh = false) {
       // Authoritative name from the portal (looked up by project#), falling back
       // to the Sheet name when there's no project# or no portal match.
       const portalName = portalNameByNumber.get(normalizeNumberField(project.projectNumber));
+      // A sample from the schedule is shown fully checked off (see isSampleCasting). Display only: its saved row,
+      // if it has one, is left as it is, so changing the CS designation in the schedule brings the old cells back.
+      const sample = isSampleCasting(project.castingNumber);
 
       return {
         id,
         project: project.project,
         displayName: portalName || project.project,
+        autoComplete: sample ? 'sample' : null,
         projectNumber: project.projectNumber || null,
         castingNumber: project.castingNumber || null,
         castingId: resolvePortalCastingId(phaseData, project.projectNumber, project.castingNumber, phaseId),
@@ -1141,7 +1164,7 @@ export async function loadAllReleasabilityData(forceRefresh = false) {
         // casting arrived — honoring it would pin scheduled work to that
         // manual week, so drop it.
         manualWeekId: null,
-        trackingStatus: saved ? saved.trackingStatus : { ...DEFAULT_TRACKING_STATUS },
+        trackingStatus: sample ? allCompleteTrackingStatus() : (saved ? saved.trackingStatus : { ...DEFAULT_TRACKING_STATUS }),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };

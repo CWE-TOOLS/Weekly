@@ -479,6 +479,15 @@ function createProjectNameCell(project) {
     : `${displayName}\n(sheet: ${project.project})`;
   cell.appendChild(nameSpan);
 
+  // Samples are checked off by themselves: say so next to the name, so an all-green row explains itself.
+  if (project.autoComplete === 'sample') {
+    const sampleTag = document.createElement('span');
+    sampleTag.className = 'sample-auto-tag';
+    sampleTag.textContent = 'SAMPLE';
+    sampleTag.title = 'A sample from the schedule (casting designation "CS"): every column is checked off automatically.';
+    cell.appendChild(sampleTag);
+  }
+
   // Cast # to the RIGHT of the title: a small "Cast" label + the colored tag.
   if (project.castingNumber) {
     const castWrap = document.createElement('span');
@@ -607,6 +616,23 @@ function createProjectControls(project) {
  * @returns {HTMLElement} Status cell element
  */
 function createStatusCell(project, trackingItem) {
+  // A sample from the schedule (casting designation "CS") needs no release steps: every column is
+  // green by itself and nothing is clickable (2026-11-11). The portal records are not read for it.
+  if (project.autoComplete === 'sample') {
+    const done = STATUS_DISPLAY[STATUS.COMPLETE];
+    const sampleCell = document.createElement('div');
+    sampleCell.className = 'status-cell status-complete status-auto status-sample';
+    sampleCell.dataset.projectId = project.id;
+    sampleCell.dataset.trackingItem = trackingItem;
+    sampleCell.dataset.status = STATUS.COMPLETE;
+    sampleCell.dataset.auto = '1';
+    sampleCell.title = `${project.project} - ${TRACKING_ITEM_LABELS[trackingItem] || trackingItem}: ${done.label}\nSAMPLE (casting CS): checked off automatically. Samples need no release steps.`;
+    const sampleIcon = document.createElement('span');
+    sampleIcon.className = 'status-icon';
+    sampleIcon.textContent = done.icon;
+    sampleCell.appendChild(sampleIcon);
+    return sampleCell;
+  }
   // AUTO columns on new-rules projects come from the portal's casting_milestones rows, never from clicks.
   // "Touched follows the new format": a cell with a portal record is the portal's; without one it is the
   // old hand-set cell (same colour as before the release, clicked the old way). A P. MANUAL cell is always

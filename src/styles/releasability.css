@@ -1107,6 +1107,20 @@ html {
   gap: 0.25rem;
 }
 
+/* Sample rows are checked off by themselves (2026-11-11): a small tag by the name says why the row is all green */
+.sample-auto-tag {
+  flex: 0 0 auto;
+  padding: 0.08rem 0.45rem;
+  border-radius: 9999px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  background: #E8F5E9;
+  color: #1B5E20;
+  border: 1px solid #81C784;
+}
+
 .cast-number-label {
   font-size: 0.7rem;
   font-weight: 600;
