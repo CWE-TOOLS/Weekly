@@ -798,6 +798,18 @@ body { overflow: visible; }
     color: #0f172a;
     font-variant-numeric: tabular-nums;
 }
+/* Inventory card: each type also says how many of its total are extras (2026-11-11), so its chips are wider */
+.pp-cast-sum-grid.pp-cast-sum-has-extras { grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); }
+.pp-cast-sum-grid.pp-cast-sum-has-extras .pp-cast-sum-item { justify-content: flex-start; }
+.pp-cast-sum-grid.pp-cast-sum-has-extras .pp-cast-sum-type { flex: 1 1 auto; }
+.pp-cast-sum-x {
+    flex: 0 0 auto;
+    font-size: 10.5px;
+    font-weight: 600;
+    color: #1d4ed8;
+    white-space: nowrap;
+}
+.pp-cast-sum-extras { font-weight: 600; color: #1d4ed8; }
 .pp-cast-sum-rej-has {
     background: #fef2f2;
     border-color: #fecaca;

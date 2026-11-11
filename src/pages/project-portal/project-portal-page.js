@@ -1339,13 +1339,18 @@ function updateCastingsSummary() {
     }
     // Panels entered in inventory, grouped by component type.
     const totalByType = new Map();
+    const extrasByType = new Map();   // how many of each type's total are extras (2026-11-11)
     let totalPanels = 0;
+    let totalExtras = 0;
     for (const c of currentCastings) {
         for (const it of getInventoryFor(c.id)) {
-            const qty = (parseInt(it.quantity, 10) || 0) + (parseInt(it.extras, 10) || 0);
+            const extras = parseInt(it.extras, 10) || 0;
+            const qty = (parseInt(it.quantity, 10) || 0) + extras;
             const key = (it.type || '').trim() || '(untyped)';
             totalByType.set(key, (totalByType.get(key) || 0) + qty);
+            extrasByType.set(key, (extrasByType.get(key) || 0) + extras);
             totalPanels += qty;
+            totalExtras += extras;
         }
     }
     // Panels flagged Rejected on Tracking, grouped by component type.
@@ -1359,21 +1364,32 @@ function updateCastingsSummary() {
             totalRejected++;
         }
     }
-    const gridByType = (m) => [...m.entries()]
+    // `extras` (the inventory card only): each type also says how many of its total are extras.
+    const gridByType = (m, extras = null) => [...m.entries()]
         .sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }))
-        .map(([type, n]) => `
-            <span class="pp-cast-sum-item">
+        .map(([type, n]) => {
+            const x = extras ? (extras.get(type) || 0) : 0;
+            const tip = extras ? ` title="${escapeAttr(x ? `${type}: ${n - x} + ${x} extra${x === 1 ? '' : 's'} = ${n}` : `${type}: ${n}, no extras`)}"` : '';
+            return `
+            <span class="pp-cast-sum-item"${tip}>
                 <span class="pp-cast-sum-type">${escapeHtml(type)}</span>
-                <span class="pp-cast-sum-n">${n}</span>
-            </span>`)
+                <span class="pp-cast-sum-n">${n}</span>${x ? `
+                <span class="pp-cast-sum-x">incl. ${x} extra${x === 1 ? '' : 's'}</span>` : ''}
+            </span>`;
+        })
         .join('');
     const totalEl = document.getElementById('pp-cast-sum-total');
     const rejEl = document.getElementById('pp-cast-sum-rejected');
     const totalListEl = document.getElementById('pp-cast-sum-total-list');
     const rejListEl = document.getElementById('pp-cast-sum-rejected-list');
     if (totalEl) totalEl.textContent = String(totalPanels);
+    const extrasEl = document.getElementById('pp-cast-sum-extras');
+    if (extrasEl) extrasEl.textContent = totalExtras ? ` \u00b7 incl. ${totalExtras} extra${totalExtras === 1 ? '' : 's'}` : '';
     if (rejEl) rejEl.textContent = String(totalRejected);
-    if (totalListEl) totalListEl.innerHTML = totalByType.size ? gridByType(totalByType) : '';
+    if (totalListEl) {
+        totalListEl.innerHTML = totalByType.size ? gridByType(totalByType, extrasByType) : '';
+        totalListEl.classList.toggle('pp-cast-sum-has-extras', totalExtras > 0);   // wider chips only when a type has extras
+    }
     if (rejListEl) rejListEl.innerHTML = totalRejected ? gridByType(rejectedByType) : '';
     wrap.querySelector('.pp-cast-sum-rej')?.classList.toggle('pp-cast-sum-rej-has', totalRejected > 0);
     // Collapse/expand state. A card with nothing to list keeps its chevron hidden.

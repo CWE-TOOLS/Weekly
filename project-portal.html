@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="src/styles/variables.css">
     <link rel="stylesheet" href="src/styles/base.css">
     <link rel="stylesheet" href="src/styles/buttons.css">
-    <link rel="stylesheet" href="src/styles/project-portal.css?v=20261110-5">
+    <link rel="stylesheet" href="src/styles/project-portal.css?v=20261111-3">
 
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 </head>
@@ -434,12 +434,12 @@
                             </div>
 
                             <div id="pp-castings-summary" class="pp-castings-summary" hidden>
-                                <div class="pp-cast-sum-card" title="Panels entered in inventory across all castings (quantity + extras), by component type">
+                                <div class="pp-cast-sum-card" title="Panels entered in inventory across all castings (quantity + extras), by component type, with how many of them are extras">
                                     <button type="button" class="pp-cast-sum-head" data-sum-toggle="total" aria-expanded="false">
                                         <span class="pp-cast-sum-chev" aria-hidden="true">
                                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
                                         </span>
-                                        <span class="pp-cast-sum-label"><b id="pp-cast-sum-total">0</b> panels in inventory</span>
+                                        <span class="pp-cast-sum-label"><b id="pp-cast-sum-total">0</b> panels in inventory<span class="pp-cast-sum-extras" id="pp-cast-sum-extras"></span></span>
                                     </button>
                                     <div class="pp-cast-sum-grid" id="pp-cast-sum-total-list" hidden></div>
                                 </div>
@@ -1285,7 +1285,7 @@
         <div id="pp-toast" class="pp-toast" hidden></div>
     </div>
 
-    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20261110-4"></script>
+    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20261111-3"></script>
     <script type="module" src="src/utils/auto-update.js?v=20261023-1"></script>
 </body>
 </html>
