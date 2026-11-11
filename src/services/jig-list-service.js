@@ -199,12 +199,54 @@ function layersForType(type, data, perThickness) {
     return sec ? sec.layers : null;
 }
 
+/** Inches as sixteenths, the way the Jig List tab reads a size (44, 44-1/8, 44 1/8, 44.125); null when unreadable. */
+function inches16(s) {
+    if (s == null) return null;
+    s = String(s).trim().replace(/["″]/g, '').replace(/\s+/g, ' ');
+    if (!s) return null;
+    let m = s.match(/^(\d+)[\s-](\d+)\/(\d+)$/);
+    if (m) return (+m[1]) * 16 + Math.round((+m[2]) * 16 / (+m[3]));
+    m = s.match(/^(\d+)\/(\d+)$/);
+    if (m) return Math.round((+m[1]) * 16 / (+m[2]));
+    m = s.match(/^\d*\.?\d+$/);
+    if (m) return Math.round(parseFloat(s) * 16);
+    return null;
+}
+
+/** The Jig List import's key for an inventory row (type + its two sizes): the same key as collapseInventory() in
+ *  jig-list.js, which stores the per-part picks under it (data.inv.choices). Change both together. */
+export function inventoryPartKey(row) {
+    const type = String((row && row.type) || '').trim();
+    const dims = [inches16(row && row.width), inches16(row && row.length)].filter(v => v != null && v > 0).sort((a, b) => a - b);
+    return type.toLowerCase() + '|' + (dims.length ? dims.join('x') : String((row && row.width) || '') + 'x' + String((row && row.length) || ''));
+}
+
+/** Parts picked "No jig/scrim" in the Jig List import (2026-11-11): no jig AND no scrim. Returns the set of part keys. */
+export function noScrimKeysFromJigData(data) {
+    const choices = data && data.inv && data.inv.choices && typeof data.inv.choices === 'object' ? data.inv.choices : {};
+    return new Set(Object.keys(choices).filter(k => choices[k] && choices[k].mode === 'skip'));
+}
+
 /** Scrim figures for a casting's inventory rows (quantity, extras, ff_sq_ft, type): { text, detail, warn }.
  *  text = the short line (linear feet of roll); detail = the full arithmetic for a hover; warn = something to check.
- *  One layer count for the whole casting when its thicknesses agree; per type via the jig-list panels when they differ. */
+ *  One layer count for the whole casting when its thicknesses agree; per type via the jig-list panels when they differ.
+ *  Parts on "No jig/scrim" in the Jig List import get no scrim: they are left out and named after the figure. */
 export function scrimForInventory(rows, data) {
-    const list = Array.isArray(rows) ? rows : [];
-    if (!list.length) return { text: '', detail: '', warn: false };
+    const all = Array.isArray(rows) ? rows : [];
+    if (!all.length) return { text: '', detail: '', warn: false };
+    const skipKeys = noScrimKeysFromJigData(data);
+    const list = skipKeys.size ? all.filter(r => !skipKeys.has(inventoryPartKey(r))) : all;
+    const skipped = [...new Set(all.filter(r => !list.includes(r)).map(r => String(r.type || '').trim() || '(no type)'))];
+    if (!skipped.length) return scrimForCounted(all, data);
+    if (!list.length) return { text: 'Scrim: none (every part is on No jig/scrim in the Jig List import).', detail: `No jig/scrim: ${skipped.join(', ')}\n${SCRIM_RULE}`, warn: false };
+    const res = scrimForCounted(list, data);
+    if (!scrimLayersFromJigData(data)) return res;   // "layers not set" stays a plain message
+    const names = skipped.length <= 10 ? skipped.join(', ') : `${skipped.length} types`;
+    return { text: `${res.text} — no scrim on ${names} (No jig/scrim)`, detail: `Not counted, No jig/scrim in the Jig List import: ${skipped.join(', ')}\n${res.detail}`, warn: res.warn };
+}
+
+/** The scrim figures for the rows that do get scrim. */
+function scrimForCounted(list, data) {
     const has = (v) => v !== null && v !== undefined && v !== '';
     const units = (r) => (parseInt(r.quantity, 10) || 0) + (parseInt(r.extras, 10) || 0);
     const partial = !list.every(r => has(r.ff_sq_ft));

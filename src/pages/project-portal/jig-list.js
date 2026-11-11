@@ -30,8 +30,11 @@
  *   - "Import from Casting Inventory" (portal-only): fills the Panels table
  *     from the active casting's inventory. Each distinct part (type + size)
  *     gets a choice — jig across the short side (default), the long side, a
- *     custom table-saw jig, a custom CNC jig, or "No jig" (left out of the
- *     list on purpose; 2026-11-06). Chosen widths within the
+ *     custom table-saw jig, a custom CNC jig, or "No jig/scrim" (left out of the
+ *     list on purpose, 2026-11-06; since 2026-11-11 it also means NO SCRIM:
+ *     scrimForInventory in jig-list-service.js leaves the part out of the
+ *     batching scrim line - the part key built in collapseInventory() must stay
+ *     the same as inventoryPartKey() there). Chosen widths within the
  *     share tolerance (default 1″) become ONE row: W = the narrowest width,
  *     Wmax = the widest (handle is sized from Wmax), label = every part it
  *     fits. Choices live in S.inv.choices keyed by type|size, so they survive
@@ -1490,6 +1493,7 @@ function collapseInventory(rows){
   for (const r of rows || []){
     const type = String(r.type || '').trim();
     const dims = [parseInches(r.width), parseInches(r.length)].filter(v => v != null && v > 0).sort((a,b) => a - b);
+    // Same key as inventoryPartKey() in jig-list-service.js (the batching scrim line reads the "No jig/scrim" picks by it): change both together.
     const key = type.toLowerCase() + '|' + (dims.length ? dims.join('x') : String(r.width || '') + 'x' + String(r.length || ''));
     let p = map.get(key);
     if (!p){
@@ -1570,7 +1574,7 @@ async function openImportModal(){
   impParts = [];
   document.getElementById('jig-imp-hint').innerHTML =
     `Casting <b>${esc((c && c.casting_number) || '')}</b> — pick which side each part’s jig runs across. `
-    + `The <b>short side</b> is pre-selected; your picks are remembered for the next import. <b>No jig</b> leaves a part out of the list on purpose. `
+    + `The <b>short side</b> is pre-selected; your picks are remembered for the next import. <b>No jig/scrim</b> leaves a part out of the list on purpose: no jig, and <b>no scrim</b> for it on the batching totals. `
     + (multiSec() ? `This casting has <b>${S.sections.length} thicknesses</b> — set each part’s thickness too; parts only share a jig within one thickness. ` : '')
     + `Rows made by an earlier import are rebuilt (their Qty is kept); rows you added by hand are not touched.`;
   document.getElementById('jig-imp-opts').innerHTML = '';
@@ -1623,7 +1627,7 @@ function renderImportModal(){
             ${square ? '' : seg('long', `${fmt16(p.long16)}″ long side`, false)}
             ${seg('saw', 'Custom width', false)}
             ${seg('cnc', 'Custom CNC', false)}
-            ${seg('skip', 'No jig', false)}
+            ${seg('skip', 'No jig/scrim', false)}
             ${c.mode === 'saw' ? `<input data-imp-saw value="${esc(c.W || '')}" placeholder="width — required">
               <span class="jig-imp-note" data-imp-note></span>` : ''}
           </div></td></tr>`;
@@ -1645,14 +1649,14 @@ function renderImportPreview(){
   plan.custom.forEach(k => lines.push(
     `<li class="cus">${multiSec() ? `<span class="q">${esc(secTag({ sec: k.sec }))} ·</span> ` : ''}<b>Custom CNC</b> (reminder only — not drawn, not on the cut maps) — ${esc(k.p.label)}</li>`));
   if (plan.skipped.length) lines.push(
-    `<li class="skip"><b>No jig</b> (left out on purpose — no row, not on the cut maps) — ${plan.skipped.map(p => esc(p.label)).join(', ')}</li>`);
+    `<li class="skip"><b>No jig/scrim</b> (left out on purpose — no jig row, not on the cut maps, <b>no scrim</b> on the batching totals) — ${plan.skipped.map(p => esc(p.label)).join(', ')}</li>`);
   let bad = '';
   if (plan.missing.length) bad += `<div class="jig-imp-err">Enter a custom width for: ${plan.missing.map(p => esc(p.label)).join(', ')}</div>`;
-  if (plan.unreadable.length) bad += `<div class="jig-imp-err">These parts don’t have both sizes in the Casting Inventory, so the jig side can’t be picked for you — choose an option for each, or No jig (or fill in the inventory and import again): ${plan.unreadable.map(p => esc(p.label)).join(', ')}</div>`;
+  if (plan.unreadable.length) bad += `<div class="jig-imp-err">These parts don’t have both sizes in the Casting Inventory, so the jig side can’t be picked for you — choose an option for each, or No jig/scrim (or fill in the inventory and import again): ${plan.unreadable.map(p => esc(p.label)).join(', ')}</div>`;
   const n = plan.groups.length + plan.custom.length;
   document.getElementById('jig-imp-preview').innerHTML =
     `<h3>Jig rows this will create <span>(${n}) — each one is cut once per foot depth</span></h3><ul>${lines.join('')}</ul>${bad}`;
-  // Everything on "No jig" is a valid import too: it clears the earlier imported rows.
+  // Everything on "No jig/scrim" is a valid import too: it clears the earlier imported rows.
   document.getElementById('jig-imp-confirm').disabled = (!n && !plan.skipped.length) || plan.missing.length > 0 || plan.unreadable.length > 0;
 }
 
