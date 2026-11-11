@@ -1338,14 +1338,16 @@ function updateCastingsSummary() {
         return;
     }
     // Panels entered in inventory, grouped by component type.
+    // The count per type is the REGULAR quantity; extras are kept apart and shown beside it, never added in
+    // (PMs need the regular count at a glance; 2026-11-11 later).
     const totalByType = new Map();
-    const extrasByType = new Map();   // how many of each type's total are extras (2026-11-11)
+    const extrasByType = new Map();   // extras of each type, shown as "+ N extras"
     let totalPanels = 0;
     let totalExtras = 0;
     for (const c of currentCastings) {
         for (const it of getInventoryFor(c.id)) {
             const extras = parseInt(it.extras, 10) || 0;
-            const qty = (parseInt(it.quantity, 10) || 0) + extras;
+            const qty = parseInt(it.quantity, 10) || 0;
             const key = (it.type || '').trim() || '(untyped)';
             totalByType.set(key, (totalByType.get(key) || 0) + qty);
             extrasByType.set(key, (extrasByType.get(key) || 0) + extras);
@@ -1364,17 +1366,17 @@ function updateCastingsSummary() {
             totalRejected++;
         }
     }
-    // `extras` (the inventory card only): each type also says how many of its total are extras.
+    // `extras` (the inventory card only): each type also shows its extras as a separate "+ N extras".
     const gridByType = (m, extras = null) => [...m.entries()]
         .sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }))
         .map(([type, n]) => {
             const x = extras ? (extras.get(type) || 0) : 0;
-            const tip = extras ? ` title="${escapeAttr(x ? `${type}: ${n - x} + ${x} extra${x === 1 ? '' : 's'} = ${n}` : `${type}: ${n}, no extras`)}"` : '';
+            const tip = extras ? ` title="${escapeAttr(x ? `${type}: ${n} + ${x} extra${x === 1 ? '' : 's'} = ${n + x} to cast` : `${type}: ${n}, no extras`)}"` : '';
             return `
             <span class="pp-cast-sum-item"${tip}>
                 <span class="pp-cast-sum-type">${escapeHtml(type)}</span>
                 <span class="pp-cast-sum-n">${n}</span>${x ? `
-                <span class="pp-cast-sum-x">incl. ${x} extra${x === 1 ? '' : 's'}</span>` : ''}
+                <span class="pp-cast-sum-x">+ ${x} extra${x === 1 ? '' : 's'}</span>` : ''}
             </span>`;
         })
         .join('');
@@ -1384,7 +1386,7 @@ function updateCastingsSummary() {
     const rejListEl = document.getElementById('pp-cast-sum-rejected-list');
     if (totalEl) totalEl.textContent = String(totalPanels);
     const extrasEl = document.getElementById('pp-cast-sum-extras');
-    if (extrasEl) extrasEl.textContent = totalExtras ? ` \u00b7 incl. ${totalExtras} extra${totalExtras === 1 ? '' : 's'}` : '';
+    if (extrasEl) extrasEl.textContent = totalExtras ? ` + ${totalExtras} extra${totalExtras === 1 ? '' : 's'}` : '';
     if (rejEl) rejEl.textContent = String(totalRejected);
     if (totalListEl) {
         totalListEl.innerHTML = totalByType.size ? gridByType(totalByType, extrasByType) : '';

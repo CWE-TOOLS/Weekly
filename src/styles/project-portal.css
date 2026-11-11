@@ -804,12 +804,12 @@ body { overflow: visible; }
 .pp-cast-sum-grid.pp-cast-sum-has-extras .pp-cast-sum-type { flex: 1 1 auto; }
 .pp-cast-sum-x {
     flex: 0 0 auto;
-    font-size: 10.5px;
+    font-size: 12px;
     font-weight: 600;
-    color: #1d4ed8;
+    color: #b45309;
     white-space: nowrap;
 }
-.pp-cast-sum-extras { font-weight: 600; color: #1d4ed8; }
+.pp-cast-sum-extras { font-weight: 600; color: #b45309; }
 .pp-cast-sum-rej-has {
     background: #fef2f2;
     border-color: #fecaca;
