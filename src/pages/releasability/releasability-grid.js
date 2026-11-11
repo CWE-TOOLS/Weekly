@@ -194,6 +194,22 @@ function createWeekSection(week, projects) {
   // Week header (spans all columns)
   const weekHeader = createWeekHeader(week);
 
+  // The chase (2026-11-11): the goal is to be released 4 weeks ahead of the current week, so the four weeks after
+  // this one stand out (dark header band + tinted project and date cells). Typed weeks have no date and never do.
+  const ahead = isManualWeek ? null : weeksAheadOfNow(week);
+  const isTarget = ahead !== null && ahead >= 1 && ahead <= WEEKS_AHEAD_TARGET;
+  if (isTarget || ahead === 0) {
+    const pill = document.createElement('span');
+    pill.className = 'week-ahead-pill';
+    pill.textContent = ahead === 0 ? 'THIS WEEK' : `${WEEKS_AHEAD_TARGET} WEEKS AHEAD \u00b7 ${ahead} of ${WEEKS_AHEAD_TARGET}`;
+    pill.title = ahead === 0
+      ? `The current week. The goal is to have the next ${WEEKS_AHEAD_TARGET} weeks released.`
+      : `The goal: every job in the ${WEEKS_AHEAD_TARGET} weeks after the current week is released. This is week ${ahead} of ${WEEKS_AHEAD_TARGET}.`;
+    weekHeader.classList.add(ahead === 0 ? 'week-current' : 'week-ahead');
+    const label = weekHeader.querySelector('.week-header-label');
+    if (label) label.after(pill); else weekHeader.appendChild(pill);
+  }
+
   // Add collapsed class to header if needed
   if (collapsed) {
     weekHeader.classList.add('collapsed');
@@ -216,12 +232,32 @@ function createWeekSection(week, projects) {
       if (collapsed) {
         cell.classList.add('week-collapsed');
       }
+      if (isTarget && (cell.classList.contains('project-name-cell') || cell.classList.contains('start-date-cell'))) {
+        cell.classList.add('week-ahead-cell');
+      }
 
       elements.push(cell);
     });
   });
 
   return elements;
+}
+
+/** How many weeks ahead the board chases (the four weeks after the current one). */
+const WEEKS_AHEAD_TARGET = 4;
+
+/**
+ * Whole weeks between the current week and a week on the board: 0 = this week, 1 = next week, -1 = last week.
+ * @param {string} weekMonday - Monday date in YYYY-MM-DD format
+ * @returns {number|null} null when the text is not a date
+ */
+function weeksAheadOfNow(weekMonday) {
+  const monday = parseLocalDate(weekMonday);
+  if (!monday || isNaN(monday.getTime())) return null;
+  const thisMonday = getMonday(new Date());
+  thisMonday.setHours(0, 0, 0, 0);
+  monday.setHours(0, 0, 0, 0);
+  return Math.round((monday - thisMonday) / (7 * 24 * 60 * 60 * 1000));   // rounded: a clock change moves it by an hour
 }
 
 /**

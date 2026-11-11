@@ -872,6 +872,41 @@ html {
   flex: 0 0 auto;
 }
 
+/* The chase (2026-11-11): the four weeks after the current week stand out. Navy on purpose: red, orange, green and
+   grey are status colours on this board and must keep their meaning. Nothing here changes a column width. */
+.week-header-cell.week-ahead {
+  background: linear-gradient(to bottom, #1E3A8A, #1E40AF);
+  color: #fff;
+  border-top-color: #172554;
+  border-bottom-color: #172554;
+  border-left: 4px solid #60A5FA;
+}
+.week-header-cell.week-ahead .week-collapse-btn { color: #DBEAFE; }
+.week-header-cell.week-ahead .week-collapse-btn:hover { background-color: rgba(255, 255, 255, 0.18); color: #fff; }
+.week-header-cell.week-ahead .week-add-btn { color: #fff; border-color: #BFDBFE; }
+.week-header-cell.week-ahead .week-add-btn:hover { background-color: rgba(255, 255, 255, 0.16); border-color: #fff; }
+.week-ahead-pill {
+  flex: 0 0 auto;
+  padding: 0.12rem 0.6rem;
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  background: #fff;
+  color: #1E3A8A;
+}
+.week-header-cell.week-current .week-ahead-pill { background: #1E3A8A; color: #fff; }
+.releasability-grid-body .project-name-cell.week-ahead-cell,
+.releasability-grid-body .start-date-cell.week-ahead-cell {
+  background-color: #DBEAFE;
+}
+.releasability-grid-body .project-name-cell.week-ahead-cell { box-shadow: inset 4px 0 0 #1E40AF, 3px 0 6px 0 rgb(0 0 0 / 0.08); }
+.releasability-grid-body .project-name-cell.week-ahead-cell:hover,
+.releasability-grid-body .start-date-cell.week-ahead-cell:hover {
+  background-color: #BFDBFE;
+}
+
 .week-collapse-btn {
   padding: 0.25rem 0.5rem;
   background-color: transparent;
