@@ -216,7 +216,7 @@ function cleanText(v) {
 function cleanQty(v, fallback) {
     if (v === undefined || v === null || v === '') return fallback;
     const n = parseInt(v, 10);
-    if (!Number.isFinite(n) || n < 1) return fallback;
+    if (!Number.isFinite(n) || n < 0) return fallback;   // 0 = an extras-only row (type master list, 2026-11-11)
     return n;
 }
 

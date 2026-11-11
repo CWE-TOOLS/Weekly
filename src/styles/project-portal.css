@@ -706,6 +706,60 @@ body { overflow: visible; }
 }
 .pp-castings-header { margin-bottom: 18px; }
 
+/* Type master list (2026-11-11): the job's types + totals, between the Notes and the panel readouts */
+.pp-type-master { margin: 14px 0 12px; }
+.pp-type-master[hidden] { display: none; }
+.pp-tm-card { background: #f8fafc; border: 1px solid #cbd5e1; border-left: 4px solid #1d4ed8; border-radius: 8px; padding: 10px 12px; }
+.pp-tm-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; width: 100%; background: none; border: none; padding: 0; text-align: left; font-family: inherit; font-size: 12.5px; color: #334155; cursor: pointer; }
+.pp-tm-head:focus-visible { outline: 2px solid #1d4ed8; outline-offset: 2px; border-radius: 4px; }
+.pp-tm-open .pp-tm-head .pp-cast-sum-chev { transform: rotate(90deg); }
+.pp-tm-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #1e3a8a; }
+.pp-tm-headsum { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pp-tm-sum b { color: #0f172a; }
+.pp-tm-flag { padding: 1px 8px; border-radius: 9999px; font-size: 11px; font-weight: 700; background: #fffbeb; color: #92400e; border: 1px solid #fcd34d; }
+.pp-tm-flag.pp-tm-flag-over { background: #fef2f2; color: #b91c1c; border-color: #fca5a5; }
+.pp-tm-body { margin-top: 10px; }
+.pp-tm-hint { margin: 0 0 10px; font-size: 12.5px; line-height: 1.5; color: #475569; }
+.pp-tm-row { display: grid; grid-template-columns: minmax(0, 0.7fr) minmax(0, 0.5fr) minmax(0, 1.45fr) minmax(0, 0.6fr) minmax(0, 0.6fr) minmax(0, 1.2fr) minmax(0, 0.55fr) minmax(0, 0.6fr) minmax(150px, 1.3fr) 22px; gap: 6px; align-items: center; margin-bottom: 4px; }
+.pp-tm-headrow span { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #1d4ed8; text-align: center; }
+.pp-tm-in { width: 100%; min-width: 0; padding: 4px 6px; border: 1px solid #94a3b8; border-radius: 4px; background: #fff; font-family: inherit; font-size: 12px; line-height: 1.3; color: #0f172a; text-align: center; }
+select.pp-tm-in { text-align-last: center; padding-left: 2px; padding-right: 0; }
+.pp-tm-in::placeholder { color: #94a3b8; }
+.pp-tm-in:focus { outline: none; border-color: #1d4ed8; box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.18); }
+.pp-tm-in.pp-tm-type { font-weight: 700; }
+.pp-tm-in.pp-tm-off { border-color: #d97706; background: #fffbeb; }
+.pp-tm-status { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 11.5px; min-width: 0; }
+.pp-tm-pill { padding: 2px 8px; border-radius: 9999px; border: 1px solid; font-weight: 700; white-space: nowrap; cursor: help; }
+.pp-tm-pill.pp-tm-left { background: #fffbeb; color: #92400e; border-color: #fcd34d; }
+.pp-tm-pill.pp-tm-done { background: #f0fdf4; color: #166534; border-color: #86efac; }
+.pp-tm-pill.pp-tm-over { background: #fef2f2; color: #b91c1c; border-color: #fca5a5; }
+.pp-tm-pill.pp-tm-none { background: #f1f5f9; color: #475569; border-color: #cbd5e1; }
+.pp-tm-x { font-weight: 600; color: #1d4ed8; white-space: nowrap; cursor: help; }
+.pp-tm-del { width: 22px; height: 22px; border: none; border-radius: 4px; background: none; color: #94a3b8; font-size: 16px; line-height: 1; cursor: pointer; padding: 0; }
+.pp-tm-del:hover { background: #fee2e2; color: #b91c1c; }
+.pp-tm-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.pp-tm-actions .pp-add-btn { width: auto; margin: 0; }
+.pp-tm-tip { font-size: 11px; color: #64748b; }
+/* a casting row's Type once the job has a master list: a dropdown; amber when its type is not on the list */
+select.pp-inv-input.pp-inv-type-select { -webkit-appearance: none; appearance: none; text-align-last: center; padding-left: 3px; padding-right: 13px; font-weight: 600; cursor: pointer;
+    background-image: linear-gradient(45deg, transparent 50%, #475569 50%), linear-gradient(135deg, #475569 50%, transparent 50%); background-position: calc(100% - 8px) 50%, calc(100% - 4px) 50%; background-size: 4px 4px, 4px 4px; background-repeat: no-repeat; }
+.pp-inv-input.pp-inv-type-off { border-color: #d97706; background: #fffbeb; }
+/* the master list's own small dialog (create a type / more than the job total) */
+.pp-tm-modal { position: fixed; inset: 0; z-index: 10050; background: rgba(15, 23, 42, 0.45); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.pp-tm-dialog { width: min(520px, 100%); background: #fff; border-radius: 10px; border-top: 5px solid #d97706; box-shadow: 0 20px 50px rgba(15, 23, 42, 0.35); padding: 18px 20px 16px; font-size: 14px; color: #0f172a; }
+.pp-tm-dialog-title { margin: 0 0 10px; font-size: 17px; font-weight: 700; }
+.pp-tm-dialog-body p { margin: 0 0 8px; line-height: 1.5; }
+.pp-tm-dialog-dim { color: #64748b; }
+.pp-tm-dialog-over { color: #b91c1c; }
+.pp-tm-dialog-note { font-size: 12px; color: #64748b; }
+.pp-tm-dialog-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 8px; font-weight: 600; }
+.pp-tm-dialog-row input { width: 190px; padding: 6px 8px; border: 1px solid #94a3b8; border-radius: 5px; font-family: inherit; font-size: 14px; }
+.pp-tm-dialog-btns { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+.pp-tm-btn { padding: 8px 14px; border: 1px solid #94a3b8; border-radius: 6px; background: #fff; font-family: inherit; font-size: 13px; font-weight: 600; color: #0f172a; cursor: pointer; }
+.pp-tm-btn:hover { background: #f1f5f9; }
+.pp-tm-btn.pp-tm-btn-primary { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
+.pp-tm-btn.pp-tm-btn-primary:hover { background: #1e40af; }
+
 /* Project-wide panel readouts above the casting list */
 .pp-castings-summary {
     display: flex;
