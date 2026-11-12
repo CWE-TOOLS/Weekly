@@ -452,7 +452,8 @@ export async function loadProjectsFromSheets(forceRefresh = false) {
     // the sheet cache is only for the Google Sheet.
     const tasks = (await getWeeklySource()) === SOURCE_SCHEDULER
       ? await fetchTasks()
-      : await loadFromCacheOrFetch(forceRefresh, 'primary', fetchTasks);
+      // Refresh button: skip BOTH 5-minute copies (the board's and the weekly's it reads from), 2026-11-12
+      : await loadFromCacheOrFetch(forceRefresh, 'primary', forceRefresh ? () => fetchTasks({ force: true }) : fetchTasks);
     logger.debug(`  → Loaded ${tasks.length} tasks`);
 
     // Group tasks by project name

@@ -76,7 +76,7 @@ import {
   deleteManualWeek,
   updateManualWeekPositions,
   updateManualWeekName
-} from '../../services/releasability-data-service.js?v=20261111-2';
+} from '../../services/releasability-data-service.js?v=20261112-1';
 import { loadProject } from '../../services/projects-service.js';
 import { loadPhasesForProject } from '../../services/phases-service.js';
 import {

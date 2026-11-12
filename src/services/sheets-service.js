@@ -66,13 +66,16 @@ export const departmentDayMapping = {
  * const tasks = await fetchTasks();
  * // Returns: [{id: 'task-1', project: 'A', department: 'Mill', ...}, ...]
  */
-export async function fetchTasks() {
+export async function fetchTasks(opts) {
+    // { force: true } = skip the shared 5-minute copy and read the Google Sheet itself (the Releasability Board's
+    // Refresh button, 2026-11-12). Anything else passed in (an event, nothing) keeps the normal cached read.
+    const force = !!(opts && opts.force === true);
     // 2026-10-28: the weekly can read the Plant Scheduler instead of the Google Sheet. One shared setting
     // (weekly-source-service) decides; the sheet stays the default until it is switched.
     const source = await getWeeklySource();
     updateSourceBadge(source);
     if (source === SOURCE_SCHEDULER) return await fetchTasksFromScheduler();
-    return await loadTasksFromCacheOrFetch(fetchTasksDirect);
+    return await loadTasksFromCacheOrFetch(fetchTasksDirect, force);
 }
 
 /**
