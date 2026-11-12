@@ -178,7 +178,8 @@ export function scrimLayersFromJigData(data) {
     const sections = Array.isArray(data.sections) && data.sections.length ? data.sections : (data.xsec && Array.isArray(data.xsec.heights) ? [data.xsec] : []);
     const perThickness = sections.map(sec => {
         const heights = Array.isArray(sec.heights) ? sec.heights : [];
-        const checks = Array.isArray(sec.kinds) ? sec.kinds.filter(k => k === 'check').length : 0;
+        // only the layers that exist: types left over from a higher layer count do not count (2026-11-12)
+        const checks = Array.isArray(sec.kinds) ? sec.kinds.slice(0, heights.length).filter(k => k === 'check').length : 0;
         // "No scrim" ticked on the Jig List tab (2026-10-26): every layer is a height check, no scrim at all.
         return { thickness: String(sec.thickness || '').trim(), layers: sec.noScrim ? 0 : Math.max(0, heights.length - checks) };
     });

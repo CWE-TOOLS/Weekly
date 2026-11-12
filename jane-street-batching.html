@@ -624,7 +624,7 @@ function describeSizes(plan) {
 // ======================================================================
 async function loadData() {
     const [ps, cs, cl, bt, tr, inv, jig, fin] = await Promise.all(
-        ['projects-service.js', 'castings-service.js', 'color-log-service.js', 'batch-ticket-service.js', 'tracking-service.js', 'inventory-service.js', 'jig-list-service.js', 'finishing-products.js?v=20261106-1']
+        ['projects-service.js', 'castings-service.js', 'color-log-service.js', 'batch-ticket-service.js', 'tracking-service.js', 'inventory-service.js', 'jig-list-service.js?v=20261112-1', 'finishing-products.js?v=20261106-1']
             .map(f => import(SERVICES + f))
     );
     S.svc = { ps, bt, inv, jig, fin };

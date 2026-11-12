@@ -66,7 +66,7 @@
  * @module pages/project-portal/jig-list
  */
 
-import { loadJigListsForProject, saveJigListForCasting } from '../../services/jig-list-service.js';
+import { loadJigListsForProject, saveJigListForCasting } from '../../services/jig-list-service.js?v=20261112-1';
 import { loadCastingInventory } from '../../services/inventory-service.js';
 import { logger } from '../../utils/logger.js';
 
@@ -1374,6 +1374,7 @@ function onEditorInput(e){
       const n = Math.max(0, Math.min(10, parseInt(el.value, 10) || 0));
       while (xs.heights.length < n) xs.heights.push('');
       if (xs.heights.length > n) xs.heights.length = n;
+      if (Array.isArray(xs.kinds) && xs.kinds.length > n) xs.kinds.length = n;   // layer types past the count go with their layers
       // A new layer count re-splits the thickness evenly between the scrims.
       const even = evenScrimHeights(xs, n);
       if (even) xs.heights = even;
@@ -1386,9 +1387,22 @@ function onEditorInput(e){
       xs.kinds[+el.dataset.idx] = el.value;
     }
     else if (el.dataset.field === 'noscrim'){
-      // No scrim for this thickness: every layer turns into a height check (and stays one until picked back).
+      // No scrim for this thickness: every layer turns into a height check. Unticked: the layers go back to what
+      // they were before the tick — scrim when that is not known (2026-11-12: they used to stay height checks, so
+      // the batching totals kept saying "Scrim: none").
+      const wasNoScrim = !!xs.noScrim;
       xs.noScrim = !!el.checked;
-      if (xs.noScrim) xs.kinds = xs.heights.map(() => 'check');
+      if (xs.noScrim) {
+        if (!wasNoScrim) xs.kindsBefore = (xs.kinds || []).slice(0, xs.heights.length);
+        xs.kinds = xs.heights.map(() => 'check');
+      } else {
+        // back to the mix it had before the tick; when that had no scrim layer at all (or is not known), every
+        // layer is scrim — unticking "No scrim" always leaves scrim on the cross-section
+        const was = Array.isArray(xs.kindsBefore) ? xs.kindsBefore : [];
+        const mix = xs.heights.map((_, i) => was[i] === 'check' ? 'check' : '');
+        xs.kinds = mix.some(k => k !== 'check') ? mix : xs.heights.map(() => '');
+        delete xs.kindsBefore;
+      }
       buildXsecHeights(si);
     }
     // The cross-section owns the scrim foot depths — keep them in step.
