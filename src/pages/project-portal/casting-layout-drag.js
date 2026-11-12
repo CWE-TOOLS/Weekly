@@ -19,7 +19,7 @@
  * @module pages/project-portal/casting-layout-drag
  */
 
-import { rectsOverlap, isRectInsideTables, rectTouchesTables } from './casting-layout.js?v=20261106-7';
+import { rectsOverlap, isRectInsideTables, rectTouchesTables } from './casting-layout.js?v=20261112-1';
 
 /** Pixels the pointer must travel before a press counts as a drag. */
 const DRAG_THRESHOLD = 3;

@@ -128,8 +128,8 @@ import {
     deleteClassroomTask,
     setClassroomTasksOrder
 } from '../../services/classroom-tasks-service.js';
-import { renderCastingLayout, computeLayoutRects, parseDimension } from './casting-layout.js?v=20261106-7';
-import { attachLayoutDrag } from './casting-layout-drag.js?v=20261106-6';
+import { renderCastingLayout, computeLayoutRects, parseDimension, tableBlockRects, CASTING_AREAS } from './casting-layout.js?v=20261112-1';
+import { attachLayoutDrag } from './casting-layout-drag.js?v=20261112-1';
 import { activateJigListTab } from './jig-list.js?v=20261111-1';
 import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, APPROVALS_TAB_ITEMS } from '../../config/milestones-config.js?v=20261106-1';
 import { SLUMP_TARGET_DEFAULTS, FINAL_BACKUP_PIG_REDUCTION_PCT, parsePigReduction, BT_IMPORT_META, btOverrides, btImportStamp, btStampDate, additiveAmount, batchTotalsRows, renderBatchTotals, clampSlumpTarget, formatSlumpLabel, renderSlumpGraphic, renderBatchTicketCard, BATCH_PRINT_CSS } from '../../services/batch-ticket-render.js';
@@ -5306,6 +5306,16 @@ function layoutConditionHtml(castingId) {
     const cur = layoutConditionOf(castingId);
     const curSide = layoutConditionSideOf(castingId) || 'A';
     const names = msLayoutConditions.includes(cur) || !cur ? msLayoutConditions : [cur, ...msLayoutConditions];
+    // Which tables the condition uses (2026-11-12): only those are blocked for the other jobs of the cast day.
+    let tablesBtn = '';
+    if (cur) {
+        const effSide = layoutConditionEffSide(castingId) || 'A';
+        const loaded = clCondTablesLoaded.has(cur);
+        if (!loaded) loadCondTables([cur]).then(() => { if (msFloatEl) msFloatEl.dataset.key = ''; updateMsFloat(); });
+        const unset = loaded && condSidesOf(effSide).some(a => !condTablesFor(cur, a));
+        const text = !loaded ? 'Tables…' : unset ? 'Pick tables…' : `Tables: ${condTablesText(cur, effSide)}`;
+        tablesBtn = `<button type="button" class="pp-ms-cond-tables${unset ? ' pp-ms-cond-tables-unset' : ''}" data-ms-layout-tables="${escapeAttr(castingId)}" title="Which tables this special condition uses. Only those are blocked for other jobs cast the same day; the rest of the side stays open. Saved with the condition, for every casting under it.">${escapeHtml(text)}</button>`;
+    }
     return `<label class="pp-ms-tick pp-ms-cond" title="A casting that is never laid out (vertical curing racks, etc.) goes green by naming the special condition and the side it applies to. The list of names is shared by every job; the weekly's Cast cards show it.">Special condition
         <select data-ms-layout-side="${escapeAttr(castingId)}" class="pp-ms-cond-select pp-ms-cond-side" title="Which side the condition applies to">
             <option value="A"${curSide === 'A' ? ' selected' : ''}>Side A</option>
@@ -5316,7 +5326,116 @@ function layoutConditionHtml(castingId) {
             <option value=""${cur ? '' : ' selected'}>— none —</option>
             ${names.map(n => `<option value="${escapeAttr(n)}"${n === cur ? ' selected' : ''}>${escapeHtml(n)}</option>`).join('')}
             <option value="__add__">Add a condition…</option>
-        </select></label>`;
+        </select></label>${tablesBtn}`;
+}
+/** The side a casting's special condition sits on: its own side, else the casting's side. 'A' | 'B' | 'AB' | null */
+function layoutConditionEffSide(castingId) {
+    const own = layoutConditionSideOf(castingId);
+    if (own) return own;
+    const cs = currentCastings.find(c => c.id === castingId)?.casting_side;
+    return ['A', 'B', 'AB'].includes(cs) ? cs : null;
+}
+// ---- Tables a special condition uses (2026-11-12): plant_schedule_settings "layout_cond_tables:<NAME>" =
+// { A: [table ids], B: [table ids] }. A side that is missing = not picked yet; an empty list = uses no tables.
+// Saved with the condition (shared by every casting under it), asked when the condition is picked or created.
+const CL_COND_TABLES_PREFIX = 'layout_cond_tables:';
+const clCondTables = new Map();          // condition name -> { A?: number[], B?: number[] }
+const clCondTablesLoaded = new Set();    // names asked for at least once
+async function loadCondTables(names, { fresh = false } = {}) {
+    const want = [...new Set((names || []).map(n => String(n || '').trim()).filter(Boolean))].filter(n => fresh || !clCondTablesLoaded.has(n));
+    if (!want.length) return;
+    try {
+        const rows = await loadSettingRows(want.map(n => CL_COND_TABLES_PREFIX + n));
+        for (const n of want) {
+            const v = rows.get(CL_COND_TABLES_PREFIX + n);
+            const clean = {};
+            for (const a of ['A', 'B']) if (v && Array.isArray(v[a])) clean[a] = v[a].map(Number).filter(Number.isFinite);
+            clCondTables.set(n, clean);
+        }
+    } catch (e) { logger.warn('[project-portal] condition tables unavailable', e); }
+    finally { want.forEach(n => clCondTablesLoaded.add(n)); }
+}
+function condSidesOf(side) { return side === 'AB' ? ['A', 'B'] : [side === 'B' ? 'B' : 'A']; }
+/** The table ids a condition uses on one side, or null when nobody picked them yet. */
+function condTablesFor(name, area) {
+    const v = clCondTables.get(String(name || '').trim());
+    return v && Array.isArray(v[area]) ? v[area] : null;
+}
+function condTableNames(area, ids) {
+    const want = new Set((ids || []).map(Number));
+    return (CASTING_AREAS[area]?.tables || []).filter(t => want.has(Number(t.id))).map(t => t.name).join(' + ');
+}
+/** "uses Table 3" | "uses no tables" | "tables not picked yet" */
+function condUsesText(name, area) {
+    const ids = condTablesFor(name, area);
+    return ids ? (ids.length ? `uses ${condTableNames(area, ids)}` : 'uses no tables') : 'tables not picked yet';
+}
+function condTablesText(name, side) {
+    const one = (a) => { const ids = condTablesFor(name, a); return ids ? (ids.length ? condTableNames(a, ids) : 'none') : 'not picked'; };
+    return side === 'AB' ? `A: ${one('A')} · B: ${one('B')}` : one(side === 'B' ? 'B' : 'A');
+}
+let clCondModalEl = null, clCondModalCtx = null;
+/** Ask which tables a special condition uses on its side(s). */
+function openCondTablesModal(name, side) {
+    name = String(name || '').trim();
+    if (!name) return;
+    const sides = condSidesOf(side);
+    clCondModalCtx = { name, sides };
+    if (!clCondModalEl) {
+        clCondModalEl = document.createElement('div');
+        clCondModalEl.id = 'pp-clay-condt-modal';
+        clCondModalEl.className = 'pp-modal-backdrop';
+        clCondModalEl.hidden = true;
+        clCondModalEl.innerHTML = `<div class="pp-modal" role="dialog" aria-modal="true" aria-labelledby="pp-clay-condt-title">
+            <div class="pp-modal-header"><h2 id="pp-clay-condt-title">Tables used</h2><button type="button" class="pp-modal-close" data-condt="cancel" aria-label="Close">&times;</button></div>
+            <form class="pp-modal-body" id="pp-clay-condt-form">
+                <p class="pp-muted" id="pp-clay-condt-info"></p>
+                <div id="pp-clay-condt-list"></div>
+                <div class="pp-modal-actions">
+                    <button type="button" class="pp-secondary-btn" data-condt="cancel">Cancel</button>
+                    <button type="submit" class="pp-primary-btn">Save tables</button>
+                </div>
+            </form></div>`;
+        document.body.appendChild(clCondModalEl);
+        clCondModalEl.addEventListener('click', (e) => {
+            if (e.target === clCondModalEl || e.target.closest('[data-condt="cancel"]')) clCondModalEl.hidden = true;
+        });
+        clCondModalEl.querySelector('#pp-clay-condt-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const ctx = clCondModalCtx;
+            if (!ctx) return;
+            const value = { ...(clCondTables.get(ctx.name) || {}) };
+            for (const a of ctx.sides) value[a] = [...clCondModalEl.querySelectorAll(`input[data-condt-area="${a}"]:checked`)].map(i => Number(i.value));
+            clCondModalEl.hidden = true;
+            try { await setSettingRow(CL_COND_TABLES_PREFIX + ctx.name, value); }
+            catch (err) { logger.error('[project-portal] save condition tables failed:', err); showToast('Tables not saved: ' + (err.message || err), 'error'); return; }
+            clCondTables.set(ctx.name, value); clCondTablesLoaded.add(ctx.name);
+            showToast(`"${ctx.name}" — ${ctx.sides.map(a => `Side ${a}: ${condUsesText(ctx.name, a)}`).join(' · ')}. The other tables stay open for other jobs.`, 'success');
+            if (msFloatEl) msFloatEl.dataset.key = '';
+            updateMsFloat();
+            if (currentTab === 'casting-layout') renderCastingLayoutTab();
+        });
+    }
+    document.getElementById('pp-clay-condt-title').textContent = `Tables used — ${name}`;
+    document.getElementById('pp-clay-condt-info').textContent =
+        `Tick the tables "${name}" uses. Only those are blocked for other jobs cast the same day — the tables left unticked stay open for them. `
+        + `The choice is saved with the condition, so every casting under "${name}" uses the same tables.`;
+    document.getElementById('pp-clay-condt-list').innerHTML = sides.map(a => {
+        const cur = condTablesFor(name, a) || [];
+        return `<div class="pp-clay-condt-side"><div class="pp-clay-condt-head">SIDE ${a}</div>${(CASTING_AREAS[a]?.tables || []).map(t =>
+            `<label class="pp-clay-condt-opt"><input type="checkbox" data-condt-area="${a}" value="${escapeAttr(String(t.id))}"${cur.includes(Number(t.id)) ? ' checked' : ''}> <b>${escapeHtml(t.name)}</b> <span>${t.narrow}″ × ${t.long}″</span></label>`).join('')}</div>`;
+    }).join('');
+    clCondModalEl.hidden = false;
+}
+/** After a condition (or its side) changed: redraw the layout tab, and ask for the tables when nobody picked them yet. */
+async function afterLayoutConditionChange(castingId, name) {
+    if (name) await loadCondTables([name]);
+    if (msFloatEl) msFloatEl.dataset.key = '';
+    updateMsFloat();
+    if (currentTab === 'casting-layout' && castingId === clSelectedCastingId) renderCastingLayoutTab();
+    if (!name) return;
+    const side = layoutConditionEffSide(castingId) || 'A';
+    if (condSidesOf(side).some(a => !condTablesFor(name, a))) openCondTablesModal(name, side);
 }
 /** The side select changed: re-save the condition (if there is one) with the new side. */
 async function handleLayoutConditionSide(castingId, side) {
@@ -5324,9 +5443,8 @@ async function handleLayoutConditionSide(castingId, side) {
     if (!castingId || !name || !['A', 'B', 'AB'].includes(side)) return;
     // Orange until the special-condition notice is printed (user 2026-11-06: green means something was printed).
     await msSet(castingId, 'Casting Layout', MS.ORANGE, { note: layoutConditionNote(name, side), stamp: true });
-    msFloatEl && (msFloatEl.dataset.key = '');
-    updateMsFloat();
     showToast(`Cast ${currentCastings.find(c => c.id === castingId)?.casting_number || ''}: special condition "${name}" now on Side ${sideWords(side)} — print the notice (Print Layout) to turn the step green.`);
+    await afterLayoutConditionChange(castingId, name);
 }
 async function handleLayoutConditionPick(castingId, value) {
     if (!castingId) return;
@@ -5341,17 +5459,14 @@ async function handleLayoutConditionPick(castingId, value) {
         // back to the normal rule: orange when forms are laid out, red otherwise
         const laid = castingId === clSelectedCastingId && Array.isArray(clLayoutPositions) && clLayoutPositions.length > 0;
         await msSet(castingId, 'Casting Layout', laid ? MS.ORANGE : MS.RED, { note: laid ? 'Forms laid out' : null, stamp: laid });
-        msFloatEl && (msFloatEl.dataset.key = '');
-        updateMsFloat();
+        await afterLayoutConditionChange(castingId, '');
         return;
     }
     if (!msLayoutConditions.includes(name)) msLayoutConditions = [...msLayoutConditions, name].sort((a, b) => a.localeCompare(b));
     // Orange until the special-condition notice is printed (user 2026-11-06: green means something was printed).
     await msSet(castingId, 'Casting Layout', MS.ORANGE, { note: layoutConditionNote(name, side), stamp: true });
-    showToast(`Special condition "${name}" set — print the notice from the Casting Layout tab (Print Layout) to turn the step green.`);
-    msFloatEl && (msFloatEl.dataset.key = '');
-    updateMsFloat();
-    showToast(`Cast ${currentCastings.find(c => c.id === castingId)?.casting_number || ''}: Casting Layout green — special condition "${name}" on Side ${sideWords(side)}.`);
+    showToast(`Special condition "${name}" set on Side ${sideWords(side)} — print the notice from the Casting Layout tab (Print Layout) to turn the step green.`);
+    await afterLayoutConditionChange(castingId, name);
 }
 /** One column for many castings: "Final Shop Folder Cover: ● Cast 1  ● Cast 2 …" (label = what the board calls it) */
 function msListChips(castings, milestone, label = milestone) {
@@ -5409,7 +5524,9 @@ function updateMsFloat() {
             const pm = e.target.closest('[data-ms-ci-pm]');
             if (pm) { ciPmReady(pm.dataset.msCiPm); return; }
             const unl = e.target.closest('[data-ms-ci-unlock]');
-            if (unl) { ciUnlock(unl.dataset.msCiUnlock); }
+            if (unl) { ciUnlock(unl.dataset.msCiUnlock); return; }
+            const tb = e.target.closest('[data-ms-layout-tables]');
+            if (tb) { const id = tb.dataset.msLayoutTables; openCondTablesModal(layoutConditionOf(id), layoutConditionEffSide(id) || 'A'); }
         });
         msFloatEl.addEventListener('change', (e) => {
             const cb = e.target.closest('[data-ms-opt-done]');
@@ -6032,6 +6149,13 @@ function checkFitment() {
     const casting = currentCastings.find(c => c.id === clSelectedCastingId);
     const out = document.getElementById('pp-clay-fit-result');
     if (!casting) return;
+    const ownCond = layoutConditionOf(clSelectedCastingId);
+    if (ownCond) {
+        const msg = `Special condition "${ownCond}": this casting's forms are not laid out on the tables, so there is nothing to fit.`;
+        if (out) out.textContent = msg;
+        showToast(msg, 'info', 6000);
+        return;
+    }
     const components = currentCastingComponents.get(clSelectedCastingId) || [];
     const sides = clSelectedArea === 'AB' ? ['B', 'A'] : [clSelectedArea === 'A' ? 'A' : 'B'];
     let comps = components;
@@ -6099,6 +6223,7 @@ async function loadCastDayContext() {
     clBasesOthers = new Map();
     const casting = currentCastings.find(c => c.id === id);
     if (!casting) return;
+    await loadCondTables([layoutConditionOf(id)], { fresh: true });
     try {
         if (!clProjectNames) {
             const rows = allProjectRows.length ? allProjectRows : await loadAllProjects();
@@ -6150,6 +6275,7 @@ async function loadCastDayContext() {
         const ids = others.filter(o => o.id).map(o => o.id);
         const conds = ids.length ? await loadLayoutConditionsForCastings(ids) : [];
         const condBy = new Map(conds.map(c => [c.casting_id, c]));
+        await loadCondTables(conds.map(c => c.name), { fresh: true });
         const sided = others.filter(o => o.id && ['A', 'B', 'AB'].includes(o.casting_side));
         const [compsMap, posList] = await Promise.all([
             sided.length ? loadAllComponentsForProject(sided.map(o => o.id)) : new Map(),
@@ -6172,16 +6298,36 @@ function clTakenBy(area) { return clDay.others.filter(o => o.casting_side === ar
 /** The other castings' forms on one side, as blocked rectangles for the packer and the drawing. With several other
  *  jobs on the side, each estimate is packed around the ones before it (box order), as the floor would do it;
  *  a saved layout always sits where it was saved. */
+function clCondSideOfOther(o) { return o.cond ? (o.cond.side || o.casting_side || null) : null; }
+/** The tables a special condition uses on one side, as blocked rectangles (hatched purple). */
+function clCondRects(name, area, who, own) {
+    const ids = condTablesFor(name, area);
+    if (!ids || !ids.length) return [];
+    return tableBlockRects(area, ids).map(r => ({ ...r, kind: 'cond', own: !!own, label: who, lines: [who, name],
+        tip: `${r.tableName}: ${who} — special condition ${name}. The whole table is taken that cast day.` }));
+}
+/** This casting's own special condition on one side (nothing when it has none, or it sits on the other side). */
+function clOwnCondBlocked(area) {
+    const name = layoutConditionOf(clSelectedCastingId);
+    const side = name ? layoutConditionEffSide(clSelectedCastingId) : null;
+    return (side === area || side === 'AB') ? clCondRects(name, area, 'THIS CASTING', true) : [];
+}
 function clBlockedFor(area) {
-    const out = [];
+    // A casting under a special condition is never laid out on the tables: it blocks the tables its condition
+    // uses and nothing else (2026-11-12). Those are certain, so they go first; form estimates pack around them.
+    const out = clOwnCondBlocked(area);
+    for (const o of clDay.others) {
+        const sd = clCondSideOfOther(o);
+        if (sd === area || sd === 'AB') out.push(...clCondRects(o.cond.name, area, clShortLabel(o), false));
+    }
     for (const o of clTakenBy(area)) {
-        if (!o.components.length) continue;
+        if (o.cond || !o.components.length) continue;
         const label = clShortLabel(o);
         let comps = o.components;
         const common = { offsetPerSide: clOffsetPerSide, gapBetween: clGapBetween, positions: o.positions, bases: clBasesOthers.get(o.id) || null };
         if (o.casting_side === 'AB') {
             // Both sides: their Side B is packed first, the leftover continues on Side A (this tab's own rule).
-            const rB = computeLayoutRects({ ...common, components: comps, area: 'B', blocked: area === 'B' ? out : [] });
+            const rB = computeLayoutRects({ ...common, components: comps, area: 'B', blocked: area === 'B' ? out.slice() : clBlockedCondOnly('B') });
             if (area === 'B') { rB.placed.forEach(p => out.push({ sx: p.sx, sy: p.sy, sw: p.sw, sh: p.sh, label })); continue; }
             const left = new Set(rB.staged.map(r => r.componentId));
             comps = comps.filter(c => left.has(c.id));
@@ -6189,6 +6335,15 @@ function clBlockedFor(area) {
         }
         const r = computeLayoutRects({ ...common, components: comps, area, blocked: out.slice() });
         r.placed.forEach(p => out.push({ sx: p.sx, sy: p.sy, sw: p.sw, sh: p.sh, label }));
+    }
+    return out;
+}
+/** Only the special-condition tables of a side (this casting's and the others'). */
+function clBlockedCondOnly(area) {
+    const out = clOwnCondBlocked(area);
+    for (const o of clDay.others) {
+        const sd = clCondSideOfOther(o);
+        if (sd === area || sd === 'AB') out.push(...clCondRects(o.cond.name, area, clShortLabel(o), false));
     }
     return out;
 }
@@ -6270,23 +6425,37 @@ function renderClayFloat() {
             const taken = clTakenBy(area);
             // a condition belongs under its casting; one whose casting sits on the other side gets its own line
             const condElsewhere = clDay.others.filter(o => condOn(o, area) && !taken.includes(o));
-            const cls = taken.length ? (mine(area) ? 'taken-mine' : 'taken') : 'free';
+            // Only special conditions with picked tables on this side: the side is taken in part, the rest is open.
+            const occ = [...taken, ...condElsewhere];
+            const condOnly = occ.length > 0 && occ.every(o => condOn(o, area) && condTablesFor(o.cond.name, area));
+            const used = new Set(condOnly ? occ.flatMap(o => condTablesFor(o.cond.name, area)).map(Number) : []);
+            const openT = condOnly ? (CASTING_AREAS[area]?.tables || []).filter(t => !used.has(Number(t.id))) : [];
+            const state = condOnly ? (!used.size ? 'FREE' : openT.length ? 'PART TAKEN' : 'TAKEN') : (taken.length ? 'TAKEN' : 'FREE');
+            const cls = state === 'FREE' ? 'free' : (mine(area) ? 'taken-mine' : 'taken');
             return `<div class="pp-clay-float-side pp-clay-float-${cls}">
-                <div class="pp-clay-float-side-head"><span>SIDE ${area}</span><span>${taken.length ? 'TAKEN' : 'FREE'}${mine(area) ? ' · THIS CASTING' : ''}</span></div>
-                ${taken.map(o => `<div class="pp-clay-float-line">${clOtherLink(o)}${o.casting_side === 'AB' ? ' (both sides)' : ''}${o.components.length ? '' : (o.inPortal === false ? '' : ' — no forms on file')}${clSwapAllowed(o, area, mySide) ? ` <button type="button" class="pp-clay-swap" data-clay-swap="${escapeAttr(o.id)}" title="${escapeAttr(clSwapTitle(o, area, mySide))}">Swap sides</button>` : ''}</div>${condOn(o, area) ? `<div class="pp-clay-float-cond pp-clay-float-cond-under">↳ special condition: ${escapeHtml(o.cond.name)}</div>` : ''}`).join('')}
-                ${condElsewhere.map(o => `<div class="pp-clay-float-cond">Special condition here: ${escapeHtml(o.cond.name)} — ${clOtherLink(o)}${['A', 'B'].includes(o.casting_side) ? ` (that casting is on Side ${o.casting_side})` : ''}</div>`).join('')}
+                <div class="pp-clay-float-side-head"><span>SIDE ${area}</span><span>${state}${mine(area) ? ' · THIS CASTING' : ''}</span></div>
+                ${taken.map(o => `<div class="pp-clay-float-line">${clOtherLink(o)}${o.casting_side === 'AB' ? ' (both sides)' : ''}${o.components.length ? '' : (o.inPortal === false ? '' : ' — no forms on file')}${clSwapAllowed(o, area, mySide) ? ` <button type="button" class="pp-clay-swap" data-clay-swap="${escapeAttr(o.id)}" title="${escapeAttr(clSwapTitle(o, area, mySide))}">Swap sides</button>` : ''}</div>${condOn(o, area) ? `<div class="pp-clay-float-cond pp-clay-float-cond-under">↳ special condition: ${escapeHtml(o.cond.name)} — ${escapeHtml(condUsesText(o.cond.name, area))}</div>` : ''}`).join('')}
+                ${condElsewhere.map(o => `<div class="pp-clay-float-cond">Special condition here: ${escapeHtml(o.cond.name)} (${escapeHtml(condUsesText(o.cond.name, area))}) — ${clOtherLink(o)}${['A', 'B'].includes(o.casting_side) ? ` (that casting is on Side ${o.casting_side})` : ''}</div>`).join('')}
+                ${condOnly && used.size && openT.length ? `<div class="pp-clay-float-open">Open for other jobs: ${escapeHtml(openT.map(t => t.name).join(', '))}</div>` : ''}
             </div>`;
         };
         const unsetAll = clDay.others.filter(o => !['A', 'B', 'AB'].includes(o.casting_side));
         const unset = unsetAll.filter(o => o.inPortal !== false);
         const notPortal = unsetAll.filter(o => o.inPortal === false);
         let fit = '';
-        if (mySide && clFitInfo) {
-            const shared = (mySide === 'AB' ? [...clTakenBy('A'), ...clTakenBy('B')] : clTakenBy(mySide)).filter(o => o.components.length);
-            if (shared.length) {
-                if (clFitInfo.clashes) { tone = 'bad'; fit = `<div class="pp-clay-float-fit bad">${clFitInfo.clashes} of this casting's forms sit on top of the other job's forms — drag them clear, or pick the other side.</div>`; }
+        const ownCond = layoutConditionOf(clSelectedCastingId);
+        if (ownCond) {
+            // this casting is under a special condition: no forms on the tables, only the tables the condition uses
+            const cs = layoutConditionEffSide(clSelectedCastingId);
+            fit = `<div class="pp-clay-float-cond">This casting: special condition ${escapeHtml(ownCond)}${cs ? ' — ' + condSidesOf(cs).map(a => `Side ${a}: ${escapeHtml(condUsesText(ownCond, a))}`).join(' · ') : ' — side not set'}. No form layout.</div>`;
+            if (!cs) tone = 'warn';
+        } else if (mySide && clFitInfo) {
+            const rects = (mySide === 'AB' ? ['A', 'B'] : [mySide]).flatMap(a => clBlockedFor(a));
+            if (rects.length) {
+                const anyCond = rects.some(b => b.kind === 'cond'), anyForms = rects.some(b => b.kind !== 'cond');
+                if (clFitInfo.clashes) { tone = 'bad'; fit = `<div class="pp-clay-float-fit bad">${clFitInfo.clashes} of this casting's forms sit on top of ${anyForms ? "the other job's forms" : "a table another casting's special condition uses"} — drag them clear, or pick the other side.</div>`; }
                 else if (clFitInfo.placed < clFitInfo.total) { tone = 'bad'; fit = `<div class="pp-clay-float-fit bad">Only ${clFitInfo.placed} of ${clFitInfo.total} forms fit in the room left on this side — ${clFitInfo.total - clFitInfo.placed} overflow.</div>`; }
-                else { tone = 'warn'; fit = `<div class="pp-clay-float-fit ok">Shared side: all ${clFitInfo.total} forms fit in the room the other job leaves. Their forms are hatched grey — an estimate unless they saved a layout.</div>`; }
+                else { tone = 'warn'; fit = `<div class="pp-clay-float-fit ok">Shared side: all ${clFitInfo.total} forms fit in the room left.${anyForms ? " Hatched grey = the other job's forms, an estimate unless they saved a layout." : ''}${anyCond ? ' Hatched purple = tables a special condition uses.' : ''}</div>`; }
             }
         } else if (!mySide) tone = 'warn';
         html = `<div class="pp-clay-float-title">CAST DAY · ${escapeHtml(days)}</div>
@@ -6422,7 +6591,22 @@ function renderCastingLayoutTab() {
     card.append(cardA, cardB);
     const quiet = document.createElement('div');
     const common = { offsetPerSide: clOffsetPerSide, gapBetween: clGapBetween, positions: clLayoutPositions, title, bases: clBases };
-    if (clSelectedArea === 'AB') {
+    const ownCond = layoutConditionOf(clSelectedCastingId);
+    if (ownCond) {
+        // Special condition (2026-11-12): the forms are not laid out on the tables. Both sides draw the tables only:
+        // the ones this condition uses hatched purple, the other jobs of the cast day as usual.
+        const cs = layoutConditionEffSide(clSelectedCastingId);
+        for (const area of ['A', 'B']) {
+            const on = cs === area || cs === 'AB';
+            const h = renderCastingLayout({ ...common, container: area === 'A' ? cardA : cardB, errorEl: quiet, components: [], area, blocked: clBlockedFor(area), allowEmpty: true,
+                sideLabel: on ? `SIDE ${area}` : `SIDE ${area} — OTHER JOBS`,
+                emptySummary: on ? `Special condition: ${ownCond} — ${condUsesText(ownCond, area)} — no form layout` : '' });
+            if (h) handles.push(h);
+        }
+        if (errorEl) errorEl.textContent = `Special condition "${ownCond}": this casting's forms are not laid out on the tables. `
+            + (cs ? condSidesOf(cs).map(a => `Side ${a}: ${condUsesText(ownCond, a)}`).join(' · ') + '. ' : 'Its side is not set yet. ')
+            + `Tables hatched purple are taken that cast day; the rest stay open for other jobs. To lay forms out here instead, set the condition back to "— none —" in the bar above.`;
+    } else if (clSelectedArea === 'AB') {
         // Both sides: Side B is packed first, whatever does not fit continues onto Side A.
         const hB = renderCastingLayout({ ...common, container: cardB, errorEl: quiet, components, sideLabel: 'SIDE B', area: 'B', overflowLabel: 'CONTINUE ON SIDE A', hideOverflow: true, blocked: clBlockedFor('B') });
         const leftover = new Set((hB?.staged || []).map(r => r.componentId));
@@ -6592,7 +6776,7 @@ function printLayoutConditionNotice(castingId, cond) {
       <div class="sub">NO FORM LAYOUT IS ISSUED FOR THIS CASTING &mdash; SEE THE CONDITION BELOW</div>
       <hr class="rule">
       <div class="meta"><div><b>Job</b> ${escapeHtml(job)}</div><div><b>Casting</b> ${escapeHtml(cast)}${casting?.description ? ' &mdash; ' + escapeHtml(casting.description) : ''}</div><div><b>Issued</b> ${escapeHtml(today)}</div></div>
-      <div class="cond"><div class="lab">SPECIAL LAYOUT CONDITION${layoutConditionSideOf(castingId) ? ' &mdash; SIDE ' + sideWords(layoutConditionSideOf(castingId)) : ''}</div><div class="name">${escapeHtml(cond)}</div></div>
+      <div class="cond"><div class="lab">SPECIAL LAYOUT CONDITION${layoutConditionSideOf(castingId) ? ' &mdash; SIDE ' + sideWords(layoutConditionSideOf(castingId)) : ''}</div><div class="name">${escapeHtml(cond)}</div>${(() => { const cs = layoutConditionEffSide(castingId); const parts = cs ? condSidesOf(cs).filter(a => condTablesFor(cond, a)).map(a => `SIDE ${a} &mdash; ${escapeHtml(condTableNames(a, condTablesFor(cond, a)) || 'no tables')}`) : []; return parts.length ? `<div class="lab" style="margin-top:14pt">TABLES USED: ${parts.join(' &middot; ')}</div>` : ''; })()}</div>
       <p class="note">The casting layout step for this casting is complete under the condition above. The forms are handled as the condition describes and are not arranged on the shop-floor tables, so there is no form layout drawing to issue. This notice goes in the job folder so the layout step is not mistaken for forgotten.</p>
       <div class="foot"><span>Casting Layout &middot; ${escapeHtml(job)}</span><span>Cast ${escapeHtml(cast)} &middot; special condition notice</span></div>
     </body></html>`;

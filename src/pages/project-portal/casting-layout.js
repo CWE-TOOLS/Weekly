@@ -107,6 +107,15 @@ function getTableScreenRect(t) {
   return { x: t.x, y: t.y, w: t.narrow, h: t.long };
 }
 
+/** Whole tables of one side as blocked rectangles (table inches): the tables a special condition uses (2026-11-12). */
+export function tableBlockRects(area, tableIds) {
+  const want = new Set((tableIds || []).map(Number));
+  return ((CASTING_AREAS[area] || CASTING_AREAS.B).tables).filter(t => want.has(Number(t.id))).map(t => {
+    const r = getTableScreenRect(t);
+    return { sx: r.x, sy: r.y, sw: r.w, sh: r.h, tableId: t.id, tableName: t.name };
+  });
+}
+
 function svgRect(ns, x, y, w, h, fill, stroke, strokeW) {
   const r = document.createElementNS(ns, 'rect');
   r.setAttribute('x', x); r.setAttribute('y', y);
@@ -625,13 +634,38 @@ export function computeLayoutRects({ components, area = 'B', offsetPerSide = 4, 
     : layoutAuto(molds, tableDefs, gapBetween, area === 'A', blocked);
 }
 
+/** A blocked rectangle's label as stacked lines on a pale plate, turned along the long side when that is the only
+ *  way it fits, shrunk until it does (a whole table taken by a special condition; 2026-11-12). */
+function drawBlockLines(NS, g, b, tx, ty, ts, fontSize, colors) {
+  const lines = (b.lines || []).map(String).filter(Boolean);
+  if (!lines.length) return;
+  const w = ts(b.sw), h = ts(b.sh), cx = tx(b.sx + b.sw / 2), cy = ty(b.sy + b.sh / 2);
+  const longest = Math.max(1, ...lines.map(l => l.length));
+  for (let f = fontSize; f >= 4; f -= 0.5) {
+    const needW = longest * f * LABEL_CHAR_W + 6, needH = lines.length * f * 1.25 + 4;
+    const horiz = needW <= w && needH <= h, vert = !horiz && needW <= h && needH <= w;
+    if (!horiz && !vert) continue;
+    const plate = svgRect(NS, cx - (horiz ? needW : needH) / 2, cy - (horiz ? needH : needW) / 2, horiz ? needW : needH, horiz ? needH : needW, '#fff', 'none', 0);
+    plate.setAttribute('opacity', 0.88); plate.setAttribute('rx', 1.5);
+    g.appendChild(plate);
+    lines.forEach((l, i) => {
+      const off = (i - (lines.length - 1) / 2) * f * 1.25;
+      const t = svgText(NS, cx, cy + off, l, f, colors[Math.min(i, colors.length - 1)], 'bold');
+      if (vert) t.setAttribute('transform', `rotate(-90 ${cx} ${cy})`);
+      g.appendChild(t);
+    });
+    return;
+  }
+}
+
 /**
  * @param {Array<Object>} [opts.blocked] - another casting's forms on this side the same cast day, in table inches
  *        ({sx, sy, sw, sh, label}); drawn hatched grey, the auto-pack goes around them, a saved layout that
  *        overlaps them is flagged (2026-11-06)
  */
 /** @param {string} [opts.sideLabel] - "SIDE A" / "SIDE B …": its own centred line at the very top of the page (2026-11-06) */
-export function renderCastingLayout({ container, errorEl, components, title, area = 'B', offsetPerSide = 4, gapBetween = 0, positions = null, overflowLabel = null, hideOverflow = false, blocked = [], allowEmpty = false, sideLabel = '', bases = null }) {
+/** @param {string} [opts.emptySummary] - the summary line when no form of this casting is drawn on this side (2026-11-12) */
+export function renderCastingLayout({ container, errorEl, components, title, area = 'B', offsetPerSide = 4, gapBetween = 0, positions = null, overflowLabel = null, hideOverflow = false, blocked = [], allowEmpty = false, sideLabel = '', bases = null, emptySummary = '' }) {
   if (!container) return null;
   container.innerHTML = '';
   if (errorEl) errorEl.textContent = '';
@@ -748,17 +782,30 @@ export function renderCastingLayout({ container, errorEl, components, title, are
     pat.setAttribute('width', 6); pat.setAttribute('height', 6); pat.setAttribute('patternTransform', 'rotate(45)');
     const stripe = document.createElementNS(NS, 'rect');
     stripe.setAttribute('width', 2); stripe.setAttribute('height', 6); stripe.setAttribute('fill', '#9ca3af');
-    pat.appendChild(stripe); defs.appendChild(pat); svg.appendChild(defs);
+    pat.appendChild(stripe); defs.appendChild(pat);
+    // Tables a special condition uses (kind 'cond', 2026-11-12): the whole table, hatched purple.
+    const condPatId = patId + '-c';
+    if (blocked.some(b => b.kind === 'cond')) {
+      const patC = pat.cloneNode(false);
+      patC.setAttribute('id', condPatId);
+      const stripeC = stripe.cloneNode(false);
+      stripeC.setAttribute('fill', '#a78bfa');
+      patC.appendChild(stripeC); defs.appendChild(patC);
+    }
+    svg.appendChild(defs);
     for (const b of blocked) {
+      const isCond = b.kind === 'cond';
       const g = document.createElementNS(NS, 'g');
-      g.setAttribute('class', 'clay-blocked');
-      g.appendChild(svgRect(NS, tx(b.sx), ty(b.sy), ts(b.sw), ts(b.sh), '#e5e7eb', '#6b7280', 0.5));
-      g.appendChild(svgRect(NS, tx(b.sx), ty(b.sy), ts(b.sw), ts(b.sh), `url(#${patId})`, 'none', 0));
-      if (ts(b.sw) > fontSize * 2.4 && ts(b.sh) > fontSize * 1.1) {
+      g.setAttribute('class', isCond ? 'clay-blocked clay-blocked-cond' : 'clay-blocked');
+      g.appendChild(svgRect(NS, tx(b.sx), ty(b.sy), ts(b.sw), ts(b.sh), isCond ? '#f5f3ff' : '#e5e7eb', isCond ? '#6d28d9' : '#6b7280', isCond ? 1 : 0.5));
+      g.appendChild(svgRect(NS, tx(b.sx), ty(b.sy), ts(b.sw), ts(b.sh), `url(#${isCond ? condPatId : patId})`, 'none', 0));
+      if (Array.isArray(b.lines) && b.lines.length) {
+        drawBlockLines(NS, g, b, tx, ty, ts, fontSize, isCond ? ['#4c1d95', '#6d28d9'] : ['#374151']);
+      } else if (ts(b.sw) > fontSize * 2.4 && ts(b.sh) > fontSize * 1.1) {
         g.appendChild(svgText(NS, tx(b.sx + b.sw / 2), ty(b.sy + b.sh / 2), b.label || '', Math.min(fontSize * 0.8, ts(b.sh) * 0.6), '#374151', 'bold'));
       }
       const tt = document.createElementNS(NS, 'title');
-      tt.textContent = `${b.label || 'Another casting'} — on this side the same cast day`;
+      tt.textContent = b.tip || `${b.label || 'Another casting'} — on this side the same cast day`;
       g.appendChild(tt);
       svg.appendChild(g);
     }
@@ -817,7 +864,7 @@ export function renderCastingLayout({ container, errorEl, components, title, are
   }
   const totalMolds = molds.length;
   const summaryStr = totalMolds === 0
-    ? (blocked.length ? `No forms of this casting on this side — ${[...new Set(blocked.map(b => b.label).filter(Boolean))].join(', ')} (hatched)` : 'Nothing on this side that day')
+    ? emptySummary || (blocked.length ? `No forms of this casting on this side — ${[...new Set(blocked.map(b => b.label).filter(Boolean))].join(', ')} (hatched)` : 'Nothing on this side that day')
     : ((mode === 'manual'
       ? `${totalMolds} molds — manual layout`
         + (staged.length > 0 ? ` — ${staged.length} not placed` : '')
@@ -827,7 +874,7 @@ export function renderCastingLayout({ container, errorEl, components, title, are
     + (blocked.length ? ` — SHARED WITH ${[...new Set(blocked.map(b => b.label).filter(Boolean))].join(', ')} (hatched)` : '')
     + (clashes.length ? ` — ${clashes.length} OVERLAP` : '')
     + (oversize.length ? ` — ${oversize.length} OVERSIZE` : ''));
-  const summaryColor = (staged.length > 0 || clashes.length > 0) ? '#dc2626' : (blocked.length ? '#b45309' : (totalMolds === 0 ? '#9ca3af' : '#555'));
+  const summaryColor = (totalMolds === 0 && emptySummary) ? '#6d28d9' : (staged.length > 0 || clashes.length > 0) ? '#dc2626' : (blocked.length ? '#b45309' : (totalMolds === 0 ? '#9ca3af' : '#555'));
   if (sideLabel) {
     // SIDE A / SIDE B first, on its own line, then the usual title and summary.
     svg.appendChild(svgText(NS, pageW / 2, 14, sideLabel, fontSize * 1.9, '#111', 'bold'));

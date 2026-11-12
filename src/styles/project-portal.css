@@ -6925,3 +6925,15 @@ body.pp-clay-zoom-open { overflow: hidden; }
 .pp-bt-totals-fin-note { display: block; color: #6d28d9; font-size: 11.5px; }
 .pp-bt-totals-fin-norate { color: #b45309; font-weight: 700; }
 .pp-bt-totals-fin-foot { margin-top: 4px; color: #64748b; font-size: 11px; }
+/* Special condition: which tables it uses (2026-11-12) */
+.pp-ms-cond-tables { font: inherit; font-size: 12px; font-weight: 700; padding: 2px 8px; border: 1px solid #c4b5fd; border-radius: 5px; background: #f5f3ff; color: #5b21b6; cursor: pointer; }
+.pp-ms-cond-tables:hover { background: #ede9fe; }
+.pp-ms-cond-tables-unset { border-color: #d97706; background: #fffbeb; color: #92400e; }
+.pp-clay-condt-side { margin-top: 10px; }
+.pp-clay-condt-head { font-weight: 900; letter-spacing: 0.04em; margin-bottom: 4px; }
+.pp-clay-condt-opt { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid #e2e8f0; border-radius: 6px; margin-top: 4px; cursor: pointer; }
+.pp-clay-condt-opt:hover { background: #f8fafc; }
+.pp-clay-condt-opt input { width: 16px; height: 16px; }
+.pp-clay-condt-opt span { color: #64748b; font-size: 12px; margin-left: auto; }
+.pp-clay-float-open { margin-top: 3px; color: #15803d; font-weight: 800; }
+.clay-blocked-cond text { pointer-events: none; }
