@@ -147,7 +147,7 @@ import {
 } from '../../services/casting-layout-service.js';
 import { registerRefreshHandler, isPortalChange, isOwnSignal, signalInfo } from '../../services/supabase-service.js';
 // Type master list (2026-11-11): the job's types + totals above the castings; casting rows pick their type from it.
-import { initTypeMaster, loadTypeMaster, renderTypeMaster, refreshTypeMasterStatus, typeMasterActive, typeCellHtml, typeMasterOverCheck, typeMasterPasteCheck, TM_NEW } from './type-master.js?v=20261113-4';
+import { initTypeMaster, loadTypeMaster, renderTypeMaster, refreshTypeMasterStatus, typeMasterActive, typeCellHtml, typeMasterOverCheck, typeMasterPasteCheck, typeMasterMissing, TM_NEW } from './type-master.js?v=20261113-5';
 import '../../utils/number-wheel-guard.js';   // the mouse wheel must not change a focused hour box (user 2026-11-03)
 
 const STATUS_SORT_ORDER = {
@@ -1370,17 +1370,23 @@ function updateCastingsSummary() {
             totalRejected++;
         }
     }
+    // Types the castings hold that the type master list does not name (2026-11-13): flagged on the inventory card.
+    // Empty while the job has no master list; on a phased job it is the active phase's list and castings.
+    const missingNames = typeMasterMissing();
+    const offMaster = new Set(missingNames.map(t => t.trim().toLowerCase()));
     // `extras` (the inventory card only): each type also shows its extras as a separate "+ N extras".
     const gridByType = (m, extras = null) => [...m.entries()]
         .sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }))
         .map(([type, n]) => {
             const x = extras ? (extras.get(type) || 0) : 0;
-            const tip = extras ? ` title="${escapeAttr(x ? `${type}: ${n} + ${x} extra${x === 1 ? '' : 's'} = ${n + x} to cast` : `${type}: ${n}, no extras`)}"` : '';
+            const off = !!extras && offMaster.has(type.toLowerCase());
+            const tip = extras ? ` title="${escapeAttr((x ? `${type}: ${n} + ${x} extra${x === 1 ? '' : 's'} = ${n + x} to cast` : `${type}: ${n}, no extras`) + (off ? ' \u2014 NOT on the type master list: add it there so its total is watched' : ''))}"` : '';
             return `
-            <span class="pp-cast-sum-item"${tip}>
+            <span class="pp-cast-sum-item${off ? ' pp-cast-sum-item-off' : ''}"${tip}>
                 <span class="pp-cast-sum-type">${escapeHtml(type)}</span>
                 <span class="pp-cast-sum-n">${n}</span>${x ? `
-                <span class="pp-cast-sum-x">+ ${x} extra${x === 1 ? '' : 's'}</span>` : ''}
+                <span class="pp-cast-sum-x">+ ${x} extra${x === 1 ? '' : 's'}</span>` : ''}${off ? `
+                <span class="pp-cast-sum-offtag">not on master list</span>` : ''}
             </span>`;
         })
         .join('');
@@ -1391,10 +1397,18 @@ function updateCastingsSummary() {
     if (totalEl) totalEl.textContent = String(totalPanels);
     const extrasEl = document.getElementById('pp-cast-sum-extras');
     if (extrasEl) extrasEl.textContent = totalExtras ? ` + ${totalExtras} extra${totalExtras === 1 ? '' : 's'}` : '';
+    // The folded card says it too: "· 2 types not on the master list" (the names on hover).
+    let offEl = document.getElementById('pp-cast-sum-off');
+    if (!offEl && extrasEl) { offEl = document.createElement('span'); offEl.id = 'pp-cast-sum-off'; offEl.className = 'pp-cast-sum-off'; extrasEl.after(offEl); }
+    if (offEl) {
+        offEl.textContent = missingNames.length ? ` \u00b7 ${missingNames.length} type${missingNames.length === 1 ? '' : 's'} not on the master list` : '';
+        offEl.title = missingNames.length ? `Not on the type master list: ${missingNames.join(', ')}` : '';
+    }
     if (rejEl) rejEl.textContent = String(totalRejected);
     if (totalListEl) {
         totalListEl.innerHTML = totalByType.size ? gridByType(totalByType, extrasByType) : '';
         totalListEl.classList.toggle('pp-cast-sum-has-extras', totalExtras > 0);   // wider chips only when a type has extras
+        totalListEl.classList.toggle('pp-cast-sum-has-off', missingNames.length > 0);
     }
     if (rejListEl) rejListEl.innerHTML = totalRejected ? gridByType(rejectedByType) : '';
     wrap.querySelector('.pp-cast-sum-rej')?.classList.toggle('pp-cast-sum-rej-has', totalRejected > 0);

@@ -878,6 +878,12 @@ select.pp-inv-input.pp-inv-type-select { -webkit-appearance: none; appearance: n
     white-space: nowrap;
 }
 .pp-cast-sum-extras { font-weight: 600; color: #b45309; }
+/* Types in the castings that the type master list does not name (2026-11-13) */
+.pp-cast-sum-off { font-weight: 700; color: #be123c; }
+.pp-cast-sum-grid.pp-cast-sum-has-off { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.pp-cast-sum-grid.pp-cast-sum-has-extras.pp-cast-sum-has-off { grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); }
+.pp-cast-sum-item.pp-cast-sum-item-off { flex-wrap: wrap; row-gap: 0; background: #fff1f2; border-color: #fda4af; }
+.pp-cast-sum-offtag { flex: 0 0 100%; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #be123c; }
 .pp-cast-sum-rej-has {
     background: #fef2f2;
     border-color: #fecaca;

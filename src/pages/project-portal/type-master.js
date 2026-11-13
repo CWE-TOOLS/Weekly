@@ -225,6 +225,13 @@ function typesNotListed() {
     }
     return [...out.values()].sort((a, b) => natural(a.type, b.type));
 }
+/**
+ * Types the castings hold (this job, or the active phase of a phased job) that the master list does not name.
+ * Empty while the job has no list: nothing is "missing" from a list that was never started.
+ * Shown in the "panels in inventory" box (user request 2026-11-13).
+ * @returns {string[]} the type names as typed in the castings
+ */
+export function typeMasterMissing() { return typeMasterActive() ? typesNotListed().map(t => t.type) : []; }
 const colorName = (id) => (ctx.colorLogs().find(l => l.id === id)?.name) || '(unnamed color)';
 const showVal = (f, v) => blank(v) ? '(blank)' : (f === 'color_log_id' ? colorName(v) : String(v));
 /** Distinct values the castings hold for one field of a type (blank rows left out). */
