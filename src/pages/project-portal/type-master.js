@@ -7,9 +7,10 @@
  *  - Picking a type fills the row with whatever the master already knows about it.
  *  - A quantity that would take a type past its master total is never saved silently: the PM is asked whether the
  *    surplus becomes extras, whether the master total goes up, or whether to cancel.
- *  - A value changed on the master goes to every casting row of that type; a value changed on a casting row goes to
- *    the master and to the same type in the other castings, as long as those rows held the old value or nothing
- *    (a row that deliberately differs is never overwritten without a question). Ready (final) castings are skipped
+ *  - A value changed on the master fills the blank casting rows of that type; rows that already hold another value
+ *    are ALWAYS asked about first, listed cast by cast (user rule 2026-11-13: "always ask"). A value changed on a
+ *    casting row goes to the master and to the same type in the other castings, as long as those rows held the
+ *    old value or nothing. Ready (final) castings are skipped
  *    and named — except for the Description (user rule 2026-11-13): no print's change check reads it, so it goes
  *    to every casting, ready ones included, and never touches a milestone. Sizes, volume, face sq ft and colour
  *    stay frozen in a ready casting until "Make changes" is pressed there.
@@ -18,6 +19,11 @@
  *    waits at the bottom and drops into place when the list is left (user rule 2026-11-13).
  *  - Paste (copied or cut rows) is checked against the totals too: the PM is asked before a paste takes a type
  *    past its total (user rule 2026-11-13). Import Remakes is not: remake rows never count toward a total.
+ *
+ *  - The list is LOCKED whenever the Casting Inventory opens (user rule 2026-11-13): its boxes and buttons do
+ *    nothing until "Unlock to edit" is pressed, and it locks itself again after one minute without work on it.
+ *    The lock is this screen's own guard against a stray click or key, nothing is stored. Picking "Create a
+ *    type" in a casting, or raising a total from the over-total question, still works while it is locked.
  *
  * A phased job keeps one list PER PHASE (user rule 2026-11-11): the list, its counts, the dropdowns and the values
  * that follow across castings all stay inside the phase picked at the top of the portal.
@@ -50,6 +56,9 @@ let storeKey = null;            // the settings row of the list on screen (job, 
 let types = [];                 // [{ id, type, qty, description, width, length, color_log_id, cu_ft, ff_sq_ft }]
 let loadedOk = false;
 let openState = null;           // null = follow OPEN_LIMIT; true / false once the user has clicked the header
+let unlocked = false;           // the list is locked until "Unlock to edit" is pressed; locks itself after LOCK_AFTER_MS idle
+let lockTimer = null;
+const LOCK_AFTER_MS = 60000;
 let pendingOps = [];
 let saveTimer = null;
 let flushing = null;
@@ -122,6 +131,7 @@ export async function loadTypeMaster(pn) {
     if (key !== storeKey) {
         if (pendingOps.length && storeKey) flush();          // the list being left: its edits are captured and saved now
         pendingOps = []; openState = null; types = []; loadedOk = false; storeKey = key;
+        unlocked = false; clearTimeout(lockTimer); lockTimer = null;      // another job or phase: locked again
     }
     if (!key || pendingOps.length) return;
     try {
@@ -305,17 +315,47 @@ export function renderTypeMaster() {
             <div class="pp-tm-actions">
                 <button type="button" class="pp-add-btn pp-tm-add" data-tm="add">+ Add Type</button>
                 ${stray.length ? `<button type="button" class="pp-add-btn pp-tm-build" data-tm="build" title="${esc(stray.map(s => s.type).join(', '))}">+ Add the ${plural(stray.length, 'type')} already in the castings</button>` : ''}
-                <span class="pp-tm-tip">The list keeps itself sorted by type. Enter moves down and starts a new line. A list copied from Excel (Type, Qty, Description, Width, Length) can be pasted into a Type box.</span>
+                <span class="pp-tm-tip pp-tm-tip-locked">Locked, so a stray click or key changes nothing. Press <b>Unlock to edit</b> at the top right of this box.</span>
+                <span class="pp-tm-tip pp-tm-tip-open">The list keeps itself sorted by type. Enter moves down and starts a new line. A list copied from Excel (Type, Qty, Description, Width, Length) can be pasted into a Type box.</span>
             </div>
         </div>`;
     wrap.innerHTML = `
-        <div class="pp-tm-card${isOpen ? ' pp-tm-open' : ''}">
+        <div class="pp-tm-card${isOpen ? ' pp-tm-open' : ''}${unlocked ? '' : ' pp-tm-locked'}">
+          <div class="pp-tm-top">
             <button type="button" class="pp-tm-head" data-tm="toggle" aria-expanded="${isOpen}">
                 <span class="pp-cast-sum-chev" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
                 <span class="pp-tm-title">Type master list${scopeNow()?.label ? ` \u00b7 ${esc(scopeNow().label)}` : ''}</span>
                 <span class="pp-tm-headsum" data-tm-sum>${summaryHtml()}</span>
-            </button>${body}
+            </button>
+            <button type="button" class="pp-tm-lock" data-tm="lock" aria-pressed="${!unlocked}" title="${unlocked ? 'Lock the list now. It also locks itself after 1 minute without work on it.' : 'The list is locked against stray clicks. Press to edit it.'}">${unlocked ? '\uD83D\uDD13 Lock' : '\uD83D\uDD12 Locked \u00b7 Unlock to edit'}</button>
+          </div>${body}
         </div>`;
+    if (!unlocked) wrap.querySelectorAll('.pp-tm-body input, .pp-tm-body select, .pp-tm-body button').forEach(el => { el.disabled = true; });
+}
+
+/** Any work on the unlocked list pushes the automatic lock one minute further. */
+function touchLock() {
+    if (!unlocked) return;
+    clearTimeout(lockTimer);
+    lockTimer = setTimeout(() => setLocked(true, true), LOCK_AFTER_MS);
+}
+/** Lock or unlock the list. Locking commits the box being typed in and drops lines that never got a name. */
+function setLocked(on, auto = false) {
+    clearTimeout(lockTimer); lockTimer = null;
+    const wrap = document.getElementById('pp-type-master');
+    if (on) {
+        if (!unlocked) return;
+        // A question of ours is on screen (it belongs to an edit in progress): try again shortly.
+        if (auto && document.querySelector('.pp-tm-modal')) { lockTimer = setTimeout(() => setLocked(true, true), 10000); return; }
+        if (wrap?.contains(document.activeElement)) document.activeElement.blur();
+        for (const e of types.filter(x => blank(x.type))) mutate(opRemove(e.id));
+        unlocked = false;
+    } else {
+        unlocked = true; openState = true;
+        touchLock();
+    }
+    renderTypeMaster();
+    if (on && auto && ctx) ctx.toast('The type master list locked itself after 1 minute without work on it.', 'success', 3000);
 }
 /** Counts, pills and "differs" notes only: nothing that holds the cursor is rebuilt. */
 export function refreshTypeMasterStatus() {
@@ -390,18 +430,36 @@ async function applyToRows(targets, f, val, what) {
     return n;
 }
 
-/** A master box changed: rows that held the old value (or nothing) follow; rows that differ are asked about once. */
+/**
+ * A master box changed. Blank casting rows take the value at once; rows that already hold another value are always
+ * asked about first, one line per casting and value (user rule 2026-11-13). Ready (final) castings keep theirs
+ * unless the field is a free one (the Description), and the question says so.
+ */
 async function pushMasterField(e, f, before, val) {
     if (blank(val)) return;
-    const follow = [], differ = [];
+    const fill = [], held = [];
     for (const t of rowsOfType(e.type)) {
         if (sameVal(t.row[f], val)) continue;
-        if (blank(t.row[f]) || sameVal(t.row[f], before)) follow.push(t); else differ.push(t);
+        (blank(t.row[f]) ? fill : held).push(t);
     }
-    let targets = follow;
-    if (differ.length) {
-        const lines = differ.slice(0, 8).map(d => `   Cast ${d.casting.casting_number || '?'}: ${showVal(f, d.row[f])}`).join('\n') + (differ.length > 8 ? `\n   and ${differ.length - 8} more` : '');
-        if (window.confirm(`${e.type}: ${FIELD_WORDS[f]} = ${showVal(f, val)}\n\n${plural(differ.length, 'row')} in the castings ${differ.length === 1 ? 'holds' : 'hold'} a different value:\n${lines}\n\nOK = replace ${differ.length === 1 ? 'it' : 'them'} with ${showVal(f, val)}\nCancel = leave ${differ.length === 1 ? 'that row' : 'those rows'} as ${differ.length === 1 ? 'it is' : 'they are'}`)) targets = follow.concat(differ);
+    let targets = fill;
+    if (held.length) {
+        const free = FREE_FIELDS.has(f);
+        const groups = new Map();
+        for (const d of held) {
+            const stays = !free && ctx.isFinal(d.casting.id);
+            const k = d.casting.id + '|' + String(d.row[f]).trim();
+            if (!groups.has(k)) groups.set(k, { cast: d.casting.casting_number || '?', v: d.row[f], n: 0, stays });
+            groups.get(k).n++;
+        }
+        const all = [...groups.values()];
+        const lines = all.slice(0, 12).map(g => `   Cast ${g.cast}: ${showVal(f, g.v)}${g.n > 1 ? ` (${g.n} rows)` : ''}${g.stays ? '   \u2014 ready, stays as it is' : ''}`).join('\n') + (all.length > 12 ? `\n   and ${all.length - 12} more` : '');
+        const head = `${e.type}: ${FIELD_WORDS[f]} = ${showVal(f, val)}\n\n${plural(held.length, 'row')} in the castings ${held.length === 1 ? 'holds' : 'hold'} another value:\n${lines}\n\n`;
+        if (all.every(g => g.stays)) {
+            window.alert(head + `All of them are in ready (final) castings: nothing changes there until "Make changes" is pressed on the casting.`);
+        } else if (window.confirm(head + `OK = replace with ${showVal(f, val)}${all.some(g => g.stays) ? ' (ready castings stay as they are until "Make changes" is pressed there)' : ''}\nCancel = leave the castings as they are`)) {
+            targets = fill.concat(held);
+        }
     }
     if (targets.length) await applyToRows(targets, f, val, `${FIELD_WORDS[f]} of ${e.type}`);
 }
@@ -760,12 +818,15 @@ export function initTypeMaster(c) {
         const b = ev.target.closest('[data-tm]');
         if (!b) return;
         const what = b.dataset.tm;
+        if (what === 'lock') { setLocked(unlocked); return; }
+        if (what !== 'toggle' && !unlocked) return;
         if (what === 'toggle') { openState = !(openState ?? (types.length <= OPEN_LIMIT)); if (wrap.contains(document.activeElement)) document.activeElement.blur(); renderTypeMaster(); }
         else if (what === 'add') addBlankRow();
         else if (what === 'build') buildFromCastings();
         else if (what === 'del') removeType(b.closest('.pp-tm-row')?.dataset.tmId);
     });
     wrap.addEventListener('change', (ev) => { if (ev.target.matches('[data-tm-field]')) commitMasterField(ev.target); });
+    for (const kind of ['keydown', 'input', 'change', 'click', 'paste']) wrap.addEventListener(kind, touchLock, true);   // work on the list keeps it open
     // Nothing moves under the cursor while a line is typed; once the cursor has left the list it is put back in order.
     wrap.addEventListener('focusout', (ev) => {
         if (!ev.target.matches?.('[data-tm-field]')) return;

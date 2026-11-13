@@ -713,6 +713,20 @@ body { overflow: visible; }
 .pp-tm-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; width: 100%; background: none; border: none; padding: 0; text-align: left; font-family: inherit; font-size: 12.5px; color: #334155; cursor: pointer; }
 .pp-tm-head:focus-visible { outline: 2px solid #1d4ed8; outline-offset: 2px; border-radius: 4px; }
 .pp-tm-open .pp-tm-head .pp-cast-sum-chev { transform: rotate(90deg); }
+.pp-tm-top { display: flex; align-items: center; gap: 10px; }
+.pp-tm-top .pp-tm-head { flex: 1 1 auto; width: auto; min-width: 0; }
+.pp-tm-lock { flex: 0 0 auto; padding: 4px 12px; border: 1px solid #94a3b8; border-radius: 9999px; background: #fff; color: #334155; font-family: inherit; font-size: 12px; font-weight: 700; white-space: nowrap; cursor: pointer; }
+.pp-tm-lock:hover { background: #eff6ff; border-color: #1d4ed8; color: #1d4ed8; }
+.pp-tm-lock:focus-visible { outline: 2px solid #1d4ed8; outline-offset: 2px; }
+.pp-tm-locked .pp-tm-lock { background: #1e293b; border-color: #1e293b; color: #fff; }
+.pp-tm-locked .pp-tm-lock:hover { background: #334155; border-color: #334155; color: #fff; }
+.pp-tm-locked .pp-tm-in:disabled { background: #f1f5f9; border-color: #cbd5e1; color: #0f172a; -webkit-text-fill-color: #0f172a; opacity: 1; cursor: not-allowed; }
+.pp-tm-locked .pp-tm-in.pp-tm-off:disabled { background: #fffbeb; border-color: #d97706; }
+.pp-tm-locked .pp-tm-del { visibility: hidden; }
+.pp-tm-locked .pp-tm-actions .pp-add-btn { display: none; }
+.pp-tm-tip-locked { display: none; }
+.pp-tm-locked .pp-tm-tip-locked { display: inline; }
+.pp-tm-locked .pp-tm-tip-open { display: none; }
 .pp-tm-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #1e3a8a; }
 .pp-tm-headsum { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .pp-tm-sum b { color: #0f172a; }
