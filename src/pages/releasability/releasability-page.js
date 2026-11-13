@@ -923,7 +923,9 @@ function executePrintFolderBoard(projects, projectsByWeek, selectedWeeks, getWee
       // Casting # flag — mirrors the blue "Cast #N" pill from the live tiles; omitted when unset.
       const castNum = p.castingNumber == null ? '' : String(p.castingNumber).trim();
       const castTag = castNum ? `<span class="fb-cast">Cast #${esc(castNum)}</span>` : '';
-      return `<tr><td class="fb-name"><span class="fb-marker">${inner}</span>${name}${castTag}</td><td class="fb-start">${start}</td></tr>`;
+      // Phase beside the cast, like the board's orange bubble (2026-11-12)
+      const phaseTag = castNum && p.phaseName ? `<span class="fb-phase">${esc(p.phaseName)}</span>` : '';
+      return `<tr><td class="fb-name"><span class="fb-marker">${inner}</span>${name}${phaseTag}${castTag}</td><td class="fb-start">${start}</td></tr>`;
     }).join('');
 
     pages += `
@@ -963,6 +965,8 @@ function executePrintFolderBoard(projects, projectsByWeek, selectedWeeks, getWee
   .fb-marker { display: inline-block; width: 52px; margin-right: 18px; text-align: center; vertical-align: middle; }
   .fb-star { color: #e53935; font-size: 42px; line-height: 1; vertical-align: middle; }
   .fb-green { display: inline-block; width: 40px; height: 28px; background: #43a047; border-radius: 3px; vertical-align: middle; }
+  .fb-phase { display: inline-block; margin-left: 18px; padding: 4px 16px; border-radius: 999px; background: #ffe0b8; color: #7a4a00; font-size: 24px; font-weight: 700; letter-spacing: 0.5px; line-height: 1.2; vertical-align: middle; white-space: nowrap; }
+  .fb-phase + .fb-cast { margin-left: 8px; }
   .fb-cast { display: inline-block; margin-left: 18px; padding: 4px 16px; border-radius: 999px; background: #d7e3ff; color: #1b3a6b; font-size: 24px; font-weight: 700; letter-spacing: 0.5px; line-height: 1.2; vertical-align: middle; white-space: nowrap; }
   table.fb-list td.fb-start { text-align: right; white-space: nowrap; font-size: 28px; font-variant-numeric: tabular-nums; width: 180px; }
   th.fb-start { text-align: right; }
@@ -979,16 +983,21 @@ ${pages}
 
 function executePrint(projects, projectsByWeek, selectedWeeks, getWeekLabel) {
   const weekKeys = Array.from(selectedWeeks).sort();
+  const esc = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
   let tableRows = '';
   weekKeys.forEach(weekKey => {
     if (!projectsByWeek[weekKey]) return;
     tableRows += `<tr class="week-header"><td colspan="2">${getWeekLabel(weekKey)}</td></tr>`;
 
-    const weekProjects = projectsByWeek[weekKey].sort((a, b) => {
+    // Same order as the board's rows: scheduled rows by start date then name, hand-added rows after them by name
+    const weekProjects = projectsByWeek[weekKey].slice().sort((a, b) => {
+      const am = a.source === 'manual', bm = b.source === 'manual';
+      if (am !== bm) return am ? 1 : -1;
+      if (am) return (a.project || '').localeCompare(b.project || '');
       const dateA = a.actualStartDate || a.weekMonday || '';
       const dateB = b.actualStartDate || b.weekMonday || '';
-      return dateA.localeCompare(dateB) || a.project.localeCompare(b.project);
+      return dateA.localeCompare(dateB) || (a.project || '').localeCompare(b.project || '');
     });
 
     weekProjects.forEach(p => {
@@ -998,7 +1007,16 @@ function executePrint(projects, projectsByWeek, selectedWeeks, getWeekLabel) {
         const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
         startDate = `${days[d.getDay()]} ${d.getDate()}`;
       }
-      tableRows += `<tr><td class="project-name">${p.project}</td><td class="start-date">${startDate}</td></tr>`;
+      // The row reads like the board's row: job number, the portal's job name, CAST + phase + cast number
+      // (it used to print the Optimizer sheet's own row name, which the board only shows on hover) 2026-11-12
+      const num = p.projectNumber ? esc(p.projectNumber) : '';
+      const name = esc(p.displayName || p.project || '');
+      const castNum = p.castingNumber == null ? '' : String(p.castingNumber).trim();
+      const sample = p.autoComplete === 'sample' ? '<span class="pn-sample">SAMPLE</span>' : '';
+      const cast = castNum
+        ? `<span class="pn-cast">CAST${p.phaseName ? ` <span class="pn-phase">${esc(p.phaseName)}</span>` : ''} <b>#${esc(castNum)}</b></span>`
+        : '';
+      tableRows += `<tr><td class="project-name"><span class="pn-num">${num}</span><span class="pn-name">${name}</span>${sample}${cast}</td><td class="start-date">${startDate}</td></tr>`;
     });
   });
 
@@ -1015,6 +1033,12 @@ function executePrint(projects, projectsByWeek, selectedWeeks, getWeekLabel) {
   th, td { border: 1px solid #bbb; padding: 4px 8px; }
   th { background: #f0f0f0; text-align: left; font-size: 11px; }
   .project-name { font-size: 11px; }
+  .pn-num { display: inline-block; min-width: 50px; margin-right: 6px; font-weight: bold; }
+  .pn-name { font-weight: bold; }
+  .pn-cast { margin-left: 14px; font-size: 10px; color: #444; letter-spacing: 0.3px; white-space: nowrap; }
+  .pn-cast b { font-size: 11px; color: #000; }
+  .pn-phase { display: inline-block; padding: 0 6px; border: 1px solid #c77700; border-radius: 8px; background: #ffe9cc; color: #7a4a00; font-weight: bold; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .pn-sample { margin-left: 8px; padding: 0 5px; border: 1px solid #2e7d32; border-radius: 3px; font-size: 9px; font-weight: bold; color: #2e7d32; }
   .start-date { text-align: center; font-size: 11px; width: 70px; }
   .week-header td { background: #e3e8f0; font-weight: bold; font-size: 12px; padding: 5px 8px; }
   @page { size: portrait; margin: 0.5in; }
