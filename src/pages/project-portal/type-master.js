@@ -227,11 +227,13 @@ function typesNotListed() {
 }
 /**
  * Types the castings hold (this job, or the active phase of a phased job) that the master list does not name.
- * Empty while the job has no list: nothing is "missing" from a list that was never started.
- * Shown in the "panels in inventory" box (user request 2026-11-13).
+ * A list that was never started names nothing, so every type is missing from it (user rule 2026-11-13, second
+ * pass: "there's no master started, the totals box should have the marks"). Empty only while there is no list
+ * to speak of: no phase picked on a phased job, or the list could not be loaded.
+ * Shown in the "panels in inventory" box.
  * @returns {string[]} the type names as typed in the castings
  */
-export function typeMasterMissing() { return typeMasterActive() ? typesNotListed().map(t => t.type) : []; }
+export function typeMasterMissing() { return (ctx && storeKey && loadedOk) ? typesNotListed().map(t => t.type) : []; }
 const colorName = (id) => (ctx.colorLogs().find(l => l.id === id)?.name) || '(unnamed color)';
 const showVal = (f, v) => blank(v) ? '(blank)' : (f === 'color_log_id' ? colorName(v) : String(v));
 /** Distinct values the castings hold for one field of a type (blank rows left out). */

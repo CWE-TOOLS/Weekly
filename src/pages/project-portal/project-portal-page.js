@@ -147,7 +147,7 @@ import {
 } from '../../services/casting-layout-service.js';
 import { registerRefreshHandler, isPortalChange, isOwnSignal, signalInfo } from '../../services/supabase-service.js';
 // Type master list (2026-11-11): the job's types + totals above the castings; casting rows pick their type from it.
-import { initTypeMaster, loadTypeMaster, renderTypeMaster, refreshTypeMasterStatus, typeMasterActive, typeCellHtml, typeMasterOverCheck, typeMasterPasteCheck, typeMasterMissing, TM_NEW } from './type-master.js?v=20261113-5';
+import { initTypeMaster, loadTypeMaster, renderTypeMaster, refreshTypeMasterStatus, typeMasterActive, typeCellHtml, typeMasterOverCheck, typeMasterPasteCheck, typeMasterMissing, TM_NEW } from './type-master.js?v=20261113-6';
 import '../../utils/number-wheel-guard.js';   // the mouse wheel must not change a focused hour box (user 2026-11-03)
 
 const STATUS_SORT_ORDER = {
@@ -1371,7 +1371,8 @@ function updateCastingsSummary() {
         }
     }
     // Types the castings hold that the type master list does not name (2026-11-13): flagged on the inventory card.
-    // Empty while the job has no master list; on a phased job it is the active phase's list and castings.
+    // A list that was never started names nothing: every type is flagged. On a phased job it is the active phase's
+    // list and castings.
     const missingNames = typeMasterMissing();
     const offMaster = new Set(missingNames.map(t => t.trim().toLowerCase()));
     // `extras` (the inventory card only): each type also shows its extras as a separate "+ N extras".
