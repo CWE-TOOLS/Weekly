@@ -10,7 +10,9 @@
  *  - A value changed on the master goes to every casting row of that type; a value changed on a casting row goes to
  *    the master and to the same type in the other castings, as long as those rows held the old value or nothing
  *    (a row that deliberately differs is never overwritten without a question). Ready (final) castings are skipped
- *    and named.
+ *    and named — except for the Description (user rule 2026-11-13): no print's change check reads it, so it goes
+ *    to every casting, ready ones included, and never touches a milestone. Sizes, volume, face sq ft and colour
+ *    stay frozen in a ready casting until "Make changes" is pressed there.
  *
  * A phased job keeps one list PER PHASE (user rule 2026-11-11): the list, its counts, the dropdowns and the values
  * that follow across castings all stay inside the phase picked at the top of the portal.
@@ -32,6 +34,8 @@ const keyFor = (pn) => ((typeof window !== 'undefined' && window.__TYPE_MASTER_P
 export const TM_NEW = '__tm_new__';
 const SYNC_FIELDS = ['description', 'width', 'length', 'color_log_id', 'cu_ft', 'ff_sq_ft'];
 const NUM_FIELDS = new Set(['cu_ft', 'ff_sq_ft']);
+/** Fields no print depends on (not in INV_PRINT_FIELDS of the page): they follow into ready (final) castings too. */
+const FREE_FIELDS = new Set(['description']);
 const FIELD_WORDS = { description: 'Description', width: 'Width', length: 'Length', color_log_id: 'Color', cu_ft: 'Cu Ft', ff_sq_ft: 'FF Sq Ft' };
 const OPEN_LIMIT = 10;          // longer lists start folded, like a casting with many rows
 
@@ -338,13 +342,17 @@ function setRowDom(rowId, f, val) {
 
 // ---------------------------------------------------------------- pushing a value to the casting rows
 
-/** Write one field on casting rows. Ready (final) castings are left alone and named in the toast. */
+/**
+ * Write one field on casting rows. Ready (final) castings are left alone and named in the toast — unless the field
+ * is one no print depends on (the Description): that one is written everywhere and no milestone is looked at.
+ */
 async function applyToRows(targets, f, val, what) {
     const skipped = new Set(), touched = new Set();
     let n = 0, failed = 0;
+    const free = FREE_FIELDS.has(f);
     const byCasting = new Map();
     for (const { casting, row } of targets) {
-        if (ctx.isFinal(casting.id)) { skipped.add(casting.casting_number || '?'); continue; }
+        if (!free && ctx.isFinal(casting.id)) { skipped.add(casting.casting_number || '?'); continue; }
         if (!byCasting.has(casting.id)) byCasting.set(casting.id, []);
         byCasting.get(casting.id).push(row);
     }
@@ -365,7 +373,8 @@ async function applyToRows(targets, f, val, what) {
             logger.error('[type-master] rows update failed:', err);
         }
     }
-    for (const id of touched) { try { ctx.afterChange(id); } catch (err) { logger.warn('[type-master] afterChange failed:', err); } }
+    // A free field changes no count and no print: the milestones are not even asked (a ready casting stays as it is).
+    if (!free) for (const id of touched) { try { ctx.afterChange(id); } catch (err) { logger.warn('[type-master] afterChange failed:', err); } }
     const parts = [];
     if (n) parts.push(`${what}: set on ${plural(n, 'row')} in ${plural(touched.size, 'casting')}.`);
     if (failed) parts.push(`${plural(failed, 'row')} could not be saved.`);
