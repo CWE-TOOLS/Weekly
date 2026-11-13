@@ -14,6 +14,11 @@
  *    to every casting, ready ones included, and never touches a milestone. Sizes, volume, face sq ft and colour
  *    stay frozen in a ready casting until "Make changes" is pressed there.
  *
+ *  - The list is always shown sorted by type, like the dropdown (TL-2 before TL-10); a line still being named
+ *    waits at the bottom and drops into place when the list is left (user rule 2026-11-13).
+ *  - Paste (copied or cut rows) is checked against the totals too: the PM is asked before a paste takes a type
+ *    past its total (user rule 2026-11-13). Import Remakes is not: remake rows never count toward a total.
+ *
  * A phased job keeps one list PER PHASE (user rule 2026-11-11): the list, its counts, the dropdowns and the values
  * that follow across castings all stay inside the phase picked at the top of the portal.
  *
@@ -170,6 +175,8 @@ const opRemove = (id) => (l) => { const i = l.findIndex(x => x.id === id); if (i
 // ---------------------------------------------------------------- what the castings hold
 
 const named = () => types.filter(e => !blank(e.type));
+/** The list as shown: named types sorted like the dropdown, lines still without a name at the bottom. */
+const shown = () => named().sort((a, b) => natural(a.type, b.type)).concat(types.filter(e => blank(e.type)));
 const findType = (type) => blank(type) ? null : (named().find(e => norm(e.type) === norm(type)) || null);
 /** True once the list names at least one type: casting rows then pick their type from it. */
 export function typeMasterActive() { return loadedOk && named().length > 0; }
@@ -294,11 +301,11 @@ export function renderTypeMaster() {
         <div class="pp-tm-body">
             ${types.length ? '' : `<p class="pp-tm-hint">Enter every type of this ${scopeWord()} with the total quantity the ${scopeWord()} needs. <b>Type</b> and <b>Qty</b> are enough: the other boxes can be filled in later, here or in a casting. Once a type is on the list, the castings pick their types from it and a type can no longer go past its total by accident.</p>`}
             ${types.length ? `<div class="pp-tm-row pp-tm-headrow"><span>Type</span><span>Qty</span><span>Description</span><span>Width</span><span>Length</span><span>Color</span><span>Cu Ft</span><span>FF Sq Ft</span><span>In the castings</span><span></span></div>` : ''}
-            ${types.map(rowHtml).join('')}
+            ${shown().map(rowHtml).join('')}
             <div class="pp-tm-actions">
                 <button type="button" class="pp-add-btn pp-tm-add" data-tm="add">+ Add Type</button>
                 ${stray.length ? `<button type="button" class="pp-add-btn pp-tm-build" data-tm="build" title="${esc(stray.map(s => s.type).join(', '))}">+ Add the ${plural(stray.length, 'type')} already in the castings</button>` : ''}
-                <span class="pp-tm-tip">Enter moves down and starts a new line. A list copied from Excel (Type, Qty, Description, Width, Length) can be pasted into a Type box.</span>
+                <span class="pp-tm-tip">The list keeps itself sorted by type. Enter moves down and starts a new line. A list copied from Excel (Type, Qty, Description, Width, Length) can be pasted into a Type box.</span>
             </div>
         </div>`;
     wrap.innerHTML = `
@@ -611,6 +618,65 @@ export async function typeMasterOverCheck(item, next) {
     return { action: 'cancel' };
 }
 
+/**
+ * The same check for a Paste (copied or cut rows about to be added to a casting): every type the paste would take
+ * past its master total is listed and the PM picks: cancel, raise the totals, or paste the surplus as extras.
+ * @param {Array<Object>} items the clipboard rows (type, quantity, extras, …) — never changed here
+ * @param {Object} [casting] the casting being pasted into (for the wording)
+ * @returns {Promise<{action:'cancel'}|{action:'ok', items:Array<Object>, commit?:Function}>} items = the rows to
+ *   create; commit (only after "raise the totals") is called by the page once the paste is really going ahead, so
+ *   a paste refused by the tracking-mark guard never leaves a raised total behind.
+ */
+export async function typeMasterPasteCheck(items, casting) {
+    if (!typeMasterActive() || !Array.isArray(items) || !items.length) return { action: 'ok', items };
+    const pasteQ = (it) => { const n = parseInt(it?.quantity, 10); return Number.isFinite(n) && n >= 0 ? n : 1; };   // a blank quantity is saved as 1
+    const adding = new Map();                                    // master entry id -> { e, add }
+    for (const it of items) {
+        const e = findType(it.type);
+        if (!e || !(e.qty > 0)) continue;
+        const q = pasteQ(it);
+        if (!q) continue;
+        if (!adding.has(e.id)) adding.set(e.id, { e, add: 0 });
+        adding.get(e.id).add += q;
+    }
+    const over = [];
+    for (const { e, add } of adding.values()) {
+        const u = usage(e.type);
+        if (u.placed + add > e.qty) over.push({ e, add, placed: u.placed, room: Math.max(0, e.qty - u.placed), total: u.placed + add });
+    }
+    if (!over.length) return { action: 'ok', items };
+    over.sort((a, b) => natural(a.e.type, b.e.type));
+    const surplus = over.reduce((n, o) => n + (o.add - o.room), 0);
+    const one = over.length === 1;
+    const answer = await dialog({
+        title: one ? `This paste takes ${esc(over[0].e.type)} past its total` : `This paste takes ${over.length} types past their totals`,
+        bodyHtml: `<p>Pasting into Cast ${esc(casting?.casting_number || '?')}:</p>
+            ${over.map(o => `<p><b>${esc(o.e.type)}</b>: the master list asks for <b>${o.e.qty}</b>, the castings already hold <b>${o.placed}</b>, the paste adds <b>${o.add}</b>: <b class="pp-tm-dialog-over">${o.total - o.e.qty} over</b>.</p>`).join('')}
+            <p class="pp-tm-dialog-note">Extras are cast on purpose on top of the total and are numbered TYPE.EXTRA on the Tracking tab.</p>`,
+        buttons: [
+            { label: 'Cancel', value: 'cancel' },
+            { label: one ? `Raise the master total to ${over[0].total}` : 'Raise the master totals', value: 'raise' },
+            { label: `Paste, the ${surplus} over as extra${surplus === 1 ? '' : 's'}`, kind: 'primary', value: 'split' }
+        ]
+    });
+    if (answer === 'raise') {
+        return { action: 'ok', items, commit: () => {
+            for (const o of over) { mutate(opSet(o.e.id, { qty: o.total }, { ...o.e })); setMasterDom(o.e.id, 'qty', o.total); }
+            refreshTypeMasterStatus();
+        } };
+    }
+    if (answer !== 'split') return { action: 'cancel' };
+    const room = new Map(over.map(o => [o.e.id, o.room]));
+    const out = items.map(it => {
+        const e = findType(it.type);
+        if (!e || !room.has(e.id)) return it;
+        const q = pasteQ(it), keep = Math.min(q, room.get(e.id));
+        room.set(e.id, room.get(e.id) - keep);
+        return keep === q ? it : { ...it, quantity: keep, extras: extrasOf(it) + (q - keep) };
+    });
+    return { action: 'ok', items: out };
+}
+
 // ---------------------------------------------------------------- the type dropdown of a casting row
 
 /** The Type cell of a casting row once the list is in use; null while the job has no list (plain text box then). */
@@ -700,6 +766,15 @@ export function initTypeMaster(c) {
         else if (what === 'del') removeType(b.closest('.pp-tm-row')?.dataset.tmId);
     });
     wrap.addEventListener('change', (ev) => { if (ev.target.matches('[data-tm-field]')) commitMasterField(ev.target); });
+    // Nothing moves under the cursor while a line is typed; once the cursor has left the list it is put back in order.
+    wrap.addEventListener('focusout', (ev) => {
+        if (!ev.target.matches?.('[data-tm-field]')) return;
+        setTimeout(() => {
+            if (wrap.contains(document.activeElement)) return;
+            const onScreen = [...wrap.querySelectorAll('.pp-tm-row[data-tm-id]')].map(r => r.dataset.tmId).join('|');
+            if (onScreen !== shown().map(e => e.id).join('|')) renderTypeMaster();
+        }, 0);
+    });
     wrap.addEventListener('keydown', (ev) => {
         if (ev.key !== 'Enter' || ev.shiftKey || ev.ctrlKey || ev.altKey || !ev.target.matches('[data-tm-field]')) return;
         ev.preventDefault();

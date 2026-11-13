@@ -147,7 +147,7 @@ import {
 } from '../../services/casting-layout-service.js';
 import { registerRefreshHandler, isPortalChange, isOwnSignal, signalInfo } from '../../services/supabase-service.js';
 // Type master list (2026-11-11): the job's types + totals above the castings; casting rows pick their type from it.
-import { initTypeMaster, loadTypeMaster, renderTypeMaster, refreshTypeMasterStatus, typeMasterActive, typeCellHtml, typeMasterOverCheck, TM_NEW } from './type-master.js?v=20261113-2';
+import { initTypeMaster, loadTypeMaster, renderTypeMaster, refreshTypeMasterStatus, typeMasterActive, typeCellHtml, typeMasterOverCheck, typeMasterPasteCheck, TM_NEW } from './type-master.js?v=20261113-3';
 import '../../utils/number-wheel-guard.js';   // the mouse wheel must not change a focused hour box (user 2026-11-03)
 
 const STATUS_SORT_ORDER = {
@@ -4781,16 +4781,27 @@ async function handlePasteComponents(targetCastingId) {
     if (!Array.isArray(copiedComponents) || copiedComponents.length === 0) return;
     if (!targetCastingId) return;
     const targetCasting = currentCastings.find(c => c.id === targetCastingId);
+    if (inventoryEditBlocked(targetCasting)) return;          // ready (final): the usual notice, before any question
+    // Type master list: a paste that would take a type past its total is asked about first (user rule 2026-11-13).
+    // The answer can turn the surplus into extras, so the tracking-mark guard runs on the rows that will really go in.
+    let clip = copiedComponents;
+    let masterVerdict = null;
+    if (typeMasterActive()) {
+        masterVerdict = await typeMasterPasteCheck(clip, targetCasting);
+        if (masterVerdict.action === 'cancel') return;
+        clip = masterVerdict.items;
+    }
     if (inventoryEditBlocked(targetCasting, sim => {
-        const rows = sim.inv.get(targetCastingId) || []; for (const it of copiedComponents) rows.push({ ...it, id: null }); sim.inv.set(targetCastingId, rows);
+        const rows = sim.inv.get(targetCastingId) || []; for (const it of clip) rows.push({ ...it, id: null }); sim.inv.set(targetCastingId, rows);
     })) return;
+    masterVerdict?.commit?.();                                 // "raise the master totals": only now that the paste goes ahead
     if (!currentCastInvExpanded.has(targetCastingId)) currentCastInvExpanded.add(targetCastingId);
     try {
         const existing = getInventoryFor(targetCastingId);
         const baseOrder = existing.length > 0
             ? Math.max(...existing.map(c => c.sort_order || 0)) + 1
             : 0;
-        const inserted = await Promise.all(copiedComponents.map((src, idx) =>
+        const inserted = await Promise.all(clip.map((src, idx) =>
             createInventoryItem(targetCastingId, { ...src, sort_order: baseOrder + idx })
         ));
         const list = existing.slice();
