@@ -733,6 +733,10 @@ body { overflow: visible; }
 .pp-tm-flag { padding: 1px 8px; border-radius: 9999px; font-size: 11px; font-weight: 700; background: #fffbeb; color: #92400e; border: 1px solid #fcd34d; }
 .pp-tm-flag.pp-tm-flag-unplaced { background: #fff1f2; color: #be123c; border-color: #fda4af; }
 .pp-tm-pill.pp-tm-unplaced { background: #fff1f2; color: #be123c; border-color: #fda4af; }
+/* No pill may run past its column (the long "not in any casting yet" one did, 2026-11-16): that one wraps onto a
+   second line inside the column, the short ones are cut with an ellipsis if a column ever gets too narrow. */
+.pp-tm-pill { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.pp-tm-pill.pp-tm-unplaced { white-space: normal; border-radius: 10px; line-height: 1.25; text-align: center; cursor: help; }
 .pp-tm-row-unplaced .pp-tm-in.pp-tm-type, .pp-tm-locked .pp-tm-row-unplaced .pp-tm-in.pp-tm-type:disabled { background: #fff1f2; border-color: #fb7185; }
 .pp-tm-flag.pp-tm-flag-over { background: #fef2f2; color: #b91c1c; border-color: #fca5a5; }
 .pp-tm-body { margin-top: 10px; }
