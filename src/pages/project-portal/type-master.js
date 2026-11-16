@@ -15,6 +15,8 @@
  *    to every casting, ready ones included, and never touches a milestone. Sizes, volume, face sq ft and colour
  *    stay frozen in a ready casting until "Make changes" is pressed there.
  *
+ *  - A type that is in no casting yet says so in rose ("not in any casting yet"), on its line and in the title
+ *    line of the box, so a type cannot be forgotten (user request 2026-11-16).
  *  - The list is always shown sorted by type, like the dropdown (TL-2 before TL-10); a line still being named
  *    waits at the bottom and drops into place when the list is left (user rule 2026-11-13).
  *  - Paste (copied or cut rows) is checked against the totals too: the PM is asked before a paste takes a type
@@ -233,6 +235,10 @@ function typesNotListed() {
  * Shown in the "panels in inventory" box.
  * @returns {string[]} the type names as typed in the castings
  */
+/** For the type search: the named types of the list with their totals ([] while the job has no list). */
+export function typeMasterEntries() { return typeMasterActive() ? named().map(e => ({ type: e.type, qty: e.qty })) : []; }
+/** A listed type that no casting row carries yet (remake rows count as carrying it). */
+const unplaced = (e) => !blank(e.type) && rowsOfType(e.type).length === 0;
 export function typeMasterMissing() { return (ctx && storeKey && loadedOk) ? typesNotListed().map(t => t.type) : []; }
 const colorName = (id) => (ctx.colorLogs().find(l => l.id === id)?.name) || '(unnamed color)';
 const showVal = (f, v) => blank(v) ? '(blank)' : (f === 'color_log_id' ? colorName(v) : String(v));
@@ -254,7 +260,8 @@ function statusHtml(e) {
     const u = usage(e.type), q = e.qty;
     const tip = u.by.length ? byText(u.by) : 'Not in any casting yet';
     let cls, text;
-    if (!(q > 0)) { cls = 'pp-tm-none'; text = `${u.placed} in castings · no total`; }
+    if (unplaced(e)) { cls = 'pp-tm-unplaced'; text = q > 0 ? `not in any casting yet · ${q} to place` : 'not in any casting yet'; }
+    else if (!(q > 0)) { cls = 'pp-tm-none'; text = `${u.placed} in castings · no total`; }
     else if (u.placed > q) { cls = 'pp-tm-over'; text = `${u.placed} of ${q} · ${u.placed - q} over`; }
     else if (u.placed === q) { cls = 'pp-tm-done'; text = `${q} of ${q} ✓`; }
     else { cls = 'pp-tm-left'; text = `${u.placed} of ${q} · ${q - u.placed} left`; }
@@ -276,7 +283,7 @@ function rowHtml(e) {
     };
     const cn = fieldNote(e, 'color_log_id');
     const color = ctx.colorSelectHtml(e.color_log_id, { className: 'pp-tm-in pp-tm-color' + (cn.off ? ' pp-tm-off' : ''), dataAttrs: { 'data-tm-field': 'color_log_id', title: cn.title || 'Color' } });
-    return `<div class="pp-tm-row" data-tm-id="${esc(e.id)}">
+    return `<div class="pp-tm-row${unplaced(e) ? ' pp-tm-row-unplaced' : ''}" data-tm-id="${esc(e.id)}">
         <input type="text" class="pp-tm-in pp-tm-type" data-tm-field="type" placeholder="Type" maxlength="40" value="${esc(e.type)}">
         <input type="number" class="pp-tm-in" data-tm-field="qty" min="0" step="1" placeholder="Qty" value="${e.qty ?? ''}">
         ${inp('description', 'type="text" maxlength="120"', 'Description')}
@@ -299,7 +306,9 @@ function summaryHtml() {
     }
     const left = required - placed;
     const stray = typesNotListed();
+    const idle = list.filter(unplaced);
     return `<span class="pp-tm-sum">${plural(list.length, 'type')} · <b>${required}</b> required · ${placed} in castings · ${left ? `<b>${left}</b> left to place` : 'all placed'}</span>`
+        + (idle.length ? `<span class="pp-tm-flag pp-tm-flag-unplaced" title="${esc(idle.map(e => e.type).join(', '))}">${plural(idle.length, 'type')} not in any casting yet</span>` : '')
         + (over ? `<span class="pp-tm-flag pp-tm-flag-over">${plural(over, 'type')} over the total</span>` : '')
         + (noTotal ? `<span class="pp-tm-flag">${plural(noTotal, 'type')} without a total</span>` : '')
         + (stray.length ? `<span class="pp-tm-flag" title="${esc(stray.map(s => s.type).join(', '))}">${plural(stray.length, 'type')} in the castings not on this list</span>` : '');
@@ -377,6 +386,7 @@ export function refreshTypeMasterStatus() {
         if (!e) return;
         const st = row.querySelector('[data-tm-status]');
         if (st) st.innerHTML = statusHtml(e);
+        row.classList.toggle('pp-tm-row-unplaced', unplaced(e));
         for (const f of SYNC_FIELDS) {
             const el = row.querySelector(`[data-tm-field="${f}"]`);
             if (!el) continue;

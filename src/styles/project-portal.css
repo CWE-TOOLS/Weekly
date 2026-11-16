@@ -731,6 +731,9 @@ body { overflow: visible; }
 .pp-tm-headsum { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .pp-tm-sum b { color: #0f172a; }
 .pp-tm-flag { padding: 1px 8px; border-radius: 9999px; font-size: 11px; font-weight: 700; background: #fffbeb; color: #92400e; border: 1px solid #fcd34d; }
+.pp-tm-flag.pp-tm-flag-unplaced { background: #fff1f2; color: #be123c; border-color: #fda4af; }
+.pp-tm-pill.pp-tm-unplaced { background: #fff1f2; color: #be123c; border-color: #fda4af; }
+.pp-tm-row-unplaced .pp-tm-in.pp-tm-type, .pp-tm-locked .pp-tm-row-unplaced .pp-tm-in.pp-tm-type:disabled { background: #fff1f2; border-color: #fb7185; }
 .pp-tm-flag.pp-tm-flag-over { background: #fef2f2; color: #b91c1c; border-color: #fca5a5; }
 .pp-tm-body { margin-top: 10px; }
 .pp-tm-hint { margin: 0 0 10px; font-size: 12.5px; line-height: 1.5; color: #475569; }
@@ -893,6 +896,38 @@ select.pp-inv-input.pp-inv-type-select { -webkit-appearance: none; appearance: n
 .pp-cast-sum-rej-has .pp-cast-sum-item { border-color: #fee2e2; }
 .pp-cast-sum-rej-has .pp-cast-sum-type { color: #7f1d1d; }
 .pp-cast-sum-rej-has .pp-cast-sum-n { color: #b91c1c; }
+/* Type search on the Casting Inventory tab (2026-11-16) */
+.pp-inv-search { margin: 0 0 16px; }
+.pp-inv-search[hidden] { display: none; }
+.pp-inv-search-bar { position: relative; display: flex; align-items: center; max-width: 460px; }
+.pp-inv-search-icon { position: absolute; left: 10px; width: 15px; height: 15px; color: #64748b; pointer-events: none; }
+.pp-inv-search-input { flex: 1 1 auto; min-width: 0; padding: 7px 30px 7px 32px; border: 1px solid #94a3b8; border-radius: 8px; background: #fff; font-family: inherit; font-size: 13px; color: #0f172a; }
+.pp-inv-search-input::placeholder { color: #94a3b8; }
+.pp-inv-search-input:focus { outline: none; border-color: #1d4ed8; box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.18); }
+.pp-inv-search-clear { position: absolute; right: 6px; width: 22px; height: 22px; border: none; border-radius: 4px; background: none; color: #64748b; font-size: 17px; line-height: 1; cursor: pointer; padding: 0; }
+.pp-inv-search-clear:hover { background: #e2e8f0; color: #0f172a; }
+.pp-inv-search-clear[hidden] { display: none; }
+.pp-inv-search-results { margin-top: 8px; padding: 8px 10px; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; max-height: 320px; overflow-y: auto; }
+.pp-inv-search-results[hidden] { display: none; }
+.pp-inv-sr { padding: 6px 0; }
+.pp-inv-sr + .pp-inv-sr { border-top: 1px solid #e2e8f0; }
+.pp-inv-sr-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; font-size: 12.5px; color: #475569; }
+.pp-inv-sr-type { font-size: 13.5px; font-weight: 700; color: #0f172a; }
+.pp-inv-sr-tot b { color: #0f172a; }
+.pp-inv-sr-tag { padding: 1px 8px; border-radius: 9999px; border: 1px solid; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.pp-inv-sr-tag.pp-inv-sr-on { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+.pp-inv-sr-tag.pp-inv-sr-off { background: #fff1f2; color: #be123c; border-color: #fda4af; }
+.pp-inv-sr-casts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 5px; }
+.pp-inv-sr-cast { display: inline-flex; align-items: baseline; gap: 6px; padding: 3px 10px; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; font-family: inherit; font-size: 12px; color: #0f172a; cursor: pointer; }
+.pp-inv-sr-cast:hover { border-color: #1d4ed8; background: #eff6ff; }
+.pp-inv-sr-cast:focus-visible { outline: 2px solid #1d4ed8; outline-offset: 1px; }
+.pp-inv-sr-castname { font-weight: 600; color: #334155; }
+.pp-inv-sr-x { font-weight: 600; color: #b45309; }
+.pp-inv-sr-rm { font-weight: 600; color: #7f1d1d; }
+.pp-inv-sr-none { font-size: 12px; font-weight: 700; color: #be123c; }
+.pp-inv-sr-more { margin: 4px 0; font-size: 12px; color: #64748b; }
+.pp-cast-card.pp-inv-found-card { box-shadow: 0 0 0 2px #1d4ed8; }
+.pp-inv-row.pp-inv-found { background: #dbeafe; box-shadow: inset 3px 0 0 #1d4ed8; transition: background 0.4s; }
 .pp-castings-title {
     margin: 0 0 4px 0;
     font-size: 18px;
