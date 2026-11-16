@@ -10827,6 +10827,16 @@ function wireEvents() {
         scopeKey: () => `${currentProjectNumber || ''}|${currentPhasesEnabled ? (currentPhaseId || '') : ''}`,
         escapeHtml
     });
+    // Expand all / Collapse all (2026-11-16): every casting the tab shows, in one click. Each casting's own arrow
+    // still opens or closes just that one afterwards.
+    document.getElementById('pp-inv-search')?.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-cast-fold]');
+        if (!btn) return;
+        const ids = getCastingsForActivePhase().map(c => c.id);
+        if (btn.dataset.castFold === 'open') ids.forEach(id => currentCastInvExpanded.add(id));
+        else ids.forEach(id => currentCastInvExpanded.delete(id));
+        renderCastings();
+    });
 
     // Castings: row actions (delegation)
     const castingsList = document.getElementById('pp-castings-list');

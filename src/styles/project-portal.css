@@ -903,7 +903,12 @@ select.pp-inv-input.pp-inv-type-select { -webkit-appearance: none; appearance: n
 /* Type search on the Casting Inventory tab (2026-11-16) */
 .pp-inv-search { margin: 0 0 16px; }
 .pp-inv-search[hidden] { display: none; }
-.pp-inv-search-bar { position: relative; display: flex; align-items: center; max-width: 460px; }
+.pp-inv-search-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.pp-inv-search-bar { position: relative; display: flex; align-items: center; flex: 1 1 280px; max-width: 460px; }
+.pp-cast-fold { display: inline-flex; gap: 6px; margin-left: auto; }
+.pp-cast-fold-btn { padding: 6px 12px; border: 1px solid #94a3b8; border-radius: 8px; background: #fff; color: #334155; font-family: inherit; font-size: 12px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+.pp-cast-fold-btn:hover { background: #eff6ff; border-color: #1d4ed8; color: #1d4ed8; }
+.pp-cast-fold-btn:focus-visible { outline: 2px solid #1d4ed8; outline-offset: 2px; }
 .pp-inv-search-icon { position: absolute; left: 10px; width: 15px; height: 15px; color: #64748b; pointer-events: none; }
 .pp-inv-search-input { flex: 1 1 auto; min-width: 0; padding: 7px 30px 7px 32px; border: 1px solid #94a3b8; border-radius: 8px; background: #fff; font-family: inherit; font-size: 13px; color: #0f172a; }
 .pp-inv-search-input::placeholder { color: #94a3b8; }
