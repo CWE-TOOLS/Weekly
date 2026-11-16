@@ -974,6 +974,15 @@ select.pp-inv-input.pp-inv-type-select { -webkit-appearance: none; appearance: n
     border-color: #cbd5e1;
     box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
 }
+/* Cast day from the weekly on each casting card (2026-11-16); a casting that has been cast gets a green border */
+.pp-cast-card.pp-cast-done, .pp-cast-card.pp-cast-done:hover, .pp-cast-card-open.pp-cast-done { border-color: #16a34a; box-shadow: 0 0 0 1px #16a34a; }
+.pp-cast-card.pp-cast-done.pp-inv-found-card { border-color: #1d4ed8; box-shadow: 0 0 0 2px #1d4ed8; }
+.pp-cast-card-day { flex: 0 0 auto; padding: 2px 9px; border: 1px solid; border-radius: 10px; font-size: 11.5px; font-weight: 700; white-space: nowrap; cursor: help; }
+.pp-cast-day-loading { border-color: transparent; color: #94a3b8; font-weight: 500; font-style: italic; }
+.pp-cast-day-none { background: #fffbeb; border-color: #fcd34d; color: #92400e; }
+.pp-cast-day-soon { background: #eff6ff; border-color: #bfdbfe; color: #1d4ed8; }
+.pp-cast-day-today { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
+.pp-cast-day-done { background: #f0fdf4; border-color: #86efac; color: #166534; }
 .pp-cast-card-header {
     display: flex;
     align-items: center;

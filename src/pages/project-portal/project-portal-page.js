@@ -1289,6 +1289,10 @@ async function loadAndRenderCastings() {
     }
     await loadMilestones();
     renderCastings();
+    // Cast day of each casting, from the weekly (2026-11-16): asked on every load of the tab, never awaited.
+    const castDayFor = currentProjectNumber;
+    loadWeeklyCastDates(castDayFor).then(() => { if (currentProjectNumber === castDayFor) refreshCastDayOnCards(); })
+        .catch(err => logger.warn('[project-portal] cast day from the weekly failed:', err));
 }
 
 // Castings with more than this many inventory rows default to collapsed when
@@ -1496,7 +1500,7 @@ function renderCastingCard(c) {
     const cutBtn = nSel ? `<button class="pp-row-btn pp-row-btn-word pp-row-btn-cut" data-action="cut-selected" type="button" title="Cut the ${nSel} ticked component${nSel === 1 ? '' : 's'} — paste them into another casting">Cut ${nSel} selected</button>` : '';
 
     return `
-        <div class="pp-cast-card${isOpen ? ' pp-cast-card-open' : ''}" data-casting-id="${escapeAttr(c.id)}">
+        <div class="pp-cast-card${isOpen ? ' pp-cast-card-open' : ''}${castDayInfo(c).state === 'done' ? ' pp-cast-done' : ''}" data-casting-id="${escapeAttr(c.id)}">
             <div class="pp-cast-card-header">
                 <button type="button" class="pp-cast-card-chevron" data-action="toggle-inventory" aria-expanded="${isOpen}" title="${isOpen ? 'Collapse inventory' : 'Expand inventory'}">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1515,6 +1519,7 @@ function renderCastingCard(c) {
                 <div class="pp-cast-card-desc">
                     <input type="text" class="pp-cast-card-desc-input" data-field="description" value="${escapeAttr(c.description || '')}" placeholder="(no description)" />
                 </div>
+                ${castDayPillHtml(c)}
                 <span class="pp-cast-card-count">${countLabel}</span>
                 <div class="pp-cast-card-actions">
                     <button class="pp-row-btn pp-row-btn-word" data-action="copy-components" type="button" ${copyDisabled ? 'disabled' : ''} title="${escapeAttr(copyTitle)}">${copyLabel}</button>
@@ -12350,6 +12355,7 @@ async function handleImportBatchFromTracking(castingId) {
 // with one click; no Cast task on the weekly → "casting not yet scheduled".
 let weeklyCastDates = null;      // Map casting_number (trimmed) -> 'YYYY-MM-DD' (first Cast day)
 let weeklyCastDatesFor = null;   // project number the map belongs to
+let weeklyCastLastDates = null;  // Map casting_number -> 'YYYY-MM-DD' (last Cast day: a casting poured over several days is cast once that one is over)
 
 function isoDay(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
 function shortDay(iso) { const d = new Date(iso + 'T00:00:00'); return isNaN(d) ? iso : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); }
@@ -12357,6 +12363,7 @@ function shortDay(iso) { const d = new Date(iso + 'T00:00:00'); return isNaN(d) 
 async function loadWeeklyCastDates(projectNumber) {
     const pn = String(projectNumber || '').trim();
     const map = new Map();
+    const last = new Map();
     if (!pn) return map;
     try {
         const all = await fetchAllTasks();
@@ -12369,12 +12376,63 @@ async function loadWeeklyCastDates(projectNumber) {
             if (!d) continue;
             const iso = isoDay(d);
             if (!map.has(cn) || iso < map.get(cn)) map.set(cn, iso);
+            if (!last.has(cn) || iso > last.get(cn)) last.set(cn, iso);
         }
     } catch (err) {
         logger.error('[batch-tickets] weekly cast dates failed:', err);
     }
-    if (String(currentProjectNumber || '').trim() === pn) { weeklyCastDates = map; weeklyCastDatesFor = pn; }
+    if (String(currentProjectNumber || '').trim() === pn) { weeklyCastDates = map; weeklyCastLastDates = last; weeklyCastDatesFor = pn; }
     return map;
+}
+
+// ---------- Cast day on the Casting Inventory cards (2026-11-16) ----------
+// Each casting's title block says when the weekly has it cast, read from the weekly every time the tab opens:
+// nothing to press and nothing is saved (unlike the Batch Tickets Cast Date, which is a stored field with its
+// "Use it" button). A casting whose cast day is over gets a green border round its whole card. No Cast task on
+// the weekly = "casting not yet scheduled" — except an old casting the weekly no longer lists: if its batch
+// ticket Cast Date is in the past, that date is shown (and says where it comes from).
+/** @returns {{state:'loading'|'none'|'done'|'today'|'soon', first?:string, last?:string, fromPortal?:boolean}} */
+function castDayInfo(c) {
+    const pn = String(currentProjectNumber || '').trim();
+    if (!weeklyCastDates || weeklyCastDatesFor !== pn) return { state: 'loading' };
+    const cn = String(c.casting_number || '').trim();
+    const today = isoDay(new Date());
+    let first = weeklyCastDates.get(cn) || null;
+    let last = (weeklyCastLastDates && weeklyCastLastDates.get(cn)) || first;
+    let fromPortal = false;
+    if (!first) {
+        const own = String(c.casting_date || '').slice(0, 10);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(own) && own < today) { first = last = own; fromPortal = true; }
+    }
+    if (!first) return { state: 'none' };
+    return { state: last < today ? 'done' : (first <= today ? 'today' : 'soon'), first, last, fromPortal };
+}
+function castDayLong(iso) {
+    const d = new Date(iso + 'T00:00:00');
+    if (isNaN(d)) return iso;
+    return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) + (d.getFullYear() !== new Date().getFullYear() ? `, ${d.getFullYear()}` : '');
+}
+function castDayPillHtml(c) {
+    const i = castDayInfo(c);
+    const pill = (cls, text, title) => `<span class="pp-cast-card-day pp-cast-day-${cls}" data-cast-day title="${escapeAttr(title)}">${escapeHtml(text)}</span>`;
+    if (i.state === 'loading') return pill('loading', 'checking the weekly…', 'Reading the cast day from the weekly');
+    if (i.state === 'none') return pill('none', 'casting not yet scheduled', 'The weekly has no Cast task for this casting');
+    const span = i.first === i.last ? castDayLong(i.first) : `${castDayLong(i.first)} – ${castDayLong(i.last)}`;
+    const src = i.fromPortal ? 'From the batch ticket Cast Date: the weekly no longer lists this casting' : 'Cast day from the weekly';
+    if (i.state === 'done') return pill('done', `✓ Cast ${span}`, `${src}. This casting has been cast.`);
+    if (i.state === 'today') return pill('today', i.first === i.last ? 'Casting today' : `Casting now · ${span}`, src);
+    const days = Math.round((new Date(i.first + 'T00:00:00') - new Date(isoDay(new Date()) + 'T00:00:00')) / 86400000);
+    return pill('soon', `Casts ${span} · ${days === 1 ? 'tomorrow' : `in ${days} days`}`, src);
+}
+/** The weekly has answered: put the cast day on the cards that are on screen (nothing else is redrawn). */
+function refreshCastDayOnCards() {
+    document.querySelectorAll('#pp-castings-list .pp-cast-card[data-casting-id]').forEach(card => {
+        const c = currentCastings.find(x => x.id === card.dataset.castingId);
+        if (!c) return;
+        const el = card.querySelector('[data-cast-day]');
+        if (el) el.outerHTML = castDayPillHtml(c);
+        card.classList.toggle('pp-cast-done', castDayInfo(c).state === 'done');
+    });
 }
 
 /** Fill every BLANK Cast Date of the current project from the weekly; returns how many were filled. */
