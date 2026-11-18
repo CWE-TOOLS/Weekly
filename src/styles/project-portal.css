@@ -696,7 +696,8 @@ body { overflow: visible; }
 
 /* ---------- Castings panel ---------- */
 .pp-castings-wrap {
-    max-width: 920px;
+    /* wider (2026-11-18): the tab uses the room of the screen, keeping a margin each side; never narrower than the old 920px cap */
+    max-width: max(920px, min(1400px, calc(100% - 170px)));
     margin: 24px auto;
     background: #ffffff;
     padding: 28px 32px;
@@ -988,13 +989,19 @@ select.pp-inv-input.pp-inv-type-select { -webkit-appearance: none; appearance: n
 .pp-cast-day-soon { background: #eff6ff; border-color: #bfdbfe; color: #1d4ed8; }
 .pp-cast-day-today { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
 .pp-cast-day-done { background: #f0fdf4; border-color: #86efac; color: #166534; }
+/* Title block on two lines (2026-11-18): line 1 = arrow, grip, casting number, description, delete;
+   line 2 = cast day, totals, Copy / Cut / Paste. The description gets the whole first line. */
 .pp-cast-card-header {
     display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 6px 10px 6px 4px;
+    flex-direction: column;
+    gap: 2px;
+    padding: 5px 10px 7px 4px;
     min-height: 44px;
 }
+.pp-cast-card-line1 { display: flex; align-items: center; gap: 10px; min-height: 30px; }
+.pp-cast-card-line1 > .pp-row-btn-delete { flex: 0 0 auto; }
+.pp-cast-card-line2 { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; padding-left: 64px; min-height: 26px; }
+.pp-cast-card-line2 .pp-cast-card-actions { margin-left: auto; }
 .pp-cast-card-chevron {
     flex: 0 0 auto;
     width: 22px;

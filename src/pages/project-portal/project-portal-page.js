@@ -1502,6 +1502,7 @@ function renderCastingCard(c) {
     return `
         <div class="pp-cast-card${isOpen ? ' pp-cast-card-open' : ''}${castDayInfo(c).state === 'done' ? ' pp-cast-done' : ''}" data-casting-id="${escapeAttr(c.id)}">
             <div class="pp-cast-card-header">
+              <div class="pp-cast-card-line1">
                 <button type="button" class="pp-cast-card-chevron" data-action="toggle-inventory" aria-expanded="${isOpen}" title="${isOpen ? 'Collapse inventory' : 'Expand inventory'}">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <polyline points="9 18 15 12 9 6"/>
@@ -1519,14 +1520,18 @@ function renderCastingCard(c) {
                 <div class="pp-cast-card-desc">
                     <input type="text" class="pp-cast-card-desc-input" data-field="description" value="${escapeAttr(c.description || '')}" placeholder="(no description)" />
                 </div>
+                <button class="pp-row-btn pp-row-btn-delete" data-action="delete" type="button" aria-label="Delete casting" title="Delete casting">&times;</button>
+              </div>
+              <!-- second line (2026-11-18): the title block was too crowded on one line -->
+              <div class="pp-cast-card-line2">
                 ${castDayPillHtml(c)}
                 <span class="pp-cast-card-count">${countLabel}</span>
                 <div class="pp-cast-card-actions">
                     <button class="pp-row-btn pp-row-btn-word" data-action="copy-components" type="button" ${copyDisabled ? 'disabled' : ''} title="${escapeAttr(copyTitle)}">${copyLabel}</button>
                     ${cutBtn}
                     <button class="pp-row-btn pp-row-btn-word" data-action="paste-components" type="button" ${hasComponentClipboard ? '' : 'disabled'} title="Paste copied components into this casting">Paste</button>
-                    <button class="pp-row-btn pp-row-btn-delete" data-action="delete" type="button" aria-label="Delete casting" title="Delete casting">&times;</button>
                 </div>
+              </div>
             </div>
             ${msOn() ? ciCardRowHtml(c) : ''}
             ${isOpen ? renderInventoryBody(c, items) : ''}
@@ -1819,6 +1824,7 @@ async function handleAddCastingClick() {
     card.dataset.draft = 'true';
     card.innerHTML = `
         <div class="pp-cast-card-header">
+          <div class="pp-cast-card-line1">
             <span class="pp-cast-card-chevron-spacer" aria-hidden="true"></span>
             <div class="pp-cast-card-grip" aria-hidden="true">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1835,6 +1841,7 @@ async function handleAddCastingClick() {
             <div class="pp-cast-card-actions">
                 <button class="pp-row-btn pp-row-btn-delete" data-action="cancel-draft" type="button" aria-label="Cancel">&times;</button>
             </div>
+          </div>
         </div>
     `;
     list.appendChild(card);
