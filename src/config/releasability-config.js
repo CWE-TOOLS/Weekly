@@ -140,12 +140,32 @@ export const TRACKING_ITEM_ABBREVIATIONS = {
 // ============================================================================
 
 /**
+ * Columns that do not start red (2026-11-18). Mitti QC Template is rarely needed, so a job starts with it N/A
+ * and the cell is clicked only on the jobs that use it (one click: N/A -> red).
+ */
+export const DEFAULT_ITEM_STATUS = {
+  'Mitti QC Template': STATUS.NOT_APPLICABLE
+};
+
+/** The status a column shows while nothing has been saved for it. */
+export function defaultStatusOf(item) {
+  return DEFAULT_ITEM_STATUS[item] || STATUS.INCOMPLETE;
+}
+
+/**
+ * Columns that fold away to a thin strip from their header (2026-11-18). A folded column still shows each
+ * job's colour as a sliver, so a red or orange cell is never hidden. They start folded on every computer
+ * until someone opens them there (remembered per browser).
+ */
+export const FOLDABLE_ITEMS = ['Mitti QC Template'];
+
+/**
  * Default tracking status object for new projects
- * All tracking items start as incomplete
+ * Tracking items start as incomplete, except the ones listed in DEFAULT_ITEM_STATUS
  */
 export const DEFAULT_TRACKING_STATUS = Object.freeze(
   TRACKING_ITEMS.reduce((acc, item) => {
-    acc[item] = STATUS.INCOMPLETE;
+    acc[item] = defaultStatusOf(item);
     return acc;
   }, {})
 );

@@ -652,6 +652,10 @@ html {
     var(--grid-project-column-width)
     70px
     repeat(22, minmax(62px, 1fr));   /* 50px min until 2026-10-28: upright titles need room for their longest word ("Instructions") and the P. MANUAL tag */
+  /* Folded columns (2026-11-18): when one is folded the grid script writes the column list itself from these two.
+     Keep --tracking-col the same as the repeat() above. */
+  --tracking-col: minmax(62px, 1fr);
+  --fold-col: 16px;
   gap: var(--grid-cell-gap);
   background-color: #E8E7E4;
   width: fit-content;
@@ -800,6 +804,22 @@ html {
 .tracking-item-header[data-tracking-item="Casting Inventory"] .tracking-mode-auto { background: #fff; color: #004D40; }
 .releasability-grid-body .status-cell[data-tracking-item="Casting Inventory"] { box-shadow: inset 0 0 0 2px #00695C, 0 2px 3px rgba(0, 0, 0, 0.18); }
 .releasability-grid-body .status-cell[data-tracking-item="Casting Inventory"]:hover { box-shadow: inset 0 0 0 2px #00695C, 0 3px 8px rgba(0, 0, 0, 0.15); }
+/* Foldable column (Mitti QC Template, 2026-11-18): the header is the switch; folded it is a thin strip that keeps
+   each job's colour (N/A is the grid's own grey, so only red / orange / green show). */
+.tracking-item-header.col-foldable { position: relative; cursor: pointer; }
+.col-fold-arrow { position: absolute; top: 2px; right: 3px; font-size: 0.8rem; line-height: 1; font-weight: 700; color: rgba(0, 0, 0, 0.5); }
+.col-fold-arrow::before { content: "\00AB"; }
+.tracking-item-header.col-foldable:hover .col-fold-arrow { color: #000; }
+.col-fold-name { display: none; }
+.tracking-item-header.col-folded { padding: 0.25rem 0 0.35rem; gap: 4px; justify-content: flex-start; overflow: hidden; }
+.tracking-item-header.col-folded .tracking-item-label,
+.tracking-item-header.col-folded .tracking-mode-tag { display: none; }
+.tracking-item-header.col-folded .col-fold-arrow { position: static; }
+.tracking-item-header.col-folded .col-fold-arrow::before { content: "\00BB"; }
+.tracking-item-header.col-folded .col-fold-name { display: block; writing-mode: vertical-rl; transform: rotate(180deg); font-size: 0.62rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; white-space: nowrap; }
+.status-cell.col-folded { margin: 1px 0; border-radius: 3px; cursor: pointer; }
+.status-cell.col-folded .status-icon { display: none; }
+.status-cell.col-folded:hover { transform: none; }
 .tracking-mode-tag {
   display: inline-block;
   flex: 0 0 auto;

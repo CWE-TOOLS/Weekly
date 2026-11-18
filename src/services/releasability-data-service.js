@@ -15,7 +15,7 @@ import { getWeeklySource, SOURCE_SCHEDULER } from './weekly-source-service.js';
 import { initializeSupabase, getSupabaseClient, sendRefreshSignal } from './supabase-service.js';
 import { logger } from '../utils/logger.js';
 import { parseDate, getMonday, getLocalDateString } from '../utils/date-utils.js';
-import { DEFAULT_TRACKING_STATUS, PROJECT_SOURCE, STATUS } from '../config/releasability-config.js';
+import { DEFAULT_TRACKING_STATUS, PROJECT_SOURCE, STATUS } from '../config/releasability-config.js?v=20261118-1';
 import { normalizeProjectName } from '../utils/ui-utils.js';
 import { loadAllProjects } from './projects-service.js';
 

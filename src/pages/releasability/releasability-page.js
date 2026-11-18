@@ -35,8 +35,8 @@ import {
   VALIDATION,
   STATUS,
   STATUS_DISPLAY
-} from '../../config/releasability-config.js?v=20261027-1';
-import { renderReleasabilityGrid, getUniqueDepartments, setProjectActions, groupProjectsByWeek, getWeekRange, setMilestoneLookup } from './releasability-grid.js?v=20261111-2';
+} from '../../config/releasability-config.js?v=20261118-1';
+import { renderReleasabilityGrid, getUniqueDepartments, setProjectActions, groupProjectsByWeek, getWeekRange, setMilestoneLookup, toggleColumnFold } from './releasability-grid.js?v=20261118-1';
 import { loadAllMilestones, saveMilestone } from '../../services/milestones-service.js';
 
 /** Pull the portal's milestone rows and index them by casting for the grid (AUTO columns). */
@@ -76,7 +76,7 @@ import {
   deleteManualWeek,
   updateManualWeekPositions,
   updateManualWeekName
-} from '../../services/releasability-data-service.js?v=20261112-1';
+} from '../../services/releasability-data-service.js?v=20261118-1';
 import { loadProject } from '../../services/projects-service.js';
 import { loadPhasesForProject } from '../../services/phases-service.js';
 import {
@@ -1256,6 +1256,13 @@ function renderGrid() {
  */
 function setupGridEventDelegation(grid) {
   grid.addEventListener('click', (e) => {
+    // Foldable column (Mitti QC, 2026-11-18): its header folds or opens it; a click on the folded strip only
+    // opens it and never changes a status.
+    const fold = e.target.closest('.tracking-item-header.col-foldable, .status-cell.col-folded');
+    if (fold) {
+      toggleColumnFold(fold.dataset.trackingItem, grid);
+      return;
+    }
     const target = e.target.closest('.status-cell, .project-control-btn, .week-add-btn, .week-control-btn, .week-collapse-btn');
     if (!target) return;
 

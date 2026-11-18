@@ -8,7 +8,7 @@
  */
 
 import { getMonday, getWeekMonth, getWeekOfMonth } from '../../utils/date-utils.js';
-import { TRACKING_ITEMS, TRACKING_ITEM_LABELS, STATUS, STATUS_DISPLAY } from '../../config/releasability-config.js?v=20261027-1';
+import { TRACKING_ITEMS, TRACKING_ITEM_LABELS, TRACKING_ITEM_ABBREVIATIONS, STATUS, STATUS_DISPLAY, FOLDABLE_ITEMS, defaultStatusOf } from '../../config/releasability-config.js?v=20261118-1';
 import { isWeekCollapsed } from './releasability-state.js';
 import { AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, BOARD_TAG_OVERRIDE, MS_TO_BOARD, milestonesApply, MILESTONE_HOW } from '../../config/milestones-config.js';
 
@@ -25,6 +25,45 @@ function milestoneRowFor(project, item) {
 }
 /** True when this row's AUTO columns are driven by the portal (new rules apply to its project). */
 function isAutoRow(project) { return milestonesApply(project.projectNumber); }
+
+// ---------- Folded columns (2026-11-18) ----------
+// A foldable column (FOLDABLE_ITEMS: Mitti QC Template) shrinks to a thin strip when its header is clicked and
+// opens again the same way. The strip keeps each job's colour, so nothing is hidden. Remembered per browser;
+// folded until someone opens it there. Display only: nothing is saved to the database.
+const FOLD_KEY = 'releasability-folded-columns';
+let foldedItems = loadFoldedItems();
+function loadFoldedItems() {
+  try {
+    const saved = localStorage.getItem(FOLD_KEY);
+    if (saved) {
+      const list = JSON.parse(saved);
+      if (Array.isArray(list)) return new Set(list.filter(item => FOLDABLE_ITEMS.includes(item)));
+    }
+  } catch (e) { /* private window or blocked storage: use the default */ }
+  return new Set(FOLDABLE_ITEMS);
+}
+/** Put the fold state on a rendered grid: column widths, and a class on the header + cells of a folded column. */
+function applyColumnFolds(wrapper) {
+  if (!wrapper) return;
+  const columns = foldedItems.size
+    ? 'var(--grid-project-column-width) 70px ' + TRACKING_ITEMS.map(item => foldedItems.has(item) ? 'var(--fold-col)' : 'var(--tracking-col)').join(' ')
+    : '';
+  wrapper.querySelectorAll('.releasability-grid-header, .releasability-grid-body').forEach(g => { g.style.gridTemplateColumns = columns; });
+  wrapper.querySelectorAll('.tracking-item-header[data-tracking-item], .status-cell[data-tracking-item]').forEach(el => {
+    el.classList.toggle('col-folded', foldedItems.has(el.dataset.trackingItem));
+  });
+}
+/**
+ * Fold or open a column on the grid that is on screen.
+ * @param {string} item - the tracking item (column) name
+ * @param {HTMLElement} wrapper - the rendered grid
+ */
+export function toggleColumnFold(item, wrapper) {
+  if (!FOLDABLE_ITEMS.includes(item)) return;
+  if (foldedItems.has(item)) foldedItems.delete(item); else foldedItems.add(item);
+  try { localStorage.setItem(FOLD_KEY, JSON.stringify(Array.from(foldedItems))); } catch (e) { /* not remembered, still works */ }
+  applyColumnFolds(wrapper);
+}
 
 // Callbacks for project actions (set by releasability-page.js to avoid circular dependency)
 let projectActions = {
@@ -90,6 +129,7 @@ export function renderReleasabilityGrid(projects, manualWeeks = []) {
   // Assemble the complete grid
   wrapper.appendChild(headerGrid);
   wrapper.appendChild(bodyGrid);
+  applyColumnFolds(wrapper);
 
   return wrapper;
 }
@@ -173,6 +213,20 @@ function createHeaderRow() {
         + (MILESTONE_HOW[item] ? '\n\nHow: ' + MILESTONE_HOW[item] : ''); // Tooltip with full name + how it is set
     headerCell.dataset.trackingIndex = index; // Add index for individual targeting
     headerCell.dataset.trackingItem = item;   // the key, for per-column styling (Casting Inventory stands out)
+    if (FOLDABLE_ITEMS.includes(item)) {
+      // Foldable column: the whole header is the switch. Folded, it shows a thin upright name and an arrow.
+      headerCell.classList.add('col-foldable');
+      const arrow = document.createElement('span');
+      arrow.className = 'col-fold-arrow';
+      arrow.setAttribute('aria-hidden', 'true');
+      headerCell.insertBefore(arrow, headerCell.firstChild);
+      const thinName = document.createElement('span');
+      thinName.className = 'col-fold-name';
+      thinName.textContent = TRACKING_ITEM_ABBREVIATIONS[item] || label;
+      headerCell.appendChild(thinName);
+      headerCell.title += (defaultStatusOf(item) === STATUS.NOT_APPLICABLE ? '\n\nStarts as N/A on a new job: click the cell on the jobs that need it.' : '')
+        + '\n\nClick this header to fold the column to a thin strip, or to open it again. The strip keeps each job\'s colour.';
+    }
     cells.push(headerCell);
   });
 
@@ -644,7 +698,7 @@ function createStatusCell(project, trackingItem) {
   const msRow = msRow0;
   const status = msRow
     ? (MS_TO_BOARD[msRow.status] || STATUS.INCOMPLETE)
-    : (project.trackingStatus[trackingItem] || STATUS.INCOMPLETE);
+    : (project.trackingStatus[trackingItem] || defaultStatusOf(trackingItem));
   const statusConfig = STATUS_DISPLAY[status];
 
   const cell = document.createElement('div');
