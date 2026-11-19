@@ -435,7 +435,7 @@ window.addEventListener('beforeunload', (e) => {
     if (invEdits.size) { e.preventDefault(); e.returnValue = ''; }
 });
 let inventorySaveTimers = new Map();       // itemId -> debounce handle
-let copiedComponents = null;               // Array<{type,width,length,color,sealer,quantity,extras,cu_ft,ff_sq_ft}> from a copy action
+let copiedComponents = null;               // Array<{type,width,length,color,sealer,quantity,extras,cu_ft,ff_sq_ft}> from a copy action (a CUT remake row also carries remake_of_panel_id + remake_of_casting_id)
 const invSelected = new Set();             // inventory row ids ticked for "Copy / Cut selected" (2026-10-13) and "colour the selected" (2026-10-29); only for this screen
 let invLastTick = null;                    // { castingId, id } of the last tick box clicked without Shift — Shift+click ticks the range from it
 function invSelectedIn(castingId) { return getInventoryFor(castingId).filter(it => invSelected.has(it.id)); }
@@ -4763,7 +4763,11 @@ async function cutInventoryItems(castingId, items, label) {
     if (!items.length) return;
     const cutIds = new Set(items.map(it => it.id));
     if (inventoryEditBlocked(casting, sim => { sim.inv.set(castingId, (sim.inv.get(castingId) || []).filter(x => !cutIds.has(x.id))); })) return;
-    copiedComponents = items.map(inventoryClipItem);
+    // A CUT remake row stays a remake where it is pasted (2026-11-19): it carries the rejected panels it re-casts.
+    // Copy never does: the row stays where it was, and the same rejected panel cannot be re-cast twice.
+    copiedComponents = items.map(it => it.remake_of_casting_id && invRemakeIds(it).length
+        ? { ...inventoryClipItem(it), remake_of_panel_id: invRemakeIds(it).join(','), remake_of_casting_id: it.remake_of_casting_id }
+        : inventoryClipItem(it));
     try {
         for (const it of items) {
             const t = inventorySaveTimers.get(it.id);
@@ -4826,6 +4830,29 @@ async function handlePasteComponents(targetCastingId) {
         if (masterVerdict.action === 'cancel') return;
         clip = masterVerdict.items;
     }
+    // Remake rows that were CUT keep their "Remake Of" link (2026-11-19), panel by panel, while the link still holds:
+    // the panel is not re-cast by another row already (the same clipboard pasted twice, or imported somewhere in
+    // between) and this casting comes after the cast the panel was rejected in (the Import Remakes rule).
+    const linkNote = { kept: 0, lost: 0 };
+    {
+        const taken = importedRemakeKeys();
+        const targetOrder = targetCasting?.sort_order ?? -Infinity;
+        clip = clip.map(src => {
+            if (!src.remake_of_casting_id) return src;
+            const from = currentCastings.find(c => c.id === src.remake_of_casting_id);
+            const after = !!from && (from.sort_order ?? -Infinity) < targetOrder;
+            const ids = invRemakeIds(src);
+            const keep = ids.filter(id => {
+                const key = `${src.remake_of_casting_id}::${id}`;
+                if (!after || taken.has(key)) return false;
+                taken.add(key);
+                return true;
+            });
+            linkNote.kept += keep.length;
+            linkNote.lost += ids.length - keep.length;
+            return { ...src, remake_of_panel_id: keep.join(',') || null, remake_of_casting_id: keep.length ? src.remake_of_casting_id : null };
+        });
+    }
     if (inventoryEditBlocked(targetCasting, sim => {
         const rows = sim.inv.get(targetCastingId) || []; for (const it of clip) rows.push({ ...it, id: null }); sim.inv.set(targetCastingId, rows);
     })) return;
@@ -4845,7 +4872,9 @@ async function handlePasteComponents(targetCastingId) {
         renderCastings();
         const target = currentCastings.find(c => c.id === targetCastingId);
         const n = inserted.filter(Boolean).length;
-        showToast(`Pasted ${n} component${n === 1 ? '' : 's'} into Cast ${target?.casting_number || ''}.`);
+        const linkText = (linkNote.kept ? ` Remake link kept for ${linkNote.kept} panel${linkNote.kept === 1 ? '' : 's'}.` : '')
+            + (linkNote.lost ? ` ${linkNote.lost} panel${linkNote.lost === 1 ? '' : 's'} went in WITHOUT the remake link (already a remake somewhere else, or this casting is not after the cast they were rejected in).` : '');
+        showToast(`Pasted ${n} component${n === 1 ? '' : 's'} into Cast ${target?.casting_number || ''}.${linkText}`, linkNote.lost ? 'error' : undefined, linkNote.lost ? 9000 : undefined);
         if (n) ciEntered(targetCastingId);
         syncTrackingFromInventory();
         msInventoryChanged(targetCastingId);
