@@ -4520,6 +4520,9 @@ body.pp-printing .pp-tab-panel[data-panel="color-log"] { display: none !importan
 .pp-appr-card { margin: 14px 0 0; background: #f8fafc; border: 1px solid #cbd5e1; border-left: 4px solid #0f172a; border-radius: 8px; padding: 10px 12px; }
 .pp-appr-card[hidden] { display: none; }
 .pp-appr-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; width: 100%; background: none; border: none; padding: 0 0 8px; text-align: left; font-family: inherit; font-size: 12px; color: #64748b; cursor: pointer; }
+/* the site-wide button look (filled on hover, ring on focus) must not reach this title line: it painted a purple
+   bar that ran into the table under it */
+.pp-appr-head:hover, .pp-appr-head:focus, .pp-appr-head:active { background: none; box-shadow: none; outline: none; color: #64748b; }
 .pp-appr-head:focus-visible { outline: 2px solid #1d4ed8; outline-offset: 2px; border-radius: 4px; }
 .pp-appr-open .pp-appr-head .pp-cast-sum-chev { transform: rotate(90deg); }
 .pp-appr-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #0f172a; }
