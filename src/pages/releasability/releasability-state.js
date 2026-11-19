@@ -13,7 +13,7 @@ import {
   STATUS,
   DEFAULT_TRACKING_STATUS,
   PROJECT_SOURCE
-} from '../../config/releasability-config.js?v=20261118-1';
+} from '../../config/releasability-config.js?v=20261119-1';
 import { debug } from '../../utils/debug.js';
 
 // ============================================================================

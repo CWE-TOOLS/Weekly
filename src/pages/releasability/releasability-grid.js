@@ -8,7 +8,7 @@
  */
 
 import { getMonday, getWeekMonth, getWeekOfMonth } from '../../utils/date-utils.js';
-import { TRACKING_ITEMS, TRACKING_ITEM_LABELS, TRACKING_ITEM_ABBREVIATIONS, STATUS, STATUS_DISPLAY, FOLDABLE_ITEMS, defaultStatusOf } from '../../config/releasability-config.js?v=20261118-1';
+import { TRACKING_ITEMS, TRACKING_ITEM_LABELS, TRACKING_ITEM_ABBREVIATIONS, STATUS, STATUS_DISPLAY, FOLDABLE_ITEMS, defaultStatusOf } from '../../config/releasability-config.js?v=20261119-1';
 import { isWeekCollapsed } from './releasability-state.js';
 import { AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, BOARD_TAG_OVERRIDE, MS_TO_BOARD, milestonesApply, MILESTONE_HOW } from '../../config/milestones-config.js';
 
@@ -224,8 +224,10 @@ function createHeaderRow() {
       thinName.className = 'col-fold-name';
       thinName.textContent = TRACKING_ITEM_ABBREVIATIONS[item] || label;
       headerCell.appendChild(thinName);
-      headerCell.title += (defaultStatusOf(item) === STATUS.NOT_APPLICABLE ? '\n\nStarts as N/A on a new job: click the cell on the jobs that need it.' : '')
-        + '\n\nClick this header to fold the column to a thin strip, or to open it again. The strip keeps each job\'s colour.';
+      headerCell.title += '\n\nClick this header to fold the column to a thin strip, or to open it again. The strip keeps each job\'s colour.';
+    }
+    if (defaultStatusOf(item) === STATUS.NOT_APPLICABLE) {
+      headerCell.title += '\n\nStarts as N/A on a new job: click the cell on the jobs that need it.';
     }
     cells.push(headerCell);
   });

@@ -142,8 +142,10 @@ export const TRACKING_ITEM_ABBREVIATIONS = {
 /**
  * Columns that do not start red (2026-11-18). Mitti QC Template is rarely needed, so a job starts with it N/A
  * and the cell is clicked only on the jobs that use it (one click: N/A -> red).
+ * Rebar/Drilling Layout starts N/A too (2026-11-19).
  */
 export const DEFAULT_ITEM_STATUS = {
+  'Rebar/Drilling Layout': STATUS.NOT_APPLICABLE,
   'Mitti QC Template': STATUS.NOT_APPLICABLE
 };
 

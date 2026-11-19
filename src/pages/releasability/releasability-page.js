@@ -35,8 +35,8 @@ import {
   VALIDATION,
   STATUS,
   STATUS_DISPLAY
-} from '../../config/releasability-config.js?v=20261118-1';
-import { renderReleasabilityGrid, getUniqueDepartments, setProjectActions, groupProjectsByWeek, getWeekRange, setMilestoneLookup, toggleColumnFold } from './releasability-grid.js?v=20261118-1';
+} from '../../config/releasability-config.js?v=20261119-1';
+import { renderReleasabilityGrid, getUniqueDepartments, setProjectActions, groupProjectsByWeek, getWeekRange, setMilestoneLookup, toggleColumnFold } from './releasability-grid.js?v=20261119-1';
 import { loadAllMilestones, saveMilestone } from '../../services/milestones-service.js';
 
 /** Pull the portal's milestone rows and index them by casting for the grid (AUTO columns). */
@@ -76,7 +76,7 @@ import {
   deleteManualWeek,
   updateManualWeekPositions,
   updateManualWeekName
-} from '../../services/releasability-data-service.js?v=20261118-1';
+} from '../../services/releasability-data-service.js?v=20261119-1';
 import { loadProject } from '../../services/projects-service.js';
 import { loadPhasesForProject } from '../../services/phases-service.js';
 import {
