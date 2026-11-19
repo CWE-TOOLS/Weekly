@@ -147,7 +147,7 @@ import {
 } from '../../services/casting-layout-service.js';
 import { registerRefreshHandler, isPortalChange, isOwnSignal, signalInfo } from '../../services/supabase-service.js';
 // Type master list (2026-11-11): the job's types + totals above the castings; casting rows pick their type from it.
-import { initTypeMaster, loadTypeMaster, renderTypeMaster, refreshTypeMasterStatus, typeMasterActive, typeCellHtml, typeMasterOverCheck, typeMasterPasteCheck, typeMasterMissing, typeMasterEntries, TM_NEW } from './type-master.js?v=20261119-2';
+import { initTypeMaster, loadTypeMaster, renderTypeMaster, refreshTypeMasterStatus, typeMasterActive, typeCellHtml, typeMasterOverCheck, typeMasterPasteCheck, typeMasterMissing, typeMasterEntries, TM_NEW } from './type-master.js?v=20261119-3';
 import { initInventorySearch, renderInventorySearch } from './inventory-search.js?v=20261116-1';
 import '../../utils/number-wheel-guard.js';   // the mouse wheel must not change a focused hour box (user 2026-11-03)
 
@@ -10905,7 +10905,8 @@ function wireEvents() {
         syncTracking: syncTrackingFromInventory, renderCastings,
         saveRow: (itemId, castingId) => { const t = inventorySaveTimers.get(itemId); if (t) clearTimeout(t); inventorySaveTimers.delete(itemId); saveInventoryItem(itemId, castingId); },
         recordEdit: (el) => { invRecordEdit(el); el.dataset.before = el.value; el.dataset.beforeLabel = el.selectedOptions?.[0]?.text || ''; },
-        toast: showToast, escapeHtml, trackSave
+        toast: showToast, escapeHtml, trackSave,
+        parseDimension                                   // the list's Proj Sq Ft column reads sizes the way the castings do
     });
     // Type search (2026-11-16): which castings hold a type. It reads the castings the tab shows and changes nothing.
     initInventorySearch({

@@ -279,6 +279,33 @@ function fieldNote(e, f) {
     const others = seen.filter(s => !sameVal(s.value, e[f]));
     return others.length ? { ph: '', title: `Some castings hold another value: ${others.map(s => `${showVal(f, s.value)} (Cast ${[...s.casts].join(', ')})`).join(' · ')}`, off: true } : { ph: '', title: '', off: false };
 }
+// ---------- Projected Sq Ft (2026-11-19) ----------
+// The same early estimate as the casting rows: Width x Length (inches) / 144 x Qty, with the master's Qty being
+// the total the job needs. Worked out on screen, never stored; batching does not read it.
+const round2 = (n) => Math.round(n * 100) / 100;
+/** @returns {{sqft:number, w:number, l:number}|null} null while a size or the Qty is missing */
+function projectedOf(e) {
+    const dim = ctx?.parseDimension;
+    if (!dim) return null;
+    const w = dim(e.width), l = dim(e.length), qty = parseInt(e.qty, 10) || 0;
+    if (!(w > 0) || !(l > 0) || !(qty > 0)) return null;
+    return { sqft: w * l / 144 * qty, w, l, qty };
+}
+function projHtml(e) {
+    const p = projectedOf(e);
+    if (!p) return `<span class="pp-tm-proj pp-tm-proj-none" data-tm-proj title="Projected sq ft needs a Width, a Length (inches) and a Qty">&mdash;</span>`;
+    return `<span class="pp-tm-proj" data-tm-proj title="${esc(`${round2(p.w)} x ${round2(p.l)} in = ${round2(p.w * p.l / 144)} sq ft each x ${p.qty} = ${round2(p.sqft)} sq ft. Worked out by itself, nothing to type.`)}">${round2(p.sqft)}</span>`;
+}
+/** The whole list added up: what the job is projected to need, flagged while some types cannot be worked out. */
+function projSumHtml(list) {
+    const done = list.map(projectedOf);
+    const missing = done.filter(p => !p).length;
+    if (!list.length || missing === list.length) return '';
+    const total = done.reduce((sum, p) => sum + (p ? p.sqft : 0), 0);
+    const tip = `Projected sq ft of the whole ${scopeWord()}: Width x Length / 144 x Qty, added up over the list. The PM's early estimate; batching uses only the engineering Cu Ft and FF Sq Ft.`
+        + (missing ? ` ${plural(missing, 'type')} without a Width, a Length or a Qty ${missing === 1 ? 'is' : 'are'} not counted yet.` : '');
+    return `<span class="pp-tm-projsum${missing ? ' pp-tm-projsum-warn' : ''}" title="${esc(tip)}">projected ${round2(total).toLocaleString()} sq ft${missing ? ' \u26A0 incomplete' : ''}</span>`;
+}
 function rowHtml(e) {
     const inp = (f, extra, ph) => {
         const n = SYNC_FIELDS.includes(f) ? fieldNote(e, f) : { ph: '', title: '', off: false };
@@ -293,6 +320,7 @@ function rowHtml(e) {
         ${inp('description', 'type="text" maxlength="120"', 'Description')}
         ${inp('width', 'type="text"', 'Width')}
         ${inp('length', 'type="text"', 'Length')}
+        ${projHtml(e)}
         ${color}
         ${inp('cu_ft', 'type="number" step="any" min="0"', '0')}
         ${inp('ff_sq_ft', 'type="number" step="any" min="0"', '0')}
@@ -312,6 +340,7 @@ function summaryHtml() {
     const stray = typesNotListed();
     const idle = list.filter(unplaced);
     return `<span class="pp-tm-sum">${plural(list.length, 'type')} · <b>${required}</b> required · ${placed} in castings · ${left ? `<b>${left}</b> left to place` : 'all placed'}</span>`
+        + projSumHtml(list)
         + (idle.length ? `<span class="pp-tm-flag pp-tm-flag-unplaced" title="${esc(idle.map(e => e.type).join(', '))}">${plural(idle.length, 'type')} not in any casting yet</span>` : '')
         + (over ? `<span class="pp-tm-flag pp-tm-flag-over">${plural(over, 'type')} over the total</span>` : '')
         + (noTotal ? `<span class="pp-tm-flag">${plural(noTotal, 'type')} without a total</span>` : '')
@@ -332,7 +361,7 @@ export function renderTypeMaster() {
     const body = !isOpen ? '' : `
         <div class="pp-tm-body">
             ${types.length ? '' : `<p class="pp-tm-hint">Enter every type of this ${scopeWord()} with the total quantity the ${scopeWord()} needs. <b>Type</b> and <b>Qty</b> are enough: the other boxes can be filled in later, here or in a casting. Once a type is on the list, the castings pick their types from it and a type can no longer go past its total by accident.</p>`}
-            ${types.length ? `<div class="pp-tm-row pp-tm-headrow"><span><input type="checkbox" class="pp-tm-tick" data-tm-tickall title="Tick every type / clear the ticks" aria-label="Tick every type"></span><span>Type</span><span>Qty</span><span>Description</span><span>Width</span><span>Length</span><span>Color</span><span>Cu Ft</span><span>FF Sq Ft</span><span>In the castings</span><span></span></div>` : ''}
+            ${types.length ? `<div class="pp-tm-row pp-tm-headrow"><span><input type="checkbox" class="pp-tm-tick" data-tm-tickall title="Tick every type / clear the ticks" aria-label="Tick every type"></span><span>Type</span><span>Qty</span><span>Description</span><span>Width</span><span>Length</span><span title="Projected square feet: Width x Length (inches) / 144 x Qty. Worked out by itself, nothing to type.">Proj Sq Ft</span><span>Color</span><span>Cu Ft</span><span>FF Sq Ft</span><span>In the castings</span><span></span></div>` : ''}
             ${shown().map(rowHtml).join('')}
             <div class="pp-tm-tickbar" data-tm-tickbar hidden></div>
             <div class="pp-tm-actions">
@@ -432,6 +461,8 @@ export function refreshTypeMasterStatus() {
         if (!e) return;
         const st = row.querySelector('[data-tm-status]');
         if (st) st.innerHTML = statusHtml(e);
+        const pr = row.querySelector('[data-tm-proj]');
+        if (pr) pr.outerHTML = projHtml(e);
         row.classList.toggle('pp-tm-row-unplaced', unplaced(e));
         for (const f of SYNC_FIELDS) {
             const el = row.querySelector(`[data-tm-field="${f}"]`);
