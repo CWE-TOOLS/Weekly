@@ -375,7 +375,7 @@ function syncTicks() {
     if (bar) {
         bar.hidden = ticked.size === 0;
         bar.innerHTML = ticked.size
-            ? `<b>${plural(ticked.size, 'type')} ticked</b><span>${ticked.size > 1 ? `A color picked on one of them goes on all ${ticked.size}.` : 'Tick more types to give them the same color in one go.'}</span><button type="button" class="pp-tm-untick" data-tm="untick">Clear ticks</button>`
+            ? `<b>${plural(ticked.size, 'type')} ticked</b><span>${ticked.size > 1 ? `A color picked on one of them goes on all ${ticked.size}.` : 'Tick more types to give them the same color in one go.'}</span><button type="button" class="pp-tm-untick" data-tm="untick" title="Esc does the same">Clear ticks (Esc)</button>`
             : '';
     }
 }
@@ -946,6 +946,13 @@ export function initTypeMaster(c) {
             if (on) wrap.querySelectorAll('.pp-tm-row[data-tm-id]').forEach(r => ticked.add(r.dataset.tmId));
             syncTicks();
         }
+    });
+    // Esc clears the ticks (user 2026-11-19), like Esc on the casting rows. In place, no redraw: a value being
+    // typed stays in its box. A dialog on screen owns Esc.
+    document.addEventListener('keydown', (ev) => {
+        if (ev.key !== 'Escape' || !ticked.size || wrap.hidden || wrap.offsetParent === null) return;
+        if (document.querySelector('.pp-tm-modal, .pp-modal-backdrop:not([hidden])')) return;
+        ticked.clear(); lastTick = null; syncTicks();
     });
     wrap.addEventListener('change', (ev) => { if (ev.target.matches('[data-tm-field]')) commitMasterField(ev.target); });
     for (const kind of ['keydown', 'input', 'change', 'click', 'paste']) wrap.addEventListener(kind, touchLock, true);   // work on the list keeps it open
