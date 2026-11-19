@@ -1034,13 +1034,16 @@ select.pp-inv-input.pp-inv-type-select { -webkit-appearance: none; appearance: n
 }
 /* a cu ft / ff sq ft total with blank rows behind it */
 .pp-cast-card-count-warn { color: #b45309; font-weight: 700; background: #fef3c7; padding: 0 5px; border-radius: 6px; cursor: help; }
+/* The actual totals stand out in violet; the projected sq ft bubble beside it is the quiet grey one, so the
+   accurate number is never taken for the projection (user, 2026-11-19). */
 .pp-cast-card-count {
     flex: 0 0 auto;
-    font-size: 11px;
-    color: #64748b;
-    font-weight: 500;
-    padding: 2px 8px;
-    background: #f1f5f9;
+    font-size: 11.5px;
+    color: #5b21b6;
+    font-weight: 700;
+    padding: 2px 9px;
+    background: #f5f3ff;
+    border: 1px solid #c4b5fd;
     border-radius: 10px;
     white-space: nowrap;
 }
@@ -1296,15 +1299,15 @@ body.pp-inv-dragging, body.pp-inv-dragging * { user-select: none !important; -we
     gap: 6px;
 }
 /* Projected Sq Ft (2026-11-19): a PM-colour cell that is worked out, not typed (dashed edge, no hover change),
-   and its own violet bubble in the casting's title block. */
+   and its own quiet grey bubble in the casting's title block. */
 .pp-inv-input.pp-inv-pm.pp-inv-proj-cell, .pp-inv-input.pp-inv-pm.pp-inv-proj-cell:hover {
     display: flex; align-items: center; justify-content: flex-end; min-width: 0; overflow: hidden; white-space: nowrap;
     border-style: dashed; background: #dbeafe; color: #1e3a8a; font-weight: 700; font-variant-numeric: tabular-nums; cursor: help;
 }
 .pp-inv-input.pp-inv-pm.pp-inv-proj-cell.pp-inv-proj-none { justify-content: center; color: #93a5c4; font-weight: 500; background: #eff6ff; }
-.pp-cast-card-proj { flex: 0 0 auto; padding: 2px 9px; border: 1px solid #c4b5fd; border-radius: 10px; background: #f5f3ff; color: #5b21b6; font-size: 11.5px; font-weight: 700; white-space: nowrap; cursor: help; }
-.pp-cast-card-proj-warn { border-color: #fcd34d; background: #fef3c7; color: #b45309; }
-.pp-cast-card-proj-none { border-style: dashed; background: transparent; color: #7c3aed; font-weight: 500; }
+.pp-cast-card-proj { flex: 0 0 auto; padding: 2px 8px; border-radius: 10px; background: #f1f5f9; color: #64748b; font-size: 11px; font-weight: 500; white-space: nowrap; cursor: help; }
+.pp-cast-card-proj-warn { background: #fef3c7; color: #b45309; }
+.pp-cast-card-proj-none { background: transparent; color: #94a3b8; font-style: italic; }
 .pp-inv-remake-cell {
     display: flex;
     align-items: center;
