@@ -306,6 +306,33 @@ function projSumHtml(list) {
         + (missing ? ` ${plural(missing, 'type')} without a Width, a Length or a Qty ${missing === 1 ? 'is' : 'are'} not counted yet.` : '');
     return `<span class="pp-tm-projsum${missing ? ' pp-tm-projsum-warn' : ''}" title="${esc(tip)}">projected ${round2(total).toLocaleString()} sq ft${missing ? ' \u26A0 incomplete' : ''}</span>`;
 }
+/**
+ * The violet bubble on the title line (2026-11-19): the ACTUAL volume and face area of the whole job, added up
+ * over every casting row the same way each casting's own bubble does (value x (Qty + Extras)). Remake rows are
+ * counted: a remake is additional concrete that was cast. It reads the castings, not the list, so it is there
+ * before a list is started too.
+ */
+function actualSumHtml() {
+    if (!ctx) return '';
+    let rows = 0, pcs = 0, cu = 0, ff = 0, noCu = 0, noFf = 0, rmPcs = 0, rmCu = 0, rmFf = 0;
+    for (const c of ctx.castings()) {
+        for (const r of ctx.inventoryOf(c.id)) {
+            const units = (parseInt(r.quantity, 10) || 0) + (parseInt(r.extras, 10) || 0);
+            const rc = (Number(r.cu_ft) || 0) * units, rf = (Number(r.ff_sq_ft) || 0) * units;
+            rows++; pcs += units; cu += rc; ff += rf;
+            if (blank(r.cu_ft)) noCu++;
+            if (blank(r.ff_sq_ft)) noFf++;
+            if (r.remake_of_casting_id) { rmPcs += units; rmCu += rc; rmFf += rf; }
+        }
+    }
+    if (!rows) return '';
+    const n = (v) => round2(v).toLocaleString();
+    const missing = Math.max(noCu, noFf);
+    const tip = `Actual totals of the whole ${scopeWord()}: every casting row added up, Cu Ft and FF Sq Ft x (Qty + Extras). ${pcs} pieces in all.`
+        + (rmPcs ? ` Remakes are counted, they are additional concrete that was cast: ${plural(rmPcs, 'remake piece')} = ${n(rmCu)} cu ft \u00b7 ${n(rmFf)} ff sq ft. Without the remakes: ${n(cu - rmCu)} cu ft \u00b7 ${n(ff - rmFf)} ff sq ft.` : ' No remakes in the castings.')
+        + (missing ? ` ${noCu ? `${plural(noCu, 'row')} without Cu Ft` : ''}${noCu && noFf ? ', ' : ''}${noFf ? `${plural(noFf, 'row')} without FF Sq Ft` : ''}: the total is incomplete.` : '');
+    return `<span class="pp-tm-totalsum" title="${esc(tip)}">total ${n(cu)} cu ft \u00b7 ${n(ff)} ff sq ft${rmPcs ? ` \u00b7 incl. ${plural(rmPcs, 'remake')}` : ''}${missing ? ' <span class="pp-cast-card-count-warn">\u26A0 incomplete</span>' : ''}</span>`;
+}
 function rowHtml(e) {
     const inp = (f, extra, ph) => {
         const n = SYNC_FIELDS.includes(f) ? fieldNote(e, f) : { ph: '', title: '', off: false };
@@ -330,7 +357,7 @@ function rowHtml(e) {
 }
 function summaryHtml() {
     const list = named();
-    if (!list.length) return '<span class="pp-tm-sum">not started</span>';
+    if (!list.length) return '<span class="pp-tm-sum">not started</span>' + actualSumHtml();
     let required = 0, placed = 0, over = 0, noTotal = 0;
     for (const e of list) {
         const u = usage(e.type);
@@ -340,6 +367,7 @@ function summaryHtml() {
     const stray = typesNotListed();
     const idle = list.filter(unplaced);
     return `<span class="pp-tm-sum">${plural(list.length, 'type')} · <b>${required}</b> required · ${placed} in castings · ${left ? `<b>${left}</b> left to place` : 'all placed'}</span>`
+        + actualSumHtml()
         + projSumHtml(list)
         + (idle.length ? `<span class="pp-tm-flag pp-tm-flag-unplaced" title="${esc(idle.map(e => e.type).join(', '))}">${plural(idle.length, 'type')} not in any casting yet</span>` : '')
         + (over ? `<span class="pp-tm-flag pp-tm-flag-over">${plural(over, 'type')} over the total</span>` : '')

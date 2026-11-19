@@ -746,6 +746,8 @@ body { overflow: visible; }
 /* Proj Sq Ft after Length (2026-11-19): worked out, not typed (dashed edge), like the same column in the castings */
 .pp-tm-proj { display: flex; align-items: center; justify-content: center; min-width: 0; overflow: hidden; white-space: nowrap; padding: 4px 6px; border: 1px dashed #3b82f6; border-radius: 4px; background: #dbeafe; color: #1e3a8a; font-size: 12px; line-height: 1.3; font-weight: 700; font-variant-numeric: tabular-nums; cursor: help; }
 .pp-tm-proj.pp-tm-proj-none { background: #eff6ff; color: #93a5c4; font-weight: 500; }
+/* The job's actual totals: the same violet as each casting's totals bubble (the accurate number stands out) */
+.pp-tm-totalsum { padding: 1px 9px; border: 1px solid #c4b5fd; border-radius: 9999px; background: #f5f3ff; color: #5b21b6; font-size: 11.5px; font-weight: 700; white-space: nowrap; cursor: help; }
 .pp-tm-projsum { padding: 1px 8px; border-radius: 9999px; font-size: 11px; font-weight: 500; background: #f1f5f9; color: #64748b; cursor: help; }
 .pp-tm-projsum.pp-tm-projsum-warn { background: #fef3c7; color: #b45309; }
 .pp-tm-headrow span { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #1d4ed8; text-align: center; }

@@ -147,7 +147,7 @@ import {
 } from '../../services/casting-layout-service.js';
 import { registerRefreshHandler, isPortalChange, isOwnSignal, signalInfo } from '../../services/supabase-service.js';
 // Type master list (2026-11-11): the job's types + totals above the castings; casting rows pick their type from it.
-import { initTypeMaster, loadTypeMaster, renderTypeMaster, refreshTypeMasterStatus, typeMasterActive, typeCellHtml, typeMasterOverCheck, typeMasterPasteCheck, typeMasterMissing, typeMasterEntries, TM_NEW } from './type-master.js?v=20261119-3';
+import { initTypeMaster, loadTypeMaster, renderTypeMaster, refreshTypeMasterStatus, typeMasterActive, typeCellHtml, typeMasterOverCheck, typeMasterPasteCheck, typeMasterMissing, typeMasterEntries, TM_NEW } from './type-master.js?v=20261119-4';
 import { initInventorySearch, renderInventorySearch } from './inventory-search.js?v=20261116-1';
 import '../../utils/number-wheel-guard.js';   // the mouse wheel must not change a focused hour box (user 2026-11-03)
 
