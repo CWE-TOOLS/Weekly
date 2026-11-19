@@ -1526,6 +1526,7 @@ function renderCastingCard(c) {
               <div class="pp-cast-card-line2">
                 ${castDayPillHtml(c)}
                 <span class="pp-cast-card-count">${countLabel}</span>
+                ${castingProjPillHtml(items)}
                 <div class="pp-cast-card-actions">
                     <button class="pp-row-btn pp-row-btn-word" data-action="copy-components" type="button" ${copyDisabled ? 'disabled' : ''} title="${escapeAttr(copyTitle)}">${copyLabel}</button>
                     ${cutBtn}
@@ -1557,7 +1558,7 @@ function renderInventoryBody(casting, items) {
         : items.map(item => renderInventoryRow(item, casting.id)).join('');
 
     const headerRow = `
-        <div class="pp-inv-legend"><span class="pp-inv-legend-pm" title="Qty, Extras, Type, Description, Width, Length, Color, Remake Of — the PM enters these, then presses Ready for engineering">PM fields</span><span class="pp-inv-legend-eng" title="Cu Ft, FF Sq Ft — engineering enters these, then presses Casting Inventory ready">Engineering fields</span></div>
+        <div class="pp-inv-legend"><span class="pp-inv-legend-pm" title="Qty, Extras, Type, Description, Width, Length, Color, Remake Of — the PM enters these, then presses Ready for engineering. Proj Sq Ft is worked out from them by itself.">PM fields</span><span class="pp-inv-legend-eng" title="Cu Ft, FF Sq Ft — engineering enters these, then presses Casting Inventory ready">Engineering fields</span></div>
         <div class="pp-inv-header-row">
             <input type="checkbox" class="pp-inv-row-select pp-inv-select-all" data-select-all aria-label="Select every component on this casting" title="Select all / none" ${items.length && items.every(it => invSelected.has(it.id)) ? 'checked' : ''} ${items.length ? '' : 'disabled'}>
             <div class="pp-inv-header-grip-spacer"></div>
@@ -1568,6 +1569,7 @@ function renderInventoryBody(casting, items) {
                 <span class="pp-inv-h-pm" title="A short description of the part, for example: flat. Tick several rows (Shift+click for a range), then type it on any ticked row: it goes on all of them. It prints on the tracking sheet.">Description</span>
                 <span class="pp-inv-h-pm">Width</span>
                 <span class="pp-inv-h-pm">Length</span>
+                <span class="pp-inv-h-pm pp-inv-h-proj" title="Projected square feet: Width x Length (inches) / 144 x (Qty + Extras). Worked out by itself, nothing to type. It is the PM's early estimate; batching uses only the engineering Cu Ft and FF Sq Ft.">Proj Sq Ft</span>
                 <span class="pp-inv-h-pm" title="Tick several rows (Shift+click for a range), then pick the colour on any ticked row: it goes on all of them.">Color</span>
                 <span class="pp-inv-header-num pp-inv-h-eng">Cu Ft</span>
                 <span class="pp-inv-header-num pp-inv-h-eng">FF Sq Ft</span>
@@ -1671,6 +1673,7 @@ function renderInventoryRow(item, castingId) {
                 ${invCell(item.id, 'description', `<input type="text" class="pp-inv-input pp-inv-pm pp-inv-input-desc${invEditedCls(item.id, 'description')}" data-field="description" placeholder="Description" maxlength="120" value="${escapeAttr(item.description || '')}"${invEditedTitle(item.id, 'description') || (item.description ? ` title="${escapeAttr(item.description)}"` : '')} />`)}
                 ${invCell(item.id, 'width', `<input type="text" class="pp-inv-input pp-inv-pm${invEditedCls(item.id, 'width')}" data-field="width" placeholder="Width" value="${escapeAttr(item.width || '')}"${invEditedTitle(item.id, 'width')} />`)}
                 ${invCell(item.id, 'length', `<input type="text" class="pp-inv-input pp-inv-pm${invEditedCls(item.id, 'length')}" data-field="length" placeholder="Length" value="${escapeAttr(item.length || '')}"${invEditedTitle(item.id, 'length')} />`)}
+                ${invProjCellHtml(item)}
                 ${invCell(item.id, 'color_log_id', buildColorLogSelectHtml(item.color_log_id, {
                     className: 'pp-inv-input pp-inv-pm pp-inv-color-select' + invEditedCls(item.id, 'color_log_id'),
                     dataAttrs: { 'data-field': 'color_log_id' }
@@ -2580,10 +2583,55 @@ function castingCountLabelHtml(items) {
     return `${items.length} ${items.length === 1 ? 'type' : 'types'} · ${totalQty} pcs · ${part('cu_ft', 'cu ft')} · ${part('ff_sq_ft', 'ff sq ft')}`;
 }
 
+// ---------- Projected Sq Ft (2026-11-19) ----------
+// The PM's early estimate, before engineering has the 3D numbers: Width x Length (inches, any way they are typed:
+// 60, 60.5, 60 1/2, 60-1/2") / 144 x (Qty + Extras). Worked out on screen from the PM's own fields; nothing is stored
+// and nothing else reads it. Batching keeps using only the engineering Cu Ft and FF Sq Ft.
+/** @returns {{sqft:number, w:number, l:number, units:number}|null} null while a size is missing or cannot be read */
+function invProjected(item) {
+    const w = parseDimension(item?.width), l = parseDimension(item?.length);
+    if (!(w > 0) || !(l > 0)) return null;
+    const units = (parseInt(item.quantity, 10) || 0) + (parseInt(item.extras, 10) || 0);
+    return { sqft: w * l / 144 * units, w, l, units };
+}
+function invProjCellHtml(item) {
+    const p = invProjected(item);
+    if (!p) return `<span class="pp-inv-input pp-inv-pm pp-inv-proj-cell pp-inv-proj-none" data-proj-cell title="Projected sq ft needs a Width and a Length (inches)">&mdash;</span>`;
+    const extras = parseInt(item.extras, 10) || 0;
+    const tip = `${roundSig(p.w, 3)} x ${roundSig(p.l, 3)} in = ${roundSig(p.w * p.l / 144, 2)} sq ft each x ${p.units} pc${p.units === 1 ? '' : 's'}${extras ? ` (${p.units - extras} + ${extras} extra${extras === 1 ? '' : 's'})` : ''} = ${roundSig(p.sqft, 2)} sq ft. Worked out by itself, nothing to type.`;
+    return `<span class="pp-inv-input pp-inv-pm pp-inv-proj-cell" data-proj-cell title="${escapeAttr(tip)}">${escapeHtml(String(roundSig(p.sqft, 2)))}</span>`;
+}
+/** The title-block bubble: the casting's projected sq ft, flagged while some rows have no size yet. */
+function castingProjPillHtml(items) {
+    if (!items.length) return '';
+    const done = items.map(invProjected);
+    const total = done.reduce((sum, p) => sum + (p ? p.sqft : 0), 0);
+    const missing = done.filter(p => !p).length;
+    if (missing === items.length) {
+        return `<span class="pp-cast-card-proj pp-cast-card-proj-none" data-cast-proj title="Projected sq ft is worked out from Width, Length, Qty and Extras. No component on this casting has a Width and a Length yet.">projected sq ft: no sizes yet</span>`;
+    }
+    const tip = 'Projected sq ft: Width x Length / 144 x (Qty + Extras), added up over this casting. The PM\u2019s early estimate; batching uses only the engineering Cu Ft and FF Sq Ft.'
+        + (missing ? ` ${missing} of ${items.length} component${items.length === 1 ? '' : 's'} ${missing === 1 ? 'has' : 'have'} no Width or Length, so this total is incomplete.` : '');
+    return `<span class="pp-cast-card-proj${missing ? ' pp-cast-card-proj-warn' : ''}" data-cast-proj title="${escapeAttr(tip)}">projected ${escapeHtml(String(roundSig(total, 2)))} sq ft${missing ? ' &#9888; incomplete' : ''}</span>`;
+}
+/** After a saved edit: the projected cells of the casting's rows and its bubble follow, without a full redraw. */
+function refreshCastingProjected(card, castingId) {
+    const items = getInventoryFor(castingId);
+    for (const item of items) {
+        const cell = card.querySelector(`.pp-inv-row[data-inventory-id="${item.id}"] [data-proj-cell]`);
+        if (cell) cell.outerHTML = invProjCellHtml(item);
+    }
+    const pill = card.querySelector('[data-cast-proj]');
+    const html = castingProjPillHtml(items);
+    if (pill) { if (html) pill.outerHTML = html; else pill.remove(); }
+    else if (html) card.querySelector('.pp-cast-card-count')?.insertAdjacentHTML('afterend', html);
+}
+
 function updateCastingInventoryCount(castingId) {
     refreshTypeMasterStatus();   // the master list's "6 of 10 · 4 left" follows every saved quantity
     const card = document.querySelector(`.pp-cast-card[data-casting-id="${castingId}"]`);
     if (!card) return;
+    refreshCastingProjected(card, castingId);
     const countEl = card.querySelector('.pp-cast-card-count');
     if (!countEl) return;
     countEl.innerHTML = castingCountLabelHtml(getInventoryFor(castingId));

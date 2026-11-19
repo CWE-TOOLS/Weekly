@@ -1235,7 +1235,7 @@ body.pp-inv-dragging, body.pp-inv-dragging * { user-select: none !important; -we
     display: grid;
     /* + Description after Type (2026-11-10). minmax(0, ...) on BOTH the header and the rows: a long title can no longer
        widen its own column, so every title sits centred over its boxes. */
-    grid-template-columns: minmax(0, 0.4fr) minmax(0, 0.4fr) minmax(0, 0.65fr) minmax(0, 1.45fr) minmax(0, 0.6fr) minmax(0, 0.6fr) minmax(0, 1.25fr) minmax(0, 0.55fr) minmax(0, 0.6fr) minmax(0, 0.65fr);
+    grid-template-columns: minmax(0, 0.4fr) minmax(0, 0.4fr) minmax(0, 0.65fr) minmax(0, 1.45fr) minmax(0, 0.6fr) minmax(0, 0.6fr) minmax(0, 0.6fr) minmax(0, 1.25fr) minmax(0, 0.55fr) minmax(0, 0.6fr) minmax(0, 0.65fr);   /* + Proj Sq Ft after Length (2026-11-19) */
     gap: 6px;
 }
 .pp-inv-header-fields span {
@@ -1292,9 +1292,19 @@ body.pp-inv-dragging, body.pp-inv-dragging * { user-select: none !important; -we
     display: grid;
     /* + Description after Type (2026-11-10). minmax(0, ...) on BOTH the header and the rows: a long title can no longer
        widen its own column, so every title sits centred over its boxes. */
-    grid-template-columns: minmax(0, 0.4fr) minmax(0, 0.4fr) minmax(0, 0.65fr) minmax(0, 1.45fr) minmax(0, 0.6fr) minmax(0, 0.6fr) minmax(0, 1.25fr) minmax(0, 0.55fr) minmax(0, 0.6fr) minmax(0, 0.65fr);
+    grid-template-columns: minmax(0, 0.4fr) minmax(0, 0.4fr) minmax(0, 0.65fr) minmax(0, 1.45fr) minmax(0, 0.6fr) minmax(0, 0.6fr) minmax(0, 0.6fr) minmax(0, 1.25fr) minmax(0, 0.55fr) minmax(0, 0.6fr) minmax(0, 0.65fr);   /* + Proj Sq Ft after Length (2026-11-19) */
     gap: 6px;
 }
+/* Projected Sq Ft (2026-11-19): a PM-colour cell that is worked out, not typed (dashed edge, no hover change),
+   and its own violet bubble in the casting's title block. */
+.pp-inv-input.pp-inv-pm.pp-inv-proj-cell, .pp-inv-input.pp-inv-pm.pp-inv-proj-cell:hover {
+    display: flex; align-items: center; justify-content: flex-end; min-width: 0; overflow: hidden; white-space: nowrap;
+    border-style: dashed; background: #dbeafe; color: #1e3a8a; font-weight: 700; font-variant-numeric: tabular-nums; cursor: help;
+}
+.pp-inv-input.pp-inv-pm.pp-inv-proj-cell.pp-inv-proj-none { justify-content: center; color: #93a5c4; font-weight: 500; background: #eff6ff; }
+.pp-cast-card-proj { flex: 0 0 auto; padding: 2px 9px; border: 1px solid #c4b5fd; border-radius: 10px; background: #f5f3ff; color: #5b21b6; font-size: 11.5px; font-weight: 700; white-space: nowrap; cursor: help; }
+.pp-cast-card-proj-warn { border-color: #fcd34d; background: #fef3c7; color: #b45309; }
+.pp-cast-card-proj-none { border-style: dashed; background: transparent; color: #7c3aed; font-weight: 500; }
 .pp-inv-remake-cell {
     display: flex;
     align-items: center;
