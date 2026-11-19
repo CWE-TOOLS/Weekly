@@ -1599,16 +1599,29 @@ function renderInventoryBody(casting, items) {
     `;
 }
 
-function countImportableRemakes(castingId) {
-    let count = 0;
-    const importedKeys = new Set();
-    for (const list of currentCastingComponents.values()) {
-        for (const c of list) {
-            if (c.remake_of_panel_id && c.remake_of_casting_id) {
-                importedKeys.add(`${c.remake_of_casting_id}::${c.remake_of_panel_id}`);
-            }
+/**
+ * Rejected panels a casting has already taken as remakes: "<source casting id>::<panel id>".
+ * Read from the Casting Inventory rows (2026-11-19), by the same rule the Tracking rebuild uses (one id per piece
+ * of the row). It used to be read from the Tracking panels, which are rebuilt a moment AFTER the inventory
+ * changes: a remake row that was deleted kept its panels out of the Import Remakes pool until the tab was left
+ * and opened again. From the inventory, a deleted or reduced remake row frees its panels at once.
+ */
+function importedRemakeKeys() {
+    const keys = new Set();
+    for (const casting of currentCastings) {
+        for (const inv of getInventoryFor(casting.id)) {
+            if (!inv.remake_of_casting_id) continue;
+            const ids = invRemakeIds(inv);
+            const qty = invQtyOf(inv);
+            for (let i = 0; i < qty && i < ids.length; i++) keys.add(`${inv.remake_of_casting_id}::${ids[i]}`);
         }
     }
+    return keys;
+}
+
+function countImportableRemakes(castingId) {
+    let count = 0;
+    const importedKeys = importedRemakeKeys();
     // Hoist the target casting's sort_order once per function call.
     const target = currentCastings.find(cc => cc.id === castingId);
     const targetOrder = target ? (target.sort_order ?? -Infinity) : -Infinity;
@@ -2127,16 +2140,9 @@ function openImportRemakesModal(castingId) {
     const submit = document.getElementById('pp-import-remakes-submit');
     if (!modal || !list || !submit || !intro) return;
 
-    // Build the set of source (casting_id, panel_id) pairs that have already
-    // been imported anywhere in this project, so they're excluded.
-    const importedKeys = new Set();
-    for (const arr of currentCastingComponents.values()) {
-        for (const c of arr) {
-            if (c.remake_of_panel_id && c.remake_of_casting_id) {
-                importedKeys.add(`${c.remake_of_casting_id}::${c.remake_of_panel_id}`);
-            }
-        }
-    }
+    // The source (casting_id, panel_id) pairs that have already been imported
+    // anywhere in this project are excluded (read from the inventory rows).
+    const importedKeys = importedRemakeKeys();
 
     const candidates = [];
     const targetOrder = target.sort_order ?? -Infinity;
