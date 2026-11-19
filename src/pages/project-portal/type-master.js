@@ -62,6 +62,8 @@ let unlocked = false;           // the list is locked until "Unlock to edit" is 
 let lockTimer = null;
 const LOCK_AFTER_MS = 60000;
 let pendingOps = [];
+const ticked = new Set();       // ids of the ticked lines: a colour picked on one of them goes on all (2026-11-19)
+let lastTick = null;            // the line ticked last without Shift: where a Shift+click range starts
 let saveTimer = null;
 let flushing = null;
 
@@ -133,6 +135,7 @@ export async function loadTypeMaster(pn) {
     if (key !== storeKey) {
         if (pendingOps.length && storeKey) flush();          // the list being left: its edits are captured and saved now
         pendingOps = []; openState = null; types = []; loadedOk = false; storeKey = key;
+        ticked.clear(); lastTick = null;
         unlocked = false; clearTimeout(lockTimer); lockTimer = null;      // another job or phase: locked again
     }
     if (!key || pendingOps.length) return;
@@ -283,7 +286,8 @@ function rowHtml(e) {
     };
     const cn = fieldNote(e, 'color_log_id');
     const color = ctx.colorSelectHtml(e.color_log_id, { className: 'pp-tm-in pp-tm-color' + (cn.off ? ' pp-tm-off' : ''), dataAttrs: { 'data-tm-field': 'color_log_id', title: cn.title || 'Color' } });
-    return `<div class="pp-tm-row${unplaced(e) ? ' pp-tm-row-unplaced' : ''}" data-tm-id="${esc(e.id)}">
+    return `<div class="pp-tm-row${unplaced(e) ? ' pp-tm-row-unplaced' : ''}${ticked.has(e.id) ? ' pp-tm-row-ticked' : ''}" data-tm-id="${esc(e.id)}">
+        <input type="checkbox" class="pp-tm-tick" data-tm-tick${ticked.has(e.id) ? ' checked' : ''} title="Tick this type. Shift+click ticks the range. A color picked on a ticked line goes on every ticked type." aria-label="Tick ${esc(e.type || 'this type')}">
         <input type="text" class="pp-tm-in pp-tm-type" data-tm-field="type" placeholder="Type" maxlength="40" value="${esc(e.type)}">
         <input type="number" class="pp-tm-in" data-tm-field="qty" min="0" step="1" placeholder="Qty" value="${e.qty ?? ''}">
         ${inp('description', 'type="text" maxlength="120"', 'Description')}
@@ -328,13 +332,14 @@ export function renderTypeMaster() {
     const body = !isOpen ? '' : `
         <div class="pp-tm-body">
             ${types.length ? '' : `<p class="pp-tm-hint">Enter every type of this ${scopeWord()} with the total quantity the ${scopeWord()} needs. <b>Type</b> and <b>Qty</b> are enough: the other boxes can be filled in later, here or in a casting. Once a type is on the list, the castings pick their types from it and a type can no longer go past its total by accident.</p>`}
-            ${types.length ? `<div class="pp-tm-row pp-tm-headrow"><span>Type</span><span>Qty</span><span>Description</span><span>Width</span><span>Length</span><span>Color</span><span>Cu Ft</span><span>FF Sq Ft</span><span>In the castings</span><span></span></div>` : ''}
+            ${types.length ? `<div class="pp-tm-row pp-tm-headrow"><span><input type="checkbox" class="pp-tm-tick" data-tm-tickall title="Tick every type / clear the ticks" aria-label="Tick every type"></span><span>Type</span><span>Qty</span><span>Description</span><span>Width</span><span>Length</span><span>Color</span><span>Cu Ft</span><span>FF Sq Ft</span><span>In the castings</span><span></span></div>` : ''}
             ${shown().map(rowHtml).join('')}
+            <div class="pp-tm-tickbar" data-tm-tickbar hidden></div>
             <div class="pp-tm-actions">
                 <button type="button" class="pp-add-btn pp-tm-add" data-tm="add">+ Add Type</button>
                 ${stray.length ? `<button type="button" class="pp-add-btn pp-tm-build" data-tm="build" title="${esc(stray.map(s => s.type).join(', '))}">+ Add the ${plural(stray.length, 'type')} already in the castings</button>` : ''}
                 <span class="pp-tm-tip pp-tm-tip-locked">Locked, so a stray click or key changes nothing. Press <b>Unlock to edit</b> at the top right of this box.</span>
-                <span class="pp-tm-tip pp-tm-tip-open">The list keeps itself sorted by type. Enter moves down and starts a new line. A list copied from Excel (Type, Qty, Description, Width, Length) can be pasted into a Type box.</span>
+                <span class="pp-tm-tip pp-tm-tip-open">The list keeps itself sorted by type. Enter moves down and starts a new line. Tick several types (Shift+click for a range) and pick a color on one of them: it goes on all the ticked types. A list copied from Excel (Type, Qty, Description, Width, Length) can be pasted into a Type box.</span>
             </div>
         </div>`;
     wrap.innerHTML = `
@@ -349,6 +354,46 @@ export function renderTypeMaster() {
           </div>${body}
         </div>`;
     if (!unlocked) wrap.querySelectorAll('.pp-tm-body input, .pp-tm-body select, .pp-tm-body button').forEach(el => { el.disabled = true; });
+    syncTicks();
+}
+
+/** The ticks on screen follow the set: lines that are gone drop out, the bar under the list says how many are ticked. */
+function syncTicks() {
+    const wrap = document.getElementById('pp-type-master');
+    if (!wrap) return;
+    for (const id of [...ticked]) if (!types.some(e => e.id === id)) ticked.delete(id);
+    const rows = [...wrap.querySelectorAll('.pp-tm-row[data-tm-id]')];
+    rows.forEach(row => {
+        const on = ticked.has(row.dataset.tmId);
+        row.classList.toggle('pp-tm-row-ticked', on);
+        const box = row.querySelector('[data-tm-tick]');
+        if (box) box.checked = on;
+    });
+    const all = wrap.querySelector('[data-tm-tickall]');
+    if (all) { all.checked = rows.length > 0 && ticked.size === rows.length; all.indeterminate = ticked.size > 0 && ticked.size < rows.length; }
+    const bar = wrap.querySelector('[data-tm-tickbar]');
+    if (bar) {
+        bar.hidden = ticked.size === 0;
+        bar.innerHTML = ticked.size
+            ? `<b>${plural(ticked.size, 'type')} ticked</b><span>${ticked.size > 1 ? `A color picked on one of them goes on all ${ticked.size}.` : 'Tick more types to give them the same color in one go.'}</span><button type="button" class="pp-tm-untick" data-tm="untick">Clear ticks</button>`
+            : '';
+    }
+}
+/** A tick box was clicked: plain click = that line; Shift+click = every line from the last plain tick to this one. */
+function tickClicked(box, shift) {
+    const wrap = document.getElementById('pp-type-master');
+    const row = box.closest('.pp-tm-row[data-tm-id]');
+    if (!wrap || !row) return;
+    const id = row.dataset.tmId, on = box.checked;
+    const order = [...wrap.querySelectorAll('.pp-tm-row[data-tm-id]')].map(r => r.dataset.tmId);
+    const a = order.indexOf(lastTick), b = order.indexOf(id);
+    if (shift && a !== -1 && b !== -1 && a !== b) {
+        for (let i = Math.min(a, b); i <= Math.max(a, b); i++) { if (on) ticked.add(order[i]); else ticked.delete(order[i]); }
+    } else {
+        if (on) ticked.add(id); else ticked.delete(id);
+        lastTick = id;
+    }
+    syncTicks();
 }
 
 /** Any work on the unlocked list pushes the automatic lock one minute further. */
@@ -367,6 +412,7 @@ function setLocked(on, auto = false) {
         if (auto && document.querySelector('.pp-tm-modal')) { lockTimer = setTimeout(() => setLocked(true, true), 10000); return; }
         if (wrap?.contains(document.activeElement)) document.activeElement.blur();
         for (const e of types.filter(x => blank(x.type))) mutate(opRemove(e.id));
+        ticked.clear(); lastTick = null;
         unlocked = false;
     } else {
         unlocked = true; openState = true;
@@ -508,6 +554,7 @@ async function commitMasterField(el) {
     if (!e) return;
     const f = el.dataset.tmField;
     if (f === 'type') return commitTypeName(e, el);
+    if (f === 'color_log_id' && ticked.has(e.id) && ticked.size > 1) return commitColorOnTicked(el);
     const before = e[f];
     let val;
     if (f === 'qty') { const n = parseInt(el.value, 10); val = Number.isFinite(n) && n >= 0 ? n : null; el.value = val ?? ''; }
@@ -515,6 +562,50 @@ async function commitMasterField(el) {
     if (sameVal(before, val)) return;
     mutate(opSet(e.id, { [f]: val }, { ...e }));
     if (f !== 'qty' && !blank(e.type)) await pushMasterField(e, f, before, val);
+    refreshTypeMasterStatus();
+}
+/**
+ * A color was picked on a ticked line: every ticked type takes it (user 2026-11-19: PMs set the color type by type).
+ * The castings follow on the rule of one type: blank rows take it at once, rows holding another color are asked
+ * about first - once for all the types - and ready (final) castings keep theirs.
+ */
+async function commitColorOnTicked(el) {
+    const f = 'color_log_id';
+    const val = parseField(f, el.value);
+    const change = types.filter(x => ticked.has(x.id) && !sameVal(x[f], val));
+    if (!change.length) return;
+    for (const x of change) { mutate(opSet(x.id, { [f]: val }, { ...x })); setMasterDom(x.id, f, val); }
+    const word = blank(val) ? 'Color cleared' : `${colorName(val)} set`;
+    ctx.toast(`${word} on ${plural(change.length, 'ticked type')}.`, 'success', 3000);
+    if (!blank(val)) {
+        const fill = [], held = [];
+        for (const x of change) {
+            if (blank(x.type)) continue;
+            for (const t of rowsOfType(x.type)) {
+                if (sameVal(t.row[f], val)) continue;
+                (blank(t.row[f]) ? fill : held).push({ ...t, type: x.type });
+            }
+        }
+        let targets = fill;
+        if (held.length) {
+            const groups = new Map();
+            for (const d of held) {
+                const stays = ctx.isFinal(d.casting.id);
+                const k = norm(d.type) + '|' + d.casting.id + '|' + String(d.row[f]).trim();
+                if (!groups.has(k)) groups.set(k, { type: d.type, cast: d.casting.casting_number || '?', v: d.row[f], n: 0, stays });
+                groups.get(k).n++;
+            }
+            const all = [...groups.values()];
+            const lines = all.slice(0, 14).map(g => `   ${g.type} \u00b7 Cast ${g.cast}: ${showVal(f, g.v)}${g.n > 1 ? ` (${g.n} rows)` : ''}${g.stays ? '   \u2014 ready, stays as it is' : ''}`).join('\n') + (all.length > 14 ? `\n   and ${all.length - 14} more` : '');
+            const head = `Color = ${showVal(f, val)} on ${plural(change.length, 'ticked type')}\n\n${plural(held.length, 'row')} in the castings ${held.length === 1 ? 'holds' : 'hold'} another color:\n${lines}\n\n`;
+            if (all.every(g => g.stays)) {
+                window.alert(head + `All of them are in ready (final) castings: nothing changes there until "Make changes" is pressed on the casting.`);
+            } else if (window.confirm(head + `OK = replace with ${showVal(f, val)}${all.some(g => g.stays) ? ' (ready castings stay as they are until "Make changes" is pressed there)' : ''}\nCancel = leave the castings as they are`)) {
+                targets = fill.concat(held);
+            }
+        }
+        if (targets.length) await applyToRows(targets, f, val, `Color of ${plural(change.length, 'type')}`);
+    }
     refreshTypeMasterStatus();
 }
 async function commitTypeName(e, el) {
@@ -843,6 +934,18 @@ export function initTypeMaster(c) {
         else if (what === 'add') addBlankRow();
         else if (what === 'build') buildFromCastings();
         else if (what === 'del') removeType(b.closest('.pp-tm-row')?.dataset.tmId);
+        else if (what === 'untick') { ticked.clear(); lastTick = null; syncTicks(); }
+    });
+    // Tick boxes: Shift+click ticks a range; the header box ticks every line or clears them all.
+    wrap.addEventListener('click', (ev) => {
+        if (!unlocked) return;
+        if (ev.target.matches('[data-tm-tick]')) tickClicked(ev.target, ev.shiftKey);
+        else if (ev.target.matches('[data-tm-tickall]')) {
+            const on = ev.target.checked;
+            ticked.clear(); lastTick = null;
+            if (on) wrap.querySelectorAll('.pp-tm-row[data-tm-id]').forEach(r => ticked.add(r.dataset.tmId));
+            syncTicks();
+        }
     });
     wrap.addEventListener('change', (ev) => { if (ev.target.matches('[data-tm-field]')) commitMasterField(ev.target); });
     for (const kind of ['keydown', 'input', 'change', 'click', 'paste']) wrap.addEventListener(kind, touchLock, true);   // work on the list keeps it open
