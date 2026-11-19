@@ -131,7 +131,7 @@ import {
 import { renderCastingLayout, computeLayoutRects, parseDimension, tableBlockRects, CASTING_AREAS } from './casting-layout.js?v=20261112-1';
 import { attachLayoutDrag } from './casting-layout-drag.js?v=20261112-1';
 import { activateJigListTab } from './jig-list.js?v=20261112-1';
-import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, APPROVALS_TAB_ITEMS } from '../../config/milestones-config.js?v=20261106-1';
+import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, APPROVALS_TAB_ITEMS } from '../../config/milestones-config.js?v=20261119-1';
 import { SLUMP_TARGET_DEFAULTS, FINAL_BACKUP_PIG_REDUCTION_PCT, parsePigReduction, BT_IMPORT_META, btOverrides, btImportStamp, btStampDate, additiveAmount, batchTotalsRows, renderBatchTotals, clampSlumpTarget, formatSlumpLabel, renderSlumpGraphic, renderBatchTicketCard, BATCH_PRINT_CSS } from '../../services/batch-ticket-render.js';
 import { finishingProductsHtml, faceSqFtOfInventory } from '../../services/finishing-products.js?v=20261106-1';   // moved out 2026-10-30 so the weekly's week print shares the ticket code
 import { invHash as invHashShared, invFingerprintRows, invColourFingerprintRows } from '../../services/inventory-marks.js';
@@ -1450,6 +1450,7 @@ function renderCastings() {
     if (!list || !empty || !needsSave || !addRow) return;
 
     updateCastingsSummary();
+    renderApprovalsCard();
     renderTypeMaster();
     renderInventorySearch();
 
@@ -3123,16 +3124,37 @@ function renderOptStagedGrid(casting) {
 
 // ---------- Staging (pre-author task descriptions per casting, by department × day) ----------
 
-/* ===================== Releasability Approvals tab (2026-10-16) ===================== */
-async function activateApprovalsTab() {
-    const needsSave = document.getElementById('pp-appr-needs-save');
-    const noCastings = document.getElementById('pp-appr-no-castings');
-    const table = document.getElementById('pp-appr-table');
-    if (!table) return;
-    if (!currentProjectNumber) { needsSave.hidden = false; noCastings.hidden = true; table.innerHTML = ''; return; }
-    needsSave.hidden = true;
-    if (currentCastings.length === 0) { try { currentCastings = await loadCastings(currentProjectNumber); } catch (e) { /* ignore */ } }
-    if (!msByCasting.size && currentProjectNumber) await loadMilestones();
+/* ===================== Releasability approvals (2026-10-16; a box on the Casting Inventory tab since 2026-11-19) =====================
+   It used to be its own sidebar tab. Folded, the box shows each column with its "all done / clear all" button
+   and how many castings are done; open, it lists every casting to click one by one. It folds itself after
+   1 minute without work on it. What a click saves is unchanged (toggleApproval -> the casting_milestones row
+   the Releasability Board reads). */
+let apprOpen = false;
+let apprFoldTimer = null;
+const APPR_FOLD_AFTER_MS = 60000;
+function apprTouch() {
+    clearTimeout(apprFoldTimer);
+    apprFoldTimer = apprOpen ? setTimeout(() => apprSetOpen(false), APPR_FOLD_AFTER_MS) : null;
+}
+function apprSetOpen(on) {
+    apprOpen = !!on;
+    apprTouch();
+    const card = document.getElementById('pp-appr-card');
+    if (!card) return;
+    card.classList.toggle('pp-appr-open', apprOpen);
+    document.getElementById('pp-appr-toggle')?.setAttribute('aria-expanded', String(apprOpen));
+}
+/** Old entry point of the tab: kept so a stale call still draws the box. */
+async function activateApprovalsTab() { renderApprovalsCard(); }
+/** Draw the box on the Casting Inventory tab (hidden while the job has no castings to sign off). */
+function renderApprovalsCard() {
+    const card = document.getElementById('pp-appr-card');
+    if (!card) return;
+    const scoped = currentProjectNumber ? getCastingsForActivePhase() : [];
+    card.hidden = !scoped.length;
+    if (card.hidden) return;
+    card.classList.toggle('pp-appr-open', apprOpen);
+    document.getElementById('pp-appr-toggle')?.setAttribute('aria-expanded', String(apprOpen));
     renderApprovals();
 }
 function apprCellHtml(castingId, milestone) {
@@ -3148,16 +3170,18 @@ function apprCellHtml(castingId, milestone) {
 }
 function renderApprovals() {
     const table = document.getElementById('pp-appr-table');
-    const noCastings = document.getElementById('pp-appr-no-castings');
     if (!table) return;
     const scoped = getCastingsForActivePhase();
-    if (!scoped.length) { noCastings.hidden = false; table.innerHTML = ''; return; }
-    noCastings.hidden = true;
-    if (!msOn()) { table.innerHTML = '<div class="pp-castings-hint">This job is before the cut-off — its approvals are clicked on the Releasability Board.</div>'; return; }
+    const sub = document.getElementById('pp-appr-sub');
+    if (!scoped.length) { table.innerHTML = ''; return; }
+    if (!msOn()) { if (sub) sub.textContent = ''; table.innerHTML = '<div class="pp-castings-hint">This job is before the cut-off — its approvals are clicked on the Releasability Board.</div>'; return; }
+    if (sub) sub.textContent = 'PM sign-offs per casting. Click a cell to flip it; the Releasability Board follows.';
     const head = APPROVALS_TAB_ITEMS.map(m => {
         const auto = AUTO_MILESTONES.includes(m);
-        const allGreen = scoped.every(c => msStatus(c.id, m) === MS.GREEN);
+        const nGreen = scoped.filter(c => msStatus(c.id, m) === MS.GREEN).length;
+        const allGreen = nGreen === scoped.length;
         return `<th><span class="pp-appr-col-name">${escapeHtml(m)}</span><span class="pp-appr-col-tag ${auto ? 'pp-appr-tag-auto' : 'pp-appr-tag-pman'}">${auto ? 'AUTO' : 'P. MANUAL'}</span>
+            <span class="pp-appr-col-count${allGreen ? ' pp-appr-col-count-done' : ''}" title="Castings signed off for ${escapeAttr(m)}">${nGreen} of ${scoped.length} done</span>
             ${auto ? '' : `<button type="button" class="pp-appr-all" data-action="appr-all" data-milestone="${escapeAttr(m)}" data-to="${allGreen ? 'red' : 'green'}" title="${allGreen ? 'Clear every casting' : 'Mark every casting done'}">${allGreen ? 'clear all' : 'all done'}</button>`}</th>`;
     }).join('');
     const rows = scoped.map(c => `<tr><th class="pp-appr-cast">Cast ${escapeHtml(c.casting_number || '')}${c.description ? `<span class="pp-appr-desc">${escapeHtml(c.description)}</span>` : ''}</th>
@@ -10187,12 +10211,20 @@ function wireEvents() {
 
     // Add Task buttons live inside each column now — handled via delegation in pp-opt-columns below.
 
+    // Releasability approvals box (Casting Inventory tab): fold / open, and fold again after 1 minute without work
+    document.getElementById('pp-appr-toggle')?.addEventListener('click', () => apprSetOpen(!apprOpen));
+    ['click', 'keydown', 'pointermove'].forEach(evt => document.getElementById('pp-appr-card')?.addEventListener(evt, apprTouch, { passive: true }));
     // Releasability Approvals grid
     document.getElementById('pp-appr-table')?.addEventListener('click', async (e) => {
         const all = e.target.closest('button[data-action="appr-all"]');
         if (all) {
             const to = all.dataset.to === 'green' ? MS.GREEN : MS.RED;
-            for (const c of getCastingsForActivePhase()) await toggleApproval(c.id, all.dataset.milestone, to);
+            const scoped = getCastingsForActivePhase();
+            // One click flips the whole column on the Releasability Board, and the box sits on a busy tab: ask first.
+            if (!window.confirm(to === MS.GREEN
+                ? `Mark "${all.dataset.milestone}" done on all ${scoped.length} casting${scoped.length === 1 ? '' : 's'}?\n\nThe Releasability Board follows.`
+                : `Clear "${all.dataset.milestone}" on all ${scoped.length} casting${scoped.length === 1 ? '' : 's'}?\n\nThey go back to red on the Releasability Board.`)) return;
+            for (const c of scoped) await toggleApproval(c.id, all.dataset.milestone, to);
             renderApprovals();
             return;
         }
@@ -15661,7 +15693,7 @@ async function init() {
     if (urlProject !== null) {
         // Form view. Set the initial tab BEFORE showFormView so its
         // internal setActiveTab + activate-tab calls land on the right panel.
-        if (urlTab && VALID_TABS.has(urlTab)) currentTab = urlTab;
+        if (urlTab && VALID_TABS.has(urlTab)) currentTab = urlTab === 'approvals' ? 'castings' : urlTab;   // the approvals live on Casting Inventory now
         // List data still loads in the background for completeness.
         loadAllData().catch(err => logger.warn(err));
         await showFormView(urlProject);

@@ -19,7 +19,7 @@ export const AUTO_MILESTONES = [
     'Batching Sheets', 'Casting Layout', 'Shop Folder Built', 'Shop Folder Cover', 'Jig List', 'Staging'
 ];
 
-/** The portal's "Releasability Approvals" tab: one row per casting, these P. MANUAL columns.
+/** The portal's "Releasability approvals" box (Casting Inventory tab; its own tab until 2026-11-19): one row per casting, these P. MANUAL columns.
  *  (Shop Folder Built is not here — Print INITIAL Cover on Project Info sets it.) */
 export const APPROVALS_TAB_ITEMS = ['Approved SDs', 'Sample Approval'];
 
@@ -37,8 +37,8 @@ export const MILESTONE_HOW = {
     'Classroom #2': 'Click the cell here for one casting, or use the Class Rooms tab in the portal to mark the classroom held for every casting in the phase (green = all held, orange = some).',
     'Classroom #3': 'Click the cell here for one casting, or use the Class Rooms tab in the portal to mark the classroom held for every casting in the phase (green = all held, orange = some).',
     'Shop Folder Built': 'Goes green the moment Print INITIAL Cover (Project Info tab) is printed for the castings in view: a printed cover means a physical folder exists.',
-    'Approved SDs': "Click the cell here, or tick it on the portal's Releasability Approvals tab; both write the same record.",
-    'Sample Approval': "Click the cell here, or tick it on the portal's Releasability Approvals tab; both write the same record.",
+    'Approved SDs': "Click the cell here, or tick it in the Releasability approvals box on the portal's Casting Inventory tab; both write the same record.",
+    'Sample Approval': "Click the cell here, or tick it in the Releasability approvals box on the portal's Casting Inventory tab; both write the same record.",
     'Color Log': 'Orange once a colour is picked on any Casting Inventory row of the casting; green when Print Color Log is printed for it.',
     'Final Optimizer HRS': "Click the cell here, or the FINAL HRS cell on the portal's Optimizer Hours tab, when the hours are final.",
     'Rebar/Drilling Layout': 'Click the cell to change it (nothing in the portal sets it yet).',

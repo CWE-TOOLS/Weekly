@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="src/styles/variables.css">
     <link rel="stylesheet" href="src/styles/base.css">
     <link rel="stylesheet" href="src/styles/buttons.css">
-    <link rel="stylesheet" href="src/styles/project-portal.css?v=20261119-5">
+    <link rel="stylesheet" href="src/styles/project-portal.css?v=20261119-6">
 
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 </head>
@@ -205,13 +205,7 @@
                         </svg>
                         <span>Optimizer Hours</span>
                     </button>
-                    <button class="pp-tab-btn" data-tab="approvals" type="button">
-                        <svg class="pp-tab-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <rect x="3" y="4" width="18" height="16" rx="2"/>
-                            <polyline points="7 12 10.5 15.5 17 9"/>
-                        </svg>
-                        <span>Releasability Approvals</span>
-                    </button>
+                    <!-- "Releasability Approvals" was a tab here until 2026-11-19: it is a box on the Casting Inventory tab now -->
                     <button class="pp-tab-btn" data-tab="staging" type="button">
                         <svg class="pp-tab-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <rect x="4" y="4" width="16" height="16" rx="2"/>
@@ -431,6 +425,19 @@
                             <div class="pp-tab-notes" id="pp-castings-notes-wrap">
                                 <label class="pp-tab-notes-label" for="pp-f-castings_notes">Notes</label>
                                 <textarea id="pp-f-castings_notes" class="pp-tab-notes-textarea" placeholder="Notes for this project's castings…"></textarea>
+                            </div>
+
+                            <!-- Releasability approvals (moved here from its own tab 2026-11-19): the PM sign-offs per casting.
+                                 Folded it shows the columns with their "all done / clear all" buttons; open it lists every casting. -->
+                            <div id="pp-appr-card" class="pp-appr-card" hidden>
+                                <button type="button" class="pp-appr-head" id="pp-appr-toggle" aria-expanded="false" title="Open to see and click each casting. It folds itself after 1 minute without work on it.">
+                                    <span class="pp-cast-sum-chev" aria-hidden="true">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                                    </span>
+                                    <span class="pp-appr-title">Releasability approvals</span>
+                                    <span class="pp-appr-sub" id="pp-appr-sub"></span>
+                                </button>
+                                <div id="pp-appr-table" class="pp-appr-table"></div>
                             </div>
 
                             <!-- Type master list (2026-11-11): the job's types + totals; drawn by src/pages/project-portal/type-master.js -->
@@ -899,17 +906,6 @@
                     </div>
 
                     <!-- Tab: Staging (pre-author task descriptions per casting) -->
-                    <div class="pp-tab-panel" data-panel="approvals" hidden>
-                        <div class="pp-opt-wrap">
-                            <div class="pp-opt-header">
-                                <h2 class="pp-opt-title">Releasability Approvals</h2>
-                                <p class="pp-muted pp-opt-sub">The PM sign-offs from the Releasability Board, per casting. Click a cell to flip it; the board follows.</p>
-                            </div>
-                            <div id="pp-appr-needs-save" class="pp-castings-hint" hidden>Save the project first.</div>
-                            <div id="pp-appr-no-castings" class="pp-castings-hint" hidden>No castings yet &mdash; add castings first.</div>
-                            <div id="pp-appr-table" class="pp-appr-table"></div>
-                        </div>
-                    </div>
                     <div class="pp-tab-panel" data-panel="staging" hidden>
                         <div class="pp-opt-wrap">
                             <div class="pp-opt-header">
@@ -1305,7 +1301,7 @@
         <div id="pp-toast" class="pp-toast" hidden></div>
     </div>
 
-    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20261119-6"></script>
+    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20261119-7"></script>
     <script type="module" src="src/utils/auto-update.js?v=20261023-1"></script>
 </body>
 </html>
