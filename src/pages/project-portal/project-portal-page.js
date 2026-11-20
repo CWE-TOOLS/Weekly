@@ -11832,17 +11832,17 @@ async function ensureJigListsForScrim() {
 }
 /** The scrim line for a casting: face sq ft from the Casting Inventory × scrim layers from the Jig List cross-section. */
 /** Finishing & sealing products for the casting's finished face, off its colour logs' notes (2026-11-06). */
-function finishingLineHtml(casting, entries, day = 1) {
+function finishingLineHtml(casting, entries, day = null) {
     if (!casting) return '';
     const logs = [];
     for (const e of entries || []) if (e.log && !logs.some(l => l.id === e.log.id)) logs.push(e.log);
     if (!logs.length) return '';
-    const { face, partial } = faceSqFtOfInventory(btDayRows(casting.id, day));
+    const { face, partial } = faceSqFtOfInventory(day ? btDayRows(casting.id, day) : getInventoryFor(casting.id));
     return finishingProductsHtml(logs, face, { partial });
 }
-function scrimLineHtml(casting, day = 1) {
+function scrimLineHtml(casting, day = null) {
     if (!casting) return '';
-    const rows = btDayRows(casting.id, day);
+    const rows = day ? btDayRows(casting.id, day) : getInventoryFor(casting.id);
     if (!rows.length) return '';
     const { text, detail, warn } = scrimForInventory(rows, btJigLists.get(casting.id));
     if (!text) return '';
@@ -12474,9 +12474,9 @@ function renderBatchPreview(casting, ticket) {
     const sectionHeader = renderBatchSectionHeader(plan);
     const assign = renderBatchAssignTable(plan);
     // Day totals combine every color ticket on this casting, not just the one being viewed.
-    const day = btDayOf(ticket);     // a casting split over its cast days: the totals of this ticket's day
-    const totalsEntries = buildBatchTotalsEntries(casting, day);
-    const totalsPanel = renderBatchTotals(totalsEntries, casting, { scrimHtml: scrimLineHtml(casting, day), finishingHtml: finishingLineHtml(casting, totalsEntries, day) });
+    // Mix Day Totals are for the WHOLE casting: every color ticket of every cast day combined (user, 2026-11-20).
+    const totalsEntries = buildBatchTotalsEntries(casting);
+    const totalsPanel = renderBatchTotals(totalsEntries, casting, { scrimHtml: scrimLineHtml(casting), finishingHtml: finishingLineHtml(casting, totalsEntries) });
     const tickets = renderBatchTicketCards(casting, ticket, plan);
 
     return `
@@ -12497,6 +12497,8 @@ function buildBatchTotalsEntries(casting, day = null) {
     const entries = [];
     for (const t of getBatchTicketList(casting.id)) {
         if (day && btDayOf(t) !== day) continue;
+        // split casting: a ticket left over on a day none of its color casts on any more is not printed, so not totalled
+        if (btDays(casting.id) && String(t.cuFt ?? '').trim() !== '' && !batchInventoryTotals(casting.id, t)) continue;
         const totalCuFt = parseFloat(t.cuFt);
         if (!totalCuFt || totalCuFt <= 0) continue;
         const log = getActiveBatchColorLog(casting, t);
