@@ -623,11 +623,20 @@ export async function enrichTasksWithPieces(tasks) {
             if (c.id) projectByCastingId.set(c.id, String(c.project_number || '').trim());
         }
         const batchInfoById = new Map();
+        const batchInfoByDay = new Map();        // SPLIT castings: casting id -> Map(cast day -> that day's tickets' info)
+        const ticketDay = (t) => (parseInt(t && t.castDay, 10) > 1 ? parseInt(t.castDay, 10) : 1);
         for (const castingId of referencedIds) {
+          // Batch tickets per cast day (2026-11-20): a casting split over its cast days has one ticket set per day.
+          // Not split: its Day 1 tickets, as always (a ticket an old split left on a later day is not counted).
+          const allTickets = ticketsByCasting.get(castingId) || [];
+          const nSplitDays = dayAccById.has(castingId) ? dayAccById.get(castingId).length : 0;
+          const ticketSets = nSplitDays
+              ? [[0, allTickets.filter(t => ticketDay(t) <= nSplitDays)], ...Array.from({ length: nSplitDays }, (_, i) => [i + 1, allTickets.filter(t => ticketDay(t) === i + 1)])]
+              : [[0, allTickets.filter(t => ticketDay(t) === 1)]];
+          for (const [dayKey, tickets] of ticketSets) {
             try {
                 const projectLogs = colorLogsByProject.get(projectByCastingId.get(castingId)) || [];
                 const logById = new Map(projectLogs.map(l => [l.id, l]));
-                const tickets = ticketsByCasting.get(castingId) || [];
                 // Projects batched on a dedicated page plan with their own sizing, so the
                 // count shown on the board matches that page (config/special-batching.js).
                 const sizing = getSpecialBatching(projectByCastingId.get(castingId))?.sizing || null;
@@ -667,14 +676,18 @@ export async function enrichTasksWithPieces(tasks) {
                     if (projectLogs[0].name) names.push(projectLogs[0].name);
                     addMethod(projectLogs[0]);
                 }
-                batchInfoById.set(castingId, {
+                const infoOut = {
                     colorLogTitle: names.join(' / '),
                     castMethod: methods.join(' / '),
-                    batchCount: batchTotal
-                });
+                    batchCount: batchTotal,
+                    hasTickets: tickets.length > 0
+                };
+                if (dayKey === 0) batchInfoById.set(castingId, infoOut);
+                else { if (!batchInfoByDay.has(castingId)) batchInfoByDay.set(castingId, new Map()); batchInfoByDay.get(castingId).set(dayKey, infoOut); }
             } catch (err) {
                 logger.error('[data-service] batch enrichment failed for casting (non-fatal):', castingId, err);
             }
+          }
         }
 
         let matched = 0;
@@ -723,7 +736,12 @@ export async function enrichTasksWithPieces(tasks) {
             // readouts (matches t.department === 'Cast' comparisons used
             // throughout, e.g. schedule-utils, print-renderer). The pcs count
             // above keeps its existing visibility on all casting-linked tasks.
-            const info = (id && t.department === 'Cast') ? batchInfoById.get(id) : undefined;
+            // A Cast card of a casting split over its cast days reads its own day's tickets.
+            const cardDay = (id && t.department === 'Cast' && batchInfoByDay.has(id)) ? ((castDatesById.get(id) || []).indexOf(isoOf(t.date)) + 1) : 0;
+            const wholeInfo = (id && t.department === 'Cast') ? batchInfoById.get(id) : undefined;
+            const dayInfo = cardDay > 0 ? batchInfoByDay.get(id).get(cardDay) : null;
+            // a day nobody has batched yet: the casting's colour and method, and no batch count
+            const info = dayInfo ? (dayInfo.hasTickets ? dayInfo : { colorLogTitle: wholeInfo?.colorLogTitle || dayInfo.colorLogTitle, castMethod: wholeInfo?.castMethod || dayInfo.castMethod, batchCount: 0 }) : wholeInfo;
             if (info) {
                 if (info.colorLogTitle) t.colorLogTitle = info.colorLogTitle;
                 if (info.castMethod) t.castMethod = info.castMethod;

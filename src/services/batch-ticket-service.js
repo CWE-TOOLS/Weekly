@@ -3,8 +3,11 @@
  * Persists per-casting batch ticket settings + manual batch-type overrides.
  *
  * Schema: batch_tickets
- *   - One row per (casting_id, color_log_id), plus at most one legacy row
- *     with NULL color_log_id per casting (see migration/batch-tickets-multi-color.sql).
+ *   - One row per (casting_id, color_log_id, cast_day), plus at most one legacy row
+ *     with NULL color_log_id per casting (see migration/batch-tickets-multi-color.sql and
+ *     migration/batch-tickets-cast-day.sql). cast_day is 1 unless the casting is split over its
+ *     cast days (2026-11-20); it is only SENT for day 2+, so a database without the column keeps
+ *     saving Day 1 tickets exactly as before.
  *   - Cascades on casting delete.
  *
  * @module services/batch-ticket-service
@@ -29,7 +32,8 @@ const FORM_TO_DB = {
     waterTemp: 'water_temp',
     notes: 'notes',
     batchAssignments: 'batch_assignments',
-    colorLogId: 'color_log_id'
+    colorLogId: 'color_log_id',
+    castDay: 'cast_day'
 };
 
 async function getClient() {
@@ -43,6 +47,7 @@ function toDb(formObj) {
     for (const [formKey, dbKey] of Object.entries(FORM_TO_DB)) {
         if (formObj[formKey] !== undefined) {
             const v = formObj[formKey];
+            if (dbKey === 'cast_day') { if (parseInt(v, 10) > 1) out[dbKey] = parseInt(v, 10); continue; }   // Day 1 is the column's default
             if (v === '' && (dbKey === 'cu_ft' || dbKey === 'face_sq_ft' || dbKey === 'cu_ft_per_250' || dbKey === 'pig_reduction')) {
                 out[dbKey] = null;
             } else if (v === '' && dbKey === 'color_log_id') {
@@ -73,7 +78,8 @@ export function rowToForm(row) {
         waterTemp: row.water_temp || '',
         notes: row.notes || '',
         batchAssignments: Array.isArray(row.batch_assignments) ? row.batch_assignments : [],
-        colorLogId: row.color_log_id || null
+        colorLogId: row.color_log_id || null,
+        castDay: parseInt(row.cast_day, 10) > 1 ? parseInt(row.cast_day, 10) : 1
     };
 }
 
@@ -94,7 +100,8 @@ export function emptyForm(castingId) {
         waterTemp: '',
         notes: '',
         batchAssignments: [],
-        colorLogId: null
+        colorLogId: null,
+        castDay: 1
     };
 }
 

@@ -597,7 +597,7 @@ export function activeColorLogFor({ ticket, components = [], logs = [] }) {
  * Mirrors the portal's handlePrintBatchTicketsNow() + buildBatchTotalsEntries().
  * @returns {{ pages: string, entries: Array<Object>, batches: number, reason: string|null }}
  */
-export function buildTicketPages({ casting, projectName = '', tickets = [], logs = [], components = [], slumpTargets = SLUMP_TARGET_DEFAULTS, printedOn = new Date(), castDate = null }) {
+export function buildTicketPages({ casting, projectName = '', tickets = [], logs = [], components = [], slumpTargets = SLUMP_TARGET_DEFAULTS, printedOn = new Date(), castDate = null, castLabel = null }) {
     const printable = [];
     let reason = null;
     for (const ticket of tickets || []) {
@@ -634,7 +634,7 @@ export function buildTicketPages({ casting, projectName = '', tickets = [], logs
             project: projectName,
             sampleName: activeLog?.name || '',
             castMethod: activeLog?.castMethod || '',
-            castNumber: casting.casting_number || '',
+            castNumber: castLabel || casting.casting_number || '',     // a split casting: "3 \u2014 DAY 2 OF 2"
             castDate: castDate || casting.casting_date || '',
             colorName: ticket.colorLogId ? (activeLog?.name || '') : '',
             batchedBy: ticket.batchedBy,

@@ -104,7 +104,7 @@ import {
     saveBatchTicketForCasting,
     deleteBatchTicket,
     emptyForm as emptyBatchTicketForm
-} from '../../services/batch-ticket-service.js';
+} from '../../services/batch-ticket-service.js?v=20261120-1';
 import {
     buildBatchPlan,
     getColorLogSandLbs,
@@ -130,7 +130,7 @@ import {
 } from '../../services/classroom-tasks-service.js';
 import { renderCastingLayout, computeLayoutRects, parseDimension, tableBlockRects, CASTING_AREAS } from './casting-layout.js?v=20261112-1';
 import { attachLayoutDrag } from './casting-layout-drag.js?v=20261120-1';
-import { LAYOUT_DAYS_PREFIX, normLayoutDays, resolveLayoutDays, layoutDayRows, layoutDaysEmpty, layoutDaysCanon, castDayDates, layoutDayOf, layoutDaysSplit, layoutDaySide, placeKeys, inventoryPieceRows } from '../../utils/layout-days.js?v=20261120-4';
+import { LAYOUT_DAYS_PREFIX, normLayoutDays, resolveLayoutDays, layoutDayRows, layoutDaysEmpty, layoutDaysCanon, castDayDates, layoutDayOf, layoutDaysSplit, layoutDaySide, placeKeys, inventoryPieceRows, inventoryRowsOfDay } from '../../utils/layout-days.js?v=20261120-5';
 import { activateJigListTab } from './jig-list.js?v=20261112-1';
 import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, APPROVALS_TAB_ITEMS } from '../../config/milestones-config.js?v=20261119-1';
 import { SLUMP_TARGET_DEFAULTS, FINAL_BACKUP_PIG_REDUCTION_PCT, parsePigReduction, BT_IMPORT_META, btOverrides, btImportStamp, btStampDate, additiveAmount, batchTotalsRows, renderBatchTotals, clampSlumpTarget, formatSlumpLabel, renderSlumpGraphic, renderBatchTicketCard, BATCH_PRINT_CSS } from '../../services/batch-ticket-render.js';
@@ -5373,6 +5373,7 @@ async function ciBatchReprintCheck(castingId) {
     if (!bcBase || bcBase !== invColourFingerprint(castingId)) return 'changed';   // colour changed, or an older lock with no colour record
     if (getSpecialBatching(currentProjectNumber)) return specialReprintCheck(castingId);   // the Jane Street page compares its own tickets
     try { await ensureBatchTicketsLoaded(); } catch { return 'changed'; }
+    await ensureCastDays();      // a split casting is compared day by day
     return btReprintCheck(castingId) === 'same' ? 'same' : 'changed';
 }
 /** Special batching page (Jane Street): the embedded page compares its own tickets with the inventory as it is now.
@@ -11609,38 +11610,82 @@ function isPristineBatchTicket(t) {
 function getBatchTicketList(castingId) {
     let arr = batchTickets.get(castingId);
     if (!arr) { arr = []; batchTickets.set(castingId, arr); }
-    const detected = getCastingComponentColorIds(castingId);
-    for (const id of detected) {
-        if (!arr.some(t => t.colorLogId === id)) {
-            const v = emptyBatchTicketForm(castingId);
-            v.colorLogId = id;
-            arr.push(v);
+    // Cast days (2026-11-20): a casting split over its cast days is batched day by day, one ticket per colour PER
+    // DAY. Not split = Day 1 only, exactly as before (a ticket left on a later day by an old split stays in the
+    // database but is not shown, printed or counted).
+    const info = btDays(castingId);
+    const dayNs = info ? info.dates.map((_, i) => i + 1) : [1];
+    const detectedOf = new Map();
+    for (const n of dayNs) {
+        const detected = info ? btDayColorIds(castingId, n) : getCastingComponentColorIds(castingId);
+        detectedOf.set(n, detected);
+        const newTicket = (colorLogId) => { const v = emptyBatchTicketForm(castingId); v.colorLogId = colorLogId; if (n > 1) v.castDay = n; arr.push(v); };
+        for (const id of detected) {
+            if (!arr.some(t => t.colorLogId === id && btDayOf(t) === n)) newTicket(id);
         }
-    }
-    // A pristine legacy placeholder from before colors were detected just clutters
-    // the pill row — drop it once real colors exist.
-    if (detected.length) {
-        const idx = arr.findIndex(t => !t.colorLogId && isPristineBatchTicket(t));
-        if (idx !== -1) arr.splice(idx, 1);
-    }
-    // A null-color ticket is not a valid state: it can't be pill-selected,
-    // can't render a batch plan, and would double-count in Mix Day Totals.
-    // If nothing color-tagged exists yet, seed an empty ticket on the project's
-    // default color log so the form has something real to bind to.
-    if (!arr.some(t => t.colorLogId) && currentColorLogs[0]?.id) {
-        const v = emptyBatchTicketForm(castingId);
-        v.colorLogId = currentColorLogs[0].id;
-        arr.push(v);
+        // A pristine legacy placeholder from before colors were detected just clutters
+        // the pill row — drop it once real colors exist.
+        if (detected.length) {
+            const idx = arr.findIndex(t => !t.colorLogId && btDayOf(t) === n && isPristineBatchTicket(t));
+            if (idx !== -1) arr.splice(idx, 1);
+        }
+        // A null-color ticket is not a valid state: it can't be pill-selected,
+        // can't render a batch plan, and would double-count in Mix Day Totals.
+        // If nothing color-tagged exists yet, seed an empty ticket on the project's
+        // default color log so the form has something real to bind to.
+        // (A later day of a split casting only gets one when pieces cast on it.)
+        const wanted = !info || n === 1 || info.totals[n - 1].pcs > 0;
+        if (wanted && !arr.some(t => t.colorLogId && btDayOf(t) === n) && currentColorLogs[0]?.id) newTicket(currentColorLogs[0].id);
     }
     if (!arr.length) arr.push(emptyBatchTicketForm(castingId));
     const rank = (t) => {
         if (!t.colorLogId) return -1;
+        const detected = detectedOf.get(btDayOf(t)) || [];
         const i = detected.indexOf(t.colorLogId);
         return i === -1 ? detected.length : i;
     };
     // Legacy null-color rows stay in `arr` (and in the DB) but never surface —
     // no pill, no plan, no contribution to totals.
-    return arr.slice().sort((a, b) => rank(a) - rank(b)).filter(t => t.colorLogId);
+    return arr.slice().sort((a, b) => (btDayOf(a) - btDayOf(b)) || (rank(a) - rank(b))).filter(t => t.colorLogId && dayNs.includes(btDayOf(t)));
+}
+
+// ---- Batching per cast day (2026-11-20) ----
+/** The split of a casting as batching sees it (invDayInfo), or null while it is not split over its cast days. */
+function btDays(castingId) {
+    const casting = currentCastings.find(c => c.id === castingId);
+    if (!casting || !currentCastingInventory.has(castingId)) return null;
+    const info = invDayInfo(casting, getInventoryFor(castingId));
+    return info && info.split ? info : null;
+}
+function btDayOf(t) { return t && parseInt(t.castDay, 10) > 1 ? parseInt(t.castDay, 10) : 1; }
+/** What a ticket is picked by: its colour, and its day once it is not Day 1 (so Day 1 keys are what they always were). */
+function btKey(t) { return (t.colorLogId || '') + (btDayOf(t) > 1 ? '@' + btDayOf(t) : ''); }
+/** The inventory rows a day's tickets are made from: the whole casting, or that day's share of a split one. */
+function btDayRows(castingId, day) {
+    const info = btDays(castingId);
+    const rows = getInventoryFor(castingId);
+    return info ? inventoryRowsOfDay(rows, info.cfg, info.nDays, day) : rows;
+}
+/** Colour logs of the pieces that cast on one day of a split casting (first-appearance order, loaded logs only). */
+function btDayColorIds(castingId, day) {
+    const ids = [];
+    for (const r of btDayRows(castingId, day)) {
+        if (!r.color_log_id || ids.includes(r.color_log_id)) continue;
+        if (getColorLogByIdSync(r.color_log_id)) ids.push(r.color_log_id);
+    }
+    return ids;
+}
+/** The tickets that share a ticket's day (with several of them, each totals only its own colour's rows). */
+function btSameDayTickets(castingId, ticket) { return getBatchTicketList(castingId).filter(t => btDayOf(t) === btDayOf(ticket)); }
+/** "3", or "3 \u2014 DAY 2 OF 2" on a split casting: the Cast # line of the ticket. */
+function btCastLabel(casting, ticket) {
+    const info = btDays(casting.id);
+    return (casting.casting_number || '') + (info ? ` \u2014 DAY ${btDayOf(ticket)} OF ${info.nDays}` : '');
+}
+/** The ticket's cast date: the casting's own, or the weekly's date of that day on a split casting. */
+function btCastDate(casting, ticket) {
+    const info = btDays(casting.id);
+    return (info && info.dates[btDayOf(ticket) - 1]) || casting.casting_date || '';
 }
 
 // Active ticket for a casting: the one matching the color-pill selection.
@@ -11650,7 +11695,7 @@ function getBatchTicketFor(castingId) {
     const list = getBatchTicketList(castingId);
     if (list.length === 1) return list[0];
     const selKey = currentBatchColorSel.get(castingId);
-    const selected = list.find(t => (t.colorLogId || '') === selKey);
+    const selected = list.find(t => btKey(t) === selKey);
     return selected || list.find(t => t.colorLogId) || list[0];
 }
 
@@ -11770,17 +11815,17 @@ async function ensureJigListsForScrim() {
 }
 /** The scrim line for a casting: face sq ft from the Casting Inventory × scrim layers from the Jig List cross-section. */
 /** Finishing & sealing products for the casting's finished face, off its colour logs' notes (2026-11-06). */
-function finishingLineHtml(casting, entries) {
+function finishingLineHtml(casting, entries, day = 1) {
     if (!casting) return '';
     const logs = [];
     for (const e of entries || []) if (e.log && !logs.some(l => l.id === e.log.id)) logs.push(e.log);
     if (!logs.length) return '';
-    const { face, partial } = faceSqFtOfInventory(getInventoryFor(casting.id));
+    const { face, partial } = faceSqFtOfInventory(btDayRows(casting.id, day));
     return finishingProductsHtml(logs, face, { partial });
 }
-function scrimLineHtml(casting) {
+function scrimLineHtml(casting, day = 1) {
     if (!casting) return '';
-    const rows = getInventoryFor(casting.id);
+    const rows = btDayRows(casting.id, day);
     if (!rows.length) return '';
     const { text, detail, warn } = scrimForInventory(rows, btJigLists.get(casting.id));
     if (!text) return '';
@@ -11866,6 +11911,8 @@ async function activateBatchTicketsTab() {
     if (!currentBatchCastingId || !phaseScoped.some(c => c.id === currentBatchCastingId)) {
         currentBatchCastingId = phaseScoped[0]?.id || null;
     }
+    // Cast days (2026-11-20): castings split over their cast days are batched day by day.
+    if (!(await ensureCastDays())) showToast('The cast days could not be read from the weekly just now. A casting that is split over its cast days shows as ONE ticket set until this tab is opened again: do not import or print it now.', 'error', 10000);
 
     // Reveal + populate the project-wide slump targets now that tickets will render.
     if (slumpPanel) {
@@ -11901,8 +11948,8 @@ function renderBatchTicketsPills() {
 // ---------- Is the ticket still in step with the Casting Inventory? ----------
 /** Inventory totals exactly as Import from Tracking computes them (value × (quantity + extras)), for this ticket's rows. */
 function batchInventoryTotals(castingId, ticket) {
-    let rows = getInventoryFor(castingId);
-    if (getBatchTicketList(castingId).length > 1) {
+    let rows = btDayRows(castingId, btDayOf(ticket));
+    if (btSameDayTickets(castingId, ticket).length > 1) {
         rows = rows.filter(r => ticket.colorLogId ? r.color_log_id === ticket.colorLogId : !r.color_log_id);
     }
     if (!rows.length) return null;
@@ -12047,7 +12094,7 @@ function batchQuickInfo() {
     if (!casting) return null;
     const ticket = getBatchTicketFor(casting.id);
     const log = getActiveBatchColorLog(casting, ticket);
-    return { cast: casting.casting_number || '', castDate: casting.casting_date || '', cuFt: ticket?.cuFt ?? '', faceSqFt: ticket?.faceSqFt ?? '', color: log?.name || '' };
+    return { cast: ticket ? btCastLabel(casting, ticket) : (casting.casting_number || ''), castDate: ticket ? btCastDate(casting, ticket) : (casting.casting_date || ''), cuFt: ticket?.cuFt ?? '', faceSqFt: ticket?.faceSqFt ?? '', color: log?.name || '' };
 }
 function quickInfoHtml(info) {
     if (!info) return '';
@@ -12082,7 +12129,7 @@ function castsAnchor() {
     const list = casting ? getBatchTicketList(casting.id) : [];
     const activeTicket = casting ? getBatchTicketFor(casting.id) : null;
     const colors = list.length > 1
-        ? list.map(t => ({ key: t.colorLogId || '', label: batchTicketColorLabel(t), active: t === activeTicket }))
+        ? list.map(t => ({ key: btKey(t), label: batchTicketPillLabel(t), active: t === activeTicket }))
         : [];
     return { bottom: pills.getBoundingClientRect().bottom, casts, colors, source: 'tab' };
 }
@@ -12203,7 +12250,7 @@ function renderBatchTicketsContent() {
     // single ticket when more color tickets could be added — the "+ Color"
     // select is the only way to split an untagged/one-color casting manually.
     const canAddColor = currentMultiColorEnabled
-        && currentColorLogs.some(l => !list.some(t => t.colorLogId === l.id));
+        && currentColorLogs.some(l => !list.some(t => t.colorLogId === l.id && btDayOf(t) === btDayOf(ticket)));
     const showColorPills = list.length > 1 || canAddColor;
     const colorPills = showColorPills ? renderBatchColorPills(list, ticket) : '';
     content.innerHTML = `<div data-casting-id="${escapeAttr(casting.id)}">${colorPills}${renderBatchTicketBody(casting, ticket, showColorPills)}</div>`;
@@ -12215,6 +12262,13 @@ function batchTicketColorLabel(ticket) {
     if (!ticket.colorLogId) return 'No Color';
     return getColorLogByIdSync(ticket.colorLogId)?.name || '(unnamed)';
 }
+/** Pill text: the colour, with its cast day in front on a casting split over its cast days ("Day 2 \u00b7 Dec 4 \u00b7 Buff"). */
+function batchTicketPillLabel(ticket) {
+    const info = btDays(ticket.castingId || currentBatchCastingId);
+    if (!info) return batchTicketColorLabel(ticket);
+    const n = btDayOf(ticket);
+    return `Day ${n} \u00b7 ${shortDay(info.dates[n - 1])} \u00b7 ${batchTicketColorLabel(ticket)}`;
+}
 
 // Second pill row (under the casting pills) — one pill per color ticket, plus
 // a "+ Color" select for project color logs that don't have a ticket yet.
@@ -12224,11 +12278,11 @@ function renderBatchColorPills(list, activeTicket) {
         const remove = isActive && list.length > 1
             ? `<span class="pp-bt-color-pill-x" data-bt-color-remove title="Remove this color ticket">&times;</span>`
             : '';
-        return `<button type="button" class="pp-bt-pill pp-bt-color-pill${isActive ? ' pp-bt-pill-active' : ''}" data-bt-color-pill data-color-key="${escapeAttr(t.colorLogId || '')}">${escapeHtml(batchTicketColorLabel(t))}${remove}</button>`;
+        return `<button type="button" class="pp-bt-pill pp-bt-color-pill${isActive ? ' pp-bt-pill-active' : ''}" data-bt-color-pill data-color-key="${escapeAttr(btKey(t))}">${escapeHtml(batchTicketPillLabel(t))}${remove}</button>`;
     }).join('');
     let addSel = '';
     if (currentMultiColorEnabled) {
-        const usedIds = new Set(list.map(t => t.colorLogId).filter(Boolean));
+        const usedIds = new Set(list.filter(t => btDayOf(t) === btDayOf(activeTicket)).map(t => t.colorLogId).filter(Boolean));
         const avail = currentColorLogs.filter(l => !usedIds.has(l.id));
         if (avail.length) {
             addSel = `<select class="pp-bt-color-add" data-bt-color-add title="Add a batch ticket for another color log">
@@ -12269,15 +12323,20 @@ function renderBatchTicketBody(casting, ticket, multi = false) {
         <div class="pp-bt-form">
             <div class="pp-bt-context">
                 <div class="pp-bt-context-cast">
-                    <span class="pp-bt-context-cast-label">Casting</span>${escapeHtml(casting.casting_number || '')}
+                    <span class="pp-bt-context-cast-label">Casting</span>${escapeHtml(casting.casting_number || '')}${btDays(casting.id) ? `<span class="pp-bt-context-day" title="This casting is split over its cast days (Casting Inventory, Day columns): each day has its own batch tickets, made from that day's pieces.">DAY ${btDayOf(ticket)} OF ${btDays(casting.id).nDays}</span>` : ''}
                 </div>
                 <span class="pp-bt-save-status" data-bt-status></span>
                 ${colorLogPicker}
-                <div class="pp-bt-context-date-group">
+                ${btDays(casting.id)
+                    ? `<div class="pp-bt-context-date-group">
+                    <span class="pp-bt-context-date-label">Cast Date</span>
+                    <span class="pp-bt-context-colorlog-static" title="The date of this cast day, from the weekly">${escapeHtml(castDayLong(btCastDate(casting, ticket)))}</span>
+                </div>`
+                    : `<div class="pp-bt-context-date-group">
                     <label class="pp-bt-context-date-label" for="pp-bt-castdate-${escapeAttr(casting.id)}">Cast Date</label>
                     <input type="date" id="pp-bt-castdate-${escapeAttr(casting.id)}" class="pp-bt-context-date" data-bt-casting-date value="${escapeAttr(casting.casting_date || '')}">
                     ${weeklyDateHintHtml(casting)}
-                </div>
+                </div>`}
             </div>
 
             <div data-bt-stale-wrap>${renderBatchUpdatingBanner(casting)}${renderBatchStaleBanner(casting, ticket)}</div>
@@ -12394,8 +12453,9 @@ function renderBatchPreview(casting, ticket) {
     const sectionHeader = renderBatchSectionHeader(plan);
     const assign = renderBatchAssignTable(plan);
     // Day totals combine every color ticket on this casting, not just the one being viewed.
-    const totalsEntries = buildBatchTotalsEntries(casting);
-    const totalsPanel = renderBatchTotals(totalsEntries, casting, { scrimHtml: scrimLineHtml(casting), finishingHtml: finishingLineHtml(casting, totalsEntries) });
+    const day = btDayOf(ticket);     // a casting split over its cast days: the totals of this ticket's day
+    const totalsEntries = buildBatchTotalsEntries(casting, day);
+    const totalsPanel = renderBatchTotals(totalsEntries, casting, { scrimHtml: scrimLineHtml(casting, day), finishingHtml: finishingLineHtml(casting, totalsEntries, day) });
     const tickets = renderBatchTicketCards(casting, ticket, plan);
 
     return `
@@ -12412,9 +12472,10 @@ function renderBatchPreview(casting, ticket) {
  * (cu ft entered and a color log with a sand weight). Feeds renderBatchTotals
  * so the Mix Day Totals panel spans all colors, not just the active ticket.
  */
-function buildBatchTotalsEntries(casting) {
+function buildBatchTotalsEntries(casting, day = null) {
     const entries = [];
     for (const t of getBatchTicketList(casting.id)) {
+        if (day && btDayOf(t) !== day) continue;
         const totalCuFt = parseFloat(t.cuFt);
         if (!totalCuFt || totalCuFt <= 0) continue;
         const log = getActiveBatchColorLog(casting, t);
@@ -12512,8 +12573,8 @@ function renderBatchTicketCards(casting, ticket, plan) {
     const projectName = document.getElementById('pp-f-project_name')?.value || '';
     const sampleName = activeLog?.name || '';
     const castMethod = activeLog?.castMethod || '';
-    const castNumber = casting.casting_number || '';
-    const castDate = casting.casting_date || '';
+    const castNumber = btCastLabel(casting, ticket);
+    const castDate = btCastDate(casting, ticket);
 
     const pigReductionPct = parsePigReduction(ticket.pigReduction);
     const reduceFirstBackup = !!ticket.pigReduceFirstBackup;
@@ -12612,7 +12673,9 @@ async function saveBatchTicketNow(castingId, ticket) {
     } catch (err) {
         logger.error('[batch-tickets] save failed', err);
         setBatchTicketStatus(castingId, 'error');
-        if (err?.code === '23505') {
+        if (btDayOf(ticket) > 1 && (err?.code === '23505' || err?.code === 'PGRST204' || err?.code === '42703' || /cast_day/i.test(String(err?.message || '')))) {
+            alert(`The Day ${btDayOf(ticket)} batch ticket could not be saved: the database has not been updated for batch tickets per cast day yet.\n\nRun migration/batch-tickets-cast-day.sql in the Supabase SQL editor (tell Sergejs), then change the ticket again.`);
+        } else if (err?.code === '23505') {
             alert('Batch ticket save failed: the database still allows only one ticket per casting.\n\nRun migration/batch-tickets-multi-color.sql in the Supabase SQL editor to enable multi-color batch tickets.');
         }
     }
@@ -12663,12 +12726,14 @@ function handleAddBatchColorTicket(colorLogId) {
     if (!castingId || !colorLogId) return;
     let arr = batchTickets.get(castingId);
     if (!arr) { arr = []; batchTickets.set(castingId, arr); }
-    if (!arr.some(t => t.colorLogId === colorLogId)) {
+    const day = btDayOf(getBatchTicketFor(castingId));          // the new colour ticket is for the day on screen
+    if (!arr.some(t => t.colorLogId === colorLogId && btDayOf(t) === day)) {
         const v = emptyBatchTicketForm(castingId);
         v.colorLogId = colorLogId;
+        if (day > 1) v.castDay = day;
         arr.push(v);
     }
-    currentBatchColorSel.set(castingId, colorLogId);
+    currentBatchColorSel.set(castingId, colorLogId + (day > 1 ? '@' + day : ''));
     renderBatchTicketsContent();
 }
 
@@ -12776,17 +12841,24 @@ async function handleImportBatchFromTracking(castingId) {
         }
     }
 
-    let rows = getInventoryFor(castingId);
+    let daysKnown = false;
+    try { daysKnown = await ensureCastDays(); } catch (e) { /* handled below */ }
+    if (!daysKnown && (batchTickets.get(castingId) || []).some(t => btDayOf(t) > 1)) {
+        showToast('Import stopped: this casting has batch tickets per cast day, and the cast days could not be read from the weekly just now. Importing would put the whole casting on one ticket. Try again in a moment.', 'error', 9000);
+        return;
+    }
+    // A casting split over its cast days: the ticket of a day totals that day's pieces only.
+    const ticket = getBatchTicketFor(castingId);
+    let rows = btDayRows(castingId, btDayOf(ticket));
     if (!rows.length) {
-        showToast('No inventory components for this casting', 'error');
+        showToast(btDays(castingId) ? `No pieces cast on Day ${btDayOf(ticket)} (see the Day columns on the Casting Inventory)` : 'No inventory components for this casting', 'error');
         return;
     }
 
     // Multi-color: only total the rows belonging to the active ticket's color
     // (NULL-color ticket matches rows without a color_log_id). Single-ticket
     // mode keeps today's behavior and sums everything.
-    const ticket = getBatchTicketFor(castingId);
-    if (getBatchTicketList(castingId).length > 1) {
+    if (btSameDayTickets(castingId, ticket).length > 1) {
         rows = rows.filter(r => ticket.colorLogId ? r.color_log_id === ticket.colorLogId : !r.color_log_id);
         if (!rows.length) {
             showToast(`No inventory rows for ${batchTicketColorLabel(ticket)}`, 'error');
@@ -15997,6 +16069,7 @@ function handlePrintOptimizer(castingIds) {
 async function handlePrintBatchTickets(castingId) {
     if (!currentCastings.find(c => c.id === castingId)) return;
     if (!(await printGate([castingId], 'Batching Sheets'))) return;
+    await ensureCastDaysForPrint('the batch tickets will');
     if (handlePrintBatchTicketsNow(castingId) !== false) stampPrinted([castingId], 'Batching Sheets');
 }
 function handlePrintBatchTicketsNow(castingId) {
@@ -16060,8 +16133,8 @@ function handlePrintBatchTicketsNow(castingId) {
                 project: projectName,
                 sampleName,
                 castMethod,
-                castNumber: casting.casting_number || '',
-                castDate: casting.casting_date || '',
+                castNumber: btCastLabel(casting, ticket),
+                castDate: btCastDate(casting, ticket),
                 colorName: ticket.colorLogId ? (activeLog?.name || '') : '',
                 batchedBy: ticket.batchedBy,
                 notes: ticket.notes,

@@ -169,3 +169,16 @@ export function inventoryPieceRows(rows) {
     }
     return out;
 }
+
+/**
+ * The inventory rows of ONE cast day of a split casting, as rows the usual totals can be run on: each row carries
+ * the pieces it has on that day as its quantity (extras 0); rows with nothing on that day are left out. Batching,
+ * the scrim line and the finishing products total these exactly as they total a whole casting.
+ */
+export function inventoryRowsOfDay(invRows, cfg, nDays, day) {
+    const count = new Map();
+    for (const { key, row } of inventoryPieceRows(invRows)) {
+        if (layoutDayOf(cfg, key, nDays) === day) count.set(row, (count.get(row) || 0) + 1);
+    }
+    return (invRows || []).filter(r => count.get(r) > 0).map(r => ({ ...r, quantity: count.get(r), extras: 0 }));
+}
