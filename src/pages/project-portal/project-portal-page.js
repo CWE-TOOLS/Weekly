@@ -1273,17 +1273,13 @@ async function loadAndRenderCastings() {
         loadAllComponentsForCurrentProject(),
         loadTypeMaster(currentProjectNumber)
     ]);
-    // First time visiting this project's Castings tab in this session: seed
-    // every casting as expanded EXCEPT those with more than the threshold of
-    // inventory rows — those would push the rest off-screen, so default them
-    // collapsed. Subsequent re-renders within the same project preserve the
-    // user's collapse choices (clicking the chevron is sticky for the session).
+    // First time visiting this project's Castings tab in this session: EVERY casting starts collapsed
+    // (user, 2026-11-20: "always open up with the casts collapsed"; before, castings with few rows started
+    // open). Subsequent re-renders within the same project preserve the user's choices (the chevron and
+    // Expand all / Collapse all are sticky for the session); a casting opened on purpose (a link from the
+    // board, a search hit, a new or pasted casting) still opens.
     if (castInvExpandedProject !== currentProjectNumber) {
-        currentCastInvExpanded = new Set(
-            currentCastings
-                .filter(c => getInventoryFor(c.id).length <= CAST_INV_AUTO_EXPAND_LIMIT)
-                .map(c => c.id)
-        );
+        currentCastInvExpanded = new Set();
         castInvExpandedProject = currentProjectNumber;
         // Summary readouts start collapsed on every project.
         castSumExpanded = new Set();
