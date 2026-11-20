@@ -6628,10 +6628,12 @@ function renderClayDays() {
     const canSend = !ownCond && clOverflowIds.length > 0 && clDayN < nDays;
     const tools = ownCond ? '' : `<div class="pp-clay-days-tools">
             ${canSend ? `<button type="button" class="pp-clay-send" data-clay-send="${clDayN + 1}" title="The forms in the overflow strip move to Day ${clDayN + 1} (${escapeAttr(clDayLabel(clDay.dates[clDayN]))}). Lay them out there.">Send the ${clOverflowIds.length} overflow form${clOverflowIds.length === 1 ? '' : 's'} to Day ${clDayN + 1} \u2192</button>` : ''}
-            <span class="pp-clay-days-hint">${split ? 'Drag a form onto a day to move it there. The Casting Inventory shows the same split in its Day columns.' : `Not split yet: every form is on Day 1, and the weekly shows the whole casting on each of its ${nDays} cast days. Drag a form onto a day, send the overflow on, or type the Day 2 quantities on the Casting Inventory.`}</span>
+            ${split ? '' : `<span class="pp-clay-days-hint">Not split yet: every form is on Day 1, and the weekly shows the whole casting on each of its ${nDays} cast days.</span>`}
             ${split ? '<button type="button" class="pp-clay-unsplit" data-clay-unsplit title="Undo the split: every form back on Day 1">Put all forms back on Day 1</button>' : ''}
         </div>`;
-    wrap.innerHTML = `<div class="pp-clay-days-row">${bubbles}</div>${tools}`;
+    // How to move a form between days, always in view (user, 2026-11-20: it was not obvious without being told).
+    const info = ownCond ? '' : `<div class="pp-clay-days-info" role="note"><span class="pp-clay-days-info-i" aria-hidden="true">i</span><span><b>To cast a form on another day:</b> drag the form from the tables (or from the overflow strip) and drop it on that day's box below. Click a day's box to see and lay out that day. You can also type the Day 2 quantities on the Casting Inventory; both show the same split.</span></div>`;
+    wrap.innerHTML = `${info}<div class="pp-clay-days-row">${bubbles}</div>${tools}`;
     wrap.hidden = false;
 }
 
