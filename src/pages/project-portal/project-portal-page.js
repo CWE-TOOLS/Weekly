@@ -130,7 +130,7 @@ import {
 } from '../../services/classroom-tasks-service.js';
 import { renderCastingLayout, computeLayoutRects, parseDimension, tableBlockRects, CASTING_AREAS } from './casting-layout.js?v=20261112-1';
 import { attachLayoutDrag } from './casting-layout-drag.js?v=20261120-1';
-import { LAYOUT_DAYS_PREFIX, normLayoutDays, layoutDayOf, layoutDaysSplit, layoutDaySide, placeKeys } from '../../utils/layout-days.js?v=20261120-1';
+import { LAYOUT_DAYS_PREFIX, normLayoutDays, layoutDayOf, layoutDaysSplit, layoutDaySide, placeKeys, inventoryPieceRows } from '../../utils/layout-days.js?v=20261120-1';
 import { activateJigListTab } from './jig-list.js?v=20261112-1';
 import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, APPROVALS_TAB_ITEMS } from '../../config/milestones-config.js?v=20261119-1';
 import { SLUMP_TARGET_DEFAULTS, FINAL_BACKUP_PIG_REDUCTION_PCT, parsePigReduction, BT_IMPORT_META, btOverrides, btImportStamp, btStampDate, additiveAmount, batchTotalsRows, renderBatchTotals, clampSlumpTarget, formatSlumpLabel, renderSlumpGraphic, renderBatchTicketCard, BATCH_PRINT_CSS } from '../../services/batch-ticket-render.js';
@@ -1292,8 +1292,23 @@ async function loadAndRenderCastings() {
     renderCastings();
     // Cast day of each casting, from the weekly (2026-11-16): asked on every load of the tab, never awaited.
     const castDayFor = currentProjectNumber;
-    loadWeeklyCastDates(castDayFor).then(() => { if (currentProjectNumber === castDayFor) refreshCastDayOnCards(); })
-        .catch(err => logger.warn('[project-portal] cast day from the weekly failed:', err));
+    loadWeeklyCastDates(castDayFor).then(async () => {
+        if (currentProjectNumber !== castDayFor) return;
+        refreshCastDayOnCards();
+        // castings with 2+ cast days get their Day columns (2026-11-20); never redrawn under someone who is typing
+        const changed = await loadCastDaysCfgs();
+        if (currentProjectNumber !== castDayFor) return;
+        const undrawn = currentCastings.some(c => castDatesOf(c).length > 1 && currentCastInvExpanded.has(c.id)
+            && !document.querySelector(`.pp-cast-card[data-casting-id="${c.id}"] [data-inv-days]`));
+        if (!changed && !undrawn) return;
+        const draw = (tries) => {
+            if (currentProjectNumber !== castDayFor || currentTab !== 'castings') return;
+            const list = document.getElementById('pp-castings-list');
+            if (list && list.contains(document.activeElement) && tries > 0) { setTimeout(() => draw(tries - 1), 2000); return; }
+            renderCastings();
+        };
+        draw(15);
+    }).catch(err => logger.warn('[project-portal] cast day from the weekly failed:', err));
 }
 
 // Castings with more than this many inventory rows default to collapsed when
@@ -1481,7 +1496,7 @@ function renderCastings() {
     list.querySelectorAll('.pp-cast-card').forEach(card => {
         if (!ciLockedById(card.dataset.castingId)) return;
         card.classList.add('pp-cast-card-locked');
-        card.querySelectorAll('.pp-inv-row input, .pp-inv-row select, .pp-inv-add, .pp-inv-import-remakes, [data-action="paste-components"], [data-action="cut-selected"], .pp-inv-row-cut, .pp-inv-row-delete, .pp-inv-row-select, .pp-inv-select-all')
+        card.querySelectorAll('.pp-inv-row input:not(.pp-inv-day-input), .pp-inv-row select, .pp-inv-add, .pp-inv-import-remakes, [data-action="paste-components"], [data-action="cut-selected"], .pp-inv-row-cut, .pp-inv-row-delete, .pp-inv-row-select, .pp-inv-select-all')
             .forEach(el => { el.disabled = true; });
     });
 
@@ -1527,6 +1542,7 @@ function renderCastingCard(c) {
               <!-- second line (2026-11-18): the title block was too crowded on one line -->
               <div class="pp-cast-card-line2">
                 ${castDayPillHtml(c)}
+                ${castDaysPillHtml(c, items)}
                 <span class="pp-cast-card-count">${countLabel}</span>
                 ${castingProjPillHtml(items)}
                 <div class="pp-cast-card-actions">
@@ -1555,18 +1571,25 @@ function ciCardRowHtml(c) {
 }
 
 function renderInventoryBody(casting, items) {
+    const dayInfo = invDayInfo(casting, items);      // a casting the weekly casts on 2+ days: a Day column per day
+    const gridStyle = invGridStyle(dayInfo ? dayInfo.nDays : 0);
     const cardsHtml = items.length === 0
         ? `<div class="pp-opt-cards-empty">No components yet. Add one below.</div>`
-        : items.map(item => renderInventoryRow(item, casting.id)).join('');
+        : items.map(item => renderInventoryRow(item, casting.id, dayInfo)).join('');
+    const dayHeads = dayInfo ? dayInfo.dates.map((d, i) => `<span class="pp-inv-header-qty pp-inv-h-day" title="${escapeAttr(i === 0
+        ? `Pieces that cast on Day 1 (${castDayLong(d)}): worked out, whatever is not on a later day`
+        : `Type how many pieces of the row (qty + extras) cast on Day ${i + 1} (${castDayLong(d)})`)}">Day ${i + 1}</span>`).join('') : '';
 
     const headerRow = `
+        ${dayInfo ? invDaysBarHtml(casting, dayInfo) : ''}
         <div class="pp-inv-legend"><span class="pp-inv-legend-pm" title="Qty, Extras, Type, Description, Width, Length, Color, Remake Of — the PM enters these, then presses Ready for engineering. Proj Sq Ft is worked out from them by itself.">PM fields</span><span class="pp-inv-legend-eng" title="Cu Ft, FF Sq Ft — engineering enters these, then presses Casting Inventory ready">Engineering fields</span></div>
         <div class="pp-inv-header-row">
             <input type="checkbox" class="pp-inv-row-select pp-inv-select-all" data-select-all aria-label="Select every component on this casting" title="Select all / none" ${items.length && items.every(it => invSelected.has(it.id)) ? 'checked' : ''} ${items.length ? '' : 'disabled'}>
             <div class="pp-inv-header-grip-spacer"></div>
-            <div class="pp-inv-header-fields">
+            <div class="pp-inv-header-fields"${gridStyle}>
                 <span class="pp-inv-header-qty pp-inv-h-pm">Qty</span>
                 <span class="pp-inv-header-qty pp-inv-h-pm">Extras</span>
+                ${dayHeads}
                 <span class="pp-inv-h-pm">Type</span>
                 <span class="pp-inv-h-pm" title="A short description of the part, for example: flat. Tick several rows (Shift+click for a range), then type it on any ticked row: it goes on all of them. It prints on the tracking sheet.">Description</span>
                 <span class="pp-inv-h-pm">Width</span>
@@ -1648,7 +1671,7 @@ function countImportableRemakes(castingId) {
 
 /** The rejected panels a remake inventory row re-casts (kept on the row as a comma list, one id per piece). */
 function invRemakeIds(item) { return String(item?.remake_of_panel_id || '').split(',').map(x => x.trim()).filter(Boolean); }
-function renderInventoryRow(item, castingId) {
+function renderInventoryRow(item, castingId, dayInfo = null) {
     const remakeIds = item.remake_of_casting_id ? invRemakeIds(item) : [];
     let remakeCellHtml;
     if (!remakeIds.length) {
@@ -1667,9 +1690,10 @@ function renderInventoryRow(item, castingId) {
                     <circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/>
                 </svg>
             </div>
-            <div class="pp-inv-row-fields">
+            <div class="pp-inv-row-fields"${invGridStyle(dayInfo ? dayInfo.nDays : 0)}>
                 ${invCell(item.id, 'quantity', `<input type="number" class="pp-inv-input pp-inv-pm pp-inv-input-qty${invEditedCls(item.id, 'quantity')}" data-field="quantity" min="${typeMasterActive() ? 0 : 1}" step="1" value="${escapeAttr(item.quantity ?? 1)}"${invEditedTitle(item.id, 'quantity')} />`)}
                 ${invCell(item.id, 'extras', `<input type="number" class="pp-inv-input pp-inv-pm pp-inv-input-qty${invEditedCls(item.id, 'extras')}" data-field="extras" min="0" step="1" placeholder="0" value="${escapeAttr(item.extras ?? 0)}"${invEditedTitle(item.id, 'extras')} />`)}
+                ${invDayCellsHtml(item, dayInfo)}
                 ${invCell(item.id, 'type', typeCellHtml(item, `pp-inv-input pp-inv-pm${invEditedCls(item.id, 'type')}`, invEditedTitle(item.id, 'type'))
                     || `<input type="text" class="pp-inv-input pp-inv-pm${invEditedCls(item.id, 'type')}" data-field="type" placeholder="Type" value="${escapeAttr(item.type || '')}"${invEditedTitle(item.id, 'type')} />`)}
                 ${invCell(item.id, 'description', `<input type="text" class="pp-inv-input pp-inv-pm pp-inv-input-desc${invEditedCls(item.id, 'description')}" data-field="description" placeholder="Description" maxlength="120" value="${escapeAttr(item.description || '')}"${invEditedTitle(item.id, 'description') || (item.description ? ` title="${escapeAttr(item.description)}"` : '')} />`)}
@@ -2634,6 +2658,7 @@ function updateCastingInventoryCount(castingId) {
     const card = document.querySelector(`.pp-cast-card[data-casting-id="${castingId}"]`);
     if (!card) return;
     refreshCastingProjected(card, castingId);
+    refreshInvDays(castingId);
     const countEl = card.querySelector('.pp-cast-card-count');
     if (!countEl) return;
     countEl.innerHTML = castingCountLabelHtml(getInventoryFor(castingId));
@@ -5895,6 +5920,9 @@ async function activateTrackingTab() {
         ensureCratesLoaded()
     ]);
     renderTracking();
+    // Cast days (2026-11-20): split castings list their panels day by day once the weekly has answered.
+    const daysFor = currentProjectNumber;
+    ensureCastDays().then(() => { if (currentProjectNumber === daysFor && currentTab === 'tracking' && castDaysCfgBy.size) renderTracking(); });
     // Every open re-reads the Casting Inventory and checks the list against it (out-of-band writes included).
     syncTrackingFromInventory({ fresh: true });
 }
@@ -6436,7 +6464,7 @@ async function loadLayoutDaysFor(ids) {
 }
 async function saveLayoutDays() {
     const has = Object.keys(clDaysCfg.assign).length || Object.keys(clDaysCfg.sides).length;
-    try { await setSettingRow(LAYOUT_DAYS_PREFIX + clSelectedCastingId, has ? clDaysCfg : null); return true; }
+    try { await setSettingRow(LAYOUT_DAYS_PREFIX + clSelectedCastingId, has ? clDaysCfg : null); castDaysCfgBy.set(clSelectedCastingId, clDaysCfg); return true; }
     catch (e) { logger.error('[project-portal] save cast-day split failed:', e); showToast('The cast-day split was not saved: ' + (e.message || e), 'error'); return false; }
 }
 /** The other castings as each cast day sees them: a split casting brings only that day's forms and that day's side. */
@@ -6545,7 +6573,7 @@ function renderClayDays() {
     const canSend = !ownCond && clOverflowIds.length > 0 && clDayN < nDays;
     const tools = ownCond ? '' : `<div class="pp-clay-days-tools">
             ${canSend ? `<button type="button" class="pp-clay-send" data-clay-send="${clDayN + 1}" title="The forms in the overflow strip move to Day ${clDayN + 1} (${escapeAttr(clDayLabel(clDay.dates[clDayN]))}). Lay them out there.">Send the ${clOverflowIds.length} overflow form${clOverflowIds.length === 1 ? '' : 's'} to Day ${clDayN + 1} \u2192</button>` : ''}
-            <span class="pp-clay-days-hint">${split ? 'Drag a form onto a day to move it there.' : `Not split yet: every form is on Day 1, and the weekly shows the whole casting on each of its ${nDays} cast days. Drag a form onto a day, or send the overflow on, to split it.`}</span>
+            <span class="pp-clay-days-hint">${split ? 'Drag a form onto a day to move it there. The Casting Inventory shows the same split in its Day columns.' : `Not split yet: every form is on Day 1, and the weekly shows the whole casting on each of its ${nDays} cast days. Drag a form onto a day, send the overflow on, or type the Day 2 quantities on the Casting Inventory.`}</span>
             ${split ? '<button type="button" class="pp-clay-unsplit" data-clay-unsplit title="Undo the split: every form back on Day 1">Put all forms back on Day 1</button>' : ''}
         </div>`;
     wrap.innerHTML = `<div class="pp-clay-days-row">${bubbles}</div>${tools}`;
@@ -6921,6 +6949,7 @@ async function loadLayoutPositionsForSelected() {
         clBases = clSelectedCastingId ? ((await loadLayoutBasesFor([clSelectedCastingId])).get(clSelectedCastingId) || {}) : {};
         if (clDaysFor !== clSelectedCastingId) { clDaysFor = clSelectedCastingId; clDayN = 1; }
         clDaysCfg = (clSelectedCastingId && (await loadLayoutDaysFor([clSelectedCastingId])).get(clSelectedCastingId)) || { assign: {}, sides: {} };
+        if (clSelectedCastingId) castDaysCfgBy.set(clSelectedCastingId, clDaysCfg);   // the Casting Inventory and Tracking read the same split
         if (Array.isArray(clLayoutPositions) && clLayoutPositions.length) markWorking(clSelectedCastingId, 'Casting Layout', 'Forms laid out', true);
     } catch (e) {
         logger.error('[project-portal] loadLayoutPositions failed:', e);
@@ -7179,13 +7208,13 @@ function printLayoutConditionNotice(castingId, cond) {
     msSet(castingId, 'Casting Layout', MS.GREEN, { note: layoutConditionNote(cond, layoutConditionSideOf(castingId)), stamp: true });   // the notice is printed: green (side kept)
 }
 function printCastingLayoutNow() {
-    let svgEls = [...document.querySelectorAll('#pp-clay-card svg')];   // both sides are drawn; print the ones with this casting's forms
-    const withOwn = svgEls.filter(el => el.querySelector('g.clay-mold'));
-    if (withOwn.length) svgEls = withOwn;
-    if (!svgEls.length) { alert('No layout to print yet.'); return false; }
     // Print on 11x17 (tabloid) portrait so the layout scales up and stays readable; each SVG is cropped to
     // its drawn content and gets its own page.
-    const pages = svgEls.map(svgEl => {
+    const collect = () => {
+      let svgEls = [...document.querySelectorAll('#pp-clay-card svg')];   // both sides are drawn; print the ones with this casting's forms
+      const withOwn = svgEls.filter(el => el.querySelector('g.clay-mold'));
+      if (withOwn.length) svgEls = withOwn;
+      return svgEls.map(svgEl => {
         const printSvg = svgEl.cloneNode(true);
         try {
             const bb = svgEl.getBBox();
@@ -7196,7 +7225,24 @@ function printCastingLayoutNow() {
             }
         } catch (e) { /* keep the original viewBox if getBBox is unavailable */ }
         return printSvg.outerHTML;
-    });
+      });
+    };
+    // A casting with 2+ cast days (2026-11-20): every page carries a big DAY label; once the casting is split, one
+    // print gives every day that has forms (each day is drawn in turn, then the screen goes back to its day).
+    let pages = [];
+    if (clMultiDay()) {
+        const nDays = clDayCount(), keep = clDayN;
+        const days = layoutDaysSplit(clDaysCfg, nDays) ? clDay.dates.map((_, i) => i + 1).filter(n => clCompsOfDay(n).length) : [clDayN];
+        for (const n of days) {
+            if (n !== clDayN) { clDayN = n; renderCastingLayoutTab(); }
+            const label = `DAY ${n} OF ${nDays} \u00b7 ${clDayLabel(clDay.dates[n - 1])}`;
+            for (const svg of collect()) pages.push({ svg, label });
+        }
+        if (clDayN !== keep) { clDayN = keep; renderCastingLayoutTab(); }
+    } else {
+        pages = collect().map(svg => ({ svg, label: '' }));
+    }
+    if (!pages.length) { alert('No layout to print yet.'); return false; }
     const w = window.open('', '_blank');
     if (!w) return;
     w.document.write(`<!DOCTYPE html>
@@ -7207,8 +7253,10 @@ function printCastingLayoutNow() {
   .page { page-break-after: always; }
   .page:last-child { page-break-after: auto; }
   svg { width: 10in; height: 16in; display: block; margin: 0 auto; }
+  .day { font: 800 30pt Arial, sans-serif; text-align: center; letter-spacing: .04em; border: 4px solid #000; border-radius: 8px; padding: 6pt 0; margin: 0 0 0.15in; height: 0.55in; line-height: 0.55in; }
+  .page.has-day svg { height: 15in; }
 </style></head>
-<body>${pages.map(p => `<div class="page">${p}</div>`).join('')}</body></html>`);
+<body>${pages.map(p => `<div class="page${p.label ? ' has-day' : ''}">${p.label ? `<div class="day">${escapeHtml(p.label)}</div>` : ''}${p.svg}</div>`).join('')}</body></html>`);
     w.document.close();
     w.focus();
     w.print();
@@ -7425,9 +7473,13 @@ function renderTrackSection(casting) {
         : '';
     const desc = casting.description ? `<span class="pp-track-section-desc">${escapeHtml(casting.description)}</span>` : '';
 
+    const dayGroups = castDayGroups(casting, components);      // a casting split over its cast days: day by day
     const cardsHtml = count === 0
         ? `<div class="pp-opt-cards-empty">No components — add inventory in the Castings tab.</div>`
-        : components.map(comp => renderTrackCard(comp, casting.id)).join('');
+        : dayGroups
+            ? dayGroups.map(g => `<div class="pp-track-day-head" title="Split on the Casting Inventory / Casting Layout tab. The dates come from the weekly."><b>DAY ${g.n} OF ${g.of}</b> \u00b7 ${escapeHtml(castDayLong(g.date))}<span>${g.comps.length} panel${g.comps.length === 1 ? '' : 's'}</span></div>`
+                + g.comps.map(comp => renderTrackCard(comp, casting.id)).join('')).join('')
+            : components.map(comp => renderTrackCard(comp, casting.id)).join('');
 
     const allIds = components.map(c => c.id);
     const allSelected = count > 0 && allIds.every(id => selectedComponentIds.has(id));
@@ -7492,7 +7544,7 @@ function renderTrackSection(casting) {
                         <span>Tracking</span>
                     </button>
                 </div>
-                <span class="pp-track-section-counts"><span class="pp-track-section-count">${count} ${count === 1 ? 'component' : 'components'}</span>${remakeBadge}</span>
+                <span class="pp-track-section-counts"><span class="pp-track-section-count">${count} ${count === 1 ? 'component' : 'components'}</span>${dayGroups ? `<span class="pp-track-section-days" title="This casting is split over its cast days: the labels and the tracking sheet print day by day">${dayGroups.map(g => `Day ${g.n}: ${g.comps.length}`).join(' \u00b7 ')}</span>` : ''}${remakeBadge}</span>
                 ${rejectedBadge}
                 ${trackMsHtml(casting.id)}
             </div>
@@ -11248,6 +11300,21 @@ function wireEvents() {
             handleCutSelected(castingId);
         }
     });
+    // Cast days (2026-11-20): a Day box of a row, Enter to the same box one row down, and the undo button.
+    castingsList.addEventListener('change', (e) => { if (e.target.matches('.pp-inv-day-input')) handleInvDayInput(e.target); });
+    castingsList.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' || !e.target.matches?.('.pp-inv-day-input')) return;
+        e.preventDefault();
+        let next = e.target.closest('.pp-inv-row')?.nextElementSibling;
+        while (next && !next.classList.contains('pp-inv-row')) next = next.nextElementSibling;
+        const target = next?.querySelector(`.pp-inv-day-input[data-inv-day="${e.target.dataset.invDay}"]`);
+        if (target) { target.focus(); target.select(); } else e.target.blur();
+    });
+    castingsList.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-inv-days-clear]');
+        const id = b?.closest('.pp-cast-card[data-casting-id]')?.getAttribute('data-casting-id');
+        if (id) handleInvDaysClear(id);
+    });
     // Shift+click on a row's tick box: every row between the last plain tick and this one is ticked too (2026-10-29).
     castingsList.addEventListener('click', (e) => {
         if (!e.target.matches('.pp-inv-row-select[data-select-row]')) return;
@@ -12719,6 +12786,7 @@ async function handleImportBatchFromTracking(castingId) {
 let weeklyCastDates = null;      // Map casting_number (trimmed) -> 'YYYY-MM-DD' (first Cast day)
 let weeklyCastDatesFor = null;   // project number the map belongs to
 let weeklyCastLastDates = null;  // Map casting_number -> 'YYYY-MM-DD' (last Cast day: a casting poured over several days is cast once that one is over)
+let weeklyCastAllDates = null;   // Map casting_number -> every Cast day, sorted (2026-11-20: Day 1, Day 2, ...)
 
 function isoDay(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
 function shortDay(iso) { const d = new Date(iso + 'T00:00:00'); return isNaN(d) ? iso : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); }
@@ -12727,6 +12795,7 @@ async function loadWeeklyCastDates(projectNumber) {
     const pn = String(projectNumber || '').trim();
     const map = new Map();
     const last = new Map();
+    const every = new Map();
     if (!pn) return map;
     try {
         const all = await fetchAllTasks();
@@ -12740,12 +12809,195 @@ async function loadWeeklyCastDates(projectNumber) {
             const iso = isoDay(d);
             if (!map.has(cn) || iso < map.get(cn)) map.set(cn, iso);
             if (!last.has(cn) || iso > last.get(cn)) last.set(cn, iso);
+            if (!every.has(cn)) every.set(cn, new Set());
+            every.get(cn).add(iso);
         }
     } catch (err) {
         logger.error('[batch-tickets] weekly cast dates failed:', err);
     }
-    if (String(currentProjectNumber || '').trim() === pn) { weeklyCastDates = map; weeklyCastLastDates = last; weeklyCastDatesFor = pn; }
+    if (String(currentProjectNumber || '').trim() === pn) {
+        weeklyCastDates = map; weeklyCastLastDates = last; weeklyCastDatesFor = pn;
+        weeklyCastAllDates = new Map([...every].map(([cn, set]) => [cn, [...set].sort()]));
+    }
     return map;
+}
+
+// ---------- Cast days across the portal (2026-11-20) ----------
+// A casting the weekly casts on two or more days can be SPLIT: so many pieces of a row on Day 1, so many on Day 2.
+// The split is typed on the Casting Inventory (a Day column per cast day) or made on the Casting Layout tab (send
+// the overflow on, drag a form onto a day); both write the same settings row (src/utils/layout-days.js). Tracking,
+// the labels, the tracking sheet, the layout print and the weekly's Cast and Demold cards all read that one row.
+// The DAYS and their dates always come from the weekly's Cast cards: nothing about dates is typed here.
+let castDaysCfgBy = new Map();     // casting id -> its split (only castings with 2+ cast days are asked for)
+/** Every Cast day of a casting on the weekly, sorted ([] while the weekly has not answered, or has none). */
+function castDatesOf(c) {
+    const pn = String(currentProjectNumber || '').trim();
+    if (!c || !weeklyCastAllDates || weeklyCastDatesFor !== pn) return [];
+    return weeklyCastAllDates.get(String(c.casting_number || '').trim()) || [];
+}
+function castDaysCfgOf(castingId) { return castDaysCfgBy.get(castingId) || { assign: {}, sides: {} }; }
+async function loadCastDaysCfgs() {
+    const pn = currentProjectNumber;
+    const ids = currentCastings.filter(c => castDatesOf(c).length > 1).map(c => c.id);
+    const map = await loadLayoutDaysFor(ids);
+    if (currentProjectNumber !== pn) return false;
+    const sig = m => JSON.stringify([...m].sort((a, b) => a[0] < b[0] ? -1 : 1));
+    const changed = sig(map) !== sig(castDaysCfgBy);
+    castDaysCfgBy = map;
+    return changed;
+}
+/** The weekly's cast days + the stored splits, ready for a screen or a print that shows days. */
+async function ensureCastDays() {
+    const pn = String(currentProjectNumber || '').trim();
+    if (!pn) return;
+    try {
+        if (!weeklyCastAllDates || weeklyCastDatesFor !== pn) await loadWeeklyCastDates(pn);
+        await loadCastDaysCfgs();
+    } catch (e) { logger.warn('[project-portal] cast days unavailable', e); }
+}
+/** The panels of a SPLIT casting day by day: [{ n, of, date, comps }]. null = not split (one list, as before). */
+function castDayGroups(casting, components) {
+    if (!casting) return null;
+    const dates = castDatesOf(casting), nDays = dates.length;
+    const cfg = castDaysCfgOf(casting.id);
+    if (!layoutDaysSplit(cfg, nDays)) return null;
+    const keys = placeKeys(components);
+    const groups = dates.map((date, i) => ({ n: i + 1, of: nDays, date, comps: [] }));
+    components.forEach((c, i) => groups[layoutDayOf(cfg, keys[i], nDays) - 1].comps.push(c));
+    return groups;
+}
+/** A casting with 2+ cast days, as its Casting Inventory shows it: pieces of each row per day, and each day's totals. */
+function invDayInfo(casting, items) {
+    const dates = castDatesOf(casting), nDays = dates.length;
+    if (nDays < 2) return null;
+    const cfg = castDaysCfgOf(casting.id);
+    const byRow = new Map(), keysByRow = new Map();
+    const totals = dates.map(() => ({ pcs: 0, cu: 0, ff: 0 }));
+    for (const { key, row } of inventoryPieceRows(items)) {
+        const d = layoutDayOf(cfg, key, nDays);
+        if (!byRow.has(row.id)) { byRow.set(row.id, dates.map(() => 0)); keysByRow.set(row.id, []); }
+        byRow.get(row.id)[d - 1]++;
+        keysByRow.get(row.id).push(key);
+        const t = totals[d - 1];
+        t.pcs++; t.cu += Number(row.cu_ft) || 0; t.ff += Number(row.ff_sq_ft) || 0;
+    }
+    return { dates, nDays, cfg, byRow, keysByRow, totals, split: layoutDaysSplit(cfg, nDays) };
+}
+const INV_GRID_TRACKS = ['0.4fr', '0.4fr', '0.65fr', '1.45fr', '0.6fr', '0.6fr', '0.6fr', '1.25fr', '0.55fr', '0.6fr', '0.65fr'];   // = .pp-inv-row-fields in the stylesheet
+/** The row grid with one narrow Day column per cast day after Extras ('' = the stylesheet's own grid). */
+function invGridStyle(nDays) {
+    if (!(nDays > 1)) return '';
+    const t = INV_GRID_TRACKS.slice();
+    t.splice(2, 0, ...Array(nDays).fill('0.42fr'));
+    return ` style="grid-template-columns:${t.map(x => `minmax(0, ${x})`).join(' ')}"`;
+}
+/** Title block (also when the card is folded): what casts on which day, once the casting is split. */
+function castDaysPillHtml(casting, items) {
+    const info = invDayInfo(casting, items);
+    if (!info || !info.split) return '<span class="pp-cast-card-days" data-cast-days hidden></span>';
+    const text = info.totals.map((t, i) => `Day ${i + 1}: ${t.pcs} pcs`).join(' \u00b7 ');
+    const tip = info.totals.map((t, i) => `Day ${i + 1} (${castDayLong(info.dates[i])}): ${t.pcs} pcs, ${roundSig(t.cu, 2)} cu ft, ${roundSig(t.ff, 2)} ff sq ft`).join('. ');
+    return `<span class="pp-cast-card-days" data-cast-days title="${escapeAttr('This casting is split over its cast days. ' + tip + '.')}">${escapeHtml(text)}</span>`;
+}
+/** The strip above the rows: one bubble per cast day with its date and totals. */
+function invDaysBarHtml(casting, info) {
+    const pills = info.dates.map((d, i) => {
+        const t = info.totals[i];
+        return `<span class="pp-inv-day-pill${t.pcs ? '' : ' pp-inv-day-pill-empty'}" title="${escapeAttr(`Day ${i + 1} of ${info.nDays}: the weekly casts this casting on ${castDayLong(d)}`)}"><b>DAY ${i + 1}</b> \u00b7 ${escapeHtml(castDayLong(d))}<span class="pp-inv-day-pill-n">${t.pcs} pcs \u00b7 ${roundSig(t.cu, 2)} cu ft \u00b7 ${roundSig(t.ff, 2)} ff sq ft</span></span>`;
+    }).join('');
+    const hint = info.split
+        ? `<button type="button" class="pp-inv-days-clear" data-inv-days-clear title="Undo the split: every piece back on Day 1">Put everything back on Day 1</button>`
+        : `<span class="pp-inv-days-hint">Not split yet. In the Day ${info.nDays > 2 ? '2, 3 \u2026 columns' : '2 column'}, type how many pieces of a row cast on that day; the rest stay on Day 1.</span>`;
+    return `<div class="pp-inv-days" data-inv-days><span class="pp-inv-days-title">CAST DAYS</span>${pills}${hint}</div>`;
+}
+/** The Day cells of one row: Day 1 is worked out (what is left), Day 2+ are typed. */
+function invDayCellsHtml(item, info) {
+    if (!info) return '';
+    const c = info.byRow.get(item.id) || info.dates.map(() => 0);
+    const pcs = c.reduce((a, b) => a + b, 0);
+    return info.dates.map((d, i) => i === 0
+        ? `<span class="pp-inv-input pp-inv-day-cell" data-inv-day1 title="${escapeAttr(`Pieces of this row that cast on Day 1 \u00b7 ${castDayLong(d)}: whatever is not on a later day`)}">${c[0]}</span>`
+        : `<input type="number" class="pp-inv-input pp-inv-day-input" data-inv-day="${i + 1}" min="0" max="${pcs}" step="1" placeholder="0" value="${c[i] ? c[i] : ''}" title="${escapeAttr(`How many of this row's ${pcs} piece${pcs === 1 ? '' : 's'} (qty + extras) cast on Day ${i + 1} \u00b7 ${castDayLong(d)}. The rest stay on Day 1.`)}" />`).join('');
+}
+/** Store a casting's split; forms that changed day leave their saved spot on the layout tables behind. */
+async function saveCastDaysCfg(castingId, cfg, movedKeys) {
+    const has = Object.keys(cfg.assign).length || Object.keys(cfg.sides).length;
+    try { await setSettingRow(LAYOUT_DAYS_PREFIX + castingId, has ? cfg : null); }
+    catch (e) { logger.error('[project-portal] save cast-day split failed:', e); showToast('The cast-day split was not saved: ' + (e.message || e), 'error'); return false; }
+    castDaysCfgBy.set(castingId, cfg);
+    if (clSelectedCastingId === castingId) clDaysCfg = cfg;
+    if (movedKeys && movedKeys.length) {
+        try {
+            const comps = getComponentsFor(castingId) || [];
+            const keys = placeKeys(comps);
+            const ids = new Set(comps.filter((c, i) => movedKeys.includes(keys[i])).map(c => c.id));
+            const pos = ids.size ? await loadLayoutPositions(castingId) : [];
+            await Promise.all(pos.filter(p => ids.has(p.component_id)).map(p => deleteLayoutPosition(p.component_id, p.area === 'A' ? 'A' : 'B')));
+            if (clSelectedCastingId === castingId) clLayoutPositions = clLayoutPositions.filter(p => !ids.has(p.component_id));
+        } catch (e) { logger.warn('[project-portal] forgetting the moved forms\' spots failed', e); }
+    }
+    return true;
+}
+/** A Day 2+ box of a row was changed: move that many of the row's pieces to (or back from) that day. */
+async function handleInvDayInput(input) {
+    const row = input.closest('.pp-inv-row[data-inventory-id]');
+    if (!row) return;
+    const castingId = row.getAttribute('data-casting-id'), itemId = row.getAttribute('data-inventory-id');
+    const casting = currentCastings.find(c => c.id === castingId);
+    const info = casting ? invDayInfo(casting, getInventoryFor(castingId)) : null;
+    const day = parseInt(input.dataset.invDay, 10);
+    if (!info || !(day > 1 && day <= info.nDays)) return;
+    const keys = info.keysByRow.get(itemId) || [];
+    const cfg = { assign: { ...info.cfg.assign }, sides: { ...info.cfg.sides } };
+    const on = keys.filter(k => layoutDayOf(cfg, k, info.nDays) === day);
+    const day1 = keys.filter(k => layoutDayOf(cfg, k, info.nDays) === 1);
+    let want = Math.max(0, parseInt(input.value, 10) || 0);
+    const max = on.length + day1.length;
+    if (want > max) {
+        want = max;
+        showToast(max
+            ? `Only ${max} piece${max === 1 ? '' : 's'} of this row can cast on Day ${day}${keys.length > max ? ' (the others are on another day)' : ''}.`
+            : `No piece of this row is free for Day ${day}: ${keys.length ? 'they are on another day already' : 'the row has no pieces'}.`, 'info');
+    }
+    const moved = [];
+    // Day 1 keeps the first pieces of the row, later days take them from the end.
+    if (want > on.length) for (const k of day1.slice(day1.length - (want - on.length))) { cfg.assign[k] = day; moved.push(k); }
+    else if (want < on.length) for (const k of on.slice(0, on.length - want)) { delete cfg.assign[k]; moved.push(k); }
+    if (moved.length) await saveCastDaysCfg(castingId, cfg, moved);
+    refreshInvDays(castingId);
+}
+async function handleInvDaysClear(castingId) {
+    const casting = currentCastings.find(c => c.id === castingId);
+    const info = casting ? invDayInfo(casting, getInventoryFor(castingId)) : null;
+    if (!info || !info.split) return;
+    if (!window.confirm('Put every piece of this casting back on Day 1?\n\nThe weekly goes back to showing the whole casting on each of its cast days, and Tracking, the labels and the layout go back to one list.')) return;
+    const moved = Object.keys(info.cfg.assign);
+    if (await saveCastDaysCfg(castingId, { assign: {}, sides: { ...info.cfg.sides } }, moved)) showToast('Every piece is back on Day 1.', 'success');
+    refreshInvDays(castingId);
+}
+/** Redraw only the day parts of one casting card (the boxes being typed in stay where they are). */
+function refreshInvDays(castingId) {
+    const card = document.querySelector(`.pp-cast-card[data-casting-id="${castingId}"]`);
+    const casting = currentCastings.find(c => c.id === castingId);
+    if (!card || !casting) return;
+    const items = getInventoryFor(castingId);
+    const pill = card.querySelector('[data-cast-days]');
+    if (pill) pill.outerHTML = castDaysPillHtml(casting, items);
+    const info = invDayInfo(casting, items);
+    const bar = card.querySelector('[data-inv-days]');
+    if (!info || !bar) return;
+    bar.outerHTML = invDaysBarHtml(casting, info);
+    card.querySelectorAll('.pp-inv-row[data-inventory-id]').forEach(r => {
+        const c = info.byRow.get(r.getAttribute('data-inventory-id')) || info.dates.map(() => 0);
+        const pcs = c.reduce((a, b) => a + b, 0);
+        const d1 = r.querySelector('[data-inv-day1]');
+        if (d1) d1.textContent = c[0];
+        r.querySelectorAll('.pp-inv-day-input').forEach(inp => {
+            const n = c[parseInt(inp.dataset.invDay, 10) - 1] || 0;
+            inp.value = n ? n : '';
+            inp.max = pcs;
+        });
+    });
 }
 
 // ---------- Cast day on the Casting Inventory cards (2026-11-16) ----------
@@ -13583,7 +13835,7 @@ function descriptionLinesHtml(text) {
     return String(text || '').split(',').map(x => x.trim()).filter(Boolean).map(escapeHtml).join('<br>');
 }
 
-function buildTrackPrintHtml(casting, components, projectNumber, projectName) {
+function buildTrackPrintHtml(casting, components, projectNumber, projectName, day = null) {
     const num = casting.casting_number || '';
     const desc = casting.description || '';
 
@@ -13747,6 +13999,7 @@ function buildTrackPrintHtml(casting, components, projectNumber, projectName) {
 
     const headerMeta = [
         castLabel ? `<span><b>Cast&nbsp;#</b>&nbsp;${escapeHtml(String(num) || '')}${desc ? ` ${escapeHtml(desc)}` : ''}</span>` : '',
+        day ? `<span class="tp-day"><b>Cast&nbsp;day</b>&nbsp;${day.n} of ${day.of} &middot; ${escapeHtml(castDayLong(day.date))}</span>` : '',
         castColor ? `<span><b>Color</b>&nbsp;${escapeHtml(castColor)}</span>` : '',
         `<span><b>Date</b>&nbsp;${escapeHtml(dateLabel)}</span>`,
         `<span><b>Total&nbsp;Panels</b>&nbsp;${components.length}</span>`
@@ -13774,6 +14027,7 @@ function buildTrackPrintHtml(casting, components, projectNumber, projectName) {
 async function handlePrintTracking(castingId) {
     if (!castingId) return;
     if (!(await printGate([castingId], 'Final Tracking'))) return;
+    await ensureCastDays();
     msArmStamp([castingId], 'Final Tracking');
     handlePrintTrackingNow(castingId);
 }
@@ -13791,7 +14045,16 @@ function handlePrintTrackingNow(castingId) {
     // Single continuous sheet — header once at the top, then one long table.
     // The browser paginates the table automatically and repeats the <thead>
     // on each printed page (handled by CSS in TRACK_PRINT_CSS).
-    const html = buildTrackPrintHtml(casting, components, projectNumber, projectName);
+    // A casting split over its cast days (2026-11-20): one sheet per day, each on its own page, each saying its day.
+    const dayGroups = (castDayGroups(casting, components) || []).filter(g => g.comps.length);
+    let html;
+    if (dayGroups.length > 1) {
+        const docs = dayGroups.map(g => buildTrackPrintHtml(casting, g.comps, projectNumber, projectName, g));
+        const bodyOf = d => d.slice(d.indexOf('<body>') + 6, d.lastIndexOf('</body>'));
+        html = docs[0].replace('</body>', docs.slice(1).map(d => `<div style="break-before:page;page-break-before:always;">${bodyOf(d)}</div>`).join('') + '</body>');
+    } else {
+        html = buildTrackPrintHtml(casting, components, projectNumber, projectName, dayGroups[0] || null);
+    }
 
     // Remove any leftover iframe from a prior print attempt.
     const prior = document.getElementById('pp-track-print-frame');
@@ -13900,6 +14163,18 @@ body { font-family: 'Segoe UI', Arial, sans-serif; color: #000; background: #fff
     padding-bottom: 0.02in;
     line-height: 1;
     overflow: hidden;
+    white-space: nowrap;
+}
+.sticker-day {
+    flex: 0 0 auto;
+    align-self: center;
+    margin: 0 0.05in;
+    padding: 1pt 5pt;
+    border: 1.5pt solid #000;
+    border-radius: 3pt;
+    font-size: 11pt;
+    font-weight: 800;
+    letter-spacing: 0.04em;
     white-space: nowrap;
 }
 .sticker-finish {
@@ -14017,6 +14292,11 @@ function buildStickerPrintHtml(casting, components, projectName) {
         ? `${cleanProject} : ${phaseName} · ${castLabel}`
         : `${cleanProject} : ${castLabel}`;
 
+    // A casting split over its cast days (2026-11-20): one pile per day. Each day gets its own title sticker (with the
+    // day and its date) and every panel sticker says its day. Day 1's pile comes out on top.
+    const dayGroups = (castDayGroups(casting, components) || []).filter(g => g.comps.length);
+    const pile = (components, day) => {
+    const dayTag = day ? `<div class="sticker-day">DAY ${day.n}</div>` : '';   // boxed, beside the panel number (the title line has no room)
     // Inventory summary: group by type, count panels per type.
     // Format mirrors the original sticker maker: "{type} - ({n}pcs)".
     const counts = new Map();
@@ -14027,6 +14307,7 @@ function buildStickerPrintHtml(casting, components, projectName) {
     const inventoryItems = Array.from(counts.entries())
         .sort((a, b) => a[0].localeCompare(b[0]))
         .map(([t, n]) => `<p>${escapeHtml(t)} - (${n}pcs)</p>`);
+    if (day) inventoryItems.unshift(`<p><b>DAY ${day.n} OF ${day.of} \u00b7 ${escapeHtml(castDayLong(day.date))}</b></p>`);
     inventoryItems.push(`<p>(${components.length}) Pieces Total</p>`);
 
     // Per-panel color resolution; title sticker shows the distinct set.
@@ -14063,15 +14344,19 @@ function buildStickerPrintHtml(casting, components, projectName) {
                 <div class="sticker-content${panelDesc ? ' has-desc' : ''}">
                     <div class="sticker-bottom">${escapeHtml(panel)}</div>
                     ${panelDesc ? `<div class="sticker-desc"><span>${escapeHtml(panelDesc)}</span></div>` : ''}
+                    ${dayTag}
                 </div>
                 <div class="sticker-finish">${escapeHtml(panelColor)}</div>
             </div>
         `;
     }).join('');
 
+    return panelStickers + titleSticker;
+    };
+    const piles = dayGroups.length > 1 ? dayGroups.slice().reverse().map(g => pile(g.comps, g)).join('') : pile(components, dayGroups[0] || null);
+
     return `<!doctype html><html><head><meta charset="utf-8"><title>Stickers — ${escapeHtml(cleanProject)} — ${escapeHtml(castLabel)}</title><style>${STICKER_PRINT_CSS}</style></head><body>
-        ${panelStickers}
-        ${titleSticker}
+        ${piles}
         <script>${STICKER_PRINT_AUTOFIT_JS}<\/script>
     </body></html>`;
 }
@@ -14079,6 +14364,7 @@ function buildStickerPrintHtml(casting, components, projectName) {
 async function handlePrintStickers(castingId) {
     if (!castingId) return;
     if (!(await printGate([castingId], 'Labels'))) return;
+    await ensureCastDays();
     msArmStamp([castingId], 'Labels');
     return handlePrintStickersNow(castingId);
 }

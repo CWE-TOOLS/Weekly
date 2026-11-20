@@ -535,22 +535,47 @@ export async function enrichTasksWithPieces(tasks) {
                 byType: [...byType].map(([type, qty]) => ({ type, qty }))
             });
         }
-        // Cast days (2026-11-20): a casting the portal's Casting Layout tab has SPLIT over its Cast days shows, on each
-        // day's Cast card, only the pieces of that day (and that day's side). The day number is the place of the
-        // card's date among the casting's Cast cards. A casting nobody split keeps the whole inventory on every day.
+        // Cast days (2026-11-20): a casting the portal has SPLIT over its Cast days (Casting Inventory or Casting
+        // Layout tab) shows, on each day's Cast card, only the pieces of that day (and that day's side). The day
+        // number is the place of the card's date among the casting's Cast cards. A casting nobody split keeps the
+        // whole inventory on every day. DEMOLD MIMICS CAST: the n-th Demold day carries what Cast day n cast; when
+        // Demold has fewer days than Cast, its last day carries the rest.
         const isoOf = (v) => { const d = parseDate(v); return d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` : ''; };
         const castDatesById = new Map();          // casting id -> its Cast days, sorted
+        const demoldDatesById = new Map();        // casting id -> its Demold days, sorted
         for (const t of linked) {
-            if (t.department !== 'Cast') continue;
+            if (t.department !== 'Cast' && t.department !== 'Demold') continue;
             const id = idByKey.get(`${String(t.projectNumber).trim()}|${String(t.castingNumber).trim()}`);
             const iso = id ? isoOf(t.date) : '';
             if (!iso) continue;
-            if (!castDatesById.has(id)) castDatesById.set(id, new Set());
-            castDatesById.get(id).add(iso);
+            const map = t.department === 'Cast' ? castDatesById : demoldDatesById;
+            if (!map.has(id)) map.set(id, new Set());
+            map.get(id).add(iso);
         }
         for (const [id, set] of castDatesById) castDatesById.set(id, [...set].sort());
+        for (const [id, set] of demoldDatesById) demoldDatesById.set(id, [...set].sort());
         const daysCfgById = new Map();            // casting id -> its stored split (only castings with 2+ Cast days are asked for)
-        const daySummaryById = new Map();         // casting id -> Map(day number -> that day's inventory summary)
+        const dayAccById = new Map();             // SPLIT castings only: casting id -> one tally per cast day
+        /** The inventory summary of cast days from..to of a split casting (one day, or several on one Demold day). */
+        const sumOfDays = (id, from, to) => {
+            const acc = dayAccById.get(id);
+            if (!acc) return null;
+            const rows = new Set(), byType = new Map();
+            let pcs = 0, cu = 0, ff = 0, noCu = false, noFf = false;
+            for (let d = from; d <= to && d <= acc.length; d++) {
+                const a = acc[d - 1];
+                a.rows.forEach(r => rows.add(r));
+                pcs += a.pcs; cu += a.cu; ff += a.ff;
+                noCu = noCu || a.noCu; noFf = noFf || a.noFf;
+                for (const [type, qty] of a.byType) byType.set(type, (byType.get(type) || 0) + qty);
+            }
+            return {
+                types: rows.size, pcs, cuFt: roundSig(cu, 2), ff: roundSig(ff, 2),
+                cuFtComplete: !noCu, ffComplete: !noFf,
+                byType: [...byType].map(([type, qty]) => ({ type, qty })),
+                day: to > from ? { n: from, to, of: acc.length } : { n: from, of: acc.length }
+            };
+        };
         try {
             const multi = [...castDatesById].filter(([, dates]) => dates.length > 1).map(([id]) => id);
             if (multi.length) {
@@ -570,12 +595,7 @@ export async function enrichTasksWithPieces(tasks) {
                     const name = String(row.type || '').trim() || '(no type)';
                     a.byType.set(name, (a.byType.get(name) || 0) + 1);
                 }
-                daySummaryById.set(id, new Map(acc.map((a, i) => [i + 1, {
-                    types: a.rows.size, pcs: a.pcs, cuFt: roundSig(a.cu, 2), ff: roundSig(a.ff, 2),
-                    cuFtComplete: !a.noCu, ffComplete: !a.noFf,
-                    byType: [...a.byType].map(([type, qty]) => ({ type, qty })),
-                    day: { n: i + 1, of: nDays }
-                }])));
+                dayAccById.set(id, acc);
             }
         } catch (err) {
             logger.error('[data-service] cast-day split load failed (non-fatal):', err);
@@ -674,14 +694,19 @@ export async function enrichTasksWithPieces(tasks) {
             if (total) { t.piecesCount = total; matched++; }
             const inv = id ? invSummaryById.get(id) : undefined;
             if (inv) t.invSummary = inv;
-            // A Cast card of a casting with 2+ cast days: that day's side, and once the casting is split, that day's pieces.
-            if (id && t.department === 'Cast' && (castDatesById.get(id) || []).length > 1) {
-                const dayN = castDatesById.get(id).indexOf(isoOf(t.date)) + 1;
+            // A Cast or Demold card of a casting with 2+ cast days: that day's side, and once the casting is split,
+            // that day's pieces. Demold day n = Cast day n; a last Demold day with cast days left over carries them all.
+            const nCastDays = id ? (castDatesById.get(id) || []).length : 0;
+            if (nCastDays > 1 && (t.department === 'Cast' || t.department === 'Demold')) {
+                const own = (t.department === 'Cast' ? castDatesById.get(id) : demoldDatesById.get(id)) || [];
+                const dayN = own.indexOf(isoOf(t.date)) + 1;
                 const cfg = daysCfgById.get(id);
-                if (dayN > 0 && cfg) {
+                const to = (t.department === 'Demold' && dayN === own.length) ? nCastDays : dayN;
+                // every cast day on one Demold day is the whole casting: that card stays as it was
+                if (cfg && dayN > 0 && dayN <= nCastDays && !(dayN === 1 && to === nCastDays)) {
                     const side = layoutDaySide(sideById.get(id), cfg, dayN);
                     if (side) t.castingSide = side;
-                    const daySum = daySummaryById.get(id)?.get(dayN);
+                    const daySum = sumOfDays(id, dayN, to);
                     if (daySum) {
                         t.invSummary = daySum;
                         if (daySum.pcs > 0) t.piecesCount = daySum.pcs; else delete t.piecesCount;

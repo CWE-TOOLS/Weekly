@@ -7137,3 +7137,25 @@ body.pp-clay-zoom-open { overflow: hidden; }
 .pp-clay-condt-opt span { color: #64748b; font-size: 12px; margin-left: auto; }
 .pp-clay-float-open { margin-top: 3px; color: #15803d; font-weight: 800; }
 .clay-blocked-cond text { pointer-events: none; }
+
+/* ---------- Cast days on the Casting Inventory and Tracking (2026-11-20) ---------- */
+.pp-inv-days { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 0 0 8px; padding: 6px 8px; border: 1px solid #99f6e4; border-radius: 8px; background: #f0fdfa; }
+.pp-inv-days-title { font-size: 10px; font-weight: 800; letter-spacing: 0.08em; color: #0f766e; }
+.pp-inv-day-pill { display: inline-flex; align-items: baseline; gap: 6px; padding: 3px 10px; border-radius: 12px; background: #ccfbf1; color: #134e4a; font-size: 12px; white-space: nowrap; }
+.pp-inv-day-pill b { font-weight: 800; }
+.pp-inv-day-pill-n { color: #0f766e; font-size: 11px; font-variant-numeric: tabular-nums; }
+.pp-inv-day-pill-empty { background: #f1f5f9; color: #64748b; }
+.pp-inv-day-pill-empty .pp-inv-day-pill-n { color: #94a3b8; }
+.pp-inv-days-hint { font-size: 11px; color: #475569; font-style: italic; }
+.pp-inv-days-clear, .pp-inv-days-clear:focus { margin-left: auto; padding: 3px 10px; border: 1px solid #99f6e4; border-radius: 6px; background: #ffffff; color: #0f766e; font-size: 11px; font-weight: 600; cursor: pointer; box-shadow: none; }
+.pp-inv-days-clear:hover, .pp-inv-days-clear:active { background: #ccfbf1; color: #134e4a; box-shadow: none; }
+.pp-inv-header-fields .pp-inv-h-day { color: #0f766e; }
+.pp-inv-input.pp-inv-day-cell, .pp-inv-input.pp-inv-day-cell:hover { display: flex; align-items: center; justify-content: center; min-width: 0; border-style: dashed; border-color: #99f6e4; background: #f0fdfa; color: #134e4a; font-weight: 700; font-variant-numeric: tabular-nums; cursor: help; }
+.pp-inv-input.pp-inv-day-input { text-align: center; border-color: #5eead4; background: #f0fdfa; color: #134e4a; font-weight: 700; padding-left: 2px; padding-right: 2px; }
+.pp-inv-input.pp-inv-day-input:focus { border-color: #0d9488; box-shadow: 0 0 0 2px rgba(13, 148, 136, 0.2); background: #ffffff; }
+.pp-cast-card-days { flex: 0 0 auto; padding: 2px 8px; border-radius: 10px; background: #ccfbf1; color: #134e4a; font-size: 11px; font-weight: 700; white-space: nowrap; cursor: help; }
+.pp-cast-card-days[hidden] { display: none; }
+.pp-track-day-head { display: flex; align-items: baseline; gap: 8px; margin: 6px 0 2px; padding: 4px 10px; border-radius: 6px; background: #ccfbf1; color: #134e4a; font-size: 12px; letter-spacing: 0.02em; }
+.pp-track-day-head b { font-weight: 800; }
+.pp-track-day-head span { margin-left: auto; font-size: 11px; color: #0f766e; }
+.pp-track-section-days { margin-left: 6px; padding: 1px 8px; border-radius: 10px; background: #ccfbf1; color: #134e4a; font-size: 11px; font-weight: 700; white-space: nowrap; }
