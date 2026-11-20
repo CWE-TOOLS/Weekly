@@ -586,6 +586,7 @@ async function showListView() {
     document.getElementById('pp-list-view').hidden = false;
     document.getElementById('pp-form-view').hidden = true;
     updateFloats();   // hides the batching floats (castings box, out-of-date warning) and the Releasability bar
+    renderClayFloat();   // and the Casting Layout's cast-day box: it floats over the page, so it must go with the project
     const memosView = document.getElementById('pp-memos-view');
     if (memosView) memosView.hidden = true;
     const scViewLV = document.getElementById('pp-standards-view');
@@ -8627,6 +8628,7 @@ async function showStandardColorsView() {
     document.getElementById('pp-list-view').hidden = true;
     document.getElementById('pp-form-view').hidden = true;
     updateMsFloat();
+    renderClayFloat();   // the Casting Layout's cast-day box goes with the project
     const memosView = document.getElementById('pp-memos-view');
     if (memosView) memosView.hidden = true;
     const scView = document.getElementById('pp-standards-view');
@@ -9786,6 +9788,7 @@ async function showRecentMemosView() {
     document.getElementById('pp-list-view').hidden = true;
     document.getElementById('pp-form-view').hidden = true;
     updateMsFloat();
+    renderClayFloat();   // the Casting Layout's cast-day box goes with the project
     const memosView = document.getElementById('pp-memos-view');
     if (memosView) memosView.hidden = false;
     const scViewRM = document.getElementById('pp-standards-view');
