@@ -48,6 +48,13 @@ export function normLayoutDays(v) {
     return rows ? { assign, sides, rows } : { assign, sides };
 }
 
+/** One spelling of a split whatever order its keys come in (the database returns them in its own order). */
+export function layoutDaysCanon(cfg) {
+    const c = normLayoutDays(cfg);
+    const sorted = o => Object.entries(o || {}).sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+    return JSON.stringify([sorted(c.assign), sorted(c.sides), sorted(c.rows || {}).map(([k, v]) => [k, sorted(v)])]);
+}
+
 /** True when nothing is stored: no piece on a later day and no side of a later day. */
 export function layoutDaysEmpty(cfg) {
     return !cfg || (!Object.keys(cfg.assign || {}).length && !Object.keys(cfg.sides || {}).length);
@@ -73,6 +80,7 @@ export function layoutDayRows(assign, invRows) {
 export function resolveLayoutDays(cfg, invRows) {
     const c = normLayoutDays(cfg);
     if (!c.rows || !invRows || !invRows.length) return c;
+    if (!Object.keys(c.rows).length && Object.keys(c.assign).length) return c;   // pieces stored without their row numbers: as stored
     const perRow = new Map();
     for (const { key, row } of inventoryPieceRows(invRows)) {
         if (!perRow.has(row.id)) perRow.set(row.id, []);
@@ -86,6 +94,9 @@ export function resolveLayoutDays(cfg, invRows) {
         for (const d of Object.keys(want).map(Number).sort((a, b) => a - b)) {
             const n = Math.min(want[String(d)], free.length);
             const pick = free.filter(k => c.assign[k] === d).slice(0, n);
+            // the rest from the end of the row: first the pieces no other day of this row has a claim on, then any
+            const claimed = k => c.assign[k] > 1 && c.assign[k] !== d && want[String(c.assign[k])] > 0;
+            for (let i = free.length - 1; i >= 0 && pick.length < n; i--) if (!pick.includes(free[i]) && !claimed(free[i])) pick.push(free[i]);
             for (let i = free.length - 1; i >= 0 && pick.length < n; i--) if (!pick.includes(free[i])) pick.push(free[i]);
             for (const k of pick) { assign[k] = d; free.splice(free.indexOf(k), 1); }
         }

@@ -108,12 +108,15 @@ export function schedulerJobsFromSettings(saved) {
 }
 
 /** Any settings rows by key (project value items `value:<project>`, casting budgets `budget:<castingId>` …). */
-export async function loadSettingRows(keys) {
+export async function loadSettingRows(keys, opts = {}) {
     const out = new Map();
     const client = await getClient();
+    // strict (2026-11-20): a caller that must tell "no row" from "could not read" gets an error instead of an empty answer
+    if (!client && opts.strict && keys.length) throw new Error('no database connection');
     if (!client || !keys.length) return out;
     for (let i = 0; i < keys.length; i += 80) {
         const { data, error } = await client.from(SETTINGS_TABLE).select('key, value').in('key', keys.slice(i, i + 80));
+        if (error && opts.strict) { logger.error('[schedule] loadSettingRows', error); throw error; }
         if (error) { if (missingTable(error)) { migrationPending = true; return out; } logger.error('[schedule] loadSettingRows', error); return out; }
         for (const r of data || []) out.set(r.key, r.value);
     }

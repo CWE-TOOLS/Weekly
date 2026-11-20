@@ -703,8 +703,10 @@ export async function enrichTasksWithPieces(tasks) {
                 const dayN = own.indexOf(isoOf(t.date)) + 1;
                 const cfg = daysCfgById.get(id);
                 const to = (t.department === 'Demold' && dayN === own.length) ? nCastDays : dayN;
-                // every cast day on one Demold day is the whole casting: that card stays as it was
-                if (cfg && dayN > 0 && dayN <= nCastDays && !(dayN === 1 && to === nCastDays)) {
+                // every cast day on one Demold day is the whole casting: that card stays as it was. Demold on MORE days
+                // than Cast cannot be paired day for day: all of its cards stay the whole casting (never a share next
+                // to a whole, which would read as double).
+                if (cfg && dayN > 0 && own.length <= nCastDays && !(dayN === 1 && to === nCastDays)) {
                     const side = layoutDaySide(sideById.get(id), cfg, dayN);
                     if (side) t.castingSide = side;
                     const daySum = sumOfDays(id, dayN, to);
