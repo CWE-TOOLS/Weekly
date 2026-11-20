@@ -182,3 +182,37 @@ export function inventoryRowsOfDay(invRows, cfg, nDays, day) {
     }
     return (invRows || []).filter(r => count.get(r) > 0).map(r => ({ ...r, quantity: count.get(r), extras: 0 }));
 }
+
+// ---- Batch tickets printed day by day (2026-11-20) ----
+// A casting split over its cast days is a folder with one set of batch tickets per day. On the Releasability
+// Board "Batching Sheets" is green only when EVERY day that casts pieces has been printed; until then it is orange
+// and its note (the hover text on the board) says which day is printed and which is not. The note itself is the
+// record: the days already printed are read back from it when the next day is printed.
+/** "Batch tickets: Day 1 printed · Day 2 NOT printed yet" for the days that cast pieces. */
+export function batchDaysNote(printedDays, neededDays) {
+    const done = new Set(printedDays || []);
+    return 'Batch tickets: ' + (neededDays || []).map(n => done.has(n) ? `Day ${n} printed` : `Day ${n} NOT printed yet`).join(' \u00b7 ');
+}
+/** True for a note batchDaysNote wrote. */
+export function isBatchDaysNote(note) { return /^Batch tickets: Day \d+ (NOT )?printed/.test(String(note || '')); }
+/** The days a batchDaysNote says are printed. */
+export function batchDaysPrinted(note) {
+    return isBatchDaysNote(note) ? [...String(note).matchAll(/Day (\d+) printed/g)].map(m => parseInt(m[1], 10)) : [];
+}
+/**
+ * What to stamp after some days' tickets were printed.
+ * @param {number[]} needed   days that cast pieces
+ * @param {number[]} printed  days printed just now
+ * @param {{status?: string, note?: string}|null} prev  the milestone row as it was
+ * @param {number[]} unbatched  days that have no batch ticket at all: never printed, whatever the row said before
+ *                              (a casting printed as a whole and split afterwards)
+ * @returns {null|string} null = every needed day is printed now (stamp as usual); else the orange note
+ */
+export function batchDaysStamp(needed, printed, prev, unbatched = []) {
+    const status = prev && prev.status, note = String((prev && prev.note) || '').replace(/\s*\[inv:[^\]]+\]$/, '');
+    // printed in full before (green, or orange only because the inventory was not final yet): every day counts as printed
+    const before = isBatchDaysNote(note) ? batchDaysPrinted(note)
+        : (status === 'green' || (status === 'orange' && note === 'Printed before Casting Inventory was final')) ? (needed || []) : [];
+    const done = new Set([...before, ...(printed || [])].filter(n => !(unbatched || []).includes(n)));
+    return (needed || []).every(n => done.has(n)) ? null : batchDaysNote([...done], needed);
+}

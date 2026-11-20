@@ -27,7 +27,7 @@ import { buildTicketPages, batchTotalsRows, sumTotalsRows, renderTotalsTable, BA
 import { EARLY_PRINT_NOTE, invEarlyMarksRows, withInvMark } from '../../services/inventory-marks.js';
 import { escapeHtml } from '../../utils/security-utils.js';
 import { loadSettingRows } from '../../services/schedule-service.js';
-import { LAYOUT_DAYS_PREFIX, resolveLayoutDays, layoutDaysSplit, castDayDates, inventoryRowsOfDay } from '../../utils/layout-days.js';
+import { LAYOUT_DAYS_PREFIX, resolveLayoutDays, layoutDaysSplit, castDayDates, inventoryRowsOfDay, batchDaysStamp } from '../../utils/layout-days.js';
 import { logger } from '../../utils/logger.js';
 
 const $ = (id) => document.getElementById(id);
@@ -169,6 +169,7 @@ async function build() {
         S.items = items;
     }
     const ms = await loadMilestonesForProjects(pns).catch(() => ({ byCasting: new Map(), touched: new Set() }));
+    S.ms = ms;
 
     S.printedOn = new Date();
     const results = [];
@@ -196,7 +197,7 @@ async function build() {
             const dayOfTicket = (tk) => (parseInt(tk && tk.castDay, 10) > 1 ? parseInt(tk.castDay, 10) : 1);
             const dayTickets = (d.tickets.get(casting.id) || []).filter(tk => dayOfTicket(tk) === (it.split ? it.dayN : 1));
             const dayInvRows = it.split ? inventoryRowsOfDay(r.invRows, it.cfg, it.dayOf, it.dayN) : r.invRows;
-            if (it.split) r.dayLabel = `Day ${it.dayN} of ${it.dayOf}`;
+            if (it.split) { r.dayLabel = `Day ${it.dayN} of ${it.dayOf}`; r.split = { n: it.dayN, of: it.dayOf, cfg: it.cfg }; }
             const out = buildTicketPages({
                 casting, projectName: r.projectName, tickets: dayTickets, logs: d.logs, components: d.comps.get(casting.id) || [],
                 slumpTargets: d.slump, printedOn: S.printedOn, castDate: it.date,
@@ -304,6 +305,20 @@ async function stampPrinted() {
     for (const r of (S.results || []).filter(r => r.pages && r.casting && r.onBoard)) {
         if (stamped.has(r.casting.id)) continue;      // a casting split over its cast days is on the list once per day
         stamped.add(r.casting.id);
+        // Split over its cast days: green only when every day that casts pieces has been printed (here or before);
+        // until then orange, and the note on the board says which day is printed and which is not.
+        if (r.split) {
+            const printed = (S.results || []).filter(x => x.pages && x.casting && x.casting.id === r.casting.id && x.split).map(x => x.split.n);
+            const needed = Array.from({ length: r.split.of }, (_, i) => i + 1).filter(n => inventoryRowsOfDay(r.invRows, r.split.cfg, r.split.of, n).length > 0);
+            const tks = S.projects.get(r.projectNumber)?.tickets?.get(r.casting.id) || [];
+            const unbatched = needed.filter(n => !tks.some(tk => (parseInt(tk.castDay, 10) > 1 ? parseInt(tk.castDay, 10) : 1) === n && parseFloat(tk.cuFt) > 0));
+            const partial = batchDaysStamp(needed, printed, S.ms?.byCasting.get(r.casting.id)?.get('Batching Sheets') || null, unbatched);
+            if (partial) {
+                try { await saveMilestone({ projectNumber: r.projectNumber, castingId: r.casting.id, milestone: 'Batching Sheets', status: MS.ORANGE, locked: false, note: partial, stampedAt: now }); n++; }
+                catch (err) { logger.error('[week-batch] stamp failed', r.projectNumber, r.castingNumber, err); }
+                continue;
+            }
+        }
         try {
             await saveMilestone({
                 projectNumber: r.projectNumber, castingId: r.casting.id, milestone: 'Batching Sheets',

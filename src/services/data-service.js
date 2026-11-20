@@ -38,7 +38,7 @@ import { loadMilestonesForProjects, parseLayoutCondition } from './milestones-se
 import { getSpecialBatching } from '../config/special-batching.js';
 import { parseDate } from '../utils/date-utils.js';
 import { loadSettingRows } from './schedule-service.js';
-import { LAYOUT_DAYS_PREFIX, normLayoutDays, resolveLayoutDays, castDayDates, layoutDayOf, layoutDaysSplit, layoutDaySide, inventoryPieceRows } from '../utils/layout-days.js';
+import { LAYOUT_DAYS_PREFIX, normLayoutDays, resolveLayoutDays, castDayDates, layoutDayOf, layoutDaysSplit, layoutDaySide, inventoryPieceRows, isBatchDaysNote, batchDaysPrinted } from '../utils/layout-days.js';
 import { setAllTasks, getAllTasks } from '../core/state.js';
 
 import { logger } from '../utils/logger.js';
@@ -606,12 +606,14 @@ export async function enrichTasksWithPieces(tasks) {
         // Casting Inventory changed enough that the tickets come out different.
         const INV_CHANGED_NOTE = 'Casting Inventory changed after this was printed — print it again';
         const batchPrintById = new Map();
+        const batchPrintedDaysById = new Map();     // split casting printed day by day: casting id -> the days printed so far
         for (const castingId of referencedIds) {
             const project = (castings.find(c => c.id === castingId) || {}).project_number;
             if (!milestones.touched.has(String(project || '').trim())) continue;
             const row = milestones.byCasting.get(castingId)?.get('Batching Sheets') || null;
             if (!row || row.status === 'red') batchPrintById.set(castingId, 'unprinted');
             else if (row.status === 'orange' && row.note === INV_CHANGED_NOTE) batchPrintById.set(castingId, 'reprint');
+            else if (row.status === 'orange' && isBatchDaysNote(row.note)) batchPrintedDaysById.set(castingId, new Set(batchDaysPrinted(row.note)));
         }
 
         // Per-casting color log title + batch count, mirroring the portal's
@@ -738,6 +740,8 @@ export async function enrichTasksWithPieces(tasks) {
             // above keeps its existing visibility on all casting-linked tasks.
             // A Cast card of a casting split over its cast days reads its own day's tickets.
             const cardDay = (id && t.department === 'Cast' && batchInfoByDay.has(id)) ? ((castDatesById.get(id) || []).indexOf(isoOf(t.date)) + 1) : 0;
+            // batch tickets printed for some cast days only: the card of a day that is not printed yet says so
+            if (cardDay > 0 && batchPrintedDaysById.has(id) && !batchPrintedDaysById.get(id).has(cardDay)) t.batchPrintState = 'unprinted';
             const wholeInfo = (id && t.department === 'Cast') ? batchInfoById.get(id) : undefined;
             const dayInfo = cardDay > 0 ? batchInfoByDay.get(id).get(cardDay) : null;
             // a day nobody has batched yet: the casting's colour and method, and no batch count

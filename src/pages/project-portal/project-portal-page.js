@@ -130,7 +130,7 @@ import {
 } from '../../services/classroom-tasks-service.js';
 import { renderCastingLayout, computeLayoutRects, parseDimension, tableBlockRects, CASTING_AREAS } from './casting-layout.js?v=20261112-1';
 import { attachLayoutDrag } from './casting-layout-drag.js?v=20261120-1';
-import { LAYOUT_DAYS_PREFIX, normLayoutDays, resolveLayoutDays, layoutDayRows, layoutDaysEmpty, layoutDaysCanon, castDayDates, layoutDayOf, layoutDaysSplit, layoutDaySide, placeKeys, inventoryPieceRows, inventoryRowsOfDay } from '../../utils/layout-days.js?v=20261120-5';
+import { LAYOUT_DAYS_PREFIX, normLayoutDays, resolveLayoutDays, layoutDayRows, layoutDaysEmpty, layoutDaysCanon, castDayDates, layoutDayOf, layoutDaysSplit, layoutDaySide, placeKeys, inventoryPieceRows, inventoryRowsOfDay, batchDaysStamp } from '../../utils/layout-days.js?v=20261120-7';
 import { activateJigListTab } from './jig-list.js?v=20261112-1';
 import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, APPROVALS_TAB_ITEMS } from '../../config/milestones-config.js?v=20261119-1';
 import { SLUMP_TARGET_DEFAULTS, FINAL_BACKUP_PIG_REDUCTION_PCT, parsePigReduction, BT_IMPORT_META, btOverrides, btImportStamp, btStampDate, additiveAmount, batchTotalsRows, renderBatchTotals, clampSlumpTarget, formatSlumpLabel, renderSlumpGraphic, renderBatchTicketCard, BATCH_PRINT_CSS } from '../../services/batch-ticket-render.js';
@@ -5140,6 +5140,18 @@ function stampPrinted(castingIds, milestone) {
         // A print made through the hold remembers the inventory it saw (2026-10-27): "Casting Inventory ready" settles it.
         msSet(id, milestone, final ? MS.GREEN : MS.ORANGE, { note: final ? null : withInvMark(EARLY_PRINT_NOTE, invEarlyMarks(id, milestone)), stamp: true });
     }
+}
+/** Batch tickets printed (2026-11-20). A casting split over its cast days is only green once EVERY day that casts
+ *  pieces has been printed; until then it is orange and the note says which day is printed and which is not
+ *  (the hover text on the Releasability Board). Not split, or every day printed: the usual stamp. */
+function stampBatchPrinted(castingId, printedDays) {
+    const info = btDays(castingId);
+    if (!msOn() || !info || !Array.isArray(printedDays)) return stampPrinted([castingId], 'Batching Sheets');
+    const needed = info.totals.map((t, i) => (t.pcs > 0 ? i + 1 : 0)).filter(Boolean);
+    // this print covers every day that has a batch ticket: a day it did not cover has none, so it is not printed
+    const note = batchDaysStamp(needed, printedDays, msRow(castingId, 'Batching Sheets'), needed.filter(n => !printedDays.includes(n)));
+    if (!note) return stampPrinted([castingId], 'Batching Sheets');
+    msSet(castingId, 'Batching Sheets', MS.ORANGE, { note, stamp: true });
 }
 function msFlushPendingStamp() { const p = msPendingStamp; msPendingStamp = null; if (p) stampPrinted(p.ids, p.milestone); }
 /** Work has started on this item (forms laid out, jig list imported…): red becomes orange; green and orange stay. */
@@ -16091,6 +16103,7 @@ function handlePrintOptimizer(castingIds) {
 // ---------- Print ----------
 
 
+let btLastPrintedDays = null;     // the cast days the last ticket print covered (a split casting), for the board stamp
 async function handlePrintBatchTickets(castingId) {
     if (!currentCastings.find(c => c.id === castingId)) return;
     if (!(await printGate([castingId], 'Batching Sheets'))) return;
@@ -16101,9 +16114,10 @@ async function handlePrintBatchTickets(castingId) {
         const list = getBatchTicketList(castingId);
         const missing = dayInfo.totals.map((t, i) => ({ n: i + 1, pcs: t.pcs })).filter(d => d.pcs > 0 && !list.some(t => btDayOf(t) === d.n && parseFloat(t.cuFt) > 0));
         if (missing.length && missing.length < dayInfo.totals.filter(t => t.pcs > 0).length
-            && !window.confirm(`No batch tickets yet for ${missing.map(d => 'Day ' + d.n).join(' and ')} of this casting (nothing imported on that day's ticket).\n\nPrint the other day${missing.length === dayInfo.nDays - 1 ? '' : 's'} anyway? The Releasability Board will show Batching Sheets as printed for the whole casting.`)) return;
+            && !window.confirm(`No batch tickets yet for ${missing.map(d => 'Day ' + d.n).join(' and ')} of this casting (nothing imported on that day's ticket).\n\nPrint the other day${missing.length === dayInfo.nDays - 1 ? '' : 's'} anyway? On the Releasability Board, Batching Sheets stays orange until every day is printed.`)) return;
     }
-    if (handlePrintBatchTicketsNow(castingId) !== false) stampPrinted([castingId], 'Batching Sheets');
+    btLastPrintedDays = null;
+    if (handlePrintBatchTicketsNow(castingId) !== false) stampBatchPrinted(castingId, btLastPrintedDays);
 }
 function handlePrintBatchTicketsNow(castingId) {
     const casting = currentCastings.find(c => c.id === castingId);
@@ -16144,6 +16158,7 @@ function handlePrintBatchTicketsNow(castingId) {
     }
 
     const projectName = document.getElementById('pp-f-project_name')?.value || '';
+    btLastPrintedDays = btDays(castingId) ? [...new Set(printable.map(p => btDayOf(p.ticket)))] : null;
     if (leftOver.length) showToast(`Not printed (nothing of that color casts on that day any more): ${leftOver.join(', ')}`, 'info', 8000);
 
     const pages = printable.map(({ ticket, activeLog, plan }) => {
