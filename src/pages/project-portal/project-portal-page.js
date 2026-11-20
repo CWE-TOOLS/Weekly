@@ -129,7 +129,8 @@ import {
     setClassroomTasksOrder
 } from '../../services/classroom-tasks-service.js';
 import { renderCastingLayout, computeLayoutRects, parseDimension, tableBlockRects, CASTING_AREAS } from './casting-layout.js?v=20261112-1';
-import { attachLayoutDrag } from './casting-layout-drag.js?v=20261112-1';
+import { attachLayoutDrag } from './casting-layout-drag.js?v=20261120-1';
+import { LAYOUT_DAYS_PREFIX, normLayoutDays, layoutDayOf, layoutDaysSplit, layoutDaySide, placeKeys } from '../../utils/layout-days.js?v=20261120-1';
 import { activateJigListTab } from './jig-list.js?v=20261112-1';
 import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, APPROVALS_TAB_ITEMS } from '../../config/milestones-config.js?v=20261119-1';
 import { SLUMP_TARGET_DEFAULTS, FINAL_BACKUP_PIG_REDUCTION_PCT, parsePigReduction, BT_IMPORT_META, btOverrides, btImportStamp, btStampDate, additiveAmount, batchTotalsRows, renderBatchTotals, clampSlumpTarget, formatSlumpLabel, renderSlumpGraphic, renderBatchTicketCard, BATCH_PRINT_CSS } from '../../services/batch-ticket-render.js';
@@ -6332,7 +6333,7 @@ function checkFitment() {
         showToast(msg, 'info', 6000);
         return;
     }
-    const components = currentCastingComponents.get(clSelectedCastingId) || [];
+    const components = clCompsOfDay();
     const sides = clSelectedArea === 'AB' ? ['B', 'A'] : [clSelectedArea === 'A' ? 'A' : 'B'];
     let comps = components;
     const lines = [];
@@ -6345,7 +6346,7 @@ function checkFitment() {
         if (!comps.length) break;
     }
     const nBases = Object.keys(clBases).length;
-    const msg = `Check fitment — auto-pack${nBases ? ` with ${nBases} custom base size${nBases === 1 ? '' : 's'}` : ' at inventory size + offset'}, around the other jobs' forms: ${lines.join(' · ')}.`
+    const msg = `Check fitment${clMultiDay() ? ` (Day ${clDayN} · ${clDayLabel(clDateNow())}, ${components.length} form${components.length === 1 ? '' : 's'})` : ''} — auto-pack${nBases ? ` with ${nBases} custom base size${nBases === 1 ? '' : 's'}` : ' at inventory size + offset'}, around the other jobs' forms: ${lines.join(' · ')}.`
         + (nBases ? ` Custom bases: ${Object.entries(clBases).map(([t, b]) => `${t} ${inchesText(b.w)}×${inchesText(b.l)}″`).join(', ')}.` : '');
     if (out) out.textContent = msg;
     showToast(lines.join(' · '), 'info', 6000);
@@ -6390,6 +6391,167 @@ function setCastingInUrl(castingId) {
 }
 function clShortLabel(o) { return `${o.project_number || o.projectName} · Cast ${o.casting_number || '?'}`; }
 
+// ---- Cast days (2026-11-20): a casting the weekly casts over 2+ days is laid out day by day ----
+// The tab shows one day at a time: that day's forms, that day's other jobs, that day's side. Which form is on which
+// day and the side of days 2+ are one settings row per casting (src/utils/layout-days.js). Days are numbers in date
+// order, so the split follows the schedule when it moves. Nothing stored = not split: all forms on Day 1 here, and
+// everywhere else (the weekly, other jobs' estimates) the whole casting on each of its days, as before.
+let clDayN = 1;                                   // the day on screen (1 = the first Cast day on the weekly)
+let clDaysFor = null;                             // the casting clDayN belongs to (another casting starts on Day 1)
+let clDaysCfg = { assign: {}, sides: {} };        // this casting's split
+let clDaysCfgOthers = new Map();                  // castingId -> split of the other castings of the cast days
+let clDayViews = new Map();                       // ISO day -> the other castings as they are ON THAT DAY ('*' = single day)
+let clOverflowIds = [];                           // this day's forms that did not fit (from the last draw)
+function clDayCount() { return Math.max(1, clDay.dates.length); }
+function clMultiDay() { return clDay.dates.length > 1; }
+function clDateNow() { return clDay.dates[clDayN - 1] || clDay.dates[0] || ''; }
+/** The other castings of the day on screen (their side, forms and saved spots of THAT day). */
+function clOthers() { return (clMultiDay() ? clDayViews.get(clDateNow()) : clDayViews.get('*')) || []; }
+/** This casting's side on a day: day 1 is the casting's own side (shared with the weekly's Cast cards). */
+function clMySide(n = clDayN) {
+    const casting = currentCastings.find(c => c.id === clSelectedCastingId);
+    return layoutDaySide(casting?.casting_side, clDaysCfg, clMultiDay() ? n : 1);
+}
+/** This casting's forms of one day (all of them while the casting has a single cast day). */
+function clCompsOfDay(n = clDayN) {
+    const all = currentCastingComponents.get(clSelectedCastingId) || [];
+    if (!clMultiDay()) return all;
+    const keys = placeKeys(all), nDays = clDayCount();
+    return all.filter((c, i) => layoutDayOf(clDaysCfg, keys[i], nDays) === n);
+}
+/** The saved spots that belong to a set of forms (a day's forms only see their own). */
+function clPositionsOf(components) {
+    if (!clMultiDay()) return clLayoutPositions;
+    const ids = new Set(components.map(c => c.id));
+    return clLayoutPositions.filter(p => ids.has(p.component_id));
+}
+async function loadLayoutDaysFor(ids) {
+    const out = new Map();
+    if (!ids.length) return out;
+    try {
+        const rows = await loadSettingRows(ids.map(id => LAYOUT_DAYS_PREFIX + id));
+        for (const [k, v] of rows) out.set(k.slice(LAYOUT_DAYS_PREFIX.length), normLayoutDays(v));
+    } catch (e) { logger.warn('[project-portal] cast-day splits unavailable', e); }
+    return out;
+}
+async function saveLayoutDays() {
+    const has = Object.keys(clDaysCfg.assign).length || Object.keys(clDaysCfg.sides).length;
+    try { await setSettingRow(LAYOUT_DAYS_PREFIX + clSelectedCastingId, has ? clDaysCfg : null); return true; }
+    catch (e) { logger.error('[project-portal] save cast-day split failed:', e); showToast('The cast-day split was not saved: ' + (e.message || e), 'error'); return false; }
+}
+/** The other castings as each cast day sees them: a split casting brings only that day's forms and that day's side. */
+function clBuildDayViews() {
+    clDayViews = new Map();
+    const viewOn = (o, date) => {
+        const all = o.allDates || [];
+        const nD = Math.max(1, all.length);
+        const ord = Math.max(1, all.indexOf(date) + 1);
+        const cfg = (o.id && clDaysCfgOthers.get(o.id)) || { assign: {}, sides: {} };
+        const split = layoutDaysSplit(cfg, nD);
+        let components = o.components, positions = o.positions;
+        if (split) {
+            const keys = placeKeys(o.components);
+            components = o.components.filter((c, i) => layoutDayOf(cfg, keys[i], nD) === ord);
+            const ids = new Set(components.map(c => c.id));
+            positions = o.positions.filter(p => ids.has(p.component_id));
+        }
+        return { ...o, dayN: ord, dayCount: nD, split, components, positions, casting_side: layoutDaySide(o.casting_side, cfg, ord) || o.casting_side || null };
+    };
+    if (!clMultiDay()) { clDayViews.set('*', clDay.others.map(o => viewOn(o, clDay.dates[0] || ''))); return; }
+    for (const date of clDay.dates) {
+        clDayViews.set(date, clDay.others.filter(o => !Array.isArray(o.dates) || o.dates.includes(date)).map(o => viewOn(o, date)));
+    }
+}
+function clSetDay(n) {
+    if (!clMultiDay() || n === clDayN || !(n >= 1 && n <= clDayCount())) return;
+    clDayN = n;
+    const fr = document.getElementById('pp-clay-fit-result'); if (fr) fr.textContent = '';
+    renderCastingLayoutTab();
+}
+/** Move forms of this casting to another cast day. A form that changes day leaves its saved spot behind. */
+async function clMoveToDay(componentIds, n) {
+    if (!clMultiDay() || !componentIds.length) return;
+    const nDays = clDayCount();
+    n = Math.min(nDays, Math.max(1, n));
+    const all = currentCastingComponents.get(clSelectedCastingId) || [];
+    const keys = placeKeys(all);
+    const moved = [];
+    for (const cid of componentIds) {
+        const i = all.findIndex(c => c.id === cid);
+        if (i < 0 || layoutDayOf(clDaysCfg, keys[i], nDays) === n) continue;
+        if (n === 1) delete clDaysCfg.assign[keys[i]]; else clDaysCfg.assign[keys[i]] = n;
+        moved.push(cid);
+    }
+    if (!moved.length) return;
+    const saved = await saveLayoutDays();
+    const had = saved ? clLayoutPositions.filter(p => moved.includes(p.component_id)) : [];
+    try { await Promise.all(had.map(p => deleteLayoutPosition(p.component_id, p.area === 'A' ? 'A' : 'B'))); }
+    catch (e) { logger.warn('[project-portal] forgetting the moved forms\' spots failed', e); }
+    await loadLayoutPositionsForSelected();       // also re-reads the split, so a failed save shows what is really stored
+    renderCastingLayoutTab();
+    if (saved) showToast(`${moved.length} form${moved.length === 1 ? '' : 's'} moved to Day ${n} · ${clDayLabel(clDay.dates[n - 1])}. The weekly's Cast cards follow on their next refresh.`, 'success', 5000);
+}
+/** Undo the split: every form back on Day 1. */
+async function clUnsplit() {
+    const nDays = clDayCount();
+    if (!layoutDaysSplit(clDaysCfg, nDays)) return;
+    if (!window.confirm('Put every form of this casting back on Day 1?\n\nThe weekly goes back to showing the whole casting on each of its cast days. Saved spots of the forms that move are forgotten.')) return;
+    const all = currentCastingComponents.get(clSelectedCastingId) || [];
+    const keys = placeKeys(all);
+    const moved = all.filter((c, i) => layoutDayOf(clDaysCfg, keys[i], nDays) > 1).map(c => c.id);
+    clDaysCfg.assign = {};
+    const saved = await saveLayoutDays();
+    const had = saved ? clLayoutPositions.filter(p => moved.includes(p.component_id)) : [];
+    try { await Promise.all(had.map(p => deleteLayoutPosition(p.component_id, p.area === 'A' ? 'A' : 'B'))); } catch (e) { /* the forms show in the overflow strip */ }
+    clDayN = 1;
+    await loadLayoutPositionsForSelected();
+    renderCastingLayoutTab();
+    if (saved) showToast('Every form is back on Day 1.', 'success');
+}
+/** The row of day bubbles (only for a casting with 2+ cast days): forms per day, who has each side, and where to send things. */
+function renderClayDays() {
+    const wrap = document.getElementById('pp-clay-days');
+    if (!wrap) return;
+    if (!clSelectedCastingId || !clMultiDay()) { wrap.hidden = true; wrap.innerHTML = ''; return; }
+    const nDays = clDayCount();
+    const all = currentCastingComponents.get(clSelectedCastingId) || [];
+    const keys = placeKeys(all);
+    const perDay = Array.from({ length: nDays }, () => []);
+    all.forEach((c, i) => perDay[layoutDayOf(clDaysCfg, keys[i], nDays) - 1].push(c));
+    const split = layoutDaysSplit(clDaysCfg, nDays);
+    const ownCond = layoutConditionOf(clSelectedCastingId);
+    const typeLine = (list) => {
+        const m = new Map();
+        for (const c of list) { const t = (c.type || '').trim() || '(no type)'; m.set(t, (m.get(t) || 0) + 1); }
+        return [...m].map(([t, q]) => `${t} \u00d7${q}`);
+    };
+    const sidesHtml = (n) => ['A', 'B'].map(area => {
+        const ms = clMySide(n);
+        const mine = ms === area || ms === 'AB';
+        const names = (clDayViews.get(clDay.dates[n - 1]) || []).filter(o => o.casting_side === area || o.casting_side === 'AB').map(clShortLabel);
+        const who = [mine ? 'THIS CASTING' : '', ...names].filter(Boolean);
+        const cls = !who.length ? 'free' : (mine && names.length ? 'shared' : mine ? 'mine' : 'taken');
+        return `<span class="pp-clay-day-side ${cls}" title="Side ${area} on ${escapeAttr(clDayLabel(clDay.dates[n - 1]))}: ${who.length ? escapeAttr(who.join(' + ')) : 'free'}"><b>${area}</b> ${who.length ? escapeHtml(who.join(' + ')) : 'free'}</span>`;
+    }).join('');
+    const bubbles = clDay.dates.map((date, i) => {
+        const n = i + 1, list = perDay[i], types = typeLine(list);
+        const shown = types.length > 4 ? types.slice(0, 4).join(', ') + ` +${types.length - 4} more` : types.join(', ');
+        return `<button type="button" class="pp-clay-day${n === clDayN ? ' pp-clay-day-on' : ''}" data-clay-day="${n}" aria-pressed="${n === clDayN}" title="${escapeAttr(`Day ${n} of ${nDays} · ${clDayLabel(date)}. Click to lay this day out; drag a form here to cast it on this day.${types.length ? ' Forms: ' + types.join(', ') : ''}`)}">
+            <span class="pp-clay-day-top">DAY ${n} · ${escapeHtml(clDayLabel(date))}</span>
+            <span class="pp-clay-day-forms">${ownCond ? 'special condition: no form layout' : `<b>${list.length}</b> form${list.length === 1 ? '' : 's'}${shown ? ' · ' + escapeHtml(shown) : ''}`}</span>
+            <span class="pp-clay-day-sides">${sidesHtml(n)}</span>
+        </button>`;
+    }).join('');
+    const canSend = !ownCond && clOverflowIds.length > 0 && clDayN < nDays;
+    const tools = ownCond ? '' : `<div class="pp-clay-days-tools">
+            ${canSend ? `<button type="button" class="pp-clay-send" data-clay-send="${clDayN + 1}" title="The forms in the overflow strip move to Day ${clDayN + 1} (${escapeAttr(clDayLabel(clDay.dates[clDayN]))}). Lay them out there.">Send the ${clOverflowIds.length} overflow form${clOverflowIds.length === 1 ? '' : 's'} to Day ${clDayN + 1} \u2192</button>` : ''}
+            <span class="pp-clay-days-hint">${split ? 'Drag a form onto a day to move it there.' : `Not split yet: every form is on Day 1, and the weekly shows the whole casting on each of its ${nDays} cast days. Drag a form onto a day, or send the overflow on, to split it.`}</span>
+            ${split ? '<button type="button" class="pp-clay-unsplit" data-clay-unsplit title="Undo the split: every form back on Day 1">Put all forms back on Day 1</button>' : ''}
+        </div>`;
+    wrap.innerHTML = `<div class="pp-clay-days-row">${bubbles}</div>${tools}`;
+    wrap.hidden = false;
+}
+
 /** This casting's cast days as the WEEKLY shows them (its Cast cards, whatever source the weekly is on), and every
  *  other casting the weekly has in Cast on those days. The portal cast date only stands in for this casting when the
  *  weekly has no Cast card for it yet. */
@@ -6397,6 +6559,8 @@ async function loadCastDayContext() {
     const id = clSelectedCastingId;
     clDay = { castingId: id, dates: [], source: '', others: [] };
     clBasesOthers = new Map();
+    clDaysCfgOthers = new Map();
+    clDayViews = new Map();
     const casting = currentCastings.find(c => c.id === id);
     if (!casting) return;
     await loadCondTables([layoutConditionOf(id)], { fresh: true });
@@ -6427,9 +6591,17 @@ async function loadCastDayContext() {
             if (isMine(t) || !dates.includes(isoDay(parseDate(t.date)))) continue;
             const tpn = String(t.projectNumber || '').trim(), tcn = String(t.castingNumber || '').trim();
             const key = tpn ? `${tpn}|${tcn}` : `name|${String(t.project || '').trim().toLowerCase()}`;
-            const e = byKey.get(key) || { key, project_number: tpn, casting_number: tcn, taskName: String(t.resolvedProjectName || t.project || '').trim(), taskSide: null };
+            const e = byKey.get(key) || { key, project_number: tpn, casting_number: tcn, taskName: String(t.resolvedProjectName || t.project || '').trim(), taskSide: null, dates: new Set(), allDates: new Set() };
             if (!e.taskSide && ['A', 'B', 'AB'].includes(t.castingSide)) e.taskSide = t.castingSide;
+            e.dates.add(isoDay(parseDate(t.date)));          // which of THIS casting's days they share
             byKey.set(key, e);
+        }
+        // Every cast day of each of them (also the ones this casting is not on): their Day 1 / Day 2 numbering.
+        for (const t of castTasks) {
+            if (isMine(t)) continue;
+            const tpn = String(t.projectNumber || '').trim(), tcn = String(t.castingNumber || '').trim();
+            const e = byKey.get(tpn ? `${tpn}|${tcn}` : `name|${String(t.project || '').trim().toLowerCase()}`);
+            if (e) e.allDates.add(isoDay(parseDate(t.date)));
         }
         if (!byKey.size) return;
         // Portal records of those castings (side, forms, saved layout, special condition) by job + cast number.
@@ -6445,6 +6617,7 @@ async function loadCastDayContext() {
                 projectName: e.project_number ? (clProjectNames.get(e.project_number) || e.taskName) : e.taskName,
                 casting_side: ['A', 'B', 'AB'].includes(r?.casting_side) ? r.casting_side : e.taskSide,
                 inPortal: !!r,
+                dates: [...e.dates].sort(), allDates: [...e.allDates].sort(),
                 cond: null, components: [], positions: []
             };
         });
@@ -6452,7 +6625,9 @@ async function loadCastDayContext() {
         const conds = ids.length ? await loadLayoutConditionsForCastings(ids) : [];
         const condBy = new Map(conds.map(c => [c.casting_id, c]));
         await loadCondTables(conds.map(c => c.name), { fresh: true });
-        const sided = others.filter(o => o.id && ['A', 'B', 'AB'].includes(o.casting_side));
+        clDaysCfgOthers = await loadLayoutDaysFor(ids);
+        // every portal casting, not only the ones with a side of their own: a later day can carry its own side
+        const sided = others.filter(o => o.id);
         const [compsMap, posList] = await Promise.all([
             sided.length ? loadAllComponentsForProject(sided.map(o => o.id)) : new Map(),
             Promise.all(sided.map(o => loadLayoutPositions(o.id).catch(() => [])))
@@ -6468,9 +6643,12 @@ async function loadCastDayContext() {
         clDay.others = others.sort((x, y) => String(x.project_number).localeCompare(String(y.project_number)) || String(x.casting_number).localeCompare(String(y.casting_number)));
     } catch (e) {
         logger.error('[project-portal] cast-day context failed:', e);
+    } finally {
+        if (clDayN > clDayCount()) clDayN = 1;
+        clBuildDayViews();
     }
 }
-function clTakenBy(area) { return clDay.others.filter(o => o.casting_side === area || o.casting_side === 'AB'); }
+function clTakenBy(area) { return clOthers().filter(o => o.casting_side === area || o.casting_side === 'AB'); }
 /** The other castings' forms on one side, as blocked rectangles for the packer and the drawing. With several other
  *  jobs on the side, each estimate is packed around the ones before it (box order), as the floor would do it;
  *  a saved layout always sits where it was saved. */
@@ -6492,7 +6670,7 @@ function clBlockedFor(area) {
     // A casting under a special condition is never laid out on the tables: it blocks the tables its condition
     // uses and nothing else (2026-11-12). Those are certain, so they go first; form estimates pack around them.
     const out = clOwnCondBlocked(area);
-    for (const o of clDay.others) {
+    for (const o of clOthers()) {
         const sd = clCondSideOfOther(o);
         if (sd === area || sd === 'AB') out.push(...clCondRects(o.cond.name, area, clShortLabel(o), false));
     }
@@ -6517,7 +6695,7 @@ function clBlockedFor(area) {
 /** Only the special-condition tables of a side (this casting's and the others'). */
 function clBlockedCondOnly(area) {
     const out = clOwnCondBlocked(area);
-    for (const o of clDay.others) {
+    for (const o of clOthers()) {
         const sd = clCondSideOfOther(o);
         if (sd === area || sd === 'AB') out.push(...clCondRects(o.cond.name, area, clShortLabel(o), false));
     }
@@ -6526,7 +6704,8 @@ function clBlockedCondOnly(area) {
 /** Where the other casting goes in a swap: this casting's side, or the other side when this casting has none. */
 function clSwapTarget(area, mySide) { return (mySide === 'A' || mySide === 'B') ? mySide : (area === 'A' ? 'B' : 'A'); }
 function clSwapAllowed(o, area, mySide) {
-    return !!o.id && o.casting_side === area && mySide !== 'AB' && mySide !== area;
+    return !!o.id && o.casting_side === area && mySide !== 'AB' && mySide !== area
+        && (!clMultiDay() || clDayN === 1) && (o.dayN || 1) === 1;   // a later day's side is that day's own: no swap there
 }
 function clSwapTitle(o, area, mySide) {
     const casting = currentCastings.find(c => c.id === clSelectedCastingId);
@@ -6535,14 +6714,14 @@ function clSwapTitle(o, area, mySide) {
 /** Swap sides with another casting of the cast day (2026-11-06): this casting takes theirs, they take this one's. */
 async function clSwapSides(otherId) {
     const casting = currentCastings.find(c => c.id === clSelectedCastingId);
-    const other = clDay.others.find(o => o.id === otherId);
+    const other = clOthers().find(o => o.id === otherId);
     if (!casting || !other) return;
-    const mySide = ['A', 'B', 'AB'].includes(casting.casting_side) ? casting.casting_side : '';
+    const mySide = clMySide();
     const take = other.casting_side, give = clSwapTarget(take, mySide);
     if (!clSwapAllowed(other, take, mySide)) return;
     const alsoThere = clTakenBy(give).filter(o => o.id !== other.id && o.id !== casting.id);
     const stillThere = clTakenBy(take).filter(o => o.id !== other.id && o.id !== casting.id);
-    const days = clDay.dates.map(clDayLabel).join(', ');
+    const days = clMultiDay() ? clDayLabel(clDateNow()) : clDay.dates.map(clDayLabel).join(', ');
     const msg = `Swap sides on ${days}?\n\n` +
         `Cast ${casting.casting_number || ''} (this job) → Side ${take}\n${clOtherLabel(other)} → Side ${give}` +
         (stillThere.length ? `\n\nNote: Cast ${casting.casting_number || ''} will share Side ${take} with ${stillThere.map(clOtherLabel).join(', ')}.` : '') +
@@ -6557,8 +6736,10 @@ async function clSwapSides(otherId) {
         showToast('Sides not swapped — ' + (err.message || err), 'error');
         return;
     }
-    other.casting_side = give;
+    const otherBase = clDay.others.find(o => o.id === otherId);
+    if (otherBase) otherBase.casting_side = give;
     casting.casting_side = take;
+    clBuildDayViews();
     showToast(`Swapped: Cast ${casting.casting_number || ''} → Side ${take}, ${clOtherLabel(other)} → Side ${give}`, 'success');
     syncClaySideSelect();
     renderCastingLayoutTab();
@@ -6584,7 +6765,7 @@ function renderClayFloat() {
         });
     }
     const casting = currentCastings.find(c => c.id === clSelectedCastingId);
-    const mySide = ['A', 'B', 'AB'].includes(casting?.casting_side) ? casting.casting_side : '';
+    const mySide = clMySide();
     const mine = (area) => mySide === area || mySide === 'AB';
     let tone = 'free', html = '';
     if (!clDay.dates.length) {
@@ -6592,7 +6773,7 @@ function renderClayFloat() {
         html = `<div class="pp-clay-float-title">CAST DAY — NOT KNOWN</div>
             <div class="pp-clay-float-text">This casting has no Cast card on the weekly and no cast date in the portal, so the sides cannot be checked. Schedule it, or enter a Cast Date on the Casting Inventory tab.</div>`;
     } else {
-        const days = clDay.dates.map(clDayLabel).join(', ');
+        const days = clMultiDay() ? `DAY ${clDayN} OF ${clDayCount()} · ${clDayLabel(clDateNow())}` : clDay.dates.map(clDayLabel).join(', ');
         const src = clDay.source === 'weekly' ? 'weekly' : 'portal cast date — this casting has no Cast card on the weekly yet';
         // a condition without a side of its own counts on its casting's side; one with neither shows under "side not set"
         const condOn = (o, area) => { if (!o.cond) return false; const sd = o.cond.side || o.casting_side; return sd === area || sd === 'AB'; };
@@ -6600,7 +6781,7 @@ function renderClayFloat() {
         const sideHtml = (area) => {
             const taken = clTakenBy(area);
             // a condition belongs under its casting; one whose casting sits on the other side gets its own line
-            const condElsewhere = clDay.others.filter(o => condOn(o, area) && !taken.includes(o));
+            const condElsewhere = clOthers().filter(o => condOn(o, area) && !taken.includes(o));
             // Only special conditions with picked tables on this side: the side is taken in part, the rest is open.
             const occ = [...taken, ...condElsewhere];
             const condOnly = occ.length > 0 && occ.every(o => condOn(o, area) && condTablesFor(o.cond.name, area));
@@ -6610,12 +6791,12 @@ function renderClayFloat() {
             const cls = state === 'FREE' ? 'free' : (mine(area) ? 'taken-mine' : 'taken');
             return `<div class="pp-clay-float-side pp-clay-float-${cls}">
                 <div class="pp-clay-float-side-head"><span>SIDE ${area}</span><span>${state}${mine(area) ? ' · THIS CASTING' : ''}</span></div>
-                ${taken.map(o => `<div class="pp-clay-float-line">${clOtherLink(o)}${o.casting_side === 'AB' ? ' (both sides)' : ''}${o.components.length ? '' : (o.inPortal === false ? '' : ' — no forms on file')}${clSwapAllowed(o, area, mySide) ? ` <button type="button" class="pp-clay-swap" data-clay-swap="${escapeAttr(o.id)}" title="${escapeAttr(clSwapTitle(o, area, mySide))}">Swap sides</button>` : ''}</div>${condOn(o, area) ? `<div class="pp-clay-float-cond pp-clay-float-cond-under">↳ special condition: ${escapeHtml(o.cond.name)} — ${escapeHtml(condUsesText(o.cond.name, area))}</div>` : ''}`).join('')}
+                ${taken.map(o => `<div class="pp-clay-float-line">${clOtherLink(o)}${o.casting_side === 'AB' ? ' (both sides)' : ''}${o.split ? ` — its Day ${o.dayN} of ${o.dayCount}: ${o.components.length} form${o.components.length === 1 ? '' : 's'}` : (o.components.length ? '' : (o.inPortal === false ? '' : ' — no forms on file'))}${clSwapAllowed(o, area, mySide) ? ` <button type="button" class="pp-clay-swap" data-clay-swap="${escapeAttr(o.id)}" title="${escapeAttr(clSwapTitle(o, area, mySide))}">Swap sides</button>` : ''}</div>${condOn(o, area) ? `<div class="pp-clay-float-cond pp-clay-float-cond-under">↳ special condition: ${escapeHtml(o.cond.name)} — ${escapeHtml(condUsesText(o.cond.name, area))}</div>` : ''}`).join('')}
                 ${condElsewhere.map(o => `<div class="pp-clay-float-cond">Special condition here: ${escapeHtml(o.cond.name)} (${escapeHtml(condUsesText(o.cond.name, area))}) — ${clOtherLink(o)}${['A', 'B'].includes(o.casting_side) ? ` (that casting is on Side ${o.casting_side})` : ''}</div>`).join('')}
                 ${condOnly && used.size && openT.length ? `<div class="pp-clay-float-open">Open for other jobs: ${escapeHtml(openT.map(t => t.name).join(', '))}</div>` : ''}
             </div>`;
         };
-        const unsetAll = clDay.others.filter(o => !['A', 'B', 'AB'].includes(o.casting_side));
+        const unsetAll = clOthers().filter(o => !['A', 'B', 'AB'].includes(o.casting_side));
         const unset = unsetAll.filter(o => o.inPortal !== false);
         const notPortal = unsetAll.filter(o => o.inPortal === false);
         let fit = '';
@@ -6635,7 +6816,7 @@ function renderClayFloat() {
             }
         } else if (!mySide) tone = 'warn';
         html = `<div class="pp-clay-float-title">CAST DAY · ${escapeHtml(days)}</div>
-            <div class="pp-clay-float-text">${clDay.others.length ? `${clDay.others.length} other casting${clDay.others.length === 1 ? '' : 's'} that day` : 'No other casting that day'} (from the ${src})${mySide ? '' : ' — pick this casting\'s side'}.</div>
+            <div class="pp-clay-float-text">${clOthers().length ? `${clOthers().length} other casting${clOthers().length === 1 ? '' : 's'} that day` : 'No other casting that day'} (from the ${src})${mySide ? '' : ' — pick this casting\'s side'}.</div>
             ${sideHtml('A')}${sideHtml('B')}
             ${unset.length ? `<div class="pp-clay-float-unset">Side not set yet: ${unset.map(o => clOtherLink(o) + (o.cond && !o.cond.side ? ` — <span class="pp-clay-float-cond-inline">${condText(o)}</span>` : '')).join('; ')}</div>` : ''}
             ${notPortal.length ? `<div class="pp-clay-float-also">Also on the weekly's Cast row that day (not portal castings): ${notPortal.map(o => escapeHtml(o.projectName || o.project_number || '?')).join('; ')}</div>` : ''}
@@ -6657,11 +6838,12 @@ function placeClayFloat() {
 window.addEventListener('resize', placeClayFloat, { passive: true });
 
 function syncClaySideSelect() {
-    const casting = currentCastings.find(c => c.id === clSelectedCastingId);
-    const side = ['A', 'B', 'AB'].includes(casting?.casting_side) ? casting.casting_side : '';
+    const side = clMySide();        // the side of the day on screen (a single-day casting: the casting's own side)
     clSelectedArea = side || 'B';   // the layout draws the casting's side; nothing stored = Side B, as before
     const el = document.getElementById('pp-clay-side');
     if (el) el.value = side;
+    const lab = document.getElementById('pp-clay-side-label');
+    if (lab) lab.textContent = clMultiDay() ? `Casting side · Day ${clDayN}` : 'Casting side';
 }
 async function activateCastingLayoutTab() {
     const needsSave = document.getElementById('pp-clay-needs-save');
@@ -6737,6 +6919,8 @@ async function loadLayoutPositionsForSelected() {
             ? await loadLayoutPositions(clSelectedCastingId)
             : [];
         clBases = clSelectedCastingId ? ((await loadLayoutBasesFor([clSelectedCastingId])).get(clSelectedCastingId) || {}) : {};
+        if (clDaysFor !== clSelectedCastingId) { clDaysFor = clSelectedCastingId; clDayN = 1; }
+        clDaysCfg = (clSelectedCastingId && (await loadLayoutDaysFor([clSelectedCastingId])).get(clSelectedCastingId)) || { assign: {}, sides: {} };
         if (Array.isArray(clLayoutPositions) && clLayoutPositions.length) markWorking(clSelectedCastingId, 'Casting Layout', 'Forms laid out', true);
     } catch (e) {
         logger.error('[project-portal] loadLayoutPositions failed:', e);
@@ -6749,11 +6933,12 @@ function renderCastingLayoutTab() {
     const card = document.getElementById('pp-clay-card');
     const errorEl = document.getElementById('pp-clay-error');
     if (!card) return;
+    syncClaySideSelect();        // the side belongs to the day on screen
 
     const casting = currentCastings.find(c => c.id === clSelectedCastingId);
-    const components = currentCastingComponents.get(clSelectedCastingId) || [];
+    const components = clCompsOfDay();     // a casting with 2+ cast days: the forms of the day on screen
     const title = casting
-        ? `${currentProjectNumber} — ${castingLayoutLabel(casting)}`
+        ? `${currentProjectNumber} — ${castingLayoutLabel(casting)}${clMultiDay() ? ` — DAY ${clDayN} of ${clDayCount()} · ${clDayLabel(clDateNow())}` : ''}`
         : 'Casting Layout';
 
     // Both sides, side by side, always (2026-11-06): this casting's forms on its side(s), the other jobs' forms of the
@@ -6766,7 +6951,7 @@ function renderCastingLayoutTab() {
     const cardB = document.createElement('div'); cardB.className = 'pp-clay-card-side'; cardB.dataset.side = 'B';
     card.append(cardA, cardB);
     const quiet = document.createElement('div');
-    const common = { offsetPerSide: clOffsetPerSide, gapBetween: clGapBetween, positions: clLayoutPositions, title, bases: clBases };
+    const common = { offsetPerSide: clOffsetPerSide, gapBetween: clGapBetween, positions: clPositionsOf(components), title, bases: clBases };
     const ownCond = layoutConditionOf(clSelectedCastingId);
     if (ownCond) {
         // Special condition (2026-11-12): the forms are not laid out on the tables. Both sides draw the tables only:
@@ -6815,14 +7000,34 @@ function renderCastingLayoutTab() {
         const placedN = ownHandles.reduce((n, h) => n + h.placed.length, 0);
         clFitInfo = { placed: placedN, total: placedN + (last.staged || []).length, clashes: ownHandles.reduce((n, h) => n + (h.clashes || []).length, 0) };
     } else clFitInfo = null;
+    // Cast days: what did not fit today can be sent to the next day; the bubbles are drop targets for single forms.
+    clOverflowIds = ownHandles.length ? (ownHandles[ownHandles.length - 1].staged || []).map(r => r.componentId).filter(Boolean) : [];
+    renderClayDays();
+    fitClayCard();               // the day row changes how much room is left under it
     renderClayFloat();
+    const dayUnder = (el) => (el && el.closest) ? el.closest('#pp-clay-days [data-clay-day]') : null;
+    const clearDrop = (keep) => document.querySelectorAll('.pp-clay-day-drop').forEach(x => { if (x !== keep) x.classList.remove('pp-clay-day-drop'); });
     for (const handle of ownHandles) {
         attachLayoutDrag(handle, {
             castingId: clSelectedCastingId,
             area: handle.area,
             onCommit: commitLayoutPositions,
             onStagedClick: openBaseModal,
-            onUnplace: unplaceForm
+            onUnplace: unplaceForm,
+            onDragOver: (el) => {
+                const hit = dayUnder(el);
+                const target = hit && Number(hit.dataset.clayDay) !== clDayN ? hit : null;
+                clearDrop(target);
+                if (target) target.classList.add('pp-clay-day-drop');
+            },
+            onDropElsewhere: (rec, ctx, el) => {
+                clearDrop(null);
+                const hit = dayUnder(el);
+                if (!hit) return false;
+                const n = Number(hit.dataset.clayDay);
+                if (n !== clDayN && rec.componentId) clMoveToDay([rec.componentId], n);
+                return true;
+            }
         });
     }
     // The reset button only makes sense once a layout has been customized.
@@ -6901,9 +7106,19 @@ async function commitLayoutPositions(rows) {
 /** Discard the manual layout for the current casting area, back to auto-pack. */
 async function resetCastingLayout() {
     if (!clSelectedCastingId) return;
-    if (!confirm('Discard the manual layout for this casting area and return to automatic packing?')) return;
+    if (!confirm(clMultiDay()
+        ? `Discard the manual layout of Day ${clDayN} (${clDayLabel(clDateNow())}) and return to automatic packing? The other days keep theirs.`
+        : 'Discard the manual layout for this casting area and return to automatic packing?')) return;
     try {
-        for (const area of (clSelectedArea === 'AB' ? ['A', 'B'] : [clSelectedArea])) await clearLayoutPositions(clSelectedCastingId, area);
+        const areas = clSelectedArea === 'AB' ? ['A', 'B'] : [clSelectedArea];
+        if (clMultiDay()) {
+            // only the spots of the forms of the day on screen
+            const ids = new Set(clCompsOfDay().map(c => c.id));
+            const mine = clLayoutPositions.filter(p => ids.has(p.component_id) && areas.includes(p.area === 'A' ? 'A' : 'B'));
+            await Promise.all(mine.map(p => deleteLayoutPosition(p.component_id, p.area === 'A' ? 'A' : 'B')));
+        } else {
+            for (const area of areas) await clearLayoutPositions(clSelectedCastingId, area);
+        }
         await loadLayoutPositionsForSelected();
     } catch (e) {
         logger.error('[project-portal] resetCastingLayout failed:', e);
@@ -9985,17 +10200,24 @@ function wireEvents() {
         if (!casting) return;
         // A side another job already casts on that day: say who, and ask (2026-11-06). The layout then packs this
         // casting into the room they leave.
-        const prevSide = ['A', 'B', 'AB'].includes(casting.casting_side) ? casting.casting_side : '';
+        const dayN = clMultiDay() ? clDayN : 1;
+        const prevSide = clMySide();
         const areas = side === 'AB' ? ['A', 'B'] : side ? [side] : [];
         const taken = [...new Set(areas.flatMap(a => clTakenBy(a).map(o => `Side ${a}: ${clOtherLabel(o)}`)))];
         if (taken.length && clDay.dates.length) {
-            const ok = window.confirm(`On ${clDay.dates.map(clDayLabel).join(', ')} this side is already in use:\n\n${taken.join('\n')}\n\nPut Cast ${casting.casting_number || ''} there too? The layout will pack its forms into the room they leave; their forms show hatched grey.`);
+            const ok = window.confirm(`On ${clMultiDay() ? clDayLabel(clDateNow()) : clDay.dates.map(clDayLabel).join(', ')} this side is already in use:\n\n${taken.join('\n')}\n\nPut Cast ${casting.casting_number || ''} there too? The layout will pack its forms into the room they leave; their forms show hatched grey.`);
             if (!ok) { e.target.value = prevSide; return; }
         }
         try {
+            if (dayN > 1) {
+                // a later cast day keeps its own side with the split; "not set" = the casting's own side again
+                if (side) clDaysCfg.sides[String(dayN)] = side; else delete clDaysCfg.sides[String(dayN)];
+                if (await saveLayoutDays()) showToast(`Cast ${casting.casting_number}, Day ${dayN}: ${side === 'AB' ? 'both sides (A + B)' : side ? 'Side ' + side : "the casting's own side"} — the weekly's Cast card of that day follows on its next refresh.`);
+            } else {
             await updateCasting(casting.id, { casting_side: side });
             casting.casting_side = side;
             showToast(`Cast ${casting.casting_number}: ${side === 'AB' ? 'both sides (A + B)' : side ? 'Side ' + side : 'no side'} — the weekly's Cast cards follow on their next refresh.`);
+            }
         } catch (err) {
             logger.error('[project-portal] casting side save failed:', err);
             showToast(side === 'AB' ? 'Not saved — run migration/casting-side-both.sql in Supabase first' : 'Side not saved — run migration/casting-side.sql in Supabase first', 'error');
@@ -10012,6 +10234,14 @@ function wireEvents() {
         const v = parseFloat(e.target.value);
         clGapBetween = (Number.isFinite(v) && v >= 0) ? v : 0;
         renderCastingLayoutTab();
+    });
+    // Cast days (2026-11-20): pick a day, send the overflow on, undo the split
+    document.getElementById('pp-clay-days')?.addEventListener('click', async (e) => {
+        const send = e.target.closest('[data-clay-send]');
+        if (send) { await clMoveToDay(clOverflowIds.slice(), Number(send.dataset.claySend)); return; }
+        if (e.target.closest('[data-clay-unsplit]')) { await clUnsplit(); return; }
+        const b = e.target.closest('[data-clay-day]');
+        if (b) clSetDay(Number(b.dataset.clayDay));
     });
     document.getElementById('pp-clay-print-btn')?.addEventListener('click', printCastingLayout);
     document.getElementById('pp-clay-reset-btn')?.addEventListener('click', resetCastingLayout);

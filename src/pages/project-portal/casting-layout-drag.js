@@ -210,6 +210,8 @@ function attachMoldHandlers(ctx, g, rec) {
       d.moved = true;
     }
     applyDragTransform(d);
+    // The page may have drop targets outside the drawing (the cast-day bubbles, 2026-11-20): tell it what is under the pointer.
+    if (typeof ctx.onDragOver === 'function') { try { ctx.onDragOver(document.elementFromPoint(evt.clientX, evt.clientY)); } catch (_) { /* noop */ } }
   }
 
   function onPointerUp(evt) {
@@ -224,6 +226,18 @@ function attachMoldHandlers(ctx, g, rec) {
       // a plain click on an overflow form: the page opens its base-size editor (2026-11-06)
       if (rec.staged && typeof ctx.onStagedClick === 'function') ctx.onStagedClick(rec);
       return;
+    }
+
+    // Dropped on something outside the drawing that the page takes (a cast-day bubble): the form goes back to where
+    // it was here and the page does the rest (2026-11-20).
+    if (typeof ctx.onDropElsewhere === 'function') {
+      let under = null;
+      try { under = document.elementFromPoint(evt.clientX, evt.clientY); } catch (_) { /* noop */ }
+      if (under && !ctx.svg.contains(under) && ctx.onDropElsewhere(rec, ctx, under)) {
+        Object.assign(rec, d.original);
+        g.removeAttribute('transform');
+        return;
+      }
     }
 
     d.lastUser = toUserPoint(ctx.svg, evt);
@@ -324,6 +338,8 @@ export function attachLayoutDrag(handle, opts) {
     onCommit: opts && opts.onCommit,
     onStagedClick: opts && opts.onStagedClick,   // (rec) — click on an overflow form
     onUnplace: opts && opts.onUnplace,           // (rec, ctx) — placed form dragged off the tables
+    onDragOver: opts && opts.onDragOver,         // (element under the pointer) — while a form is dragged
+    onDropElsewhere: opts && opts.onDropElsewhere,   // (rec, ctx, element) -> true when the page took the drop
     recById,
   };
   activeContext = ctx;

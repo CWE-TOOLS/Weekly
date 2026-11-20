@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="src/styles/variables.css">
     <link rel="stylesheet" href="src/styles/base.css">
     <link rel="stylesheet" href="src/styles/buttons.css">
-    <link rel="stylesheet" href="src/styles/project-portal.css?v=20261119-8">
+    <link rel="stylesheet" href="src/styles/project-portal.css?v=20261120-1">
 
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 </head>
@@ -555,7 +555,7 @@
                                     <select id="pp-clay-casting" class="pp-clay-select"></select>
                                 </label>
                                 <label class="pp-clay-ctrl" title="Side A / Side B of this casting — the weekly's Cast cards show and edit the same value">
-                                    <span>Casting side</span>
+                                    <span id="pp-clay-side-label">Casting side</span>
                                     <select id="pp-clay-side" class="pp-clay-select">
                                         <option value="">— not set (forms shown on Side B) —</option>
                                         <option value="A">Side A</option>
@@ -575,6 +575,9 @@
                                 <button id="pp-clay-print-btn" class="pp-secondary-btn pp-clay-print" type="button">Print Layout</button>
                                 <button id="pp-clay-reset-btn" class="pp-secondary-btn pp-clay-reset" type="button" hidden>Reset to auto-pack</button>
                             </div>
+
+                            <!-- Cast days (2026-11-20): one bubble per Cast day of the weekly, only for a casting with two or more -->
+                            <div id="pp-clay-days" class="pp-clay-days" hidden></div>
 
                             <div id="pp-clay-fit-result" class="pp-clay-fit-result"></div>
                             <div id="pp-clay-error" class="pp-clay-error"></div>
@@ -1301,7 +1304,7 @@
         <div id="pp-toast" class="pp-toast" hidden></div>
     </div>
 
-    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20261119-7"></script>
+    <script type="module" src="src/pages/project-portal/project-portal-page.js?v=20261120-1"></script>
     <script type="module" src="src/utils/auto-update.js?v=20261023-1"></script>
 </body>
 </html>
