@@ -59,7 +59,7 @@ function summariseCastings(tasks) {
             c = { key, projectNumber: pn, castingNumber: cn, sheetName: String(t.project || '').trim(), firstFinish: null, finishDays: 0, finishDaysDone: 0, lastShip: null, next: null, inv: null, lastDate: null };
             out.set(key, c);
         }
-        if (t.invSummary && !c.inv) c.inv = t.invSummary;
+        if ((t.invCasting || t.invSummary) && !c.inv) c.inv = t.invCasting || t.invSummary;   // the whole casting, never one cast day's share
         if (FINISHING_DEPARTMENTS.includes(t.department)) {
             c.finishDays++;
             if (iso <= now) c.finishDaysDone++;

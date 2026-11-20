@@ -38,7 +38,7 @@ import { loadMilestonesForProjects, parseLayoutCondition } from './milestones-se
 import { getSpecialBatching } from '../config/special-batching.js';
 import { parseDate } from '../utils/date-utils.js';
 import { loadSettingRows } from './schedule-service.js';
-import { LAYOUT_DAYS_PREFIX, normLayoutDays, layoutDayOf, layoutDaysSplit, layoutDaySide, inventoryPieceRows } from '../utils/layout-days.js';
+import { LAYOUT_DAYS_PREFIX, normLayoutDays, resolveLayoutDays, castDayDates, layoutDayOf, layoutDaysSplit, layoutDaySide, inventoryPieceRows } from '../utils/layout-days.js';
 import { setAllTasks, getAllTasks } from '../core/state.js';
 
 import { logger } from '../utils/logger.js';
@@ -549,11 +549,11 @@ export async function enrichTasksWithPieces(tasks) {
             const iso = id ? isoOf(t.date) : '';
             if (!iso) continue;
             const map = t.department === 'Cast' ? castDatesById : demoldDatesById;
-            if (!map.has(id)) map.set(id, new Set());
-            map.get(id).add(iso);
+            if (!map.has(id)) map.set(id, []);
+            map.get(id).push({ iso, day: t.castingDayNumber });   // the card's Staging-tab day: the split's Day n is that card
         }
-        for (const [id, set] of castDatesById) castDatesById.set(id, [...set].sort());
-        for (const [id, set] of demoldDatesById) demoldDatesById.set(id, [...set].sort());
+        for (const [id, cards] of castDatesById) castDatesById.set(id, castDayDates(cards));
+        for (const [id, cards] of demoldDatesById) demoldDatesById.set(id, castDayDates(cards));
         const daysCfgById = new Map();            // casting id -> its stored split (only castings with 2+ Cast days are asked for)
         const dayAccById = new Map();             // SPLIT castings only: casting id -> one tally per cast day
         /** The inventory summary of cast days from..to of a split casting (one day, or several on one Demold day). */
@@ -580,7 +580,8 @@ export async function enrichTasksWithPieces(tasks) {
             const multi = [...castDatesById].filter(([, dates]) => dates.length > 1).map(([id]) => id);
             if (multi.length) {
                 const rows = await loadSettingRows(multi.map(id => LAYOUT_DAYS_PREFIX + id));
-                for (const [k, v] of rows) daysCfgById.set(k.slice(LAYOUT_DAYS_PREFIX.length), normLayoutDays(v));
+                // read against the inventory as it is now: each row keeps its numbers per day (a renamed type, reordered rows)
+                for (const [k, v] of rows) { const id = k.slice(LAYOUT_DAYS_PREFIX.length); daysCfgById.set(id, resolveLayoutDays(v, inventoryByCasting.get(id) || [])); }
             }
             for (const [id, cfg] of daysCfgById) {
                 const nDays = castDatesById.get(id).length;
@@ -693,7 +694,7 @@ export async function enrichTasksWithPieces(tasks) {
             const total = id ? piecesById.get(id) : undefined;
             if (total) { t.piecesCount = total; matched++; }
             const inv = id ? invSummaryById.get(id) : undefined;
-            if (inv) t.invSummary = inv;
+            if (inv) { t.invSummary = inv; t.invCasting = inv; }   // invCasting stays the WHOLE casting (the maps total it); invSummary can become one day's share below
             // A Cast or Demold card of a casting with 2+ cast days: that day's side, and once the casting is split,
             // that day's pieces. Demold day n = Cast day n; a last Demold day with cast days left over carries them all.
             const nCastDays = id ? (castDatesById.get(id) || []).length : 0;

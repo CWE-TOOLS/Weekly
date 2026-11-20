@@ -6,7 +6,16 @@
  * (plant_schedule_settings, key "layout_days:<castingId>"):
  *
  *   { assign: { "<type>#<n>": 2, ... },   // the n-th form of a type (0-based, in Tracking order) -> its day
- *     sides:  { "2": "A", ... } }         // the side of day 2, 3, ... (day 1 = the casting's own side)
+ *     sides:  { "2": "A", ... },          // the side of day 2, 3, ... (day 1 = the casting's own side)
+ *     rows:   { "<inventory row id>": { "2": 11 } } }   // how many pieces of each Casting Inventory row are on day 2, 3, ...
+ *
+ * "rows" is what the split MEANS (11 of this row cast on Day 2); "assign" says which pieces those are. The piece keys
+ * move when the inventory is edited (a type renamed, rows reordered, a quantity changed in another row of the same
+ * type), the row ids do not: wherever the inventory is at hand the split is read through resolveLayoutDays(), which
+ * keeps each row's numbers and re-picks the pieces only when it has to.
+ *
+ * DAY NUMBERS are the Staging tab's day numbers of the casting's Cast cards (castDayDates): Day 2 here is the card
+ * that shows the staging note "Cast - Day 2".
  *
  * Days are numbers (1 = the first Cast day on the weekly), not dates: when the schedule moves, the split moves
  * with it. Only days 2+ are stored; everything else is on Day 1. A casting with nothing stored is "not split":
@@ -23,11 +32,85 @@ export const LAYOUT_DAYS_PREFIX = (typeof window !== 'undefined' && window.__LAY
 /** A stored value made safe: unknown shapes become "nothing stored". */
 export function normLayoutDays(v) {
     const assign = {}, sides = {};
+    let rows = null;
     if (v && typeof v === 'object') {
         for (const [k, d] of Object.entries(v.assign || {})) { const n = parseInt(d, 10); if (n > 1) assign[k] = n; }
         for (const [k, s] of Object.entries(v.sides || {})) { const n = parseInt(k, 10); if (n > 1 && ['A', 'B', 'AB'].includes(s)) sides[String(n)] = s; }
+        if (v.rows && typeof v.rows === 'object') {
+            rows = {};
+            for (const [id, per] of Object.entries(v.rows)) {
+                const out = {};
+                for (const [d, q] of Object.entries(per || {})) { const dn = parseInt(d, 10), qn = parseInt(q, 10); if (dn > 1 && qn > 0) out[String(dn)] = qn; }
+                if (Object.keys(out).length) rows[id] = out;
+            }
+        }
     }
-    return { assign, sides };
+    return rows ? { assign, sides, rows } : { assign, sides };
+}
+
+/** True when nothing is stored: no piece on a later day and no side of a later day. */
+export function layoutDaysEmpty(cfg) {
+    return !cfg || (!Object.keys(cfg.assign || {}).length && !Object.keys(cfg.sides || {}).length);
+}
+
+/** The per-row numbers of a split: { "<inventory row id>": { "2": 11 } }, counted from the pieces. */
+export function layoutDayRows(assign, invRows) {
+    const rows = {};
+    for (const { key, row } of inventoryPieceRows(invRows)) {
+        const d = parseInt(assign && assign[key], 10);
+        if (!(d > 1) || !row.id) continue;
+        if (!rows[row.id]) rows[row.id] = {};
+        rows[row.id][String(d)] = (rows[row.id][String(d)] || 0) + 1;
+    }
+    return rows;
+}
+
+/**
+ * A stored split read against the casting's inventory as it is NOW. Each row keeps the number of pieces it had on
+ * each later day (as many as it still has); the pieces that were on that day stay there, the rest are taken from
+ * the end of the row. A split stored without row numbers, or an inventory that is not at hand, is returned as it is.
+ */
+export function resolveLayoutDays(cfg, invRows) {
+    const c = normLayoutDays(cfg);
+    if (!c.rows || !invRows || !invRows.length) return c;
+    const perRow = new Map();
+    for (const { key, row } of inventoryPieceRows(invRows)) {
+        if (!perRow.has(row.id)) perRow.set(row.id, []);
+        perRow.get(row.id).push(key);
+    }
+    const assign = {};
+    for (const [rowId, keys] of perRow) {
+        const want = c.rows[rowId];
+        if (!want) continue;
+        const free = keys.slice();
+        for (const d of Object.keys(want).map(Number).sort((a, b) => a - b)) {
+            const n = Math.min(want[String(d)], free.length);
+            const pick = free.filter(k => c.assign[k] === d).slice(0, n);
+            for (let i = free.length - 1; i >= 0 && pick.length < n; i--) if (!pick.includes(free[i])) pick.push(free[i]);
+            for (const k of pick) { assign[k] = d; free.splice(free.indexOf(k), 1); }
+        }
+    }
+    return { assign, sides: c.sides, rows: c.rows };
+}
+
+/**
+ * The cast days of a casting from its Cast cards on the weekly: [{ iso, day }] -> the dates, Day 1 first.
+ * `day` is the card's Staging-tab day number: when the cards are numbered 1..n, one date each, Day n here is the
+ * card with that staging day, so the pieces and the staging note of a day always sit on the same card. Cards
+ * numbered any other way (two cards on one date, a gap) fall back to the dates in order.
+ */
+export function castDayDates(cards) {
+    const list = (cards || []).filter(c => c && c.iso);
+    const byDate = [...new Set(list.map(c => c.iso))].sort();
+    const byDay = new Map();
+    for (const c of list) {
+        const n = parseInt(c.day, 10);
+        if (!(n >= 1) || (byDay.has(n) && byDay.get(n) !== c.iso)) return byDate;
+        byDay.set(n, c.iso);
+    }
+    if (byDay.size !== byDate.length) return byDate;
+    for (let n = 1; n <= byDay.size; n++) if (!byDay.has(n)) return byDate;
+    return byDate.map((_, i) => byDay.get(i + 1));
 }
 
 /** The day a form is on. A day the schedule no longer has (the casting went back to fewer days) reads as Day 1. */

@@ -209,7 +209,7 @@ function summarise(tasks) {
             c = { key, projectNumber: pn, castingNumber: cn, sheetName, missing, days: new Map(), orig: new Map(), hours: new Map(), rows: new Map(), inv: null, lastShip: null, lastDate: null, firstDate: null, moved: false };
             out.set(key, c);
         }
-        if (t.invSummary && !c.inv) c.inv = t.invSummary;
+        if ((t.invCasting || t.invSummary) && !c.inv) c.inv = t.invCasting || t.invSummary;   // the whole casting, never one cast day's share
         if (!c.days.has(t.department)) c.days.set(t.department, []);
         c.days.get(t.department).push(iso);
         c.orig.set(`${t.department}|${iso}`, orig);
