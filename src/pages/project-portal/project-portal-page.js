@@ -130,7 +130,7 @@ import {
 } from '../../services/classroom-tasks-service.js';
 import { renderCastingLayout, computeLayoutRects, parseDimension, tableBlockRects, CASTING_AREAS } from './casting-layout.js?v=20261112-1';
 import { attachLayoutDrag } from './casting-layout-drag.js?v=20261120-1';
-import { LAYOUT_DAYS_PREFIX, normLayoutDays, resolveLayoutDays, layoutDayRows, layoutDaysEmpty, layoutDaysCanon, castDayDates, layoutDayOf, layoutDaysSplit, layoutDaySide, placeKeys, inventoryPieceRows, inventoryRowsOfDay, batchDaysStamp } from '../../utils/layout-days.js?v=20261120-7';
+import { LAYOUT_DAYS_PREFIX, normLayoutDays, resolveLayoutDays, layoutDayRows, layoutDaysEmpty, layoutDaysCanon, castDayDates, layoutDayOf, layoutDaysSplit, layoutDaySide, placeKeys, inventoryPieceRows, inventoryRowsOfDay, batchDaysStamp, batchDaysPrinted } from '../../utils/layout-days.js?v=20261120-7';
 import { activateJigListTab } from './jig-list.js?v=20261112-1';
 import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, APPROVALS_TAB_ITEMS } from '../../config/milestones-config.js?v=20261119-1';
 import { SLUMP_TARGET_DEFAULTS, FINAL_BACKUP_PIG_REDUCTION_PCT, parsePigReduction, BT_IMPORT_META, btOverrides, btImportStamp, btStampDate, additiveAmount, batchTotalsRows, renderBatchTotals, clampSlumpTarget, formatSlumpLabel, renderSlumpGraphic, renderBatchTicketCard, BATCH_PRINT_CSS } from '../../services/batch-ticket-render.js';
@@ -5144,12 +5144,13 @@ function stampPrinted(castingIds, milestone) {
 /** Batch tickets printed (2026-11-20). A casting split over its cast days is only green once EVERY day that casts
  *  pieces has been printed; until then it is orange and the note says which day is printed and which is not
  *  (the hover text on the Releasability Board). Not split, or every day printed: the usual stamp. */
-function stampBatchPrinted(castingId, printedDays) {
+function stampBatchPrinted(castingId, last) {
     const info = btDays(castingId);
-    if (!msOn() || !info || !Array.isArray(printedDays)) return stampPrinted([castingId], 'Batching Sheets');
+    if (!msOn() || !info || !last || !Array.isArray(last.printed)) return stampPrinted([castingId], 'Batching Sheets');
     const needed = info.totals.map((t, i) => (t.pcs > 0 ? i + 1 : 0)).filter(Boolean);
-    // this print covers every day that has a batch ticket: a day it did not cover has none, so it is not printed
-    const note = batchDaysStamp(needed, printedDays, msRow(castingId, 'Batching Sheets'), needed.filter(n => !printedDays.includes(n)));
+    // The days are picked in a pop-up (2026-11-20): a day left out of this print keeps what it had (printed before
+    // stays printed). A day with no batch ticket at all never counts as printed.
+    const note = batchDaysStamp(needed, last.printed, msRow(castingId, 'Batching Sheets'), needed.filter(n => !(last.batched || []).includes(n)));
     if (!note) return stampPrinted([castingId], 'Batching Sheets');
     msSet(castingId, 'Batching Sheets', MS.ORANGE, { note, stamp: true });
 }
@@ -16105,30 +16106,118 @@ function handlePrintOptimizer(castingIds) {
 // ---------- Print ----------
 
 
-let btLastPrintedDays = null;     // the cast days the last ticket print covered (a split casting), for the board stamp
+let btLastPrintedDays = null;     // split casting, the last ticket print: { printed: days printed, batched: days that have a ticket to print }
 async function handlePrintBatchTickets(castingId) {
     if (!currentCastings.find(c => c.id === castingId)) return;
     if (!(await printGate([castingId], 'Batching Sheets'))) return;
     await ensureCastDaysForPrint('the batch tickets will');
-    // A split casting with a cast day nobody has batched yet: say so before the board shows the casting as printed.
-    const dayInfo = btDays(castingId);
-    if (dayInfo) {
-        const list = getBatchTicketList(castingId);
-        const missing = dayInfo.totals.map((t, i) => ({ n: i + 1, pcs: t.pcs })).filter(d => d.pcs > 0 && !list.some(t => btDayOf(t) === d.n && parseFloat(t.cuFt) > 0));
-        if (missing.length && missing.length < dayInfo.totals.filter(t => t.pcs > 0).length
-            && !window.confirm(`No batch tickets yet for ${missing.map(d => 'Day ' + d.n).join(' and ')} of this casting (nothing imported on that day's ticket).\n\nPrint the other day${missing.length === dayInfo.nDays - 1 ? '' : 's'} anyway? On the Releasability Board, Batching Sheets stays orange until every day is printed.`)) return;
+    // A casting split over its cast days: pick the days in a pop-up, every day ticked to start with.
+    let days = null;
+    if (btDays(castingId)) {
+        days = await pickBatchPrintDays(castingId);
+        if (!days) return;
     }
     btLastPrintedDays = null;
-    if (handlePrintBatchTicketsNow(castingId) !== false) stampBatchPrinted(castingId, btLastPrintedDays);
+    if (handlePrintBatchTicketsNow(castingId, days) !== false) stampBatchPrinted(castingId, btLastPrintedDays);
 }
-function handlePrintBatchTicketsNow(castingId) {
+/**
+ * Which cast days of a split casting to print (2026-11-20: "pop up default will have both days selected ... if
+ * you're just reprinting one day for whatever reason i need that option"). Resolves the ticked day numbers, or null
+ * when cancelled. A day with no batch ticket yet is listed but cannot be ticked. Nothing to print on any day: no
+ * pop-up, the print's own message follows.
+ */
+let btDaysPickCancel = null;
+function pickBatchPrintDays(castingId) {
     const casting = currentCastings.find(c => c.id === castingId);
-    if (!casting) return false;
-    const list = getBatchTicketList(castingId);
-
-    // Print every color ticket that yields batches; each plan restarts numbering.
+    const info = btDays(castingId);
+    const { printable } = btPrintable(castingId);
+    const dayNs = info ? info.totals.map((t, i) => (t.pcs > 0 ? i + 1 : 0)).filter(Boolean) : [];
+    if (!casting || !info || !printable.length) return Promise.resolve(dayNs);
+    const byDay = new Map();
+    for (const p of printable) {
+        const d = btDayOf(p.ticket);
+        const o = byDay.get(d) || { colors: 0, batches: 0 };
+        o.colors++; o.batches += p.plan.batches.length;
+        byDay.set(d, o);
+    }
+    // what the Releasability Board has for each day so far
+    let before = null;
+    if (msOn()) {
+        const note = batchDaysStamp(dayNs, [], msRow(castingId, 'Batching Sheets'), dayNs.filter(n => !byDay.has(n)));
+        before = note ? batchDaysPrinted(note) : dayNs;
+    }
+    const rows = dayNs.map(n => {
+        const o = byDay.get(n), pcs = info.totals[n - 1].pcs;
+        const what = o
+            ? `${pcs} pc${pcs === 1 ? '' : 's'} \u00b7 ${o.colors > 1 ? o.colors + ' colors \u00b7 ' : ''}${o.batches} batch${o.batches === 1 ? '' : 'es'}`
+            : `${pcs} pc${pcs === 1 ? '' : 's'} \u00b7 no batch ticket yet (nothing imported on this day)`;
+        const state = !o || !before ? '' : before.includes(n)
+            ? '<span class="pp-bt-days-state pp-bt-days-state-done">printed before</span>'
+            : '<span class="pp-bt-days-state">not printed yet</span>';
+        return `<label class="pp-bt-days-row${o ? '' : ' pp-bt-days-row-off'}">
+                <input type="checkbox" data-bt-print-day="${n}"${o ? ' checked' : ' disabled'}>
+                <span class="pp-bt-days-name">Day ${n}</span>
+                <span class="pp-bt-days-date">${escapeHtml(info.dates[n - 1] ? shortDay(info.dates[n - 1]) : '')}</span>
+                <span class="pp-bt-days-what">${escapeHtml(what)}</span>${state}
+            </label>`;
+    }).join('');
+    return new Promise(resolve => {
+        if (btDaysPickCancel) btDaysPickCancel();     // one pop-up at a time: an older one counts as cancelled
+        const el = document.createElement('div');
+        el.id = 'pp-bt-days-modal';
+        el.className = 'pp-modal-backdrop';
+        el.innerHTML = `<div class="pp-modal pp-bt-days-modal" role="dialog" aria-modal="true" aria-labelledby="pp-bt-days-title">
+            <div class="pp-modal-header"><h2 id="pp-bt-days-title">Print batch tickets \u2014 Cast ${escapeHtml(String(casting.casting_number || ''))}</h2><button type="button" class="pp-modal-close" data-bt-days="cancel" aria-label="Close">&times;</button></div>
+            <div class="pp-modal-body">
+                <p class="pp-bt-days-hint">This casting casts over ${dayNs.length} days. Every day is ticked. Untick a day to leave it out, for example when reprinting one day only.</p>
+                <div class="pp-bt-days-list">${rows}</div>
+                <p class="pp-bt-days-foot" data-bt-days-foot></p>
+                <div class="pp-modal-actions">
+                    <button type="button" class="pp-secondary-btn" data-bt-days="cancel">Cancel</button>
+                    <button type="button" class="pp-primary-btn" data-bt-days="print">Print</button>
+                </div>
+            </div></div>`;
+        document.body.appendChild(el);
+        const printBtn = el.querySelector('[data-bt-days="print"]');
+        const foot = el.querySelector('[data-bt-days-foot]');
+        const ticked = () => [...el.querySelectorAll('[data-bt-print-day]:checked')].map(b => parseInt(b.getAttribute('data-bt-print-day'), 10));
+        const sync = () => {
+            const t = ticked();
+            printBtn.disabled = !t.length;
+            printBtn.textContent = !t.length ? 'Print' : t.length === dayNs.length ? (t.length === 2 ? 'Print both days' : `Print all ${t.length} days`) : `Print Day ${t.join(' + ')} only`;
+            // what the board will show after this print
+            const after = new Set([...(before || []), ...t].filter(n => byDay.has(n)));
+            const left = dayNs.filter(n => !after.has(n));
+            foot.textContent = !t.length ? 'Tick at least one day.'
+                : !msOn() ? ''
+                : left.length ? `Releasability Board: Batching Sheets stays orange until Day ${left.join(' and Day ')} ${left.length === 1 ? 'is' : 'are'} printed too.`
+                : 'Releasability Board: Batching Sheets turns green, every day is printed.';
+            foot.classList.toggle('pp-bt-days-foot-warn', !t.length || left.length > 0);
+        };
+        const done = (v) => { btDaysPickCancel = null; document.removeEventListener('keydown', onKey, true); el.remove(); resolve(v); };
+        btDaysPickCancel = () => done(null);
+        const onKey = (e) => {
+            if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(null); }
+            else if (e.key === 'Enter' && !printBtn.disabled) { e.preventDefault(); e.stopPropagation(); done(ticked()); }
+        };
+        document.addEventListener('keydown', onKey, true);
+        el.addEventListener('change', sync);
+        el.addEventListener('click', (e) => {
+            if (e.target === el || e.target.closest('[data-bt-days="cancel"]')) return done(null);
+            if (e.target.closest('[data-bt-days="print"]') && !printBtn.disabled) done(ticked());
+        });
+        sync();
+        printBtn.focus();
+    });
+}
+/** The tickets of a casting that yield batches (what a print covers), and the left-over ones of a split casting. */
+function btPrintable(castingId) {
+    const casting = currentCastings.find(c => c.id === castingId);
     const printable = [];
     const leftOver = [];
+    if (!casting) return { printable, leftOver };
+    const list = getBatchTicketList(castingId);
+    // Every color ticket that yields batches; each plan restarts numbering.
     for (const ticket of list) {
         // split casting: a ticket of a day none of its colour casts on any more is left over, never printed
         if (btDays(castingId) && String(ticket.cuFt ?? '').trim() !== '' && !batchInventoryTotals(castingId, ticket)) { leftOver.push(batchTicketPillLabel(ticket)); continue; }
@@ -16146,6 +16235,14 @@ function handlePrintBatchTicketsNow(castingId) {
         if (!plan.batches.length) continue;
         printable.push({ ticket, activeLog, plan });
     }
+    return { printable, leftOver };
+}
+/** @param {number[]|null} [days] split casting: the cast days to print (picked in the pop-up); none = every ticket */
+function handlePrintBatchTicketsNow(castingId, days = null) {
+    const casting = currentCastings.find(c => c.id === castingId);
+    if (!casting) return false;
+    const { printable: every, leftOver } = btPrintable(castingId);
+    const printable = Array.isArray(days) ? every.filter(p => days.includes(btDayOf(p.ticket))) : every;
 
     if (!printable.length) {
         // Keep the single-ticket error behavior, judged against the active ticket.
@@ -16160,7 +16257,8 @@ function handlePrintBatchTicketsNow(castingId) {
     }
 
     const projectName = document.getElementById('pp-f-project_name')?.value || '';
-    btLastPrintedDays = btDays(castingId) ? [...new Set(printable.map(p => btDayOf(p.ticket)))] : null;
+    btLastPrintedDays = btDays(castingId)
+        ? { printed: [...new Set(printable.map(p => btDayOf(p.ticket)))], batched: [...new Set(every.map(p => btDayOf(p.ticket)))] } : null;
     if (leftOver.length) showToast(`Not printed (nothing of that color casts on that day any more): ${leftOver.join(', ')}`, 'info', 8000);
 
     const pages = printable.map(({ ticket, activeLog, plan }) => {
