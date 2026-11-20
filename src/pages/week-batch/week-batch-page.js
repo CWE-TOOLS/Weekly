@@ -58,27 +58,37 @@ async function fromScheduler() {
     const ids = [...new Set((data || []).map(r => r.casting_id))];
     const casts = ids.length ? (await client.from('project_castings').select('id, project_number, casting_number').in('id', ids)).data || [] : [];
     const byId = new Map(casts.map(c => [c.id, c]));
-    // Cast days (2026-11-20): all Cast rows of those castings, in any week, number their cast days by date.
-    const daysOf = new Map();
-    if (ids.length) {
-        const all = (await client.from('plant_schedule').select('casting_id, date').eq('department', 'Cast').in('casting_id', ids)).data || [];
-        const cards = new Map();
-        for (const r of all) { if (!cards.has(r.casting_id)) cards.set(r.casting_id, []); cards.get(r.casting_id).push({ iso: String(r.date).slice(0, 10) }); }
-        for (const [id, list] of cards) daysOf.set(id, castDayDates(list));
-    }
+    // Cast days (2026-11-20): all Cast rows of those castings, in any week, number their cast days (by date here:
+    // the scheduler row does not carry the staging day; the weekly's own hand-off does).
+    const daysOf = await schedulerCastDays(ids);
     const out = [];
     for (const r of data || []) {
         const c = byId.get(r.casting_id);
         if (!c) continue;
-        const iso = String(r.date).slice(0, 10);
-        const days = daysOf.get(r.casting_id) || [];
-        const dayN = days.indexOf(iso) + 1;
-        const multi = days.length > 1 && dayN > 0;
-        const pn = String(c.project_number).trim(), cn = String(c.casting_number).trim();
-        if (out.some(o => o.projectNumber === pn && o.castingNumber === cn && (!multi || o.dayN === dayN))) continue;
-        out.push({ projectNumber: pn, castingNumber: cn, date: isoToMdy(iso), ...(multi ? { dayN, dayOf: days.length } : {}) });
+        if (out.some(o => o.projectNumber === String(c.project_number) && o.castingNumber === String(c.casting_number))) continue;
+        const item = { projectNumber: String(c.project_number).trim(), castingNumber: String(c.casting_number).trim(), date: isoToMdy(String(r.date).slice(0, 10)) };
+        const days = daysInWeek(daysOf.get(r.casting_id));
+        if (days) item.days = days;
+        out.push(item);
     }
     return out;
+}
+/** Every Cast day of the given castings on the Plant Scheduler: Map casting id -> dates, Day 1 first. */
+async function schedulerCastDays(castingIds) {
+    const out = new Map();
+    if (!castingIds.length) return out;
+    if (!getSupabaseClient()) await initializeSupabase();
+    const all = (await getSupabaseClient().from('plant_schedule').select('casting_id, date').eq('department', 'Cast').in('casting_id', castingIds)).data || [];
+    const cards = new Map();
+    for (const r of all) { if (!cards.has(r.casting_id)) cards.set(r.casting_id, []); cards.get(r.casting_id).push({ iso: String(r.date).slice(0, 10) }); }
+    for (const [id, list] of cards) out.set(id, castDayDates(list));
+    return out;
+}
+/** The cast days of a casting that fall in this week: [{ n, of, date }] (null = it casts on one day only). */
+function daysInWeek(all) {
+    if (!all || all.length < 2) return null;
+    const days = all.map((iso, i) => ({ n: i + 1, of: all.length, iso })).filter(x => x.iso >= WEEK && x.iso <= addDays(WEEK, 6)).map(x => ({ n: x.n, of: x.of, date: isoToMdy(x.iso) }));
+    return days.length ? days : null;
 }
 
 // ---- one project's data -------------------------------------------------------------------------------------------
@@ -139,19 +149,23 @@ async function build() {
     const datas = await Promise.all(pns.map(pn => loadProjectData(pn).catch(err => { logger.error('[week-batch] load failed', pn, err); return { pn, error: err }; })));
     for (const d of datas) S.projects.set(d.pn, d);
     {
-        const seen = new Set(), kept = [];
+        const lines = [];
         for (const it of items) {
             const d = S.projects.get(it.projectNumber);
             const casting = d && !d.error ? d.castings.find(c => String(c.casting_number).trim() === String(it.castingNumber).trim()) : null;
-            const cfg = casting ? d.days.get(casting.id) : null;
-            // (a special job's own page batches the whole casting: one line)
-            const split = !!(casting && !d.special && it.dayOf > 1 && cfg && layoutDaysSplit(cfg, it.dayOf));
-            const key = it.projectNumber + '|' + it.castingNumber + (split ? '|' + it.dayN : '');
-            if (seen.has(key)) continue;
-            seen.add(key);
-            kept.push({ ...it, split, cfg: split ? cfg : null });
+            const cfg = casting && !d.special ? d.days.get(casting.id) : null;     // (a special job's own page batches the whole casting: one line)
+            let days = Array.isArray(it.days) && it.days.length ? it.days : null;
+            // a list made by a weekly tab that was open before this version carries no days: ask the scheduler
+            if (!days && cfg && Object.keys(cfg.assign || {}).length) {
+                try { days = daysInWeek((await schedulerCastDays([casting.id])).get(casting.id)); } catch (e) { logger.warn('[week-batch] cast days of', it.projectNumber, it.castingNumber, 'not read', e); }
+            }
+            const split = !!(cfg && days && layoutDaysSplit(cfg, days[0].of));
+            if (split) for (const day of days) lines.push({ ...it, date: day.date, split: true, dayN: day.n, dayOf: day.of, cfg });
+            else lines.push({ ...it, split: false });
         }
-        items = kept;
+        const order = (a, b) => (mdyToIso(a.date) || '').localeCompare(mdyToIso(b.date) || '') || a.projectNumber.localeCompare(b.projectNumber) || String(a.castingNumber).localeCompare(String(b.castingNumber), undefined, { numeric: true });
+        if (lines.some(l => l.split)) lines.sort(order);
+        items = lines;
         S.items = items;
     }
     const ms = await loadMilestonesForProjects(pns).catch(() => ({ byCasting: new Map(), touched: new Set() }));
@@ -286,7 +300,10 @@ async function stampPrinted() {
     S.stamped = true;
     const now = new Date().toISOString();
     let n = 0;
+    const stamped = new Set();
     for (const r of (S.results || []).filter(r => r.pages && r.casting && r.onBoard)) {
+        if (stamped.has(r.casting.id)) continue;      // a casting split over its cast days is on the list once per day
+        stamped.add(r.casting.id);
         try {
             await saveMilestone({
                 projectNumber: r.projectNumber, castingId: r.casting.id, milestone: 'Batching Sheets',

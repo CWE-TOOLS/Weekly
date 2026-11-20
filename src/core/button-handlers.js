@@ -92,18 +92,19 @@ export function initializeButtonHandlers() {
             const end = new Date(start); end.setDate(end.getDate() + 6); end.setHours(23, 59, 59, 999);
             const items = [];
             const mdy = (t) => /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(t.date || '').trim());
+            const isoOf = (m) => `${m[3]}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`;
             // Cast days (2026-11-20): every Cast card of a casting, in any week, numbers its cast days (Day n = the
-            // card's staging day). A casting split over its cast days prints each day's own tickets, so each of its
-            // cards in this week is handed over with its day; the print page keeps one per casting when it is not split.
+            // card's staging day). The list stays ONE line per casting, exactly as before; a casting with 2+ cast
+            // days also carries its days that fall in this week, and the print page prints a casting that is split
+            // over its cast days once per day (each day's own tickets).
             const cardsBy = new Map();
             for (const t of state.getAllTasks()) {
                 if (t.isManual || String(t.department || '') !== 'Cast') continue;
                 const m = mdy(t);
                 const pn = String(t.projectNumber || '').trim(), cn = String(t.castingNumber || '').trim();
                 if (!m || !pn || !cn) continue;
-                const key = pn + '|' + cn;
-                if (!cardsBy.has(key)) cardsBy.set(key, []);
-                cardsBy.get(key).push({ iso: `${m[3]}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`, day: t.castingDayNumber });
+                if (!cardsBy.has(pn + '|' + cn)) cardsBy.set(pn + '|' + cn, []);
+                cardsBy.get(pn + '|' + cn).push({ iso: isoOf(m), day: t.castingDayNumber });
             }
             for (const t of state.getAllTasks()) {
                 if (t.isManual || String(t.department || '') !== 'Cast') continue;
@@ -112,12 +113,16 @@ export function initializeButtonHandlers() {
                 const d = new Date(Number(m[3]), Number(m[1]) - 1, Number(m[2]));
                 if (d < start || d > end) continue;
                 const pn = String(t.projectNumber || '').trim(), cn = String(t.castingNumber || '').trim();
-                if (!pn || !cn) continue;
-                const days = castDayDates(cardsBy.get(pn + '|' + cn) || []);
-                const dayN = days.indexOf(`${m[3]}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`) + 1;
-                const multi = days.length > 1 && dayN > 0;
-                if (items.some(i => i.projectNumber === pn && i.castingNumber === cn && (!multi || i.dayN === dayN))) continue;
-                items.push({ projectNumber: pn, castingNumber: cn, date: t.date, projectName: t.resolvedProjectName || t.project || '', ...(multi ? { dayN, dayOf: days.length } : {}) });
+                if (!pn || !cn || items.some(i => i.projectNumber === pn && i.castingNumber === cn)) continue;
+                const item = { projectNumber: pn, castingNumber: cn, date: t.date, projectName: t.resolvedProjectName || t.project || '' };
+                const all = castDayDates(cardsBy.get(pn + '|' + cn) || []);
+                if (all.length > 1) {
+                    const days = all.map((isoDay, i) => ({ n: i + 1, of: all.length, isoDay }))
+                        .filter(x => { const dt = new Date(x.isoDay + 'T00:00:00'); return dt >= start && dt <= end; })
+                        .map(x => { const [y, mo, da] = x.isoDay.split('-').map(Number); return { n: x.n, of: x.of, date: `${mo}/${da}/${y}` }; });
+                    if (days.length) item.days = days;
+                }
+                items.push(item);
             }
             if (!items.length) { alert('No castings with a job and cast number are scheduled to cast in this week.'); return; }
             try { sessionStorage.setItem('weekBatchPrint:' + iso(start), JSON.stringify(items)); } catch (_) { /* the page falls back to the scheduler's rows */ }

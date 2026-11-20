@@ -629,7 +629,7 @@ export async function enrichTasksWithPieces(tasks) {
           // Batch tickets per cast day (2026-11-20): a casting split over its cast days has one ticket set per day.
           // Not split: its Day 1 tickets, as always (a ticket an old split left on a later day is not counted).
           const allTickets = ticketsByCasting.get(castingId) || [];
-          const nSplitDays = dayAccById.has(castingId) ? dayAccById.get(castingId).length : 0;
+          const nSplitDays = (dayAccById.has(castingId) && !getSpecialBatching(projectByCastingId.get(castingId))) ? dayAccById.get(castingId).length : 0;
           const ticketSets = nSplitDays
               ? [[0, allTickets.filter(t => ticketDay(t) <= nSplitDays)], ...Array.from({ length: nSplitDays }, (_, i) => [i + 1, allTickets.filter(t => ticketDay(t) === i + 1)])]
               : [[0, allTickets.filter(t => ticketDay(t) === 1)]];
