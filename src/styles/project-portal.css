@@ -7164,3 +7164,10 @@ body.pp-clay-zoom-open { overflow: hidden; }
 .pp-bt-context-day { margin-left: 8px; padding: 2px 8px; border-radius: 10px; background: #ccfbf1; color: #134e4a; font-size: 11px; font-weight: 800; letter-spacing: 0.04em; vertical-align: middle; cursor: help; }
 .pp-clay-days-info { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 8px; padding: 7px 10px; border: 1px solid #bfdbfe; border-radius: 8px; background: #eff6ff; color: #1e3a8a; font-size: 12.5px; line-height: 1.4; }
 .pp-clay-days-info-i { flex: 0 0 18px; width: 18px; height: 18px; border-radius: 50%; background: #2563eb; color: #ffffff; font-size: 12px; font-weight: 800; font-style: italic; font-family: Georgia, serif; text-align: center; line-height: 18px; margin-top: 1px; }
+/* Approvals box (PMs, 2026-11-20): the count reads at a glance - red = none, orange = some, green = all - and the
+   all done / clear all buttons are real buttons, bigger than the P. MANUAL tag. */
+.pp-appr-card .pp-appr-col-count { margin-top: 6px; font-size: 15px; font-weight: 800; letter-spacing: 0.01em; color: #c2410c; }
+.pp-appr-card .pp-appr-col-count.pp-appr-col-count-none { color: #b91c1c; }
+.pp-appr-card .pp-appr-col-count.pp-appr-col-count-done { color: #15803d; }
+.pp-appr-card .pp-appr-all { margin-top: 7px; padding: 6px 16px; border-radius: 6px; font-size: 12.5px; font-weight: 700; background: #1e293b; color: #ffffff; }
+.pp-appr-card .pp-appr-all:hover, .pp-appr-card .pp-appr-all:focus { background: #0f172a; color: #ffffff; box-shadow: none; }

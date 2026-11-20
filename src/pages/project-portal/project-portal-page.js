@@ -3209,7 +3209,7 @@ function renderApprovals() {
         const nGreen = scoped.filter(c => msStatus(c.id, m) === MS.GREEN).length;
         const allGreen = nGreen === scoped.length;
         return `<th><span class="pp-appr-col-name">${escapeHtml(m)}</span><span class="pp-appr-col-tag ${auto ? 'pp-appr-tag-auto' : 'pp-appr-tag-pman'}">${auto ? 'AUTO' : 'P. MANUAL'}</span>
-            <span class="pp-appr-col-count${allGreen ? ' pp-appr-col-count-done' : ''}" title="Castings signed off for ${escapeAttr(m)}">${nGreen} of ${scoped.length} done</span>
+            <span class="pp-appr-col-count${allGreen ? ' pp-appr-col-count-done' : nGreen === 0 ? ' pp-appr-col-count-none' : ''}" title="Castings signed off for ${escapeAttr(m)}: red = none yet, orange = some, green = all">${nGreen} of ${scoped.length} done</span>
             ${auto ? '' : `<button type="button" class="pp-appr-all" data-action="appr-all" data-milestone="${escapeAttr(m)}" data-to="${allGreen ? 'red' : 'green'}" title="${allGreen ? 'Clear every casting' : 'Mark every casting done'}">${allGreen ? 'clear all' : 'all done'}</button>`}</th>`;
     }).join('');
     const rows = scoped.map(c => `<tr><th class="pp-appr-cast">Cast ${escapeHtml(c.casting_number || '')}${c.description ? `<span class="pp-appr-desc">${escapeHtml(c.description)}</span>` : ''}</th>
