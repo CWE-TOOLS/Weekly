@@ -1,0 +1,2462 @@
+/**
+ * Jig List — GFRC Scrim Jig Generator (Project Portal tab)
+ *
+ * Mechanical port of the standalone `jig list tool.html` (S:\!CWE - Tools\
+ * Custom Tools\Jig Making). Generates the plywood scrim-jig cut list,
+ * per-jig profile drawings and the panel cross-section diagram for a project.
+ *
+ * Portal adaptations (behavior otherwise preserved verbatim):
+ *   - localStorage autosave replaced with a debounced per-casting Supabase
+ *     save via jig-list-service (same JSON state shape as the standalone
+ *     tool used, so old exports could be seeded into the table if needed).
+ *   - One jig list per casting: a casting pill row (same look as the Batch
+ *     Tickets tab) selects which casting's list is being edited. A casting
+ *     with no saved list yet is seeded by deep-copying the most recent
+ *     casting that has one (date reset to today) — falling back to the
+ *     project's legacy pre-migration blob, then to the defaults. A toolbar
+ *     "Copy to Casting…" button does the same copy explicitly: it pushes the
+ *     active casting's list/cross-section onto chosen castings, replacing
+ *     whatever they had.
+ *   - The JSON export/import buttons and the editable project-name field are
+ *     removed: Supabase is the source of truth and the printed title always
+ *     mirrors the portal project record (Info tab).
+ *   - Both print paths (Print Jigs, Print Cross-Section) go through a hidden
+ *     print iframe instead of `window.print()`, so only the tool's pages
+ *     print — not the whole portal.
+ *   - The fixed dark toolbars render as normal in-panel bars; the editor and
+ *     generated pages scroll with the tab panel.
+ *   - Every element id is prefixed `jig-` (including the SVG arrow marker,
+ *     `jig-ar`) to avoid collisions with the rest of the portal.
+ *   - "Import from Casting Inventory" (portal-only): fills the Panels table
+ *     from the active casting's inventory. Each distinct part (type + size)
+ *     gets a choice — jig across the short side (default), the long side, a
+ *     custom table-saw jig, a custom CNC jig, or "No jig/scrim" (left out of the
+ *     list on purpose, 2026-11-06; since 2026-11-11 it also means NO SCRIM:
+ *     scrimForInventory in jig-list-service.js leaves the part out of the
+ *     batching scrim line - the part key built in collapseInventory() must stay
+ *     the same as inventoryPartKey() there). Chosen widths within the
+ *     share tolerance (default 1″) become ONE row: W = the narrowest width,
+ *     Wmax = the widest (handle is sized from Wmax), label = every part it
+ *     fits. Choices live in S.inv.choices keyed by type|size, so they survive
+ *     a re-import and carry over when a list is copied to the next casting.
+ *     Rows created by the import carry src:'inv' and are rebuilt on every
+ *     import (their Qty is kept per width); hand-added rows are never touched.
+ *   - Foot depths can be typed "Height check jig" (dp.kind === 'check'): the
+ *     label is then generated — "Height Check Jig · <thickness − depth>″".
+ *   - A casting can carry SEVERAL concrete thicknesses (S.sections[] — each
+ *     {thickness, heights, auto}; S.xsec is kept as an alias of sections[0] so
+ *     older single-thickness data and code keep working). Every panel row
+ *     (p.sec) and every foot depth (dp.sec) belongs to one section by index;
+ *     a jig is only made where the panel's and the depth's section agree.
+ *     The import window assigns a thickness per part (S.inv.secs).
+ *   - The cross-section drives the scrim foot depths: every scrim layer owns
+ *     one depth row (dp.scrim = its index, depth = thickness − height), kept
+ *     in step whenever the cross-section is edited. Rows without dp.scrim are
+ *     hand-added extras (e.g. a height check jig between two scrim layers).
+ *   - Operator cut maps (portal-only): nests the jig blanks (handle width ×
+ *     handle height + foot depth) on the chosen sheet, table-saw style — rip
+ *     strips first, then crosscut, 1/8″ kerf — and prints a takeoff cover,
+ *     parts list, maps and strip schedules following the shop's Material
+ *     Takeoff Workflow rules (page titles / colours, 1/4-sheet rounding).
+ *
+ * Screen styles live in src/styles/project-portal.css scoped under
+ * `.pp-tab-panel[data-panel="jig-list"]`; the print iframe carries its own
+ * copy of the page CSS (PRINT_DOC_CSS below).
+ *
+ * @module pages/project-portal/jig-list
+ */
+
+import { loadJigListsForProject, saveJigListForCasting } from '../../services/jig-list-service.js?v=20261112-1';
+import { loadCastingInventory } from '../../services/inventory-service.js';
+import { logger } from '../../utils/logger.js';
+
+/* ============================ module state ============================ */
+
+let S = null;                    // the ACTIVE casting's state (see defaultState())
+let currentGroup = null;         // null = All
+let measDiv = null;              // hidden measuring div for list pagination
+let currentProjectNumber = null;
+let currentProjectName = '';
+let currentCastings = [];        // phase-scoped, sort-ordered castings from the portal
+let currentCastingId = null;     // active casting (owner of S)
+let stateByCasting = new Map();  // castingId -> state object (loaded + seeded)
+let savedCastingIds = new Set(); // castings known to have a persisted jig_lists row
+let legacyState = null;          // pre-migration project-level blob (seed fallback)
+let uiBuilt = false;
+let activationToken = 0;         // guards against overlapping activations
+
+let saveTimer = null;            // debounced Supabase save
+let pendingSave = null;          // {pn, castingId, state} captured by scheduleSave
+let renderTimer = null;          // debounced output re-render
+let statusTimer = null;          // transient save-status clear
+
+const SAVE_DEBOUNCE_MS = 800;
+
+/* ============================ public API ============================ */
+
+/**
+ * Activate the Jig List tab. Renders the UI on first call; every activation
+ * reloads the project's per-casting jig lists in one query so newly added
+ * castings (and their seeded copies) always appear fresh. Safe to call
+ * repeatedly.
+ * @param {{projectNumber:string, projectName:string, castings:Array}} project
+ *   `castings` is the phase-scoped, sort-ordered casting array from the
+ *   portal (same source the Batch Tickets tab uses).
+ */
+export async function activateJigListTab(project) {
+  const root = document.getElementById('jig-list-root');
+  if (!root) return;
+
+  const projectNumber = project && project.projectNumber ? String(project.projectNumber) : null;
+  const projectName = project && project.projectName ? String(project.projectName) : '';
+  const castings = (project && Array.isArray(project.castings)) ? project.castings : [];
+
+  if (!uiBuilt) { buildShell(root); uiBuilt = true; }
+
+  // Flush any pending save for the casting being left before reloading.
+  flushPendingSave();
+
+  const token = ++activationToken;
+  const prevCastingId = (projectNumber === currentProjectNumber) ? currentCastingId : null;
+  currentProjectNumber = projectNumber;
+  currentProjectName = projectName;
+  currentCastings = castings;
+  currentCastingId = null;
+  S = null;
+  stateByCasting = new Map();
+  savedCastingIds = new Set();
+  legacyState = null;
+
+  let loaded = { byCasting: new Map(), legacy: null };
+  try {
+    if (projectNumber) loaded = await loadJigListsForProject(projectNumber);
+  } catch (err) {
+    logger.error('[jig-list] load failed:', err);
+  }
+  if (token !== activationToken) return;   // superseded by a newer activation
+
+  for (const [castingId, data] of loaded.byCasting) {
+    // Merge over defaults; a row with an unreadable blob counts as absent so
+    // seeding can rebuild it.
+    savedCastingIds.add(castingId);
+    if (data && Array.isArray(data.depths)) {
+      stateByCasting.set(castingId, Object.assign(defaultState(), data));
+    }
+  }
+  legacyState = (loaded.legacy && Array.isArray(loaded.legacy.depths)) ? loaded.legacy : null;
+
+  // No castings in scope → hint instead of the editor (Batch Tickets pattern).
+  if (!currentCastings.length) {
+    setNoCastingsHint(true);
+    renderCastingPills();
+    return;
+  }
+  setNoCastingsHint(false);
+
+  // Keep the previously selected casting if still in scope, else first.
+  const keep = prevCastingId && currentCastings.some(c => c.id === prevCastingId);
+  selectCasting(keep ? prevCastingId : currentCastings[0].id);
+}
+
+/* ================== casting selection + seeding ================== */
+
+function setNoCastingsHint(show) {
+  const hint = document.getElementById('jig-no-castings');
+  const doc = document.getElementById('jig-doc');
+  const bar = document.getElementById('jig-topbar');
+  const vbar = document.getElementById('jig-vbar');
+  if (hint) hint.hidden = !show;
+  if (doc) doc.hidden = show;
+  // .bar is display:flex in CSS, which beats the hidden attribute.
+  if (bar) bar.style.display = show ? 'none' : '';
+  if (show && vbar) { vbar.style.display = 'none'; vbar.innerHTML = ''; }
+}
+
+/** The casting row for the active casting (label for printed titles). */
+function activeCasting() {
+  return currentCastings.find(c => c.id === currentCastingId) || null;
+}
+
+/**
+ * Make a casting active: use its loaded state, or seed one by copying the
+ * most recent casting that has a jig list (date reset to today), falling
+ * back to the legacy project-level blob, then to the defaults. Seeded
+ * copies are persisted immediately.
+ */
+function selectCasting(castingId) {
+  currentCastingId = castingId;
+  window.__ppMilestones?.setJigCasting(castingId);   // the portal's Releasability box follows this tab's casting
+  let st = stateByCasting.get(castingId);
+  let persistSeed = false;
+  if (!st) {
+    const seed = buildSeedState(castingId);
+    st = seed.state;
+    persistSeed = seed.fromCopy;
+    stateByCasting.set(castingId, st);
+  }
+  S = st;
+  if (st && st.inv && st.inv.importedAt) window.__ppMilestones?.markWorking(castingId, 'Jig List', 'Imported from Casting Inventory', true);
+  normalizeSections();
+  syncDepthsFromXsec(true);
+  // The printed title always mirrors the portal project record (Info tab),
+  // even for states saved under an older project name.
+  if (currentProjectName) S.project = currentProjectName;
+  currentGroup = null;
+  renderCastingPills();
+  buildEditor();
+  renderOutput();
+  updateJigFloats();
+  // Persist a seeded-from-copy state right away so the copy survives.
+  if (persistSeed) scheduleSave();
+}
+
+/**
+ * Build the initial state for a casting with no saved jig list.
+ * @returns {{state:Object, fromCopy:boolean}} fromCopy=true when the state
+ *   was copied from another casting / the legacy blob (should be persisted).
+ */
+function buildSeedState(castingId) {
+  // Most recent casting WITH a jig list = highest sort_order = last in the
+  // sorted array (excluding the casting being seeded).
+  for (let i = currentCastings.length - 1; i >= 0; i--) {
+    const c = currentCastings[i];
+    if (c.id === castingId) continue;
+    const src = stateByCasting.get(c.id);
+    if (src) {
+      const st = structuredClone(src);
+      st.date = todayISO();
+      return { state: st, fromCopy: true };
+    }
+  }
+  if (legacyState) {
+    const st = structuredClone(Object.assign(defaultState(), legacyState));
+    st.date = todayISO();
+    return { state: st, fromCopy: true };
+  }
+  return { state: freshState(), fromCopy: false };
+}
+
+/* ===================== casting pill row ===================== */
+
+function renderCastingPills() {
+  const copyBtn = document.getElementById('jig-btn-copy');
+  if (copyBtn) copyBtn.disabled = currentCastings.length < 2;
+  const pills = document.getElementById('jig-casting-pills');
+  if (!pills) return;
+  // .pp-bt-pills is display:flex in CSS, which beats the hidden attribute.
+  if (!currentCastings.length) { pills.innerHTML = ''; pills.style.display = 'none'; return; }
+  pills.style.display = '';
+  pills.innerHTML = currentCastings.map(c => {
+    const active = c.id === currentCastingId ? ' pp-bt-pill-active' : '';
+    const date = c.casting_date ? `<span class="pp-bt-pill-date">${esc(c.casting_date)}</span>` : '';
+    return `<button type="button" class="pp-bt-pill${active}" data-jig-pill data-casting-id="${esc(c.id)}">${esc(c.casting_number || '')}${date}</button>`;
+  }).join('');
+}
+
+/* ===================== floating boxes (2026-10-14) ==================== */
+/* Once the casting pills / toolbar scroll up under the portal header, a copy of the casting pills and a
+   box with the print buttons float at the right (like the Batch Tickets tab), so you can switch castings
+   and print without scrolling back to the top. */
+let floatCastsEl = null, floatPrintEl = null;
+function jigPanelVisible(){
+  const root = document.getElementById('jig-list-root');
+  return !!root && !root.closest('[hidden]') && root.offsetParent !== null;
+}
+function jigHeaderBottom(){ const o = window.__ppMilestones?.topOffset?.(); return typeof o === 'number' ? o : (document.querySelector('.pp-header')?.getBoundingClientRect().bottom || 0); }
+function updateJigFloats(){
+  const vis = jigPanelVisible() && !!S;
+  const limit = jigHeaderBottom() + 4;
+  const pills = document.getElementById('jig-casting-pills');
+  const showCasts = vis && pills && pills.style.display !== 'none' && pills.children.length > 0 && pills.getBoundingClientRect().bottom < limit;
+  if (!showCasts){ if (floatCastsEl) floatCastsEl.hidden = true; }
+  else {
+    if (!floatCastsEl){
+      floatCastsEl = document.createElement('div');
+      floatCastsEl.id = 'pp-jig-casts-float';
+      floatCastsEl.className = 'pp-bt-casts-float pp-jig-float';
+      document.body.appendChild(floatCastsEl);
+      floatCastsEl.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-float-cast]');
+        if (b) handleSelectCasting(b.dataset.floatCast);
+      });
+    }
+    const key = currentCastingId + '|' + currentCastings.map(c => c.id + ':' + (c.casting_number || '') + ':' + (c.casting_date || '')).join(',');
+    if (floatCastsEl.dataset.key !== key){
+      floatCastsEl.innerHTML = `<div class="pp-bt-casts-float-title">Castings</div><div class="pp-bt-casts-float-list">${currentCastings.map(c =>
+        `<button type="button" class="pp-bt-pill${c.id === currentCastingId ? ' pp-bt-pill-active' : ''}" data-float-cast="${esc(c.id)}">${esc(c.casting_number || '')}${c.casting_date ? `<span class="pp-bt-pill-date">${esc(c.casting_date)}</span>` : ''}</button>`).join('')}</div>`;
+      floatCastsEl.dataset.key = key;
+    }
+    floatCastsEl.style.top = Math.round(jigHeaderBottom() + 12) + 'px';
+    floatCastsEl.hidden = false;
+  }
+  const bar = document.getElementById('jig-topbar');
+  const showPrint = vis && bar && bar.getBoundingClientRect().bottom < limit;
+  if (!showPrint){ if (floatPrintEl) floatPrintEl.hidden = true; return; }
+  if (!floatPrintEl){
+    floatPrintEl = document.createElement('div');
+    floatPrintEl.id = 'pp-jig-print-float';
+    floatPrintEl.className = 'pp-bt-casts-float pp-jig-float';
+    floatPrintEl.innerHTML = `<div class="pp-bt-casts-float-title">Print</div><div class="pp-jig-float-btns">
+      <button type="button" data-float-print="jigs">Print Jigs</button>
+      <button type="button" data-float-print="cut">Print Cut Maps</button>
+      <button type="button" data-float-print="xsec">Print Cross-Section</button>
+      <button type="button" data-float-print="all" class="all">Print All</button></div>`;
+    document.body.appendChild(floatPrintEl);
+    floatPrintEl.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-float-print]');
+      if (!b) return;
+      ({ jigs: printJigs, cut: printCutMaps, xsec: printXsec, all: printAll })[b.dataset.floatPrint]?.();
+    });
+  }
+  const below = (floatCastsEl && !floatCastsEl.hidden) ? floatCastsEl.getBoundingClientRect().bottom + 8 : jigHeaderBottom() + 12;
+  floatPrintEl.style.top = Math.round(below) + 'px';
+  floatPrintEl.hidden = false;
+}
+window.addEventListener('scroll', updateJigFloats, { passive: true });
+document.addEventListener('scroll', updateJigFloats, { passive: true, capture: true });
+window.addEventListener('resize', updateJigFloats, { passive: true });
+
+function handleSelectCasting(castingId) {
+  if (!castingId || castingId === currentCastingId) return;
+  // Flush the pending save for the casting we're leaving so its DB state
+  // matches the editor before switching.
+  flushPendingSave();
+  selectCasting(castingId);
+}
+
+/* ================== copy to another casting ================== */
+
+/** Open the copy modal listing every OTHER casting in scope as a target. */
+function openCopyModal() {
+  if (!S || !currentCastingId) return;
+  const targets = currentCastings.filter(c => c.id !== currentCastingId);
+  if (!targets.length) return;
+  const src = activeCasting();
+  document.getElementById('jig-copy-hint').innerHTML =
+    `Copy casting <b>${esc((src && src.casting_number) || '')}</b>’s jig list and cross-section onto the selected castings. Targets that already have a jig list are <b>replaced</b>.`;
+  document.getElementById('jig-copy-list').innerHTML = targets.map(c => {
+    const date = c.casting_date ? ` <span class="pp-pl-desc">${esc(c.casting_date)}</span>` : '';
+    const status = savedCastingIds.has(c.id)
+      ? '<span class="pp-pl-color">has a jig list — will be replaced</span>'
+      : '<span class="pp-pl-color pp-pl-color-empty">no jig list yet</span>';
+    return `<label class="pp-print-label-row"><input type="checkbox" value="${esc(c.id)}"><span class="pp-pl-cast">${esc(c.casting_number || '')}</span>${date}${status}</label>`;
+  }).join('');
+  document.getElementById('jig-copy-all').checked = false;
+  updateCopyConfirmState();
+  document.getElementById('jig-copy-modal').hidden = false;
+}
+
+function closeCopyModal() {
+  document.getElementById('jig-copy-modal').hidden = true;
+}
+
+function updateCopyConfirmState() {
+  const any = !!document.querySelector('#jig-copy-list input:checked');
+  document.getElementById('jig-copy-confirm').disabled = !any;
+}
+
+/**
+ * Copy the active casting's state onto every checked target (deep clone,
+ * date reset to today — same rules as seeding) and persist each copy
+ * immediately so it survives without the target ever being opened.
+ */
+async function confirmCopy() {
+  const ids = [...document.querySelectorAll('#jig-copy-list input:checked')].map(cb => cb.value);
+  if (!ids.length || !S || !currentProjectNumber) return;
+  closeCopyModal();
+  setSaveStatus('Copying…', false);
+  let failed = 0;
+  for (const targetId of ids) {
+    const clone = structuredClone(S);
+    clone.date = todayISO();
+    stateByCasting.set(targetId, clone);
+    try {
+      await saveJigListForCasting(currentProjectNumber, targetId, clone);
+      savedCastingIds.add(targetId);
+    } catch (err) {
+      if (err && err.pendingMigration) {
+        setSaveStatus('Not saved — DB migration pending', false, true);
+        return;
+      }
+      failed++;
+      logger.error('[jig-list] copy failed:', err);
+    }
+  }
+  if (failed) setSaveStatus(`Copy failed for ${failed} casting${failed === 1 ? '' : 's'}`, true, true);
+  else setSaveStatus(`Copied to ${ids.length} casting${ids.length === 1 ? '' : 's'}`, true);
+}
+
+/* ============================ state ============================ */
+
+function todayISO(){ const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
+function defaultState(){
+  return {
+    project:'New Project', date:todayISO(),
+    overhang:'4', clearance:'1', handleH:'1-1/2',
+    depths:[ {d:'1/2', label:'First Scrim', scrim:0}, {d:'1/4', label:'Second Scrim', scrim:1} ],
+    panels:[ {label:'', W:'', qty:'', group:''} ],
+    xsec: defaultXsec()
+  };
+}
+/** defaultState() with the project name prefilled from the portal project. */
+function freshState(){
+  const st = defaultState();
+  if (currentProjectName) st.project = currentProjectName;
+  return st;
+}
+function defaultXsec(){ return { thickness:'3/4', heights:['1/4','1/2'], auto:true }; }
+/**
+ * S.sections = the casting's concrete thicknesses. Lists saved before this existed carry
+ * only S.xsec — it becomes sections[0]. S.xsec always stays the same object as sections[0].
+ */
+function normalizeSections(){
+  if (!Array.isArray(S.sections) || !S.sections.length){
+    fixXsec();
+    S.sections = [S.xsec];
+  }
+  S.sections.forEach(sec => {
+    if (!Array.isArray(sec.heights)) sec.heights = [];
+    if (sec.thickness == null) sec.thickness = '';
+    // sec.auto: the scrim heights follow the thickness (even split) until one is typed by hand.
+    if (sec.auto == null) sec.auto = xsecIsEvenSplit(sec);
+  });
+  S.xsec = S.sections[0];
+  S.panels.forEach(p => { if (!(p.sec >= 0 && p.sec < S.sections.length)) p.sec = 0; });
+  S.depths.forEach(dp => { if (!(dp.sec >= 0 && dp.sec < S.sections.length)) dp.sec = 0; });
+}
+/** Section (thickness) a panel / depth belongs to. */
+function secOf(o){ return S.sections[(o && o.sec) || 0] || S.sections[0]; }
+function secT16(o){ return parseInches(secOf(o).thickness); }
+/** "1″" — used to tag labels when a casting has more than one thickness. */
+function secTag(o){ const T = secT16(o); return T != null ? fmt16(T) + '″' : '?″'; }
+const multiSec = () => S.sections.length > 1;
+/** Layer type of layer i in a section: '' = scrim (default), 'check' = height check.
+ *  "No scrim" ticked on the thickness (2026-10-26) makes every layer a height check. */
+function layerKind(sec, i){ return (sec.noScrim || (sec.kinds && sec.kinds[i] === 'check')) ? 'check' : ''; }
+/** Which scrim a scrim layer is (1-based, counting scrim layers only) — 0 for a height check. */
+function scrimNo(sec, i){
+  if (layerKind(sec, i) === 'check') return 0;
+  let n = 0;
+  for (let k = 0; k <= i; k++) if (layerKind(sec, k) !== 'check') n++;
+  return n;
+}
+/** Short name of a layer for drawings / tables: "Scrim 2" or "Height check". */
+function layerName(sec, i){
+  return layerKind(sec, i) === 'check' ? 'Height check' : 'Scrim ' + scrimNo(sec, i);
+}
+/* Legacy projects have no cross-section: derive one from the foot depths
+   (scrim depth from top → height from bottom = thickness − depth).
+   Total thickness isn't in legacy data, so it falls back to the 3/4″ default. */
+function fixXsec(){
+  if (S.xsec && Array.isArray(S.xsec.heights)) return;
+  const T = parseInches(defaultXsec().thickness);
+  const heights = (S.depths || [])
+    .map(dp => parseInches(dp.d))
+    .filter(v => v != null && v > 0 && v < T)
+    .map(v => fmt16(T - v));
+  S.xsec = { thickness: defaultXsec().thickness, heights: heights.length ? heights : defaultXsec().heights };
+}
+
+/* =================== persistence (Supabase) =================== */
+
+function scheduleSave(){
+  if (!currentProjectNumber || !currentCastingId || !S) return;
+  clearTimeout(saveTimer);
+  pendingSave = { pn: currentProjectNumber, castingId: currentCastingId, state: S };
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    const p = pendingSave; pendingSave = null;
+    if (p) doSave(p.pn, p.castingId, p.state);
+  }, SAVE_DEBOUNCE_MS);
+}
+/** Fire a pending debounced save immediately (casting/project switch). */
+function flushPendingSave(){
+  if (!saveTimer) return;
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  const p = pendingSave; pendingSave = null;
+  if (p) doSave(p.pn, p.castingId, p.state);
+}
+async function doSave(projectNumber, castingId, state){
+  if (!projectNumber || !castingId || !state) return;
+  setSaveStatus('Saving…', false);
+  try {
+    await saveJigListForCasting(projectNumber, castingId, state);
+    savedCastingIds.add(castingId);
+    setSaveStatus('Saved', true);
+  } catch (err) {
+    if (err && err.pendingMigration) {
+      // DB not migrated yet — the service already warned once; keep the
+      // status visible without spamming errors.
+      setSaveStatus('Not saved — DB migration pending', false, true);
+      return;
+    }
+    logger.error('[jig-list] save failed:', err);
+    setSaveStatus('Save failed', true, true);
+  }
+}
+function setSaveStatus(text, transient, isErr){
+  const el = document.getElementById('jig-save-status');
+  if (!el) return;
+  el.textContent = text;
+  el.style.color = isErr ? '#b91c1c' : '';
+  clearTimeout(statusTimer);
+  if (transient) statusTimer = setTimeout(() => { if (el.textContent === text) el.textContent = ''; }, 2000);
+}
+
+/* ===================== inch ⇄ sixteenths ====================== */
+function parseInches(s){
+  if (s == null) return null;
+  s = String(s).trim().replace(/["″]/g,'').replace(/\s+/g,' ');
+  if (!s) return null;
+  let m = s.match(/^(\d+)[\s-](\d+)\/(\d+)$/);            // 44-1/8 or 44 1/8
+  if (m) return (+m[1])*16 + Math.round((+m[2])*16/(+m[3]));
+  m = s.match(/^(\d+)\/(\d+)$/);                          // 1/8
+  if (m) return Math.round((+m[1])*16/(+m[2]));
+  m = s.match(/^\d*\.?\d+$/);                             // 44 or 44.125
+  if (m) return Math.round(parseFloat(s)*16);
+  return null;
+}
+function fmt16(v){
+  if (v == null) return '?';
+  const neg = v < 0; v = Math.abs(v);
+  let whole = Math.trunc(v/16), r = v - whole*16;
+  let out;
+  if (r === 0) out = '' + whole;
+  else { const g = (a,b)=> b? g(b,a%b): a; const k = g(r,16); out = (whole? whole+'-':'') + (r/k) + '/' + (16/k); }
+  return (neg? '-':'') + out;
+}
+
+/* ============================ jigs ============================ */
+function activeGroups(){
+  const seen = []; S.panels.forEach(p=>{ const g=(p.group||'').trim(); if(g && !seen.includes(g)) seen.push(g); });
+  return seen;
+}
+function buildJigs(){
+  const over = parseInches(S.overhang) || 0;
+  const clr  = parseInches(S.clearance) || 0;
+  let src = S.panels;
+  if (currentGroup) src = src.filter(p => (p.group||'').trim() === currentGroup);
+  // Custom jigs with no width (CNC / table saw) are not drawn — listed as reminders.
+  const customs = src.filter(p => p.custom && !(parseInches(p.W) > 0))
+                     .map(p => ({ label:(p.label||'').trim() || '?', kind:p.custom, qty:(p.qty||'').trim() }));
+  const panels = src.map((p,i)=>({ label:(p.label||'').trim(), W:p.W, qty:p.qty, w16:parseInches(p.W),
+                                   max16:parseInches(p.Wmax), custom:p.custom || '', sec:p.sec || 0, T16:secT16(p), idx:i }))
+                    .filter(p => p.w16 != null && p.w16 > 0);
+  // duplicate-width detection
+  const byW = {};
+  panels.forEach(p => { (byW[p.w16] = byW[p.w16] || []).push(p.label || '?'); });
+  const jigs = []; let n = 0;
+  panels.forEach((p, pi) => {
+    const others = [...new Set(byW[p.w16])].filter(l => l !== (p.label || '?'));
+    // A shared jig (import) spans widths W…Wmax: foot from the narrowest, handle from the widest.
+    const hi16 = (p.max16 != null && p.max16 > p.w16) ? p.max16 : p.w16;
+    const notes = [];
+    if (p.custom) notes.push('custom — ' + customLabel(p.custom));
+    if (others.length) notes.push('same as / igual que ' + others.join(', '));
+    const note = notes.join(' · ');
+    const foot = p.w16 - clr, handle = hi16 + over;
+    S.depths.forEach(dp => {
+      if ((dp.sec || 0) !== p.sec) return;                           // depth belongs to another thickness
+      if (dp.scrim != null && parseInches(dp.d) == null) return;   // that scrim's height isn't filled in yet
+      n++;
+      const d16 = parseInches(dp.d) || 0;
+      jigs.push({
+        n, pi, label: p.label || ('Panel ' + (pi+1)), qty: p.qty,
+        W: fmt16(p.w16), foot: fmt16(foot), handle: fmt16(handle), foot16: foot, handle16: handle,
+        depth: fmt16(d16), depth16: d16, depthLabel: depthLabelOf(dp), kind: dp.kind || '', note, T16: p.T16
+      });
+    });
+  });
+  return { jigs, over, clr, customs };
+}
+function customLabel(kind){ return kind === 'cnc' ? 'CNC' : 'custom'; }
+/* Printed pages are bilingual (2026-10-14): English first, Spanish in a muted italic (.es). */
+function es(txt){ return `<span class="es">${txt}</span>`; }
+function esBlock(txt){ return `<span class="es es-block">${txt}</span>`; }
+const N_ES = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+/** Label of a foot depth. "Height check jig" depths get a generated label
+    carrying the concrete height the jig checks (thickness − foot depth). */
+function depthLabelOf(dp){
+  if (!dp) return '';
+  const T = secT16(dp);
+  const pre = multiSec() ? secTag(dp) + ' · ' : '';
+  if (dp.scrim != null && dp.kind !== 'check'){
+    // Linked scrim layer: "First Scrim" counted among the scrim layers of its thickness.
+    const n = scrimNo(secOf(dp), dp.scrim);
+    return pre + ((SCRIM_ORDINALS[n - 1] || ('#' + n)) + ' Scrim');
+  }
+  if (dp.kind !== 'check') return pre + ((dp.label || '').trim());
+  const d = parseInches(dp.d);
+  if (T != null && d != null && d >= 0 && d < T) return `${pre}Height Check Jig · ${fmt16(T - d)}″`;
+  return pre + 'Height Check Jig';
+}
+
+/* ===================== output page builders ==================== */
+
+/**
+ * Title line for generated/printed pages: the project name plus the active
+ * casting (e.g. "Project Name — Casting 2") so per-casting printouts are
+ * distinguishable. The casting suffix is display-only — S.project itself
+ * stays the bare portal project name in the saved state.
+ */
+function projTitle(){
+  const c = activeCasting();
+  const num = c ? String(c.casting_number || '').trim() : '';
+  if (!num) return S.project;
+  const label = /^cast/i.test(num) ? num : ('Casting ' + num);
+  return S.project + ' — ' + label;
+}
+/* Retained from the source tool for parity — the source defines it but
+   renderOutput() never calls it (output starts straight at the jig list). */
+function instrPage(over, clr){
+  const overStr = fmt16(over), clrStr = fmt16(clr);
+  const overHalf = fmt16(Math.round(over/2)), clrHalf = fmt16(Math.round(clr/2));
+  const depthList = S.depths.map(d => `<b>${fmt16(parseInches(d.d)||0)}″</b> ${d.label||''}`).join(' &nbsp;·&nbsp; ');
+  return `<section class="page">
+    <div class="titlerow"><h1>Scrim Jigs — How They Work</h1>
+      <div class="meta">${esc(projTitle())}<br>${esc(S.date)}</div></div>
+    <p class="rules" style="margin-top:0">Each jig is <b>one piece of plywood</b> cut to a T-outline. It spans the panel width and
+      <b>rides on top of the two form side walls</b>; the foot drops into the cavity and sets the depth the scrim is pressed to.</p>
+    <svg class="instr-svg" viewBox="0 0 700 350" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Scrim jig profile">
+      <rect class="wl" x="190" y="170" width="40" height="75"/>
+      <rect class="wl" x="470" y="170" width="40" height="75"/>
+      <polygon class="pl" points="190,90 510,90 510,170 455,170 455,210 245,210 245,170 190,170"/>
+      <text class="rlbl" x="350" y="138" text-anchor="middle">HANDLE</text>
+      <text class="rlbl" x="350" y="197" text-anchor="middle">FOOT</text>
+      <line class="scr" x1="230" y1="210" x2="470" y2="210"/>
+      <text class="il" x="350" y="228" text-anchor="middle" style="fill:#555;font-style:normal;font-size:12px">scrim is pressed to this depth</text>
+      <line class="de" x1="190" y1="86" x2="190" y2="62"/><line class="de" x1="510" y1="86" x2="510" y2="62"/>
+      <line class="dl" x1="190" y1="68" x2="510" y2="68" marker-start="url(#jig-ar)" marker-end="url(#jig-ar)"/>
+      <text class="dnum" x="350" y="58" text-anchor="middle">HANDLE WIDTH = panel width + ${overStr}″  (${overHalf}″ overhang each side)</text>
+      <line class="de" x1="186" y1="90" x2="158" y2="90"/><line class="de" x1="186" y1="170" x2="158" y2="170"/>
+      <line class="dl" x1="164" y1="90" x2="164" y2="170" marker-start="url(#jig-ar)" marker-end="url(#jig-ar)"/>
+      <text class="dnum" x="152" y="134" text-anchor="end">${esc(S.handleH)}″</text>
+      <line class="de" x1="514" y1="170" x2="552" y2="170"/><line class="de" x1="514" y1="210" x2="552" y2="210"/>
+      <line class="dl" x1="546" y1="170" x2="546" y2="210" marker-start="url(#jig-ar)" marker-end="url(#jig-ar)"/>
+      <text class="dnum" x="556" y="178" text-anchor="start">FOOT DEPTH</text>
+      <text class="dnum" x="556" y="194" text-anchor="start" style="font-size:11px">= scrim depth</text>
+      <line class="de" x1="245" y1="214" x2="245" y2="266"/><line class="de" x1="455" y1="214" x2="455" y2="266"/>
+      <line class="dl" x1="245" y1="262" x2="455" y2="262" marker-start="url(#jig-ar)" marker-end="url(#jig-ar)"/>
+      <text class="dnum" x="350" y="256" text-anchor="middle">FOOT WIDTH = panel width − ${clrStr}″</text>
+      <line class="de" x1="230" y1="249" x2="230" y2="292"/><line class="de" x1="470" y1="249" x2="470" y2="292"/>
+      <line class="dl" x1="230" y1="286" x2="470" y2="286" marker-start="url(#jig-ar)" marker-end="url(#jig-ar)"/>
+      <text class="dnum" x="350" y="307" text-anchor="middle">PANEL WIDTH (W)</text>
+      <rect class="pl" x="40" y="306" width="16" height="12" style="stroke-width:1"/>
+      <text class="rlbl" x="62" y="316" style="font-weight:400;font-size:12px">Plywood jig — one piece</text>
+      <rect class="wl" x="40" y="326" width="16" height="12"/>
+      <text class="rlbl" x="62" y="336" style="font-weight:400;font-size:12px">Form side wall</text>
+    </svg>
+    <ul class="rules">
+      <li><b>Handle</b> — width = panel width <b>+ ${overStr}″</b> (${overHalf}″ overhang each side); height <b>${esc(S.handleH)}″</b>.</li>
+      <li><b>Foot</b> — width = panel width <b>− ${clrStr}″</b> (${clrHalf}″ clearance each side); height = the scrim depth.</li>
+      <li><b>Depths this project:</b> ${depthList}. One jig is cut per panel width for <b>each</b> depth.</li>
+      <li>Profile drawings are schematic — height exaggerated. Widths are the real cut dimensions.</li>
+    </ul>
+    <div class="pfoot"><span>Scrim Jigs · ${esc(projTitle())}</span><span>Page 1 — Instructions</span></div>
+  </section>`;
+}
+
+function rowHTML(j){
+  return `<tr class="${j.pi % 2 ? 'w1' : ''}">
+       <td class="c">${j.n}</td>
+       <td class="b"${j.label.length > 14 ? ' style="white-space:normal"' : ''}>${esc(j.label)}${j.depthLabel ? ' · ' + esc(j.depthLabel) : ''}</td>
+       <td class="c">${j.depth}″</td>
+       <td>${j.foot}″</td>
+       <td>${j.handle}″</td>
+       <td class="c">${esc(S.handleH)}″</td>
+       <td style="color:#b23">${esc(j.note)}</td>
+     </tr>`;
+}
+function listHeadHTML(over, clr){
+  return `<thead><tr>
+    <th style="width:5%" class="c">#</th>
+    <th style="width:19%">Jig${es('Plantilla')}</th>
+    <th style="width:10%" class="c">Foot depth${es('Prof. del pie')}</th>
+    <th style="width:16%">Foot width${es('Ancho del pie')}<br><span style="font-weight:400;color:#666">(W − ${fmt16(clr)}″)</span></th>
+    <th style="width:16%">Handle width${es('Ancho del mango')}<br><span style="font-weight:400;color:#666">(W + ${fmt16(over)}″)</span></th>
+    <th style="width:12%" class="c">Handle height${es('Alto del mango')}</th>
+    <th style="width:22%">Notes${es('Notas')}</th>
+  </tr></thead>`;
+}
+
+function measurer(){
+  if (!measDiv){ measDiv = document.createElement('div');
+    measDiv.style.cssText = 'position:absolute;left:-10000px;top:0;width:7.5in;visibility:hidden';
+    const root = document.getElementById('jig-list-root');
+    (root || document.body).appendChild(measDiv); }
+  return measDiv;
+}
+const PRINT_CONTENT_PX = 950;     // usable height inside the 10.9in print box
+
+function buildListPages(jigs, opt){
+  const d = measurer();
+  const rows = jigs.map(rowHTML);
+  d.innerHTML = `<div class="titlerow"><h1>${opt.title}</h1><div class="meta">${opt.summary?opt.summary+'<br>':''}x<br>x</div></div>`
+    + `<table class="list">${opt.listHead}<tbody>${rows.join('')}</tbody></table>` + opt.legend;
+  const rect = el => el.getBoundingClientRect().height;
+  const titleH  = rect(d.querySelector('.titlerow')) + 16;
+  const theadH  = rect(d.querySelector('thead'));
+  const rowH    = [...d.querySelectorAll('tbody tr')].map(rect);
+  const legendH = rect(d.querySelector('.listnote')) + 12;
+  const avail = PRINT_CONTENT_PX - titleH - theadH - 6;
+
+  const pages = []; let cur = [], h = 0;
+  for (let i = 0; i < rowH.length; i++){
+    if (cur.length && h + rowH[i] > avail){ pages.push(cur); cur = []; h = 0; }
+    cur.push(i); h += rowH[i];
+  }
+  if (cur.length) pages.push(cur);
+
+  let legendPage = pages.length - 1;
+  const lastH = pages[legendPage].reduce((s,i)=> s + rowH[i], 0);
+  if (lastH + legendH > avail){
+    const prev = pages[pages.length - 1]; const moved = []; let mh = legendH;
+    while (prev.length > 1){
+      const idx = prev[prev.length - 1];
+      if (mh + rowH[idx] > avail) break;
+      const prevH = prev.reduce((s,i)=> s + rowH[i], 0);
+      if (prevH <= mh + rowH[idx]) break;
+      prev.pop(); moved.unshift(idx); mh += rowH[idx];
+    }
+    pages.push(moved); legendPage = pages.length - 1;
+  }
+
+  let html = '';
+  pages.forEach((grp, pi) => {
+    const pageNo = opt.page0 + pi;
+    const body = grp.map(i => rows[i]).join('');
+    const range = grp.length ? `${grp[0]+1}–${grp[grp.length-1]+1}` : 'notes';
+    const meta = grp.length ? `Jigs ${range} of ${jigs.length} · Plantillas ${range} de ${jigs.length}` : 'Notes · Notas';
+    html += `<section class="page">
+      <div class="titlerow"><h1>${opt.title}</h1>
+        <div class="meta"><b style="font-size:13px;color:#333">${esc(projTitle())}</b><br>${opt.summary?opt.summary+'<br>':''}${meta}<br>${esc(S.date)}</div></div>
+      ${grp.length ? `<table class="list">${opt.listHead}<tbody>${body}</tbody></table>` : ''}
+      ${pi === legendPage ? opt.legend : ''}
+      <div class="pfoot"><span>Scrim Jigs / Plantillas de malla · ${esc(projTitle())}</span><span>Page / Página ${pageNo} — Jig List / Lista de plantillas (${range})</span></div>
+    </section>`;
+  });
+  return { html, n: pages.length };
+}
+
+function cardSVG(j){
+  const T = j.T16;
+  const hasT = T != null && T > 0;
+  const h16 = (hasT && j.depth16 > 0 && j.depth16 < T) ? T - j.depth16 : null;
+  // concrete depth (left) and scrim height from face (right); schematic like the rest of the profile
+  let dims = '';
+  if (hasT){
+    dims += `<line class="de" x1="46" y1="205" x2="30" y2="205"/>
+    <line class="dl" x1="36" y1="130" x2="36" y2="205" marker-start="url(#jig-ar)" marker-end="url(#jig-ar)"/>
+    <text class="dnum" x="28" y="163" text-anchor="end">${fmt16(T)}″</text>
+    <text class="dnum" x="28" y="176" text-anchor="end" style="font-size:9px;fill:#666">conc</text>`;
+  }
+  if (h16 != null){
+    dims += `<line class="de" x1="314" y1="205" x2="340" y2="205"/>
+    <line class="dl" x1="334" y1="165" x2="334" y2="205" marker-start="url(#jig-ar)" marker-end="url(#jig-ar)"/>
+    <text class="dnum" x="337" y="186" text-anchor="start">${fmt16(h16)}″</text>
+    <text class="dnum" x="337" y="198" text-anchor="start" style="font-size:9px;fill:#666">to face / a la cara</text>`;
+  }
+  return `<svg class="cardsvg" viewBox="-30 0 420 250" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" role="img">
+    <rect x="75" y="130" width="210" height="75" style="fill:#d6d6d6;stroke:#8a8a8a;stroke-width:.7"/>
+    <rect class="wl" x="50" y="130" width="25" height="75"/><rect class="wl" x="285" y="130" width="25" height="75"/>
+    <polygon class="pl" points="50,65 310,65 310,130 275,130 275,165 85,165 85,130 50,130"/>
+    <line class="scr" x1="75" y1="165" x2="285" y2="165"/>
+    <text class="rlbl" x="180" y="103" text-anchor="middle">HANDLE / MANGO</text>
+    <text class="rlbl" x="180" y="152" text-anchor="middle">FOOT / PIE</text>
+    <text class="il" x="180" y="190" text-anchor="middle" style="font-size:9px;fill:#555">concrete / concreto</text>
+    <line class="de" x1="50" y1="61" x2="50" y2="44"/><line class="de" x1="310" y1="61" x2="310" y2="44"/>
+    <line class="dl" x1="50" y1="50" x2="310" y2="50" marker-start="url(#jig-ar)" marker-end="url(#jig-ar)"/>
+    <text class="dnum" x="180" y="40" text-anchor="middle">Handle / Mango ${j.handle}″</text>
+    <line class="de" x1="46" y1="65" x2="30" y2="65"/><line class="de" x1="46" y1="130" x2="30" y2="130"/>
+    <line class="dl" x1="36" y1="65" x2="36" y2="130" marker-start="url(#jig-ar)" marker-end="url(#jig-ar)"/>
+    <text class="dnum" x="28" y="101" text-anchor="end">${esc(S.handleH)}″</text>
+    <line class="de" x1="314" y1="130" x2="340" y2="130"/><line class="de" x1="314" y1="165" x2="340" y2="165"/>
+    <line class="dl" x1="334" y1="130" x2="334" y2="165" marker-start="url(#jig-ar)" marker-end="url(#jig-ar)"/>
+    <text class="dnum" x="337" y="151" text-anchor="start">${j.depth}″</text>
+    ${dims}
+    <line class="de" x1="85" y1="169" x2="85" y2="228"/><line class="de" x1="275" y1="169" x2="275" y2="228"/>
+    <line class="dl" x1="85" y1="224" x2="275" y2="224" marker-start="url(#jig-ar)" marker-end="url(#jig-ar)"/>
+    <text class="dnum" x="180" y="241" text-anchor="middle">Foot / Pie ${j.foot}″</text>
+  </svg>`;
+}
+function cardConc(j){
+  const T = j.T16;
+  if (T == null || T <= 0) return '';
+  const h16 = (j.depth16 > 0 && j.depth16 < T) ? T - j.depth16 : null;
+  return ` &nbsp;·&nbsp; <b>Conc</b> ${fmt16(T)}″${h16 != null ? ` · <b>${j.kind === 'check' ? 'Height / Altura' : 'Scrim / Malla'}</b> ${fmt16(h16)}″ up from face / desde la cara` : ''}`;
+}
+function card(j){
+  return `<div class="card">
+    <div class="card-h"><span class="jno">JIG ${esc(j.label)}</span><span class="jid">${esc(j.depthLabel)}</span></div>
+    ${j.qty ? `<div class="qtybig"><span class="num">${esc(j.qty)}</span><span class="lab">QTY · CANT.</span></div>` : ''}
+    ${cardSVG(j)}
+    <div class="card-f"><b>Jig / Plantilla ${j.n}</b> &nbsp;·&nbsp; <b>Handle / Mango</b> ${j.handle}″ × ${esc(S.handleH)}″ &nbsp;·&nbsp; <b>Foot / Pie</b> ${j.foot}″ × ${j.depth}″ &nbsp;·&nbsp; from W / de ancho W ${j.W}″${cardConc(j)}${j.note?` &nbsp;·&nbsp; <span style="color:#b23">${esc(j.note)}</span>`:''}</div>
+  </div>`;
+}
+function drawingPages(jigs, opt){
+  let html = ''; const T = jigs.length, PER = 4;
+  for (let i = 0; i < T; i += PER){
+    const group = jigs.slice(i, i+PER);
+    const a = i+1, b = Math.min(i+PER, T);
+    const pageNo = opt.page0 + i/PER;
+    html += `<section class="page">
+      <div class="titlerow"><h1>${opt.title}</h1>
+        <div class="meta"><b style="font-size:13px;color:#333">${esc(projTitle())}</b><br>${opt.summary?opt.summary+'<br>':''}Jigs ${a}–${b} of ${T} · Plantillas ${a}–${b} de ${T}<br>${esc(S.date)}</div></div>
+      <div class="grid">${group.map(card).join('')}</div>
+      <div class="pfoot"><span>Scrim Jigs / Plantillas de malla · ${esc(projTitle())}</span><span>Page / Página ${pageNo} — Drawings / Dibujos ${a}–${b}</span></div>
+    </section>`;
+  }
+  return html;
+}
+
+/* ===================== render the document ==================== */
+function renderOutput(){
+  if (!S) return;
+  renderCutSummary();
+  document.querySelectorAll('#jig-xsec-list [data-xsec]').forEach(blk => {
+    const el = blk.querySelector('[data-xsec-cnc]');
+    if (el) el.innerHTML = cncNoteHTML(+blk.dataset.xsec);
+  });
+  // validate the active group still exists
+  const groups = activeGroups();
+  if (currentGroup && !groups.includes(currentGroup)) currentGroup = null;
+  buildPrintSetBar(groups);
+
+  const out = document.getElementById('jig-output');
+  if (!out) return;
+
+  const { html, jigs } = jigPagesHTML();
+  if (!jigs.length){
+    out.innerHTML = `<div class="emptyhint">Add at least one panel with a valid width — and at least one foot depth — to generate jigs.</div>`;
+    updateJigFloats();
+    return;
+  }
+  out.innerHTML = html;
+  updateJigFloats();
+}
+
+/** Jig list + drawing pages for the current print set (currentGroup; null = all groups). */
+function jigPagesHTML(){
+  const { jigs, over, clr, customs } = buildJigs();
+  if (!jigs.length) return { html: '', jigs };
+
+  const widths = new Set(jigs.map(j => j.W)).size;
+  const summaryBase = currentGroup ? `${esc(currentGroup)} · ${widths} widths · ${jigs.length} jigs`
+                                   : `${widths} widths · ${jigs.length} jigs`;
+  const customNote = customs.length
+    ? `<b style="color:#b23">Custom jigs / Plantillas a medida — not drawn here / no dibujadas aquí:</b> ${customs.map(c =>
+        `${esc(c.label)} — ${customLabel(c.kind)}${c.qty ? ' ×' + esc(c.qty) : ''}`).join('; ')}<br>`
+    : '';
+  const clrSide = fmt16(Math.round(clr/2)), overSide = fmt16(Math.round(over/2));
+  const legend = `<p class="listnote">${customNote}
+      <b>Foot depth</b> = how deep the scrim is pressed; one jig per depth listed.
+      Cut each jig from <b>one piece of plywood</b>: the foot is ${clrSide}″ narrower per side so it drops into the form, and the handle overhangs ${overSide}″ per side to ride on the form walls.<br>
+      <b style="color:#b23">“same as …”</b> = another panel shares this width — cut the jig once and reuse it.
+      ${esBlock(`<b>Prof. del pie</b> = qué tan profundo se presiona la malla; una plantilla por cada profundidad listada.
+      Corte cada plantilla de <b>una sola pieza de madera contrachapada</b>: el pie es ${clrSide}″ más angosto por lado para que entre en el molde, y el mango sobresale ${overSide}″ por lado para apoyarse en las paredes del molde.<br>
+      <b style="color:#b23">“igual que …”</b> = otro panel comparte este ancho — corte la plantilla una vez y reutilícela.`)}</p>`;
+  const listHead = listHeadHTML(over, clr);
+
+  let html = '', page0list = 1;   // no explanatory page — start straight at the jig list
+
+  const title = currentGroup
+    ? `${esc(currentGroup)} — Jig List${es(`${esc(currentGroup)} — Lista de plantillas`)}`
+    : `Jig List — ${jigs.length} Jigs${es(`Lista de plantillas — ${N_ES(jigs.length, 'plantilla', 'plantillas')}`)}`;
+  const L = buildListPages(jigs, { title, summary: currentGroup ? summaryBase : '', legend, page0: page0list, listHead });
+  html += L.html;
+  html += drawingPages(jigs, { title: currentGroup ? `${esc(currentGroup)} — Jig Drawings${es(`${esc(currentGroup)} — Dibujos de plantillas`)}` : `Individual Jig Drawings${es('Dibujos de cada plantilla')}`,
+                               summary: currentGroup ? summaryBase : '', page0: page0list + L.n });
+  return { html, jigs };
+}
+
+/* ===================== print-set bar ==================== */
+function buildPrintSetBar(groups){
+  const bar = document.getElementById('jig-vbar');
+  if (!bar) return;
+  if (!groups.length){ bar.style.display = 'none'; bar.innerHTML = ''; return; }
+  bar.style.display = 'flex';
+  let html = '<span class="vlab">Print set:</span>'
+    + `<button type="button" data-g="" class="${currentGroup?'':'active'}">All</button>`;
+  groups.forEach(g => html += `<button type="button" data-g="${esc(g)}" class="${currentGroup===g?'active':''}">${esc(g)}</button>`);
+  bar.innerHTML = html;
+  bar.querySelectorAll('button').forEach(btn => btn.onclick = () => {
+    currentGroup = btn.dataset.g || null;
+    renderOutput();
+    // Portal adaptation: the panel scrolls, not the window — bring the
+    // regenerated output into view (source scrolled past the editor).
+    const out = document.getElementById('jig-output');
+    if (out) out.scrollIntoView({ block: 'start' });
+  });
+}
+
+/* ============================ editor ========================== */
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+/* ==================== cross-section designer =================== */
+function buildXsecList(){
+  const host = document.getElementById('jig-xsec-list');
+  if (!host) return;
+  host.innerHTML = S.sections.map((sec, si) => `
+    <div class="xsec-block" data-xsec="${si}">
+      ${multiSec() ? `<div class="xsec-head"><b>Thickness ${si + 1}</b>
+        <button type="button" class="xsec-del" data-act="del-xsec" data-si="${si}" title="Remove this thickness">× remove</button></div>` : ''}
+      <div class="fields" data-xsec-fields></div>
+      <div class="fields" data-xsec-heights style="margin-top:10px"></div>
+      <div class="xsec-wrap" data-xsec-preview></div>
+      <div data-xsec-cnc></div>
+      <div class="warn" data-xsec-warn></div>
+      <div class="toolrow"><button type="button" data-act="even-xsec" data-si="${si}" title="Space the layers evenly through the concrete thickness">↕ Split layers evenly</button></div>
+    </div>`).join('');
+  S.sections.forEach((sec, si) => { buildXsecFields(si); renderXsec(si); });
+}
+function xsecBlock(si){ return document.querySelector(`#jig-xsec-list [data-xsec="${si}"]`); }
+function buildXsecFields(si){
+  const sec = S.sections[si], blk = xsecBlock(si);
+  if (!blk) return;
+  blk.querySelector('[data-xsec-fields]').innerHTML =
+    `<div class="fld"><label>Total concrete thickness</label>
+       <input data-sec="xsec" data-si="${si}" data-field="thickness" value="${esc(sec.thickness)}" style="width:140px" placeholder="3/4">
+       <span class="u">inches</span></div>
+     <div class="fld"><label># of layers</label>
+       <input type="number" min="0" max="10" data-sec="xsec" data-si="${si}" data-field="count" value="${sec.heights.length}" style="width:80px">
+       <span class="u">layers</span></div>
+     <div class="fld"><label>Scrim</label>
+       <label class="xsec-noscrim" title="Tick when this thickness gets no scrim at all. Every layer becomes a height check, the cross-section says NO SCRIM, and the batching tickets' scrim line shows none.">
+         <input type="checkbox" data-sec="xsec" data-si="${si}" data-field="noscrim"${sec.noScrim ? ' checked' : ''}> No scrim</label></div>`;
+  buildXsecHeights(si);
+}
+function buildXsecHeights(si){
+  const sec = S.sections[si], blk = xsecBlock(si);
+  if (!blk) return;
+  blk.querySelector('[data-xsec-heights]').innerHTML = sec.heights.map((h,i)=>
+    `<div class="fld"><label>Layer ${i+1}</label>
+       <select data-sec="xsec" data-si="${si}" data-field="kind" data-idx="${i}" class="xsec-kind"${sec.noScrim ? ' title="No scrim is ticked for this thickness — every layer is a height check"' : ''}>
+         <option value=""${layerKind(sec, i) === 'check' ? '' : ' selected'}${sec.noScrim ? ' disabled' : ''}>Scrim</option>
+         <option value="check"${layerKind(sec, i) === 'check' ? ' selected' : ''}>Height check</option></select>
+       <input data-sec="xsec" data-si="${si}" data-field="h" data-idx="${i}" value="${esc(h)}" style="width:110px" placeholder="1/4">
+       <span class="u">from bottom</span></div>`).join('');
+}
+
+/** Scrim heights that split the concrete thickness evenly (n scrims -> n+1 equal layers), to the 1/16″. */
+function evenScrimHeights(sec, n){
+  const T = parseInches(sec.thickness);
+  if (T == null || T <= 0 || n < 1) return null;
+  return Array.from({ length: n }, (_, i) => fmt16(Math.round(T * (i + 1) / (n + 1))));
+}
+/** True when the current heights are empty or exactly the even split of the current thickness. */
+function xsecIsEvenSplit(sec){
+  const hs = sec.heights;
+  if (hs.every(h => !(h || '').trim())) return true;
+  const even = evenScrimHeights(sec, hs.length);
+  return !!even && hs.every((h, i) => parseInches(h) === parseInches(even[i]));
+}
+function xsecScrims(sec, T){
+  return sec.heights
+    .map((h,i)=>({ n:i+1, v:parseInches(h), kind: layerKind(sec, i), name: layerName(sec, i) }))
+    .filter(o => o.v != null && o.v > 0 && (T == null || o.v < T))
+    .sort((a,b)=> a.v - b.v);
+}
+function xsecSVG(sec){
+  const T = parseInches(sec.thickness);
+  if (T == null || T <= 0) return null;
+  const scr = xsecScrims(sec, T);
+  const top = 46, bot = 316, H = bot - top, x1 = 150, x2 = 400;
+  const vbW = x2 + 60 + Math.max(1, scr.length) * 58;
+  const y = v => bot - (v / T) * H;
+  let s = `<svg viewBox="0 0 ${vbW} 366" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Concrete panel cross-section with scrim layers">`;
+  // concrete slab
+  s += `<rect class="conc" x="${x1}" y="${top}" width="${x2-x1}" height="${H}"/>`;
+  if (sec.noScrim) s += `<text class="rlbl" x="${(x1+x2)/2}" y="${top-14}" text-anchor="middle" style="font-size:15px;font-weight:700;fill:#b91c1c">NO SCRIM — height checks only / SIN MALLA</text>`;
+  s += `<text class="il" x="${(x1+x2)/2}" y="${bot+20}" text-anchor="middle">bottom of panel (face) — ${sec.noScrim ? 'heights' : 'scrim heights'} measured from here</text>`;
+  s += `<text class="il" x="${(x1+x2)/2}" y="${bot+34}" text-anchor="middle">fondo del panel (cara) — las alturas de malla se miden desde aquí</text>`;
+  // overall thickness dimension (left)
+  s += `<line class="de" x1="${x1-4}" y1="${top}" x2="${x1-40}" y2="${top}"/>`;
+  s += `<line class="de" x1="${x1-4}" y1="${bot}" x2="${x1-40}" y2="${bot}"/>`;
+  s += `<line class="dl" x1="${x1-32}" y1="${top}" x2="${x1-32}" y2="${bot}" marker-start="url(#jig-ar)" marker-end="url(#jig-ar)"/>`;
+  s += `<text class="dnum" x="${x1-40}" y="${(top+bot)/2-3}" text-anchor="end">${fmt16(T)}″</text>`;
+  s += `<text class="dnum" x="${x1-40}" y="${(top+bot)/2+13}" text-anchor="end" style="font-size:10px;fill:#666">overall / total</text>`;
+  // scrim lines + stacked height dimensions (right)
+  scr.forEach((o,k)=>{
+    const yy = y(o.v), dx = x2 + 36 + k*58;
+    s += `<line class="${o.kind === 'check' ? 'chk' : 'scr'}" x1="${x1-6}" y1="${yy}" x2="${x2+6}" y2="${yy}" style="stroke-width:1.4"/>`;
+    s += `<text class="rlbl" x="${x1+8}" y="${yy-5}" text-anchor="start" style="font-size:10px">${esc(o.name.toUpperCase())}</text>`;
+    s += `<line class="de" x1="${x2+8}" y1="${yy}" x2="${dx+8}" y2="${yy}"/>`;
+    s += `<line class="de" x1="${x2+8}" y1="${bot}" x2="${dx+8}" y2="${bot}"/>`;
+    s += `<line class="dl" x1="${dx}" y1="${yy}" x2="${dx}" y2="${bot}" marker-start="url(#jig-ar)" marker-end="url(#jig-ar)"/>`;
+    s += `<text class="dnum" x="${dx}" y="${yy-8}" text-anchor="middle">${fmt16(o.v)}″</text>`;
+  });
+  return s + '</svg>';
+}
+function renderXsec(si){
+  const sec = S.sections[si], blk = xsecBlock(si);
+  if (!blk) return;
+  const svg = xsecSVG(sec);
+  blk.querySelector('[data-xsec-preview]').innerHTML =
+    svg || '<p class="hint" style="margin:8px 0">Enter a total thickness to draw the section.</p>';
+  blk.querySelector('[data-xsec-cnc]').innerHTML = cncNoteHTML(si);
+  const T = parseInches(sec.thickness);
+  const bad = [];
+  sec.heights.forEach((h,i)=>{
+    const v = parseInches(h);
+    if ((h||'').trim() && v == null) bad.push(`Layer ${i+1} height is unreadable`);
+    else if (v != null && T != null && v >= T) bad.push(`Layer ${i+1} (${fmt16(v)}″) is at or above the total thickness`);
+  });
+  if (multiSec() && T != null && S.sections.some((o, k) => k !== si && parseInches(o.thickness) === T))
+    bad.push(`Another thickness is also ${fmt16(T)}″ — use one entry per thickness`);
+  blk.querySelector('[data-xsec-warn]').textContent = bad.join(' · ');
+}
+/**
+ * "CNC-cut jigs" call-out for the cross-section sheet — on a CNC job that sheet is the only
+ * thing printed from this tab, so it has to say how the jigs are made. Empty when no panel
+ * is set to Custom CNC.
+ */
+function cncNoteHTML(si){
+  // With several thicknesses each sheet only speaks for its own parts.
+  const mine = multiSec() ? S.panels.filter(p => (p.sec || 0) === si) : S.panels;
+  const cnc = [...new Set(mine.filter(p => p.custom === 'cnc').map(p => (p.label || '').trim() || '?'))];
+  if (!cnc.length) return '';
+  const sawCut = mine.some(p => p.custom !== 'cnc' && parseInches(p.W) > 0);
+  const list = ` <b>${cnc.map(esc).join(', ')}</b>`;
+  return `<div class="cncnote"><span class="cnctag">CNC-CUT JIGS · PLANTILLAS CNC</span> `
+    + (sawCut
+        ? `The jigs for these parts are <b>cut on the CNC</b> (custom shape) — not on the table saw, and not on the jig list or cut maps:`
+        : `<b>All jigs for ${multiSec() ? 'the ' + secTag({ sec: si }) + ' parts' : 'this casting'} are cut on the CNC</b> (custom shape) — there is no table-saw jig list or cut map. Parts:`)
+    + list
+    + esBlock(sawCut
+        ? `Las plantillas de estas piezas se <b>cortan en el CNC</b> (forma especial) — no en la sierra de mesa, y no aparecen en la lista de plantillas ni en los mapas de corte:${list}`
+        : `<b>Todas las plantillas de ${multiSec() ? 'las piezas de ' + secTag({ sec: si }) : 'esta colada'} se cortan en el CNC</b> (forma especial) — no hay lista de plantillas ni mapa de corte para la sierra de mesa. Piezas:${list}`)
+    + `</div>`;
+}
+/** Inner HTML of the cross-section print page (goes inside a `.page`). */
+function xsecPrintHTML(si){
+  const sec = S.sections[si];
+  const T = parseInches(sec.thickness);
+  const svg = xsecSVG(sec);
+  const rows = xsecScrims(sec, T).map(o =>
+    `<tr><td class="c">${o.n}</td><td class="b">${esc(o.name)}</td><td>${fmt16(o.v)}″ from bottom${es(' · desde abajo')}</td><td>${fmt16(T - o.v)}″ from top${es(' · desde arriba')}</td></tr>`).join('');
+  const parts = multiSec()
+    ? [...new Set(S.panels.filter(p => (p.sec || 0) === si && ((p.label || '').trim())).map(p => p.label.trim()))]
+    : [];
+  const thk = T != null ? fmt16(T) + '″' : '?';
+  const hasScrim = xsecScrims(sec, T).some(o => o.kind !== 'check'), hasCheck = xsecScrims(sec, T).some(o => o.kind === 'check');
+  const kindEn = sec.noScrim ? 'NO SCRIM — Height Check Layers' : hasScrim ? (hasCheck ? 'Scrim & Height Check Layers' : 'Scrim Placement') : 'Height Check Layers';
+  const kindEs = sec.noScrim ? 'SIN MALLA — Niveles de verificación de altura' : hasScrim ? (hasCheck ? 'Capas de malla y verificación de altura' : 'Posición de la malla') : 'Niveles de verificación de altura';
+  return `
+    <div class="titlerow"><h1>Panel Cross-Section${multiSec() ? ' — ' + thk : ''} — ${kindEn}${es(`Sección transversal del panel${multiSec() ? ' — ' + thk : ''} — ${kindEs}`)}</h1>
+      <div class="meta"><b style="font-size:13px;color:#333">${esc(projTitle())}</b><br>${multiSec() ? `Thickness ${si + 1} of ${S.sections.length} · Espesor ${si + 1} de ${S.sections.length}<br>` : ''}${esc(S.date)}</div></div>
+    ${parts.length ? `<p class="rules" style="margin:0 0 4px"><b>${thk} parts / piezas:</b> ${parts.map(esc).join(', ')}</p>` : ''}
+    <div class="xsec-wrap" style="margin-top:0.15in">${svg || '<p>No section — enter a total concrete thickness.</p>'}</div>
+    ${rows ? `<table class="list" style="margin-top:0.15in"><thead><tr>
+      <th style="width:8%" class="c">#</th><th style="width:24%">Layer${es('Capa')}</th><th style="width:34%">Height from bottom${es('Altura desde abajo')}</th><th style="width:34%">Depth from top${es('Profundidad desde arriba')}</th>
+    </tr></thead><tbody>${rows}</tbody></table>` : ''}
+    <p class="listnote">Total concrete thickness <b>${thk}</b>.
+      Grey = concrete; dashed lines = scrim layers; dotted red lines = height check levels. Heights are measured from the bottom (face) of the panel;
+      “depth from top” matches the jig foot depth pressed from the top of the pour.
+      ${esBlock(`Espesor total de concreto <b>${thk}</b>. Gris = concreto; líneas discontinuas = capas de malla; líneas punteadas rojas = niveles de verificación de altura.
+      Las alturas se miden desde el fondo (cara) del panel; la “profundidad desde arriba” es la profundidad del pie de la plantilla presionado desde la parte superior del vaciado.`)}</p>
+    ${cncNoteHTML(si)}
+    <div class="pfoot"><span>Scrim Jigs / Plantillas de malla · ${esc(projTitle())}</span><span>Panel Cross-Section / Sección transversal${multiSec() ? ` — ${thk} (${si + 1} of ${S.sections.length})` : ''}</span></div>`;
+}
+/* Releasability (2026-10-15): the portal gates jig printouts on the Casting Inventory being final and
+   stamps the "Jig List" column when something is printed or the deliverable is saved. */
+async function jigGate(){ const g = window.__ppMilestones; return (g && currentCastingId) ? g.printGate([currentCastingId], 'Jig List') : true; }
+function jigStamp(){ if (currentCastingId) window.__ppMilestones?.stampPrinted([currentCastingId], 'Jig List'); }
+
+async function printXsec(){
+  if (!S) return;
+  if (!(await jigGate())) return;
+  printViaIframe('Panel Cross-Section — ' + projTitle(),
+    S.sections.map((sec, si) => `<section class="page">${xsecPrintHTML(si)}</section>`).join(''));
+  jigStamp();
+}
+async function printJigs(){
+  if (!S) return;
+  const out = document.getElementById('jig-output');
+  const pages = out ? out.querySelectorAll('.page') : [];
+  if (!pages.length){ alert('Add at least one panel with a valid width to generate jigs.'); return; }
+  if (!(await jigGate())) return;
+  printViaIframe('Jig List — ' + projTitle(), [...pages].map(p => p.outerHTML).join(''));
+  jigStamp();
+}
+
+/* ===================== hidden print iframe ==================== */
+
+/** Reusable arrow-marker defs — referenced by every dimension line. */
+const MARKER_DEFS = `<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <marker id="jig-ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="#1f3a93" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+</defs></svg>`;
+
+/* The print iframe gets its own document, so it carries the tool's page CSS
+   un-prefixed (verbatim from the source tool, with the print-mode page
+   sizing applied unconditionally). */
+const PRINT_DOC_CSS = `
+  :root{
+    --ink:#1a1a1a; --sub:#555; --line:#111; --blue:#1f3a93;
+    --tan:#efe2c2; --wall:#d9d9d9; --hdr:#eaeaea; --rowb:#f6f1e6;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{font-family:'Segoe UI',Arial,Helvetica,sans-serif;color:var(--ink);background:#fff;
+       -webkit-print-color-adjust:exact;print-color-adjust:exact}
+  @page{size:letter portrait;margin:0}
+  .page{width:8.5in;height:10.9in;overflow:hidden;background:#fff;margin:0;padding:0.5in;
+        position:relative;page-break-after:always}
+  .page:last-child{page-break-after:auto}
+  h1{font-size:22px;font-weight:700;margin:0}
+  .titlerow{display:flex;justify-content:space-between;align-items:flex-end;
+            border-bottom:1.5px solid var(--line);padding-bottom:8px;margin-bottom:16px}
+  .titlerow .meta{text-align:right;font-size:12px;color:var(--sub);line-height:1.5}
+  .pfoot{position:absolute;left:0.5in;right:0.5in;bottom:0.3in;
+         border-top:.5px solid #bbb;padding-top:4px;font-size:10px;color:#888;
+         display:flex;justify-content:space-between}
+  .rules{font-size:12.5px;line-height:1.7;margin:14px 0 0}
+  .rules li{margin-bottom:5px}
+  .rules b{color:#000}
+  .instr-svg{display:block;width:100%;max-width:6.6in;margin:6px auto 0}
+
+  table.list{border-collapse:collapse;width:100%;font-size:13px;margin-top:6px}
+  table.list thead th{background:var(--hdr);border:1px solid var(--line);padding:7px 8px;
+           text-align:left;font-size:12px;letter-spacing:.3px}
+  table.list tbody td{border:1px solid #cfcfcf;padding:6px 8px}
+  table.list td.c{text-align:center}
+  table.list td.b{font-weight:700;white-space:nowrap}
+  table.list tr.w1{background:var(--rowb)}
+  .listnote{font-size:12px;color:#333;margin-top:12px;line-height:1.6}
+
+  .grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;
+        gap:0.28in;margin-top:10px;height:8.7in}
+  .card{border:1px solid #222;border-radius:6px;padding:8px 10px 6px;
+        display:flex;flex-direction:column;break-inside:avoid;position:relative}
+  .card-h{display:flex;align-items:baseline;gap:10px;border-bottom:.5px solid #ccc;
+          padding-bottom:5px;margin-bottom:2px}
+  .qtybig{position:absolute;top:38px;right:14px;text-align:center;line-height:.85;
+          color:var(--blue);pointer-events:none;background:rgba(255,255,255,.86);
+          border-radius:9px;padding:3px 10px 5px}
+  .qtybig .num{font-size:46px;font-weight:800;display:block}
+  .qtybig .lab{font-size:10px;font-weight:700;letter-spacing:2px;color:#888}
+  .card-h .jno{font-size:15px;font-weight:800;letter-spacing:.5px}
+  .card-h .jid{font-size:13px;font-weight:600;color:#333}
+  .cardsvg{flex:1;width:100%;min-height:0}
+  .card-f{font-size:11px;color:#333;border-top:.5px solid #ccc;padding-top:5px;margin-top:2px}
+  .card-f b{color:#000}
+
+  .pl{fill:var(--tan);stroke:var(--line);stroke-width:1.6;stroke-linejoin:round}
+  .wl{fill:var(--wall);stroke:var(--line);stroke-width:.8}
+  .scr{stroke:var(--line);stroke-width:.8;stroke-dasharray:5 3}
+  .chk{stroke:#b91c1c;stroke-width:.8;stroke-dasharray:2 3}
+  .rlbl{font-size:11px;font-weight:700;letter-spacing:.5px;fill:var(--ink)}
+  .dnum{font-size:13px;font-weight:700;fill:var(--blue)}
+  .dl{stroke:var(--blue);stroke-width:1;fill:none}
+  .de{stroke:var(--blue);stroke-width:.7;stroke-dasharray:3 2;fill:none}
+  .il{font-style:italic;font-size:11px;fill:#777}
+
+  .conc{fill:#c9c9c9;stroke:var(--line);stroke-width:1.5}
+  .cncnote{margin-top:0.3in;border:2.5px solid #b91c1c;border-radius:6px;padding:12px 14px;font-size:15px;line-height:1.55}
+  .cnctag{display:inline-block;background:#b91c1c;color:#fff;font-weight:800;letter-spacing:1px;padding:2px 10px;border-radius:3px;margin-right:6px}
+  .xsec-wrap{margin:12px auto 2px;text-align:center}
+  .xsec-wrap svg{max-width:100%;height:auto;max-height:4.3in}
+  .es{color:#555;font-style:italic;font-weight:400}
+  .es-block{display:block;margin-top:4px}
+  h1 .es{display:block;font-size:14px;margin-top:2px}
+  th .es{display:block;font-size:10px;letter-spacing:0}
+  .cncnote .es-block{margin-top:6px;font-size:13.5px}
+  .listnote .es b,.cncnote .es b{color:#333}
+`;
+
+/**
+ * Print via a hidden iframe (portal pattern) — build a complete document,
+ * write it in, print it, remove the iframe.
+ */
+function printViaIframe(title, bodyHTML, css){
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title>`
+    + `<style>${css || PRINT_DOC_CSS}</style></head><body>${MARKER_DEFS}${bodyHTML}</body></html>`;
+
+  // Remove any leftover iframe from a prior print attempt.
+  const prior = document.getElementById('jig-print-frame');
+  if (prior) prior.remove();
+
+  // Hidden iframe — kept off-screen rather than display:none so browsers
+  // reliably layout & print the contents.
+  const iframe = document.createElement('iframe');
+  iframe.id = 'jig-print-frame';
+  iframe.setAttribute('aria-hidden', 'true');
+  iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;';
+  document.body.appendChild(iframe);
+
+  let cleaned = false;
+  const cleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    // Defer removal so the print dialog can finish reading the document.
+    setTimeout(() => { iframe.remove(); }, 500);
+  };
+
+  iframe.addEventListener('load', () => {
+    try {
+      const win = iframe.contentWindow;
+      // onafterprint fires whether the user printed or cancelled.
+      win.addEventListener('afterprint', cleanup);
+      win.focus();
+      win.print();
+    } catch (err) {
+      logger.error('[jig-list] print failed:', err);
+      cleanup();
+    }
+    // Safety net: clean up after 60s even if afterprint never fires.
+    setTimeout(cleanup, 60000);
+  }, { once: true });
+
+  const doc = iframe.contentDocument || (iframe.contentWindow && iframe.contentWindow.document);
+  if (!doc) { iframe.remove(); return; }
+  doc.open();
+  doc.write(html);
+  doc.close();
+}
+
+/* ============================ editor build ========================== */
+
+function buildEditor(){
+  if (!S) return;
+  renderDeliverableStamp();
+  // cross-section designer — one block per thickness
+  buildXsecList();
+
+  // project fields — the title comes from the portal project record (Info tab)
+  document.getElementById('jig-proj-fields').innerHTML =
+    `<div class="fld"><label>Date</label>
+       <input data-sec="settings" data-field="date" value="${esc(S.date)}" style="width:160px" placeholder="${todayISO()}"></div>`;
+
+  // geometry fields
+  document.getElementById('jig-geo-fields').innerHTML = [
+    geoFld('overhang', 'Handle overhang (total)', S.overhang, 'W + this'),
+    geoFld('clearance','Foot clearance (total)',  S.clearance,'W − this'),
+    geoFld('handleH',  'Handle height',           S.handleH,  'label only')
+  ].join('');
+
+  buildDepthTable();
+
+  // panels
+  document.getElementById('jig-panel-wrap').innerHTML = `<table class="edit"><thead><tr>
+      <th class="row-n">#</th><th style="width:${multiSec() ? 26 : 30}%">Label / type</th><th style="width:16%">Width</th>
+      ${multiSec() ? '<th style="width:12%">Thickness</th>' : ''}
+      <th style="width:9%">Qty</th><th style="width:${multiSec() ? 14 : 18}%">Group <span style="font-weight:400;color:#999">(optional)</span></th>
+      <th style="width:12%">Source</th><th class="del"></th></tr></thead><tbody>`
+    + S.panels.map((p,i)=>`<tr>
+        <td class="row-n">${i+1}</td>
+        <td><input data-sec="panel" data-idx="${i}" data-field="label" value="${esc(p.label)}" placeholder="e.g. A·1"></td>
+        <td><input data-sec="panel" data-idx="${i}" data-field="W" value="${esc(p.W)}" placeholder="${p.custom ? 'custom — no width' : '44-1/8'}"></td>
+        ${multiSec() ? `<td><select data-sec="panel" data-idx="${i}" data-field="sec">${secOptions(p.sec || 0)}</select></td>` : ''}
+        <td><input data-sec="panel" data-idx="${i}" data-field="qty" value="${esc(p.qty)}" placeholder="0"></td>
+        <td><input data-sec="panel" data-idx="${i}" data-field="group" value="${esc(p.group)}" placeholder="Casting 1"></td>
+        <td class="src">${panelSourceTag(p)}</td>
+        <td class="del"><button type="button" data-act="del-panel" data-idx="${i}" title="Remove">×</button></td>
+      </tr>`).join('') + `</tbody></table>`;
+
+  refreshWarnings();
+  refreshImportStamp();
+  buildCutFields();
+}
+function buildDepthTable(){
+  document.getElementById('jig-depth-wrap').innerHTML = `<table class="edit"><thead><tr>
+      <th class="row-n">#</th><th style="width:22%">Depth</th><th style="width:26%">Type</th><th>Label</th><th class="del"></th></tr></thead><tbody>`
+    + S.depths.map((d,i)=>{
+        const linked = d.scrim != null;
+        const depthCell = linked
+          ? `<input value="${esc(d.d)}" disabled title="Comes from the cross-section: total thickness − Scrim ${d.scrim+1} height">`
+          : `<input data-sec="depth" data-idx="${i}" data-field="d" value="${esc(d.d)}" placeholder="1/4">`;
+        const secPick = (multiSec() && !linked)
+          ? `<select data-sec="depth" data-idx="${i}" data-field="sec" style="width:auto;margin-right:4px">${secOptions(d.sec || 0)}</select>` : '';
+        const typeCell = linked
+          ? `<span class="jig-linked">${multiSec() ? secTag(d) + ' · ' : ''}Layer ${d.scrim+1} · ${d.kind === 'check' ? 'Height check' : 'Scrim'} · from cross-section</span>`
+          : secPick + `<select data-sec="depth" data-idx="${i}" data-field="kind"${multiSec() ? ' style="width:auto"' : ''}>
+              <option value=""${d.kind === 'check' ? '' : ' selected'}>Extra (type your label)</option>
+              <option value="check"${d.kind === 'check' ? ' selected' : ''}>Height check jig</option></select>`;
+        const labelCell = (linked || d.kind === 'check')
+          ? `<input data-auto-label="${i}" value="${esc(depthLabelOf(d))}" disabled title="${linked ? 'Generated from the cross-section layer' : 'Generated: total concrete thickness − this depth'}">`
+          : `<input data-sec="depth" data-idx="${i}" data-field="label" value="${esc(d.label)}" placeholder="First Scrim">`;
+        const delCell = linked ? '' : `<button type="button" data-act="del-depth" data-idx="${i}" title="Remove">×</button>`;
+        return `<tr><td class="row-n">${i+1}</td><td>${depthCell}</td><td>${typeCell}</td><td>${labelCell}</td><td class="del">${delCell}</td></tr>`;
+      }).join('') + `</tbody></table>`;
+}
+const SCRIM_ORDINALS = ['First','Second','Third','Fourth','Fifth','Sixth','Seventh','Eighth','Ninth','Tenth'];
+/**
+ * Keep one foot depth per cross-section scrim (depth = thickness − height).
+ * A scrim with no row yet first adopts an unlinked depth that already has the
+ * right value (lists saved before the link existed); otherwise a row is added.
+ * Hand-added rows are never changed. Runs only when the cross-section is edited.
+ */
+function syncDepthsFromXsec(adoptOnly){
+  const nSec = S.sections.length;
+  if (!adoptOnly) S.depths = S.depths.filter(dp => dp.scrim == null
+    || ((dp.sec || 0) < nSec && dp.scrim < S.sections[dp.sec || 0].heights.length));
+  S.sections.forEach((sec, si) => {
+    const T = parseInches(sec.thickness);
+    const n = sec.heights.length;
+    for (let i = 0; i < n; i++){
+      const h = parseInches(sec.heights[i]);
+      const ok = T != null && h != null && h > 0 && h < T;
+      let dp = S.depths.find(x => x.scrim === i && (x.sec || 0) === si);
+      if (!dp && ok){
+        dp = S.depths.find(x => x.scrim == null && (x.sec || 0) === si && x.kind !== 'check' && parseInches(x.d) === T - h);
+        if (dp) dp.scrim = i;
+      }
+      if (dp && adoptOnly && dp.kind === 'check' && layerKind(sec, i) !== 'check'){
+        // A list saved before layer types existed: keep its height-check row as one.
+        sec.kinds = sec.kinds || []; sec.kinds[i] = 'check';
+      }
+      if (adoptOnly) continue;   // on load: only recognise what is already there, change nothing
+      if (!dp){ dp = { d:'', label: '', scrim: i, sec: si }; S.depths.push(dp); }
+      dp.d = ok ? fmt16(T - h) : '';
+      // Type and label come from the cross-section layer.
+      if (layerKind(sec, i) === 'check') dp.kind = 'check'; else delete dp.kind;
+      dp.label = layerKind(sec, i) === 'check' ? '' : (SCRIM_ORDINALS[scrimNo(sec, i) - 1] || ('#' + scrimNo(sec, i))) + ' Scrim';
+    }
+  });
+  if (adoptOnly) return;
+  S.depths = S.depths.filter(x => x.scrim != null).sort((a,b) => (a.sec || 0) - (b.sec || 0) || a.scrim - b.scrim)
+    .concat(S.depths.filter(x => x.scrim == null));
+}
+/** <option>s for a thickness picker. */
+function secOptions(cur){
+  return S.sections.map((sec, k) => `<option value="${k}"${k === cur ? ' selected' : ''}>${esc(secTag({ sec: k }))}</option>`).join('');
+}
+function panelSourceTag(p){
+  const tags = [];
+  if (p.src === 'inv') tags.push('<span class="jig-tag">inventory</span>');
+  if (p.custom) tags.push(`<span class="jig-tag jig-tag-c">${customLabel(p.custom)}</span>`);
+  return tags.join(' ');
+}
+/** Thickness pickers show the thickness value — keep their text current while it is typed. */
+function refreshSecPickers(){
+  document.querySelectorAll('#jig-editor select[data-field="sec"]').forEach(sel => {
+    [...sel.options].forEach(o => { o.textContent = secTag({ sec: +o.value }); });
+  });
+}
+/** Generated "Height Check Jig" labels follow the depth / thickness as they are typed. */
+function refreshDepthLabels(){
+  document.querySelectorAll('#jig-depth-wrap [data-auto-label]').forEach(el => {
+    const dp = S.depths[+el.dataset.autoLabel];
+    if (dp) el.value = depthLabelOf(dp);
+  });
+}
+function geoFld(field, label, val, unit){
+  return `<div class="fld"><label>${label}</label>
+    <input data-sec="settings" data-field="${field}" value="${esc(val)}" style="width:140px">
+    <span class="u">${unit}</span></div>`;
+}
+function refreshWarnings(){
+  const bad = S.panels.filter(p => (p.W||'').trim() && parseInches(p.W) == null).length;
+  document.getElementById('jig-panel-warn').textContent =
+    bad ? `${bad} panel${bad>1?'s have':' has'} an unreadable width and ${bad>1?'were':'was'} skipped.` : '';
+}
+
+function liveUpdate(){ scheduleSave(); refreshWarnings(); clearTimeout(renderTimer); renderTimer = setTimeout(renderOutput, 160); }
+
+function onEditorInput(e){
+  if (!S) return;
+  const el = e.target; const sec = el.dataset.sec;
+  if (sec === 'xsec'){
+    const si = +el.dataset.si, xs = S.sections[si];
+    if (!xs) return;
+    if (el.dataset.field === 'thickness'){
+      // Heights that were an even split (or still empty) follow the new thickness;
+      // heights somebody typed by hand are left alone.
+      xs.thickness = el.value;
+      const even = xs.auto ? evenScrimHeights(xs, xs.heights.length) : null;
+      if (even){ xs.heights = even; buildXsecHeights(si); }
+      refreshSecPickers();
+    }
+    else if (el.dataset.field === 'count'){
+      const n = Math.max(0, Math.min(10, parseInt(el.value, 10) || 0));
+      while (xs.heights.length < n) xs.heights.push('');
+      if (xs.heights.length > n) xs.heights.length = n;
+      if (Array.isArray(xs.kinds) && xs.kinds.length > n) xs.kinds.length = n;   // layer types past the count go with their layers
+      // A new layer count re-splits the thickness evenly between the scrims.
+      const even = evenScrimHeights(xs, n);
+      if (even) xs.heights = even;
+      xs.auto = true;
+      buildXsecHeights(si);
+    }
+    else if (el.dataset.field === 'h'){ xs.heights[+el.dataset.idx] = el.value; xs.auto = false; }   // typed by hand — stop following
+    else if (el.dataset.field === 'kind'){
+      xs.kinds = xs.kinds || [];
+      xs.kinds[+el.dataset.idx] = el.value;
+    }
+    else if (el.dataset.field === 'noscrim'){
+      // No scrim for this thickness: every layer turns into a height check. Unticked: the layers go back to what
+      // they were before the tick — scrim when that is not known (2026-11-12: they used to stay height checks, so
+      // the batching totals kept saying "Scrim: none").
+      const wasNoScrim = !!xs.noScrim;
+      xs.noScrim = !!el.checked;
+      if (xs.noScrim) {
+        if (!wasNoScrim) xs.kindsBefore = (xs.kinds || []).slice(0, xs.heights.length);
+        xs.kinds = xs.heights.map(() => 'check');
+      } else {
+        // back to the mix it had before the tick; when that had no scrim layer at all (or is not known), every
+        // layer is scrim — unticking "No scrim" always leaves scrim on the cross-section
+        const was = Array.isArray(xs.kindsBefore) ? xs.kindsBefore : [];
+        const mix = xs.heights.map((_, i) => was[i] === 'check' ? 'check' : '');
+        xs.kinds = mix.some(k => k !== 'check') ? mix : xs.heights.map(() => '');
+        delete xs.kindsBefore;
+      }
+      buildXsecHeights(si);
+    }
+    // The cross-section owns the scrim foot depths — keep them in step.
+    syncDepthsFromXsec(); buildDepthTable();
+    S.sections.forEach((o, k) => renderXsec(k));
+    liveUpdate();
+    return;
+  }
+  if (sec === 'cut'){
+    const c = cutState();
+    c[el.dataset.field] = el.value;
+    // Stock follows the material unless the user then picks otherwise.
+    if (el.dataset.field === 'material'){ c.sheet = el.value === 'bb' ? '5x12' : '4x8'; buildCutFields(); }
+    scheduleSave(); renderCutSummary(); return;
+  }
+  if (sec === 'settings'){ S[el.dataset.field] = el.value; }
+  else if (sec === 'depth'){
+    const dp = S.depths[+el.dataset.idx];
+    if (el.dataset.field === 'sec'){ dp.sec = +el.value; scheduleSave(); buildDepthTable(); renderOutput(); return; }
+    if (el.dataset.field === 'kind'){
+      if (el.value) dp.kind = el.value; else delete dp.kind;
+      scheduleSave(); buildEditor(); renderOutput(); return;
+    }
+    dp[el.dataset.field] = el.value;
+    if (el.dataset.field === 'd') refreshDepthLabels();
+  }
+  else if (sec === 'panel'){
+    if (el.dataset.field === 'sec'){ S.panels[+el.dataset.idx].sec = +el.value; liveUpdate(); return; }
+    S.panels[+el.dataset.idx][el.dataset.field] = el.value;
+    // A hand-typed width replaces the imported "fits up to" range.
+    if (el.dataset.field === 'W') delete S.panels[+el.dataset.idx].Wmax;
+    if (el.dataset.field === 'group'){ scheduleSave(); buildPrintSetBar(activeGroups()); } }
+  liveUpdate();
+}
+function onEditorClick(e){
+  if (!S) return;
+  const act = e.target.dataset.act; if (!act) return;
+  const idx = +e.target.dataset.idx;
+  if (act === 'add-panel'){ S.panels.push({label:'',W:'',qty:'',group: currentGroup||'', sec: 0}); }
+  else if (act === 'del-panel'){ S.panels.splice(idx,1); if(!S.panels.length) S.panels.push({label:'',W:'',qty:'',group:''}); }
+  else if (act === 'add-depth'){ S.depths.push({d:'',label:'', sec: 0}); }
+  else if (act === 'add-xsec'){
+    S.sections.push({ thickness:'', heights:[], auto:true });
+  }
+  else if (act === 'del-xsec'){
+    const si = +e.target.dataset.si;
+    if (S.sections.length < 2) return;
+    const used = S.panels.filter(p => (p.sec || 0) === si && ((p.label || '').trim() || (p.W || '').trim())).length;
+    if (!confirm(`Remove thickness ${secTag({ sec: si })}?` + (used ? ` ${used} panel row${used === 1 ? '' : 's'} on it will move to ${secTag({ sec: si === 0 ? 1 : 0 })}.` : ''))) return;
+    S.sections.splice(si, 1);
+    S.depths = S.depths.filter(dp => !(dp.scrim != null && (dp.sec || 0) === si));
+    const remap = o => { const s = o.sec || 0; o.sec = s === si ? 0 : (s > si ? s - 1 : s); };
+    S.panels.forEach(remap); S.depths.forEach(remap);
+    S.xsec = S.sections[0];
+  }
+  else if (act === 'del-depth'){ S.depths.splice(idx,1); }
+  else if (act === 'print-xsec'){ printXsec(); return; }
+  else if (act === 'even-xsec'){
+    const xs = S.sections[+e.target.dataset.si];
+    const even = xs && evenScrimHeights(xs, xs.heights.length);
+    if (!even){ alert('Enter the total concrete thickness and at least one scrim first.'); return; }
+    xs.heights = even; xs.auto = true;
+    syncDepthsFromXsec();
+  }
+  else if (act === 'import-inv'){ openImportModal(); return; }
+  else if (act === 'print-cut'){ printCutMaps(); return; }
+  else if (act === 'clear'){ if(confirm('Clear all panels, depths and settings for THIS casting? Other castings are not touched.')){ S = freshState(); afterLoad(); } return; }
+  else return;
+  scheduleSave(); buildEditor(); renderOutput();
+}
+
+function afterLoad(){
+  normalizeSections(); currentGroup = null;
+  // The printed title always mirrors the portal project record (Info tab).
+  if (currentProjectName) S.project = currentProjectName;
+  // Clear all replaced the state object — keep the per-casting map in sync.
+  if (currentCastingId) stateByCasting.set(currentCastingId, S);
+  // Immediate save (not debounced) — a clear should persist now.
+  if (currentProjectNumber && currentCastingId) doSave(currentProjectNumber, currentCastingId, S);
+  buildEditor(); renderOutput();
+}
+
+/* ================= import from casting inventory ================= */
+
+const IMPORT_DEFAULTS = { tol: '1', jigQty: '2', clearance: '3' };
+let impParts = [];     // distinct parts (type + size) of the active casting's inventory
+let impDraft = null;   // working copy of S.inv while the modal is open
+
+/** S.inv = { tol, jigQty, choices:{partKey:{mode,W}}, importedAt } — created on demand. */
+function invState(){
+  if (!S.inv || typeof S.inv !== 'object') S.inv = {};
+  if (!S.inv.choices || typeof S.inv.choices !== 'object') S.inv.choices = {};
+  if (!S.inv.secs || typeof S.inv.secs !== 'object') S.inv.secs = {};     // partKey -> thickness index
+  if (S.inv.tol == null) S.inv.tol = IMPORT_DEFAULTS.tol;
+  if (S.inv.jigQty == null) S.inv.jigQty = IMPORT_DEFAULTS.jigQty;
+  return S.inv;
+}
+
+/** Inventory rows -> one entry per distinct part (same type + same two sizes). */
+function collapseInventory(rows){
+  const map = new Map();
+  for (const r of rows || []){
+    const type = String(r.type || '').trim();
+    const dims = [parseInches(r.width), parseInches(r.length)].filter(v => v != null && v > 0).sort((a,b) => a - b);
+    // Same key as inventoryPartKey() in jig-list-service.js (the batching scrim line reads the "No jig/scrim" picks by it): change both together.
+    const key = type.toLowerCase() + '|' + (dims.length ? dims.join('x') : String(r.width || '') + 'x' + String(r.length || ''));
+    let p = map.get(key);
+    if (!p){
+      p = { key, type, sizeTxt: [r.width, r.length].map(v => String(v || '').trim() || '?').join(' × '),
+            short16: dims.length ? dims[0] : null, long16: dims.length > 1 ? dims[1] : null, qty: 0 };
+      map.set(key, p);
+    }
+    p.qty += (parseInt(r.quantity, 10) || 0);
+  }
+  const parts = [...map.values()];
+  // A type cast in more than one size needs the size in its label to stay unambiguous.
+  const perType = {};
+  parts.forEach(p => { const t = p.type.toLowerCase(); perType[t] = (perType[t] || 0) + 1; });
+  parts.forEach(p => {
+    const size = p.short16 != null ? ` (${fmt16(p.short16)}${p.long16 != null ? '×' + fmt16(p.long16) : ''})` : '';
+    p.label = (p.type || '?') + (perType[p.type.toLowerCase()] > 1 ? size : '');
+  });
+  return parts;
+}
+
+function choiceOf(inv, p){
+  const c = inv.choices[p.key];
+  if (c && c.mode) return c;
+  // Short side is the default — but only when both sizes are on file. With a single size
+  // nobody can tell whether it is the short side, so the part waits for an explicit pick.
+  return { mode: (p.short16 != null && p.long16 != null) ? 'short' : 'none', W: '' };
+}
+
+/**
+ * Turn parts + choices into jig rows. Standard widths (short / long side) are
+ * sorted and swept from the narrowest: every width within `tol` of a group's
+ * narrowest joins that group. Custom jigs never share.
+ */
+function importSecOf(inv, p){
+  const s = inv.secs ? inv.secs[p.key] : 0;
+  return (s >= 0 && s < S.sections.length) ? s : 0;
+}
+function planImport(parts, inv){
+  const tolParsed = parseInches(inv.tol);
+  const tol16 = tolParsed == null ? 16 : Math.max(0, tolParsed);
+  const sized = [], custom = [], unreadable = [], missing = [], skipped = [];
+  for (const p of parts){
+    const c = choiceOf(inv, p);
+    const sec = importSecOf(inv, p);
+    if (c.mode === 'skip'){ skipped.push(p); continue; }            // "No jig": left out on purpose
+    if (c.mode === 'cnc'){ custom.push({ p, kind: 'cnc', sec }); continue; }
+    let w;
+    if (c.mode === 'saw'){                       // custom width — a normal table-saw jig, width required
+      w = parseInches(c.W);
+      if (w == null || w <= 0){ missing.push(p); continue; }
+    } else {
+      if (c.mode === 'none'){ unreadable.push(p); continue; }
+      w = c.mode === 'long' ? (p.long16 != null ? p.long16 : p.short16) : p.short16;
+      if (w == null){ unreadable.push(p); continue; }
+    }
+    sized.push({ p, w, sec });
+  }
+  // Parts only share a jig within the same thickness.
+  sized.sort((a,b) => a.sec - b.sec || a.w - b.w);
+  const groups = [];
+  for (const s of sized){
+    const g = groups[groups.length - 1];
+    if (g && g.sec === s.sec && s.w - g.lo <= tol16){ g.items.push(s); g.hi = Math.max(g.hi, s.w); }
+    else groups.push({ lo: s.w, hi: s.w, sec: s.sec, items: [s] });
+  }
+  groups.forEach(g => { g.label = [...new Set(g.items.map(s => s.p.label))].join(', '); });
+  return { groups, custom, unreadable, missing, skipped };
+}
+
+async function openImportModal(){
+  if (!S || !currentCastingId) return;
+  const c = activeCasting();
+  const castingId = currentCastingId;
+  impDraft = structuredClone(invState());
+  // First import on this list proposes the shop's shared-jig clearance; after that the
+  // Geometry setting is the truth.
+  impDraft.clearance = S.inv.importedAt ? S.clearance : IMPORT_DEFAULTS.clearance;
+  impParts = [];
+  document.getElementById('jig-imp-hint').innerHTML =
+    `Casting <b>${esc((c && c.casting_number) || '')}</b> — pick which side each part’s jig runs across. `
+    + `The <b>short side</b> is pre-selected; your picks are remembered for the next import. <b>No jig/scrim</b> leaves a part out of the list on purpose: no jig, and <b>no scrim</b> for it on the batching totals. `
+    + (multiSec() ? `This casting has <b>${S.sections.length} thicknesses</b> — set each part’s thickness too; parts only share a jig within one thickness. ` : '')
+    + `Rows made by an earlier import are rebuilt (their Qty is kept); rows you added by hand are not touched.`;
+  document.getElementById('jig-imp-opts').innerHTML = '';
+  document.getElementById('jig-imp-parts').innerHTML = '<div class="jig-imp-empty">Loading inventory…</div>';
+  document.getElementById('jig-imp-preview').innerHTML = '';
+  document.getElementById('jig-imp-confirm').disabled = true;
+  document.getElementById('jig-imp-modal').hidden = false;
+  let rows = [];
+  try { rows = await loadCastingInventory(castingId); }
+  catch (err) {
+    logger.error('[jig-list] inventory load failed:', err);
+    document.getElementById('jig-imp-parts').innerHTML = '<div class="jig-imp-empty jig-imp-err">Could not load the casting inventory.</div>';
+    return;
+  }
+  if (castingId !== currentCastingId || !impDraft) return;   // switched / closed meanwhile
+  impParts = collapseInventory(rows);
+  renderImportModal();
+}
+
+function closeImportModal(){
+  document.getElementById('jig-imp-modal').hidden = true;
+  impDraft = null; impParts = [];
+}
+
+function renderImportModal(){
+  if (!impDraft) return;
+  if (!impParts.length){
+    document.getElementById('jig-imp-parts').innerHTML =
+      '<div class="jig-imp-empty">This casting has no inventory yet — fill in the Casting Inventory first.</div>';
+    return;
+  }
+  document.getElementById('jig-imp-opts').innerHTML = `
+    <label>Widths within <input data-imp-opt="tol" value="${esc(impDraft.tol)}">″ share one jig</label>
+    <label>Foot = narrowest width − <input data-imp-opt="clearance" value="${esc(impDraft.clearance)}">″</label>
+    <label>Jigs per width <input data-imp-opt="jigQty" value="${esc(impDraft.jigQty)}"></label>`;
+  document.getElementById('jig-imp-parts').innerHTML = `<table class="jig-imp-table"><thead><tr>
+      <th>Part</th><th>Size (inventory)</th><th class="c">Qty</th>${multiSec() ? '<th>Thickness</th>' : ''}<th>Jig runs across</th></tr></thead><tbody>`
+    + impParts.map(p => {
+        const c = choiceOf(impDraft, p);
+        const square = p.long16 == null || p.long16 === p.short16;
+        const seg = (mode, text, disabled) =>
+          `<button type="button" data-imp-mode="${mode}" class="${c.mode === mode ? 'on' : ''}"${disabled ? ' disabled' : ''}>${text}</button>`;
+        const sec = importSecOf(impDraft, p);
+        const secCell = multiSec() ? `<td><div class="jig-imp-seg">${S.sections.map((o, k) =>
+          `<button type="button" data-imp-sec="${k}" class="${k === sec ? 'on' : ''}">${esc(secTag({ sec: k }))}</button>`).join('')}</div></td>` : '';
+        return `<tr data-imp-key="${esc(p.key)}">
+          <td class="b">${esc(p.label)}</td><td>${esc(p.sizeTxt)}</td><td class="c">${p.qty || ''}</td>${secCell}
+          <td><div class="jig-imp-seg">
+            ${seg('short', p.short16 != null ? `${fmt16(p.short16)}″ ${p.long16 == null ? '— only size on file' : (square ? '' : 'short side')}` : 'no size on file', p.short16 == null)}
+            ${square ? '' : seg('long', `${fmt16(p.long16)}″ long side`, false)}
+            ${seg('saw', 'Custom width', false)}
+            ${seg('cnc', 'Custom CNC', false)}
+            ${seg('skip', 'No jig/scrim', false)}
+            ${c.mode === 'saw' ? `<input data-imp-saw value="${esc(c.W || '')}" placeholder="width — required">
+              <span class="jig-imp-note" data-imp-note></span>` : ''}
+          </div></td></tr>`;
+      }).join('') + `</tbody></table>`;
+  renderImportPreview();
+}
+
+function renderImportPreview(){
+  if (!impDraft) return;
+  const plan = planImport(impParts, impDraft);
+  const clr = parseInches(impDraft.clearance) || 0;
+  const qty = esc(String(impDraft.jigQty || '').trim());
+  document.querySelectorAll('#jig-imp-parts [data-imp-note]').forEach(el => {
+    el.textContent = `Enter the width being screeded — ${fmt16(clr)}″ is subtracted from it for the jig foot, like every other jig.`;
+  });
+  const lines = plan.groups.map(g =>
+    `<li${g.lo - clr <= 0 ? ' class="nofoot"' : ''}>${multiSec() ? `<span class="q">${esc(secTag({ sec: g.sec }))} ·</span> ` : ''}<b>${fmt16(g.lo)}″</b> → foot <b>${fmt16(g.lo - clr)}″</b>${g.lo - clr <= 0 ? ' <b>— no foot left: the clearance is as big as the part</b>' : ''}${g.hi > g.lo ? ` <span class="fit">fits ${fmt16(g.lo)}″–${fmt16(g.hi)}″</span>` : ''}`
+    + ` — ${esc(g.label)}${qty ? ` <span class="q">×${qty}</span>` : ''}</li>`);
+  plan.custom.forEach(k => lines.push(
+    `<li class="cus">${multiSec() ? `<span class="q">${esc(secTag({ sec: k.sec }))} ·</span> ` : ''}<b>Custom CNC</b> (reminder only — not drawn, not on the cut maps) — ${esc(k.p.label)}</li>`));
+  if (plan.skipped.length) lines.push(
+    `<li class="skip"><b>No jig/scrim</b> (left out on purpose — no jig row, not on the cut maps, <b>no scrim</b> on the batching totals) — ${plan.skipped.map(p => esc(p.label)).join(', ')}</li>`);
+  let bad = '';
+  if (plan.missing.length) bad += `<div class="jig-imp-err">Enter a custom width for: ${plan.missing.map(p => esc(p.label)).join(', ')}</div>`;
+  if (plan.unreadable.length) bad += `<div class="jig-imp-err">These parts don’t have both sizes in the Casting Inventory, so the jig side can’t be picked for you — choose an option for each, or No jig/scrim (or fill in the inventory and import again): ${plan.unreadable.map(p => esc(p.label)).join(', ')}</div>`;
+  const n = plan.groups.length + plan.custom.length;
+  document.getElementById('jig-imp-preview').innerHTML =
+    `<h3>Jig rows this will create <span>(${n}) — each one is cut once per foot depth</span></h3><ul>${lines.join('')}</ul>${bad}`;
+  // Everything on "No jig/scrim" is a valid import too: it clears the earlier imported rows.
+  document.getElementById('jig-imp-confirm').disabled = (!n && !plan.skipped.length) || plan.missing.length > 0 || plan.unreadable.length > 0;
+}
+
+function setImportMode(key, mode){
+  if (!impDraft) return;
+  const prev = impDraft.choices[key] || {};
+  const part = impParts.find(p => p.key === key);
+  const shortIsDefault = !!part && part.short16 != null && part.long16 != null;
+  if (mode === 'short' && shortIsDefault) delete impDraft.choices[key];   // default — nothing to remember
+  else impDraft.choices[key] = { mode, W: mode === 'saw' ? (prev.W || '') : '' };
+  renderImportModal();
+}
+
+function onImportInput(e){
+  if (!impDraft) return;
+  const el = e.target;
+  if (el.dataset.impOpt){ impDraft[el.dataset.impOpt] = el.value; renderImportPreview(); return; }
+  if (el.dataset.impSaw !== undefined){
+    const key = el.closest('[data-imp-key]').dataset.impKey;
+    impDraft.choices[key] = { mode: 'saw', W: el.value };
+    renderImportPreview();
+  }
+}
+
+/** Rebuild the imported rows from the draft; keep hand-added rows and per-width Qty edits. */
+function confirmImport(){
+  if (!S || !impDraft) return;
+  const plan = planImport(impParts, impDraft);
+  const keptQty = new Map();
+  S.panels.forEach(p => { if (p.src === 'inv' && (p.qty || '').trim()) keptQty.set(importRowKey(p), p.qty); });
+  const defQty = String(impDraft.jigQty || '').trim();
+  const made = [];
+  plan.groups.forEach(g => {
+    const row = { label: g.label, W: fmt16(g.lo), qty: defQty, group: '', src: 'inv', sec: g.sec };
+    if (g.hi > g.lo) row.Wmax = fmt16(g.hi);
+    made.push(row);
+  });
+  plan.custom.forEach(k => made.push(
+    { label: k.p.label, W: '', qty: defQty, group: '', src: 'inv', custom: k.kind, sec: k.sec }));
+  made.forEach(r => { const q = keptQty.get(importRowKey(r)); if (q) r.qty = q; });
+  const manual = S.panels.filter(p => p.src !== 'inv' && ((p.label || '').trim() || (p.W || '').trim()));
+  S.panels = made.concat(manual);
+  if (!S.panels.length) S.panels.push({ label:'', W:'', qty:'', group:'' });
+
+  const { clearance, ...inv } = impDraft;
+  S.inv = inv;
+  S.inv.importedAt = new Date().toISOString();
+  window.__ppMilestones?.markWorking(currentCastingId, 'Jig List', 'Imported from Casting Inventory');
+  if (parseInches(clearance) != null) S.clearance = String(clearance).trim();
+  closeImportModal();
+  scheduleSave(); buildEditor(); renderOutput();
+}
+/** Identity of an imported row for keeping its Qty: custom rows by label, the rest by width. */
+function importRowKey(r){
+  return (r.sec || 0) + ':' + (r.custom ? 'c:' + r.custom + ':' + (r.label || '') : 'w:' + parseInches(r.W));
+}
+
+function refreshImportStamp(){
+  const el = document.getElementById('jig-imp-stamp');
+  if (!el) return;
+  const iso = S && S.inv && S.inv.importedAt;
+  const d = iso ? new Date(iso) : null;
+  el.innerHTML = 'Last imported: <b>' + ((d && !isNaN(d))
+    ? esc(d.toLocaleDateString(undefined, { weekday:'short', year:'numeric', month:'short', day:'numeric' })
+        + ' at ' + d.toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' }))
+    : 'never') + '</b>';
+}
+
+/* ===================== operator cut maps ===================== */
+
+const KERF16 = 2;   // 1/8″ on all table-saw work
+const CUT_SVG_ML = 13, CUT_SVG_MR = 3.5;   // map drawing margins (inches at sheet scale): strip labels / width dimension
+const CUT_SHEETS = { '4x8': { L: 96, W: 48 }, '5x9': { L: 108, W: 60 }, '5x12': { L: 144, W: 60 } };
+const CUT_MATERIALS = { hdo: 'HDO', bb: 'Black Board', other: 'Other' };
+
+/** S.cut = { material, other, thickness, sheet } — created / repaired on demand. */
+function cutState(){
+  if (!S.cut || typeof S.cut !== 'object') S.cut = {};
+  const c = S.cut;
+  if (!CUT_MATERIALS[c.material]) c.material = 'hdo';
+  if (c.other == null) c.other = '';
+  if (c.thickness !== '1/2' && c.thickness !== '3/4') c.thickness = '3/4';
+  if (!CUT_SHEETS[c.sheet]) c.sheet = c.material === 'bb' ? '5x12' : '4x8';
+  return c;
+}
+function cutMaterialName(c){
+  return c.material === 'other' ? ((c.other || '').trim() || 'Other material') : CUT_MATERIALS[c.material];
+}
+function cutStockName(c){ const s = CUT_SHEETS[c.sheet]; return `${c.sheet} (${s.L}″ × ${s.W}″)`; }
+
+function buildCutFields(){
+  const el = document.getElementById('jig-cut-fields');
+  if (!el || !S) return;
+  const c = cutState();
+  const opt = (v, text, cur) => `<option value="${v}"${v === cur ? ' selected' : ''}>${text}</option>`;
+  el.innerHTML = `
+    <div class="fld"><label>Material</label>
+      <select data-sec="cut" data-field="material">${Object.keys(CUT_MATERIALS).map(k => opt(k, CUT_MATERIALS[k], c.material)).join('')}</select></div>
+    ${c.material === 'other' ? `<div class="fld"><label>Material name</label>
+      <input data-sec="cut" data-field="other" value="${esc(c.other)}" style="width:180px" placeholder="type the material"></div>` : ''}
+    <div class="fld"><label>Thickness</label>
+      <select data-sec="cut" data-field="thickness">${['1/2','3/4'].map(t => opt(t, t + '″', c.thickness)).join('')}</select></div>
+    <div class="fld"><label>Sheet size</label>
+      <select data-sec="cut" data-field="sheet">${Object.keys(CUT_SHEETS).map(k => opt(k, k, c.sheet)).join('')}</select></div>`;
+}
+
+/**
+ * Nest the jig blanks. Table-saw logic: blanks of one height share strips
+ * (first-fit, longest first, kerf after every crosscut); strips are then
+ * stacked across the sheet (tallest first, kerf after every rip). Jigs with
+ * identical cut dimensions are made once. Identical sheets become one map.
+ */
+function buildCutPlan(){
+  const c = cutState();
+  const SL = CUT_SHEETS[c.sheet].L * 16, SW = CUT_SHEETS[c.sheet].W * 16;
+  const { jigs, customs } = buildJigs();
+  const hH = parseInches(S.handleH);
+  const handleH16 = (hH != null && hH > 0) ? hH : 24;
+
+  const blanks = [], seen = new Map();
+  jigs.forEach(j => {
+    const key = j.handle16 + '|' + j.foot16 + '|' + j.depth16;
+    const qty = Math.max(1, parseInt(j.qty, 10) || 1);
+    const ex = seen.get(key);
+    if (ex){ if (!ex.names.includes(j.label)) ex.names.push(j.label); ex.qty = Math.max(ex.qty, qty); return; }
+    const b = { n: j.n, names: [j.label], depthLabel: j.depthLabel, L: j.handle16, H: handleH16 + j.depth16,
+                foot16: j.foot16, depth16: j.depth16, qty, maps: [] };
+    seen.set(key, b); blanks.push(b);
+  });
+  const noFoot = blanks.filter(b => b.foot16 <= 0 || b.L <= 0);   // clearance is as big as the part
+  const tooBig = blanks.filter(b => !noFoot.includes(b) && (b.L > SL || b.H > SW));
+  const ok = blanks.filter(b => !tooBig.includes(b) && !noFoot.includes(b));
+
+  // Strips: fill the long edge first. Each strip is opened by the tallest (then longest) blank
+  // still waiting and ripped at that height; it is then filled along the sheet length with the
+  // combination of waiting blanks that leaves the shortest tail — same-height blanks first, then
+  // lower ones (those get ripped down to their own height after the crosscut).
+  const waiting = [];
+  ok.forEach(b => { for (let i = 0; i < b.qty; i++) waiting.push(b); });
+  waiting.sort((a,b) => b.H - a.H || b.L - a.L || a.n - b.n);
+  const strips = [];
+  while (waiting.length){
+    const first = waiting.shift();
+    const st = { H: first.H, used: first.L + KERF16, pieces: [first] };
+    [p => p.H === st.H, () => true].forEach(allowed => {
+      const pool = waiting.filter(allowed);
+      cutBestFill(pool, SL + KERF16 - st.used).forEach(b => {
+        waiting.splice(waiting.indexOf(b), 1);
+        st.pieces.push(b); st.used += b.L + KERF16;
+      });
+    });
+    st.pieces.sort((a,b) => b.H - a.H || b.L - a.L || a.n - b.n);
+    let x = 0;
+    st.pieces = st.pieces.map(b => { const p = { b, x }; x += b.L + KERF16; return p; });
+    strips.push(st);
+  }
+  // sheets
+  const sheets = [];
+  strips.forEach(st => {
+    let sh = sheets.find(x => x.used + st.H <= SW);
+    if (!sh){ sh = { used: 0, strips: [] }; sheets.push(sh); }
+    sh.strips.push({ ...st, y: sh.used });
+    sh.used += st.H + KERF16;
+  });
+  // identical sheets -> one map with a QTY
+  const maps = [];
+  sheets.forEach(sh => {
+    const sig = sh.strips.map(s => s.H + ':' + s.pieces.map(p => p.b.n).join(',')).join(';');
+    const m = maps.find(x => x.sig === sig);
+    if (m) m.qty++; else maps.push({ sig, qty: 1, sheet: sh });
+  });
+  maps.forEach((m, i) => {
+    m.no = i + 1;
+    const frac = Math.min(1, Math.max(0, m.sheet.used - KERF16) / SW);
+    m.frac = frac;
+    m.consumption = frac >= 0.8 ? 1 : Math.ceil(frac * 4) / 4;   // 1/4-sheet rounding, 80% = full sheet
+    m.sheet.strips.forEach(s => s.pieces.forEach(p => { if (!p.b.maps.includes(m.no)) p.b.maps.push(m.no); }));
+  });
+  return { c, SL, SW, blanks, ok, tooBig, noFoot, customs, maps,
+           pieceCount: ok.reduce((t,b) => t + b.qty, 0),
+           physical: maps.reduce((t,m) => t + m.qty, 0),
+           consumption: maps.reduce((t,m) => t + m.consumption * m.qty, 0) };
+}
+
+let lastCutDoc = '';   // what the live frame currently shows — skip rewrites when nothing changed
+
+/** Live cut-map pages under the jig drawings. They are the printout's own pages, shown in a frame
+    so they keep their own (landscape) stylesheet. */
+/** The blanks from `pool` whose lengths (+ kerf each) best fill `room` sixteenths — subset-sum. */
+function cutBestFill(pool, room){
+  if (room <= 0 || !pool.length) return [];
+  const reach = new Array(room + 1).fill(-1);   // reach[w] = index of the last blank used to total w
+  const prev = new Array(room + 1).fill(-1);
+  reach[0] = -2;
+  pool.forEach((b, i) => {
+    const w = b.L + KERF16;
+    for (let t = room; t >= w; t--){
+      if (reach[t] === -1 && reach[t - w] !== -1 && reach[t - w] !== i){ reach[t] = i; prev[t] = t - w; }
+    }
+  });
+  let best = room; while (best > 0 && reach[best] === -1) best--;
+  const picked = [];
+  for (let t = best; t > 0; t = prev[t]) picked.push(pool[reach[t]]);
+  return picked;
+}
+
+function renderCutLive(plan){
+  const host = document.getElementById('jig-cut-output');
+  if (!host) return;
+  const show = plan.blanks.length && !plan.tooBig.length && !plan.noFoot.length;
+  const docHtml = show
+    ? `<!doctype html><html><head><meta charset="utf-8"><style>${CUT_DOC_CSS}
+        html,body{background:transparent}
+        .page{margin:0 auto 18px;background:#fff;border:1px solid #e2e8f0;box-shadow:0 1px 4px rgba(15,23,42,.10)}
+       </style></head><body>${buildCutPages(plan)}</body></html>`
+    : '';
+  if (docHtml === lastCutDoc && host.childElementCount) return;
+  lastCutDoc = docHtml;
+  if (!show){
+    host.innerHTML = plan.noFoot.length
+      ? `<div class="emptyhint" style="color:#b91c1c">Cut maps are on hold — a jig has no foot left (the foot clearance is as big as the part). See the note in “Operator cut maps”.</div>`
+      : (plan.tooBig.length
+        ? `<div class="emptyhint" style="color:#b91c1c">Cut maps are on hold — a jig is longer than the chosen sheet. Pick a longer sheet size in “Operator cut maps”.</div>` : '');
+    return;
+  }
+  let frame = host.querySelector('iframe');
+  if (!frame){
+    host.innerHTML = '<iframe class="jig-cut-frame" title="Operator cut maps" scrolling="no"></iframe>';
+    frame = host.querySelector('iframe');
+  }
+  // Landscape pages are 11in wide — shrink the whole frame document to the room there is.
+  const fit = () => { try {
+    const FULL = 11.2 * 96, root = frame.contentDocument.documentElement;
+    const z = Math.min(1, Math.max(0.4, (host.clientWidth - 4) / FULL));
+    root.style.zoom = z;
+    frame.style.width = Math.round(FULL * z) + 'px';
+    const pages = frame.contentDocument.querySelectorAll('.page');
+    const last = pages[pages.length - 1];
+    frame.style.height = Math.ceil(last ? last.getBoundingClientRect().bottom + 24 : root.scrollHeight) + 'px';
+  } catch (e) { /* frame gone */ } };
+  // Written straight into the frame (not srcdoc): a frame navigation can be held back or
+  // coalesced while the tab is in the background, which left stale maps on screen.
+  const d = frame.contentDocument;
+  d.open(); d.write(docHtml); d.close();
+  fit();
+  setTimeout(fit, 250);   // once more after fonts / layout settle
+}
+
+function renderCutSummary(){
+  const el = document.getElementById('jig-cut-summary');
+  if (!el || !S) return;
+  const plan = buildCutPlan();
+  renderCutLive(plan);
+  if (!plan.blanks.length){ el.innerHTML = '<span class="muted">No jigs yet — nothing to nest.</span>'; return; }
+  const c = plan.c;
+  let html = `<b>${plan.pieceCount}</b> blank${plan.pieceCount === 1 ? '' : 's'} → <b>${plan.physical}</b> sheet${plan.physical === 1 ? '' : 's'} of `
+    + `<b>${esc(cutMaterialName(c))} ${c.thickness}″ — ${esc(c.sheet)}</b> at the saw · consumption <b>${plan.consumption}</b> sheet${plan.consumption === 1 ? '' : 's'} · `
+    + `${plan.maps.length} cut map${plan.maps.length === 1 ? '' : 's'}`;
+  if (plan.noFoot.length) html += `<div class="bad">No foot left — the foot clearance (${esc(S.clearance)}″) is as big as the part, so these jigs cannot be made as entered (printing is blocked until this clears): `
+    + plan.noFoot.map(b => `Jig ${b.n} ${esc(b.names.join(', '))} (foot ${fmt16(b.foot16)}″)`).join('; ') + `</div>`;
+  if (plan.tooBig.length) html += `<div class="bad">Cannot be cut from a ${esc(c.sheet)} sheet — pick a longer sheet (printing is blocked until this clears): `
+    + plan.tooBig.map(b => `Jig ${b.n} ${esc(b.names.join(', '))} (${fmt16(b.L)}″)`).join('; ') + `</div>`;
+  if (c.material === 'bb' && c.sheet !== '5x12') html += `<div class="note">Black Board is stocked as 5x12 only.</div>`;
+  if (c.material === 'other' && !(c.other || '').trim()) html += `<div class="note">Type the material name so it prints on the maps.</div>`;
+  el.innerHTML = html;
+}
+
+function cutTitle(kind){
+  const cst = activeCasting();
+  const num = cst ? String(cst.casting_number || '').trim() : '';
+  const cast = num ? ' — ' + (/^cast/i.test(num) ? num : 'CAST ' + num) : '';
+  const job = ((currentProjectNumber ? currentProjectNumber + ' ' : '') + (S.project || '')).trim();
+  return `${job} — ${kind}${cast}${currentGroup ? ' — ' + currentGroup : ''}`.toUpperCase();
+}
+function cutPageHead(kind, color, strap, right, strapHl, kindEs, strapEs){
+  const titleEs = kindEs ? cutTitle(kindEs).replace(' — CAST ', ' — COLADA ') : '';
+  return `<div class="thead hl-${color}"><h1><span>${esc(cutTitle(kind))}</span>${titleEs ? `<span class="es-title">${esc(titleEs)}</span>` : ''}</h1>
+      <div class="meta">${right || ''}</div></div>
+    <div class="strap">${strapHl ? `<span class="strap-hl">${esc(strap)}</span>` : esc(strap)}${strapEs ? es(' · ' + esc(strapEs)) : ''}</div>`;
+}
+function cutFoot(label, pageNo, pageCount){
+  return `<div class="pfoot"><span>Jig blanks / Piezas en bruto · ${esc(projTitle())} · ${esc(S.date)}</span><span>${esc(label)} — page ${pageNo} of ${pageCount} · página ${pageNo} de ${pageCount}</span></div>`;
+}
+
+function cutMapSVG(plan, m){
+  const SLi = plan.SL / 16, SWi = plan.SW / 16, ML = CUT_SVG_ML, MT = 3.2, MB = 1;
+  const vbW = SLi + ML + CUT_SVG_MR;
+  const usedIn = Math.min(SWi, Math.max(0, m.sheet.used - KERF16) / 16), rest = SWi - usedIn;
+  // The sheet is drawn true to scale in both directions — what you see is proportional.
+  const k = 1, restBand = rest;
+  const bodyH = usedIn * k + restBand, vbH = bodyH + MT + MB;
+  let s = `<svg class="cutsvg" viewBox="0 0 ${vbW} ${vbH}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Cut map ${m.no}">`;
+  s += `<text class="cdim" x="${ML + SLi/2}" y="${MT - 1.1}" text-anchor="middle">${fmt16(plan.SL)}″</text>`;
+  s += `<text class="cdim" x="${ML + SLi + 1}" y="${MT + bodyH/2}" text-anchor="middle" transform="rotate(90 ${ML + SLi + 1} ${MT + bodyH/2})">${fmt16(plan.SW)}″</text>`;
+  s += `<rect class="csheet" x="${ML}" y="${MT}" width="${SLi}" height="${bodyH}"/>`;
+  m.sheet.strips.forEach((st, si) => {
+    const y = MT + st.y / 16 * k, h = st.H / 16 * k, fs = Math.min(1.9, h * 0.6);
+    s += `<text class="cstrip" x="${ML - 0.5}" y="${y + h/2 + fs*0.35}" text-anchor="end" style="font-size:${Math.min(fs, 1.5)}px">S${si+1} · rip ${fmt16(st.H)}″</text>`;
+    st.pieces.forEach(p => {
+      const x = ML + p.x / 16, w = p.b.L / 16, ph = p.b.H / 16 * k, low = p.b.H < st.H;
+      if (low) s += `<rect class="cspare" x="${x}" y="${y}" width="${w}" height="${h}"/>`;
+      s += `<rect class="cpiece" x="${x}" y="${y}" width="${w}" height="${ph}"/>`;
+      const trim = low ? ` · rip to ${fmt16(p.b.H)}″` : '';
+      const full = `JIG ${p.b.n} · ${p.b.names.join(', ')} · ${fmt16(p.b.L)}″${trim}`;
+      const short = `JIG ${p.b.n} · ${fmt16(p.b.L)}″${trim}`;
+      // Full label if it fits; else "JIG n · length", shrunk as far as half size so a short blank still shows its length.
+      const fits = (t, f) => t.length * f * 0.56 <= w - 0.6;
+      let txt = '', f = fs;
+      if (fits(full, fs)) txt = full;
+      else {
+        f = Math.min(fs, (w - 0.6) / (short.length * 0.56));
+        if (f >= fs * 0.5) txt = short; else { f = fs; txt = fits('' + p.b.n, fs) ? '' + p.b.n : ''; }
+      }
+      if (txt) s += `<text class="cname" x="${x + 0.35}" y="${y + h/2 + f*0.35}" style="font-size:${f}px">${esc(txt)}</text>`;
+    });
+    const tail = SLi - Math.min(SLi, st.used / 16);
+    if (tail > 0.05) s += `<rect class="cspare" x="${ML + SLi - tail}" y="${y}" width="${tail}" height="${h}"/>`;
+  });
+  if (rest > 0.05){
+    const y0 = MT + usedIn * k;
+    s += `<rect class="cspare" x="${ML}" y="${y0}" width="${SLi}" height="${restBand}"/>`;
+    if (rest >= 2.5 && restBand >= 2.4) s += `<text class="ckeep" x="${ML + SLi/2}" y="${y0 + restBand/2 + 0.6}" text-anchor="middle">KEEP / GUARDAR — ${fmt16(plan.SL)}″ × ${fmt16(Math.round(rest*16))}″ OFFCUT / RETAZO · BACK TO THE RACK / AL ESTANTE</text>`;
+  }
+  return s + '</svg>';
+}
+
+/** Full print document: the takeoff cover, then one map per sheet layout. */
+function buildCutPages(plan){
+  const c = plan.c, mat = `${cutMaterialName(c)} ${c.thickness}″`, stock = cutStockName(c);
+  const pages = [];   // {label, html}
+
+  // ---- cover
+  const ripSummary = {};
+  plan.maps.forEach(m => m.sheet.strips.forEach(s => { ripSummary[s.H] = (ripSummary[s.H] || 0) + m.qty; }));
+  const depthsTxt = S.depths.filter(d => parseInches(d.d) != null).map(d => `<b>${fmt16(parseInches(d.d))}″</b> ${esc(depthLabelOf(d))}`).join(' · ') || '—';
+  const ripsTxt = Object.keys(ripSummary).sort((a,b) => b - a).map(H => `${ripSummary[H]} × ${fmt16(+H)}″`).join(', ');
+  pages.push({ label: 'Material Takeoff', html: `
+    ${cutPageHead('MATERIAL TAKEOFF', 'yellow', 'SCRIM / HEIGHT-CHECK JIG BLANKS — TABLE SAW — ONE DOCUMENT PER CAST', `Issued / Emitido ${esc(S.date)}`, true,
+                  'DESPIECE DE MATERIAL', 'PIEZAS EN BRUTO PARA PLANTILLAS DE MALLA / VERIFICACIÓN DE ALTURA — SIERRA DE MESA — UN DOCUMENTO POR COLADA')}
+    <h2>Sheet Count Summary${es('Resumen de hojas')}</h2>
+    <table class="list"><thead><tr><th>Material</th><th>Stock size${es('Tamaño de hoja')}</th><th>Process${es('Proceso')}</th><th class="c">Consumption${es('Consumo')}</th><th class="c">Physical sheets at the saw${es('Hojas físicas en la sierra')}</th></tr></thead>
+      <tbody><tr><td class="b">${esc(mat)}</td><td>${esc(stock)}</td><td>Table saw / Sierra de mesa — ${plan.physical} ${plan.physical === 1 ? 'sheet / hoja' : 'sheets / hojas'}</td>
+        <td class="c b">${plan.consumption}</td><td class="c b">${plan.physical}</td></tr></tbody></table>
+    <p class="fine">Consumption is rounded up to the nearest 1/4 sheet per map; a map using 80% or more of a sheet counts as a full sheet. Physical sheets are what gets handled at the saw.
+      ${es('El consumo se redondea hacia arriba al 1/4 de hoja más cercano por mapa; un mapa que usa el 80 % o más de una hoja cuenta como hoja completa. Las hojas físicas son las que se manejan en la sierra.')}</p>
+    <h2>Cut Maps${es('Mapas de corte')}</h2>
+    <table class="list"><thead><tr><th class="c">Map${es('Mapa')}</th><th class="c">QTY sheets${es('Cant. hojas')}</th><th class="c">Strips${es('Tiras')}</th><th class="c">Blanks per sheet${es('Piezas por hoja')}</th><th>Sheet used${es('Hoja usada')}</th><th>Full-length offcut to keep${es('Retazo de largo completo a guardar')}</th></tr></thead><tbody>
+      ${plan.maps.map(m => { const rest = plan.SW - Math.min(plan.SW, m.sheet.used);
+        return `<tr><td class="c b">${m.no}</td><td class="c">${m.qty}</td><td class="c">${m.sheet.strips.length}</td>
+          <td class="c">${m.sheet.strips.reduce((t,s) => t + s.pieces.length, 0)}</td><td>${Math.round(m.frac*100)}% of the width → counts as ${m.consumption}${es(` · ${Math.round(m.frac*100)}% del ancho → cuenta como ${m.consumption}`)}</td>
+          <td>${rest >= 40 ? `${fmt16(plan.SL)}″ × ${fmt16(rest)}″` : '—'}</td></tr>`; }).join('')}
+    </tbody></table>
+    <h2>Jigs${es('Plantillas')}</h2>
+    <p class="body"><b>${plan.pieceCount}</b> blanks for <b>${plan.ok.length}</b> different jigs · foot depths: ${depthsTxt}
+      · handle height <b>${esc(S.handleH)}″</b> · rips: ${ripsTxt}
+      ${esBlock(`<b>${plan.pieceCount}</b> piezas en bruto para <b>${plan.ok.length}</b> plantillas distintas · profundidades del pie: ${depthsTxt} · alto del mango <b>${esc(S.handleH)}″</b> · cortes al hilo: ${ripsTxt}`)}</p>
+    <h2>Standing Rules${es('Reglas fijas')}</h2>
+    <ul class="body">
+      <li>Kerf is <b>1/8″</b> on every cut and is included in the maps.
+        ${esBlock('El corte (kerf) es de <b>1/8″</b> en cada pasada y ya está incluido en los mapas.')}</li>
+      <li><b>Rip the strips first, then crosscut</b> each strip left to right to the lengths printed on the blanks. Strips are filled along the long edge first; a lower blank riding in a taller strip is marked <b>rip to …</b>.
+        ${esBlock('<b>Primero corte las tiras al hilo y luego haga los cortes transversales</b> de cada tira de izquierda a derecha a los largos impresos en las piezas. Las tiras se llenan primero a lo largo del borde largo; una pieza más baja dentro de una tira más alta se marca <b>rip to … (cortar a …)</b>.')}</li>
+      <li>Blanks are <b>square-cut rectangles</b>: handle width × (handle height + foot depth). <b>Notch the foot afterwards</b> from the jig drawings — the maps do not show the notch.
+        ${esBlock('Las piezas en bruto son <b>rectángulos a escuadra</b>: ancho del mango × (alto del mango + profundidad del pie). <b>Haga la muesca del pie después</b> según los dibujos de las plantillas — los mapas no muestran la muesca.')}</li>
+      <li>Jigs with identical cut sizes are made once and shared. The <b>jig list printout</b> is the parts list — it shows every part each jig fits.
+        ${esBlock('Las plantillas con las mismas medidas de corte se hacen una sola vez y se comparten. La <b>lista de plantillas impresa</b> es la lista de piezas — muestra cada pieza que corresponde a cada plantilla.')}</li>
+    </ul>` });
+
+  // ---- maps (the jig list printout is the parts list; lengths are printed on the blanks)
+  plan.maps.forEach(m => {
+    const head = `MAP ${m.no} OF ${plan.maps.length} — <u>${esc(mat)}</u> — ${esc(stock)} — QTY ${m.qty} SHEET${m.qty === 1 ? '' : 'S'}${es(` · MAPA ${m.no} DE ${plan.maps.length} · CANT. ${m.qty} ${m.qty === 1 ? 'HOJA' : 'HOJAS'}`)}`;
+    const rips = {}; m.sheet.strips.forEach(s => { rips[s.H] = (rips[s.H] || 0) + 1; });
+    const ripKeys = Object.keys(rips).sort((a,b) => b - a);
+    const ripTxt = ripKeys.map(H => `${rips[H]} strip${rips[H] === 1 ? '' : 's'} at ${fmt16(+H)}″`).join(', ');
+    const ripTxtEs = ripKeys.map(H => `${rips[H]} tira${rips[H] === 1 ? '' : 's'} a ${fmt16(+H)}″`).join(', ');
+    const vbW = plan.SL / 16 + CUT_SVG_ML + CUT_SVG_MR;
+    const scale = (vbW / 10).toFixed(1);
+    pages.push({ label: `Cut Map ${m.no}`, html: `
+      ${cutPageHead('OPERATOR CUT MAPS', 'blue', 'WHAT TO CUT — SEE THE JIG DRAWINGS FOR THE FOOT NOTCH', `Map ${m.no} of ${plan.maps.length} · Mapa ${m.no} de ${plan.maps.length}`, false,
+                    'MAPAS DE CORTE DEL OPERADOR', 'QUÉ CORTAR — VEA LOS DIBUJOS DE LAS PLANTILLAS PARA LA MUESCA DEL PIE')}
+      <div class="maphead">${head}</div>
+      ${cutMapSVG(plan, m)}
+      <div class="legend"><span class="sw sw-p"></span> <u>${esc(mat)}</u> jig blank / pieza en bruto &nbsp;&nbsp; <span class="sw sw-s"></span> Gray = spare / offcut${es(' · Gris = sobrante / retazo')} &nbsp;&nbsp; Drawn to scale: 1″ on paper = ${scale}″ on the sheet${es(` · A escala: 1″ en papel = ${scale}″ en la hoja`)}</div>
+      <p class="fine"><b>Cut sequence:</b> sheet long edge against the fence. Rip top to bottom as drawn — ${ripTxt} — 1/8″ kerf each rip. Then crosscut each strip left to right to the length printed on each blank. A blank marked <b>rip to …</b> is lower than its strip — rip it down to that height after the crosscut. Cut to the printed numbers, not by scaling this drawing. Notch the foot afterwards from the jig drawings.
+        ${esBlock(`<b>Secuencia de corte:</b> borde largo de la hoja contra la guía. Corte al hilo de arriba hacia abajo como se muestra — ${ripTxtEs} — 1/8″ de corte en cada pasada. Luego haga los cortes transversales de cada tira de izquierda a derecha al largo impreso en cada pieza. Una pieza marcada <b>rip to … (cortar a …)</b> es más baja que su tira — córtela a esa altura después del corte transversal. Corte a las medidas impresas, no midiendo este dibujo. Haga la muesca del pie después según los dibujos de las plantillas.`)}</p>` });
+  });
+
+  return pages.map((p, i) => `<section class="page">${p.html}${cutFoot(p.label, i + 1, pages.length)}</section>`).join('');
+}
+
+async function printCutMaps(){
+  if (!S) return;
+  const plan = buildCutPlan();
+  if (!plan.blanks.length){ alert('Add at least one panel width and one foot depth first — there are no jigs to nest.'); return; }
+  if (!cutPlanReady(plan)) return;
+  if (!(await jigGate())) return;
+  printViaIframe('Jig Cut Maps — ' + projTitle(), buildCutPages(plan), CUT_DOC_CSS);
+  jigStamp();
+}
+/** True when the cut maps can be drawn; otherwise tells the user what to fix (same messages as Print Cut Maps). */
+function cutPlanReady(plan){
+  if (plan.noFoot.length){
+    alert('These jigs have no foot left — the foot clearance (' + S.clearance + '″) is as big as the part:\n\n'
+      + plan.noFoot.map(b => `Jig ${b.n} — ${b.names.join(', ')} (foot ${fmt16(b.foot16)}″)`).join('\n')
+      + '\n\nChange the width or the foot clearance, then print again.');
+    return;
+  }
+  if (plan.tooBig.length){
+    alert('These jigs cannot be cut from a ' + plan.c.sheet + ' sheet:\n\n'
+      + plan.tooBig.map(b => `Jig ${b.n} — ${b.names.join(', ')} (${fmt16(b.L)}″ long)`).join('\n')
+      + '\n\nPick a longer sheet size, then print again.');
+    return false;
+  }
+  if (plan.c.material === 'other' && !(plan.c.other || '').trim()){ alert('Type the material name first — it prints on every map.'); return false; }
+  return true;
+}
+
+/* ===================== deliverable: Print All / Save Deliverable (2026-10-14) ==================== */
+/* One document for the casting: jig list + drawings (all groups), the cross-section sheet(s), then the
+   cut maps (material takeoff cover + operator cut maps). Portrait and landscape sheets live in the
+   same file through named pages, and each original stylesheet is scoped to its own wrapper. */
+
+/** Scope a flat stylesheet (no nested at-rules) under `scope`. @page and :last-child rules are dropped —
+ *  the deliverable's base CSS handles page sizes and breaks; document-level rules are shared. */
+function scopeCss(css, scope){
+  return css.replace(/\/\*[\s\S]*?\*\//g, '').replace(/([^{}]+)\{([^{}]*)\}/g, (m, sel, body) => {
+    sel = sel.trim();
+    if (!sel || sel.startsWith('@page') || sel.includes(':last-child')) return '';
+    if (sel === ':root') return `${scope}{${body}}`;
+    if (sel === '*' || sel === 'html,body' || sel === 'body') return '';
+    return sel.split(',').map(s => `${scope} ${s.trim()}`).join(',') + `{${body}}`;
+  });
+}
+const DELIVERABLE_BASE_CSS = `
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{font-family:'Segoe UI',Arial,Helvetica,sans-serif;color:#1a1a1a;background:#fff;
+       -webkit-print-color-adjust:exact;print-color-adjust:exact}
+  @page{margin:0}
+  @page jig-portrait{size:letter portrait;margin:0}
+  @page jig-landscape{size:letter landscape;margin:0}
+  .doc-p .page{page:jig-portrait;page-break-after:always;break-after:page}
+  .doc-l .page{page:jig-landscape;page-break-after:always;break-after:page}
+  .doc-last .page:last-child{page-break-after:auto;break-after:auto}
+  @media screen{
+    body{background:#6b7280;padding:24px 0}
+    .page{margin:0 auto 24px;box-shadow:0 2px 14px rgba(0,0,0,.45)}
+    .deliv-banner{max-width:11in;margin:0 auto 18px;background:#0f172a;color:#fff;font:600 13px/1.5 'Segoe UI',Arial,sans-serif;
+                  padding:10px 16px;border-radius:8px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+    .deliv-banner button{background:#2563eb;color:#fff;border:0;border-radius:6px;padding:6px 14px;font:inherit;cursor:pointer}
+  }
+  @media print{.deliv-banner{display:none}}
+`;
+function deliverableCss(){ return DELIVERABLE_BASE_CSS + scopeCss(PRINT_DOC_CSS, '.doc-p') + scopeCss(CUT_DOC_CSS, '.doc-l'); }
+
+/** The three parts, or null after telling the user what is missing. Jigs cover ALL groups. */
+function deliverableParts(){
+  if (!S) return null;
+  const savedGroup = currentGroup;
+  currentGroup = null;
+  let jig;
+  try { jig = jigPagesHTML(); } finally { currentGroup = savedGroup; }
+  if (!jig.jigs.length){ alert('Add at least one panel with a valid width — and at least one foot depth — before printing or saving the deliverable.'); return null; }
+  const xsec = S.sections.map((sec, si) => `<section class="page">${xsecPrintHTML(si)}</section>`).join('');
+  const plan = buildCutPlan();
+  let cut = '';
+  if (plan.blanks.length){            // a casting with only CNC jigs has no cut maps — that is fine
+    if (!cutPlanReady(plan)) return null;
+    cut = buildCutPages(plan);
+  }
+  return { jigs: jig.html, xsec, cut };
+}
+function deliverableBody(parts){
+  const blocks = [`<div class="doc-p">${parts.jigs}</div>`, `<div class="doc-p">${parts.xsec}</div>`];
+  if (parts.cut) blocks.push(`<div class="doc-l">${parts.cut}</div>`);
+  blocks[blocks.length - 1] = blocks[blocks.length - 1].replace('<div class="', '<div class="doc-last ');
+  return blocks.join('');
+}
+function deliverableTitle(){ return 'Jig List Deliverable — ' + projTitle(); }
+function deliverableFilename(){
+  const c = activeCasting();
+  const cast = c ? String(c.casting_number || '').trim() : '';
+  const job = [currentProjectNumber, currentProjectName].filter(Boolean).join(' ');
+  const safe = s => String(s).replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim();
+  return safe(`${job} - Cast ${cast || '?'} - Jig List ${todayISO()}`) + '.html';   // dated by the save, so older records are never overwritten
+}
+/** The saved file: the printable pages, a screen-only banner with a Print button, and the casting's
+ *  jig-list data as JSON at the end so a material takeoff can be generated from the file later. */
+function deliverableHTML(parts){
+  const title = deliverableTitle();
+  const stamp = new Date();
+  const c = activeCasting();
+  const data = {
+    generator: 'CWE portal — Jig List tab',
+    savedAt: stamp.toISOString(),
+    projectNumber: currentProjectNumber,
+    projectName: currentProjectName,
+    casting: c ? String(c.casting_number || '') : '',
+    castingId: currentCastingId,
+    state: S
+  };
+  const json = JSON.stringify(data).replace(/<\//g, '<\\/');
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title>`
+    + `<meta name="generator" content="CWE portal — Jig List tab"><style>${deliverableCss()}</style></head><body>`
+    + `<div class="deliv-banner"><span>${esc(title)} · saved ${esc(stamp.toLocaleString())}</span><button type="button" onclick="window.print()">Print</button></div>`
+    + MARKER_DEFS + deliverableBody(parts)
+    + `<script type="application/json" id="jig-deliverable-data">${json}</script></body></html>`;
+}
+async function printAll(){
+  const parts = deliverableParts();
+  if (!parts) return;
+  if (!(await jigGate())) return;
+  printViaIframe('Jig List — ' + projTitle(), deliverableBody(parts), deliverableCss());
+  jigStamp();
+}
+async function saveDeliverable(){
+  const parts = deliverableParts();
+  if (!parts) return;
+  if (!(await jigGate())) return;
+  const html = deliverableHTML(parts);
+  const name = deliverableFilename();
+  try {
+    if (window.showSaveFilePicker){
+      // Chrome / Edge: a real Save As dialog; the browser remembers the last folder used for this id.
+      const handle = await window.showSaveFilePicker({
+        id: 'cwe-jig-deliverables', suggestedName: name,
+        types: [{ description: 'Web page (HTML)', accept: { 'text/html': ['.html'] } }]
+      });
+      const w = await handle.createWritable();
+      await w.write(new Blob([html], { type: 'text/html' }));
+      await w.close();
+      noteDeliverableSaved(handle.name || name);
+      jigStamp();
+    } else {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+      noteDeliverableSaved(name);
+      jigStamp();
+    }
+  } catch (err) {
+    if (err && err.name === 'AbortError') return;   // the user closed the dialog
+    logger.error('[jig-list] save deliverable failed:', err);
+    alert('Could not save the deliverable: ' + ((err && err.message) || err));
+  }
+}
+function noteDeliverableSaved(name){
+  if (!S) return;
+  S.deliverable = { savedAt: new Date().toISOString(), name };
+  scheduleSave();
+  renderDeliverableStamp();
+  setSaveStatus('Deliverable saved', true);
+}
+function renderDeliverableStamp(){
+  const el = document.getElementById('jig-deliv-stamp');
+  if (!el) return;
+  const d = S && S.deliverable;
+  if (!d){ el.textContent = ''; el.title = ''; return; }
+  const when = new Date(d.savedAt);
+  el.textContent = 'Deliverable saved ' + (isNaN(when) ? '' : when.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }));
+  el.title = d.name || '';
+}
+
+/* Landscape letter; page titles highlighted per the Material Takeoff Workflow rules
+   (takeoff yellow, parts orange, cut maps blue). */
+const CUT_DOC_CSS = `
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{font-family:'Segoe UI',Arial,Helvetica,sans-serif;color:#1a1a1a;background:#fff;
+       -webkit-print-color-adjust:exact;print-color-adjust:exact}
+  @page{size:letter landscape;margin:0}
+  .page{width:11in;height:8.4in;overflow:hidden;padding:0.45in 0.5in;position:relative;page-break-after:always}
+  .page:last-child{page-break-after:auto}
+  .thead{display:flex;justify-content:space-between;align-items:flex-end;padding-bottom:6px;border-bottom:4px solid #999}
+  .thead h1{font-size:21px;font-weight:800;margin:0;letter-spacing:.3px}
+  .thead h1 span{padding:2px 8px;border-radius:2px}
+  .thead .meta{font-size:12px;color:#444;text-align:right;white-space:nowrap;padding-left:16px}
+  .hl-yellow{border-color:#facc15}.hl-yellow h1 span{background:#fde047}
+  .hl-orange{border-color:#fb923c}.hl-orange h1 span{background:#fdba74}
+  .hl-blue{border-color:#60a5fa}.hl-blue h1 span{background:#93c5fd}
+  .strap{font-size:12.5px;font-weight:700;letter-spacing:.6px;margin:6px 0 12px;color:#222}
+  .strap-hl{background:#bbf7d0;padding:2px 8px;border-radius:2px}   /* light green: tells this cover apart from the main takeoff cover */
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:.8px;margin:9px 0 4px;color:#333}
+  table.list{border-collapse:collapse;width:100%;font-size:12px}
+  table.list thead th{background:#eaeaea;border:1px solid #111;padding:3px 8px;text-align:left;font-size:11px;line-height:1.25}
+  table.list tbody td{border:1px solid #bbb;padding:3px 8px;vertical-align:top}
+  table.list .c{text-align:center}
+  table.list .b{font-weight:700}
+  table.list td.wrap{white-space:normal;line-height:1.7}
+  .pc{display:inline-block;border:1px solid #999;border-radius:3px;padding:0 6px;margin:1px 3px 1px 0;background:#f4ead0;white-space:nowrap}
+  .body{font-size:12.5px;line-height:1.4;margin:3px 0}
+  ul.body{padding-left:20px}
+  .fine{font-size:11px;color:#333;line-height:1.4;margin:5px 0 0}
+  .maphead{font-size:15px;font-weight:800;margin:0 0 6px}
+  .legend{font-size:14px;font-weight:700;margin-top:6px}
+  .sw{display:inline-block;width:22px;height:12px;border:1px solid #111;vertical-align:-1px}
+  .sw-p{background:#efe2c2}.sw-s{background:#cfcfcf}
+  .cutsvg{display:block;width:10in;max-height:5.3in;margin:0 auto}
+  .csheet{fill:#fff;stroke:#111;stroke-width:.25}
+  .cpiece{fill:#efe2c2;stroke:#111;stroke-width:.09}
+  .cspare{fill:#cfcfcf;stroke:#777;stroke-width:.06}
+  .cname{font-weight:700;fill:#111}
+  .cstrip{fill:#1f3a93;font-weight:700}
+  .cdim{font-size:1.9px;font-weight:700;fill:#1f3a93}
+  .ckeep{font-size:1.7px;font-weight:800;fill:#333;letter-spacing:.05px}
+  .pfoot{position:absolute;left:0.5in;right:0.5in;bottom:0.25in;border-top:.5px solid #bbb;padding-top:4px;
+         font-size:10px;color:#777;display:flex;justify-content:space-between}
+  .es{color:#555;font-style:italic;font-weight:400}
+  .es-block{display:block;margin-top:1px}
+  .thead h1 .es-title{display:block;background:none !important;padding:0;margin-top:3px;font-size:12px;font-weight:600;color:#444;letter-spacing:.2px}
+  h2 .es{text-transform:none;letter-spacing:0;font-size:11px;margin-left:8px}
+  th .es{display:block;font-size:10px}
+  .body .es b,.fine .es b{color:#333}
+  ul.body li{margin-bottom:2px}
+  .strap{margin:4px 0 8px}
+  .cutsvg{max-height:4.75in}
+`;
+
+/* ============================ shell ============================ */
+
+/** Build the static UI skeleton once and wire the (delegated) events. */
+function buildShell(root){
+  root.innerHTML = `
+${MARKER_DEFS}
+<div class="pp-bt-pills" id="jig-casting-pills" style="display:none"></div>
+<div class="pp-castings-hint" id="jig-no-castings" hidden>
+  No castings yet. Add a casting first — each casting gets its own jig list.
+</div>
+<div class="bar" id="jig-topbar">
+  <b>Scrim Jig Generator</b>
+  <span class="savestat" id="jig-save-status" aria-live="polite"></span>
+  <span class="savestat delivstat" id="jig-deliv-stamp"></span>
+  <span class="sp"></span>
+  <span class="actions">
+    <button type="button" id="jig-btn-copy" class="ghost">Copy to Casting…</button>
+    <button type="button" id="jig-btn-print-jigs">Print Jigs</button>
+    <button type="button" id="jig-btn-print-cut">Print Cut Maps</button>
+    <button type="button" id="jig-btn-print-xsec">Print Cross-Section</button>
+    <button type="button" id="jig-btn-print-all" class="all" title="Jig list, cross-section and cut maps for this casting in one print">Print All</button>
+    <button type="button" id="jig-btn-save-deliv" class="save" title="Save the complete printable document (with the jig-list data inside) as one file for the records and for material takeoff generation">Save Deliverable</button>
+  </span>
+</div>
+<div class="vbar" id="jig-vbar" style="display:none"></div>
+
+<div class="doc" id="jig-doc">
+
+  <!-- ====================== EDITOR (screen only) ====================== -->
+  <section class="editor" id="jig-editor">
+
+    <h2>Panel cross-section <span style="font-weight:400;text-transform:none;color:#888;font-size:12px">— scrim placement diagram</span></h2>
+    <p class="hint">Enter the total concrete thickness and the number of layers — the heights are filled in so the layers <b>split the thickness evenly</b> (measured from the <b>bottom / face of the panel</b>). Each layer is a <b>Scrim</b> or a <b>Height check</b>; the printed sheet and the foot depths follow. Type over any height for a special case; <b>Split layers evenly</b> puts them back. A casting with parts of <b>different thicknesses</b> gets one entry per thickness (<b>+ Add thickness</b>); each part is then assigned its thickness in the import window or in the Panels table. Dimensions accept <b>3/4</b>, <b>1-1/2</b> or <b>0.75</b>.</p>
+    <div id="jig-xsec-list"></div>
+    <div class="toolrow" style="margin-top:10px"><button type="button" class="addbtn xsec-add" style="margin-top:0" data-act="add-xsec">+ Add thickness</button>
+      <button type="button" data-act="print-xsec">🖨 Print cross-section (one sheet per thickness)</button></div>
+
+    <h2 style="margin-top:22px">Project</h2>
+    <div class="fields" id="jig-proj-fields"></div>
+
+    <h2 style="margin-top:20px">Geometry &amp; depths</h2>
+    <p class="hint">Each jig is one plywood T. <b>Handle</b> = panel width + overhang (rides on the form walls). <b>Foot</b> = panel width − clearance (drops into the cavity); its <b>depth</b> = how deep the scrim is pressed. One jig is made per panel width × per depth below.</p>
+    <div class="fields" id="jig-geo-fields"></div>
+
+    <h2 style="margin-top:20px">Foot depths <span style="font-weight:400;text-transform:none;color:#888;font-size:12px">— one jig per depth, per width</span></h2>
+    <p class="hint">Every layer in the cross-section above gets its foot depth here automatically (thickness − layer height), with its type and label. Use <b>+ Add extra depth</b> only for a jig that is not a layer of the cross-section.</p>
+    <div id="jig-depth-wrap"></div>
+    <button type="button" class="addbtn" data-act="add-depth">+ Add extra depth</button>
+
+    <h2 style="margin-top:22px">Panels</h2>
+    <p class="hint">Enter each panel’s width and quantity. Widths accept <b>44</b>, <b>44-1/8</b>, <b>44 1/8</b> or <b>44.125</b>. <b>Group</b> is optional — fill it to get per-group print buttons (like castings); leave blank for one flat list.</p>
+    <div class="jig-imp-row">
+      <button type="button" class="jig-imp-btn" data-act="import-inv">⭳ Import from Casting Inventory…</button>
+      <span class="jig-imp-stamp" id="jig-imp-stamp"></span>
+    </div>
+    <div id="jig-panel-wrap"></div>
+    <button type="button" class="addbtn" data-act="add-panel">+ Add panel</button>
+    <div class="warn" id="jig-panel-warn"></div>
+
+    <h2 style="margin-top:22px">Operator cut maps <span style="font-weight:400;text-transform:none;color:#888;font-size:12px">— jig blanks nested for the table saw</span></h2>
+    <p class="hint">Each jig is cut from one rectangular blank: <b>handle width × (handle height + foot depth)</b>. Blanks are nested rip-first with a <b>1/8″ kerf</b>; the printout has a takeoff cover with the sheet count, the parts list, a map per sheet and a strip schedule for the saw.</p>
+    <div class="fields" id="jig-cut-fields"></div>
+    <div class="jig-cut-summary" id="jig-cut-summary"></div>
+    <div class="toolrow"><button type="button" data-act="print-cut">🖨 Print cut maps &amp; summary</button></div>
+
+    <h2 style="margin-top:22px">Start over</h2>
+    <div class="toolrow">
+      <button type="button" class="danger" data-act="clear">Clear all</button>
+    </div>
+    <p class="hint" style="margin-top:8px">Work auto-saves to the selected casting.</p>
+  </section>
+
+  <!-- ====================== GENERATED OUTPUT ====================== -->
+  <div id="jig-output"></div>
+
+  <!-- ============ LIVE OPERATOR CUT MAPS (own document in a frame — same pages as the printout) ============ -->
+  <div id="jig-cut-output"></div>
+
+</div>
+
+<!-- Copy-to-casting modal (portal pp-modal classes, jig-copy-* ids) -->
+<div class="pp-modal-backdrop" id="jig-copy-modal" role="dialog" aria-modal="true" aria-labelledby="jig-copy-title" hidden>
+  <div class="pp-modal">
+    <div class="pp-modal-header">
+      <h2 id="jig-copy-title">Copy Jig List / Cross-Section</h2>
+      <button type="button" class="pp-modal-close" id="jig-copy-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="pp-modal-body">
+      <p class="pp-modal-hint" id="jig-copy-hint"></p>
+      <label class="pp-print-label-all"><input type="checkbox" id="jig-copy-all"> Select all</label>
+      <div class="pp-print-label-list" id="jig-copy-list"></div>
+    </div>
+    <div class="pp-modal-actions">
+      <button type="button" class="pp-secondary-btn" id="jig-copy-cancel">Cancel</button>
+      <button type="button" class="pp-primary-btn" id="jig-copy-confirm" disabled>Copy</button>
+    </div>
+  </div>
+</div>
+
+<!-- Import-from-inventory modal (jig-imp-* ids) -->
+<div class="pp-modal-backdrop" id="jig-imp-modal" role="dialog" aria-modal="true" aria-labelledby="jig-imp-title" hidden>
+  <div class="pp-modal jig-imp-modal">
+    <div class="pp-modal-header">
+      <h2 id="jig-imp-title">Import from Casting Inventory</h2>
+      <button type="button" class="pp-modal-close" id="jig-imp-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="pp-modal-body">
+      <p class="pp-modal-hint" id="jig-imp-hint"></p>
+      <div class="jig-imp-opts" id="jig-imp-opts"></div>
+      <div class="jig-imp-parts" id="jig-imp-parts"></div>
+      <div class="jig-imp-preview" id="jig-imp-preview"></div>
+    </div>
+    <div class="pp-modal-actions">
+      <button type="button" class="pp-secondary-btn" id="jig-imp-cancel">Cancel</button>
+      <button type="button" class="pp-primary-btn" id="jig-imp-confirm" disabled>Update jig list</button>
+    </div>
+  </div>
+</div>`;
+
+  const editor = document.getElementById('jig-editor');
+  editor.addEventListener('input', onEditorInput);
+  editor.addEventListener('click', onEditorClick);
+
+  // Casting pill row (delegated — pills re-render on every casting switch).
+  document.getElementById('jig-casting-pills').addEventListener('click', (e) => {
+    const pill = e.target.closest('[data-jig-pill]');
+    if (!pill) return;
+    handleSelectCasting(pill.dataset.castingId);
+  });
+
+  document.getElementById('jig-btn-print-jigs').onclick = printJigs;
+  document.getElementById('jig-btn-print-xsec').onclick = printXsec;
+  document.getElementById('jig-btn-print-cut').onclick = printCutMaps;
+  document.getElementById('jig-btn-print-all').onclick = printAll;
+  document.getElementById('jig-btn-save-deliv').onclick = saveDeliverable;
+
+  // Copy-to-casting modal.
+  document.getElementById('jig-btn-copy').onclick = openCopyModal;
+  document.getElementById('jig-copy-close').onclick = closeCopyModal;
+  document.getElementById('jig-copy-cancel').onclick = closeCopyModal;
+  document.getElementById('jig-copy-confirm').onclick = confirmCopy;
+  const copyModal = document.getElementById('jig-copy-modal');
+  copyModal.addEventListener('click', (e) => { if (e.target === copyModal) closeCopyModal(); });
+  document.getElementById('jig-copy-list').addEventListener('change', updateCopyConfirmState);
+  document.getElementById('jig-copy-all').addEventListener('change', (e) => {
+    document.querySelectorAll('#jig-copy-list input[type="checkbox"]')
+      .forEach(cb => { cb.checked = e.target.checked; });
+    updateCopyConfirmState();
+  });
+
+  // Import-from-inventory modal.
+  document.getElementById('jig-imp-close').onclick = closeImportModal;
+  document.getElementById('jig-imp-cancel').onclick = closeImportModal;
+  document.getElementById('jig-imp-confirm').onclick = confirmImport;
+  const impModal = document.getElementById('jig-imp-modal');
+  impModal.addEventListener('click', (e) => {
+    if (e.target === impModal) { closeImportModal(); return; }
+    const btn = e.target.closest('[data-imp-mode]');
+    if (btn) setImportMode(btn.closest('[data-imp-key]').dataset.impKey, btn.dataset.impMode);
+    const sb = e.target.closest('[data-imp-sec]');
+    if (sb && impDraft){
+      const key = sb.closest('[data-imp-key]').dataset.impKey, k = +sb.dataset.impSec;
+      if (k === 0) delete impDraft.secs[key]; else impDraft.secs[key] = k;   // first thickness is the default
+      renderImportModal();
+    }
+  });
+  impModal.addEventListener('input', onImportInput);
+}

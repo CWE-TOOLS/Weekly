@@ -1,0 +1,300 @@
+/* Project Map — department columns in process order, one screen; shares the card look of finishing-map.css */
+
+.pm-sub { font-size: 12px; color: #475569; font-weight: 600; white-space: nowrap; }
+.pm-app { background: #9aa6b6; }   /* the page behind the bands: dark, so the band boxes and cards stand out (user, 2026-10-23) */
+.pm-main { overflow: hidden; }
+.pm-hidden { flex: 0 0 auto; margin: 0.45rem 0.8rem 0; padding: 0.3rem 0.7rem; border-radius: 6px; font-size: 12px; background: #fef3c7; color: #78350f; border: 1px solid #fcd34d; }
+.pm-hidden[hidden] { display: none; }
+.pm-hidden { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+.pm-hidden-why { font-weight: 600; margin-right: 0.2rem; }
+.pm-hidden-dept { display: inline-block; padding: 0.1rem 0.6rem; border-radius: 999px; background: var(--pm-col, #334155); color: #fff; font-weight: 800; font-size: 12px; letter-spacing: 0.03em; }
+.pm-none { grid-column: 1 / -1; align-self: start; background: #fff; border-radius: 8px; padding: 1rem; font-size: 14px; color: #475569; }
+
+/* day / week switch and the date arrows, in the middle of the header */
+.pm-when { display: flex; align-items: center; gap: 0.35rem; }
+.pm-view { display: inline-flex; border: 1px solid #cbd5e1; border-radius: 999px; overflow: hidden; margin-right: 0.4rem; }
+.pm-view-btn { font: inherit; font-size: 12px; font-weight: 700; padding: 4px 12px; border: none; background: #fff; color: #475569; cursor: pointer; }
+.pm-view-btn:hover { background: #f1f5f9; }
+.pm-view-on { background: #1d4ed8; color: #fff; }
+.pm-view-stack { display: flex; flex-direction: column; align-items: center; gap: 0.2rem; margin-right: 0.4rem; }
+.pm-view-stack .pm-view { margin-right: 0; }
+.pm-sunday { border: 1px solid #cbd5e1; border-radius: 999px; font-size: 11px; padding: 2px 10px; }
+.pm-sunday[hidden] { display: none; }
+.pm-arrow { font-size: 18px; line-height: 1; padding: 2px 10px; font-weight: 800; }
+.pm-when-label { font-weight: 800; font-size: 14px; min-width: 13rem; text-align: center; }
+
+.pm-main {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(var(--pm-cols, 12), minmax(0, 1fr));
+  /* rows are set from the page: header + one row per band, sized to the busiest column of that band */
+  column-gap: 0.45rem;
+  row-gap: 0;
+  padding: 0.6rem 0.8rem 0.6rem;
+}
+
+/* a department is a set of grid cells (title + one per band) so bands line up across departments;
+   each cell carries the department's colour (--pm-col set inline) and a faint tint */
+.pm-col { display: contents; }
+.pm-cell-head.fm-area-head { background: var(--pm-col, #111827); padding: 0.3rem 0.4rem; font-size: 0.74rem; border: 2px solid var(--pm-col, #1f2937); border-bottom: none; border-radius: 8px 8px 0 0; min-height: 0; }
+.pm-cell-head.fm-area-overflow { background: #78350f; border-color: #78350f; }
+.pm-cell-head .fm-area-more { font-size: 0.66rem; }
+.pm-cell {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--pm-col, #1f2937) 7%, white);   /* light inside the band; the page behind the bands is the dark part */
+  border-left: 2px solid var(--pm-col, #1f2937);
+  border-right: 2px solid var(--pm-col, #1f2937);
+}
+.pm-cell-last { border-bottom: 2px solid var(--pm-col, #1f2937); border-radius: 0 0 8px 8px; }
+/* with bands (Week / 4 weeks / Month): a small gap between the bands, each band its own box */
+.pm-banded .pm-cell { border: 2px solid var(--pm-col, #1f2937); border-radius: 6px; margin-top: 0.3rem; }
+.pm-banded .pm-cell-head { border-bottom: 2px solid var(--pm-col, #1f2937); border-radius: 8px; }
+.pm-banded .pm-cell-head.fm-area-overflow { border-color: #78350f; }
+.pm-banded .pm-section-head { border-top: none; }
+.pm-cell .fm-cards { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; flex-direction: column; flex-wrap: nowrap; padding: 0.3rem; gap: 0.3rem; scrollbar-width: thin; overscroll-behavior: contain; }   /* a full band scrolls under the wheel without opening it */
+.pm-cell .fm-cards::-webkit-scrollbar { width: 6px; }
+.pm-cell .fm-cards::-webkit-scrollbar-thumb { background: rgba(15, 23, 42, 0.3); border-radius: 3px; }
+.pm-cell .fm-chip { flex: 0 0 auto; width: 100%; max-width: none; cursor: pointer; padding: 0.18rem 0.35rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25); }
+.pm-chip-day { font-size: 10.5px; color: #6d28d9; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pm-col-scheduled .pm-chip-day { color: #475569; }
+.pm-trail { margin-top: 0.25rem; padding-top: 0.25rem; border-top: 1px dashed #e2e8f0; font-size: 11px; }
+.pm-trail-here { color: #0f172a; font-weight: 800; }
+#fm-popover .fm-chip-expanded { cursor: default; }
+
+@media (max-width: 1100px) {
+  .pm-when { order: 3; width: 100%; justify-content: center; }
+}
+
+/* ---------- band titles inside a cell: weekdays (Week), Week 1–7… (4 weeks), Week 1, 2… (Month) ---------- */
+.pm-section-head[data-open-band] { cursor: pointer; }
+.pm-section-head[data-open-band]:hover { background: color-mix(in srgb, var(--pm-col, #1f2937) 28%, white); }
+.pm-section-head {
+  display: flex; align-items: baseline; gap: 0.3rem;
+  padding: 0.12rem 0.4rem;
+  font-size: 10.5px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase;
+  color: #334155;
+  background: color-mix(in srgb, var(--pm-col, #1f2937) 18%, white);
+  border-top: 1px solid color-mix(in srgb, var(--pm-col, #1f2937) 40%, white);
+}
+.pm-cell:nth-child(2) .pm-section-head { border-top: none; }
+.pm-section-sub { font-weight: 500; text-transform: none; letter-spacing: 0; color: #64748b; font-size: 10px; }
+.pm-section-n { margin-left: auto; font-weight: 800; color: #1e293b; }
+
+/* ---------- department picker (like the weekly's) ---------- */
+.pm-dept-dropdown { position: relative; }
+.pm-dept-btn { border-color: #cbd5e1; }
+.pm-dept-panel {
+  display: none; position: absolute; right: 0; top: calc(100% + 4px); z-index: 30;
+  width: 13rem; background: #fff; border: 1px solid #cbd5e1; border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18); padding: 0.4rem;
+}
+.pm-dept-dropdown.open .pm-dept-panel { display: block; }
+.pm-dept-actions { display: flex; gap: 0.3rem; padding-bottom: 0.3rem; border-bottom: 1px solid #e2e8f0; margin-bottom: 0.3rem; }
+.pm-dept-list { list-style: none; margin: 0; padding: 0; max-height: 60vh; overflow: auto; }
+.pm-dept-list li label { display: flex; align-items: center; gap: 0.4rem; padding: 0.2rem 0.3rem; font-size: 12.5px; cursor: pointer; border-radius: 4px; }
+.pm-dept-list li label:hover { background: #f1f5f9; }
+
+/* ---------- dummy mode ---------- */
+.pm-dummy-toggle { border: 1px solid #c026d3; color: #a21caf; border-radius: 999px; margin-left: 0.5rem; }
+.pm-dummy-toggle.pm-view-on { background: #a21caf; color: #fff; }
+.pm-dummy-bar {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;
+  margin: 0.45rem 0.8rem 0; padding: 0.35rem 0.7rem; border-radius: 6px;
+  background: #fdf4ff; border: 2px solid #c026d3; color: #701a75; font-size: 12.5px;
+}
+.pm-dummy-bar[hidden] { display: none; }
+.pm-dummy-tag { background: #a21caf; color: #fff; font-weight: 900; letter-spacing: 0.1em; padding: 0.1rem 0.5rem; border-radius: 4px; font-size: 11px; }
+.pm-dummy-state { color: #86198f; }
+.pm-dummy-chain { display: flex; align-items: center; gap: 0.3rem; font-weight: 600; margin-left: 0.4rem; }
+.pm-dummy-actions { margin-left: auto; display: flex; gap: 0.3rem; flex-wrap: wrap; }
+.pm-dummy-exit { border-color: #a21caf; color: #a21caf; }
+body.pm-dummy .pm-app { background: #7c5f86; }
+body.pm-dummy .fm-chip[draggable="true"] { cursor: grab; }
+body.pm-dummy .fm-chip[draggable="true"]:active { cursor: grabbing; }
+.pm-chip-moved { border-left-color: #c026d3 !important; background: #fdf4ff !important; outline: 1.5px dashed #c026d3; outline-offset: -1px; }
+.pm-moved-tag { background: #c026d3; color: #fff; font-size: 9.5px; font-weight: 800; padding: 0 0.3rem; border-radius: 3px; vertical-align: middle; }
+.pm-orig { color: #86198f; font-weight: 600; }
+.pm-movebox { margin-top: 0.35rem; padding-top: 0.3rem; border-top: 1px dashed #e2e8f0; font-size: 11.5px; }
+.pm-movebox label { display: flex; align-items: center; gap: 0.4rem; }
+.pm-movebox input { font: inherit; font-size: 11.5px; padding: 1px 4px; border: 1px solid #cbd5e1; border-radius: 4px; }
+.pm-section-h { font-weight: 700; color: #475569; text-transform: none; letter-spacing: 0; font-size: 10.5px; margin-left: 0.25rem; }
+.pm-section-h.pm-over { color: #b91c1c; }
+.pm-section-head-day { justify-content: flex-end; padding: 0.05rem 0.4rem; }
+.pm-section-head-day .pm-section-h:empty { display: none; }
+.pm-section-head-day:not(:has(.pm-section-h:not(:empty))) { display: none; }
+.pm-section-sq:empty { display: none; }
+.pm-day-dept .pm-section-sq { margin-left: 0; }
+.pm-cell-over { box-shadow: inset 0 0 0 2px #dc2626; }
+.pm-cell-over .pm-section-head { background: #fee2e2; }
+.pm-drop-ok { outline: 2px dashed rgba(192, 38, 211, 0.6); outline-offset: -3px; }
+.pm-cell.fm-drop-hover { background: #f5d0fe !important; }
+body.pm-dragging .pm-cell:not(.pm-drop-ok) { opacity: 0.45; }
+.pm-final-tag { background: #166534; color: #fff; font-size: 10px; font-weight: 800; padding: 0.05rem 0.4rem; border-radius: 3px; margin-left: 0.3rem; }
+.pm-dummy-row .fm-bulk-go { padding: 0.2rem 0.8rem; }
+
+/* ---------- Calendar (dummy mode): the month as the conference-room whiteboard — Week 1, 2, 3… rows, a cell per day,
+   the day's jobs grouped by department inside the cell (user, 2026-10-27) ---------- */
+.pm-view-btn[hidden] { display: none; }
+.pm-view-cal { border-left: 1px solid #cbd5e1; }
+.pm-calendar { column-gap: 0.3rem; row-gap: 0.3rem; }
+.pm-cal-dow { text-align: center; font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: #f8fafc; padding: 0.1rem 0 0; }
+.pm-cal-week { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 0.15rem; background: #1e293b; color: #f8fafc; border-radius: 8px; font-size: 12.5px; font-weight: 800; text-align: center; padding: 0.3rem; }
+.pm-cal-week .pm-section-sub { color: #cbd5e1; }
+.pm-calendar .pm-cell { border: 2px solid #475569; border-radius: 8px; background: #fff; overflow: hidden; }
+.pm-calendar .pm-cell.pm-cal-sun { background: #f1f5f9; }
+.pm-calendar .pm-cell.pm-cal-today { border-color: #1d4ed8; box-shadow: inset 0 0 0 2px #93c5fd; }
+.pm-cal-date { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 0.15rem 0.4rem; padding: 0.1rem 0.4rem; font-size: 11.5px; color: #1e293b; background: #e2e8f0; border-bottom: 1px solid #cbd5e1; }
+.pm-cal-today .pm-cal-date { background: #dbeafe; }
+.pm-cal-date[data-open-day] { cursor: pointer; }
+.pm-cal-date[data-open-day]:hover { background: #cbd5e1; }
+.pm-day-dept { display: flex; align-items: center; gap: 0.5rem; }
+.pm-cal-date-n { font-weight: 600; color: #64748b; font-size: 10.5px; white-space: nowrap; margin-left: auto; }
+.pm-cal-open { background: #fde047; color: #713f12; font-weight: 900; font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; padding: 0.05rem 0.45rem; border-radius: 999px; line-height: 1.3; box-shadow: 0 0 0 1px #ca8a04; }   /* "open Cast, Finish day": bright, so a free day jumps out */
+.pm-cal-body { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; overscroll-behavior: contain; padding: 0.25rem; display: flex; flex-direction: column; gap: 0.3rem; }
+.pm-cal-body::-webkit-scrollbar { width: 6px; }
+.pm-cal-body::-webkit-scrollbar-thumb { background: rgba(15, 23, 42, 0.3); border-radius: 3px; }
+.pm-cal-dept { border-left: 4px solid var(--pm-col, #1f2937); border-radius: 4px; background: color-mix(in srgb, var(--pm-col, #1f2937) 8%, white); }
+.pm-cal-dept-head { display: flex; align-items: baseline; gap: 0.35rem; padding: 0.08rem 0.35rem; font-size: 10.5px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: #1e293b; cursor: pointer; background: color-mix(in srgb, var(--pm-col, #1f2937) 22%, white); border-radius: 0 4px 0 0; }
+.pm-cal-dept-head:hover { background: color-mix(in srgb, var(--pm-col, #1f2937) 34%, white); }
+.pm-cal-dept-head .pm-section-n { margin-left: auto; }
+.pm-cal-dept-head .pm-section-h { margin-left: 0; }
+.pm-cal-dept-over { box-shadow: inset 0 0 0 2px #dc2626; }
+.pm-cal-dept-over .pm-cal-dept-head { background: #fee2e2; }
+.pm-calendar .pm-cell .fm-cards { flex: 0 0 auto; overflow: visible; padding: 0.25rem; gap: 0.25rem; }
+
+/* ---------- touch: pick a card up with its Move button, tap the day; bigger targets on touch displays (2026-10-27) ---------- */
+.pm-pick-note { display: inline-flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; font-weight: 600; color: #701a75; }
+.pm-pick-note[hidden] { display: none; }
+.pm-pick-tag { background: #c026d3; color: #fff; font-weight: 900; letter-spacing: 0.08em; padding: 0.1rem 0.45rem; border-radius: 4px; font-size: 11px; }
+.pm-movebox { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.pm-pickup { padding: 0.3rem 0.8rem; }
+.pm-cell.pm-pick-ok { outline: 3px dashed #c026d3; outline-offset: -4px; cursor: pointer; animation: pm-pick-pulse 1.2s ease-in-out infinite; }
+.pm-cell.pm-pick-ok .pm-section-head[data-open-band], .pm-cell.pm-pick-ok .pm-cal-dept-head, .pm-cell.pm-pick-ok .pm-cal-date { pointer-events: none; }   /* while moving, a tap anywhere in the cell is the drop */
+body.pm-picking .pm-cell:not(.pm-pick-ok) { opacity: 0.45; }
+@keyframes pm-pick-pulse { 0%, 100% { outline-color: rgba(192, 38, 211, 0.9); } 50% { outline-color: rgba(192, 38, 211, 0.35); } }
+body.pm-dummy .fm-chip { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+html { touch-action: manipulation; }   /* no double-tap zoom delay on touch displays */
+@media (pointer: coarse) {
+  .fm-nav-btn, .pm-view-btn, .fm-mini-btn { min-height: 2.3rem; padding-left: 0.9rem; padding-right: 0.9rem; }
+  .pm-arrow { min-width: 2.6rem; }
+  .pm-cell .fm-chip { padding: 0.35rem 0.5rem; }
+  .pm-cal-dept-head, .pm-section-head { padding-top: 0.25rem; padding-bottom: 0.25rem; }
+  .pm-dept-list li label { padding: 0.45rem 0.4rem; font-size: 14px; }
+  .pm-movebox input { font-size: 14px; padding: 4px 6px; }
+}
+
+/* dummy mode: Cast with more than CAST_PER_DAY_LIMIT castings on one day — the count goes red */
+.pm-section-n.pm-cast-over { background: #dc2626; color: #fff; border-radius: 4px; padding: 0 0.4rem; font-weight: 900; box-shadow: 0 0 0 1px #7f1d1d; white-space: nowrap; }
+.pm-day-dept .pm-cast-over { margin-left: 0.2rem; font-size: 11px; }
+.pm-cast-risk { margin-left: auto; color: #b91c1c; font-weight: 900; font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; }
+.pm-section-head .pm-cast-risk + .pm-section-n, .pm-cal-dept-head .pm-cast-risk + .pm-section-n { margin-left: 0.3rem; }
+/* dummy mode sq ft on a line: green under 300, orange 300–350, red 350 and over (its own scale, not tied to the cast warning) */
+.pm-section-sq.pm-sq-ok { color: #15803d; font-weight: 800; }
+.pm-section-sq.pm-sq-warn { color: #c2410c; font-weight: 800; }
+.pm-section-sq.pm-sq-over { color: #b91c1c; font-weight: 800; }
+/* ---------- loads on a line (2026-10-27): finished-face sq ft and the cast warning ---------- */
+.pm-section-sq { font-weight: 800; font-size: 10.5px; text-transform: none; letter-spacing: 0; margin-left: 0.25rem; white-space: nowrap; }
+.pm-section-sq:empty { display: none; }
+.pm-sq-ok { color: #15803d; }     /* under 300 */
+.pm-sq-warn { color: #c2410c; }   /* 300 up to 350 */
+.pm-sq-over { color: #b91c1c; }   /* 350 and over */
+.pm-cast-risk { margin-left: auto; color: #b91c1c; font-weight: 900; font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; }
+.pm-cast-risk + .pm-section-n { margin-left: 0.3rem; }
+.pm-section-n.pm-cast-over { background: #dc2626; color: #fff; border-radius: 4px; padding: 0 0.4rem; font-weight: 900; box-shadow: 0 0 0 1px #7f1d1d; white-space: nowrap; }
+.pm-day-dept { display: flex; align-items: center; gap: 0.4rem; }
+.pm-day-dept .pm-section-sq { font-size: 11px; }
+/* the same on the dark column head: white pill for the sq ft, red pill for the warning */
+.pm-head-sq { background: #fff; border-radius: 999px; padding: 0.05rem 0.45rem; font-weight: 800; font-size: 0.68rem; white-space: nowrap; }
+.pm-head-sq:empty { display: none; }
+.pm-cell-head .pm-cast-risk { margin-left: 0; background: #dc2626; color: #fff; border-radius: 999px; padding: 0.05rem 0.45rem; font-size: 0.6rem; }
+.pm-cell-head .fm-area-count.pm-cast-over { background: #dc2626; color: #fff; box-shadow: 0 0 0 1px #fff; }
+/* A head that is wider than its column wraps onto a second line instead of running into the next column (2026-10-28).
+   The POTENTIAL RISK pill and the count share .pm-head-tail, so they move down together and stay right-aligned. */
+.pm-cell-head.fm-area-head { flex-wrap: wrap; row-gap: 0.1rem; min-width: 0; overflow: hidden; }
+.pm-section-head { flex-wrap: wrap; row-gap: 0.05rem; }
+.pm-head-tail { margin-left: auto; display: inline-flex; align-items: center; gap: 0.3rem; }
+.pm-head-tail .fm-area-count, .pm-head-tail .pm-section-n, .pm-head-tail .pm-cast-risk { margin-left: 0; }
+
+/* ---------- dummy mode revenue strip (2026-10-29): hours × $135 per week / month, dummy vs live, against the target ---------- */
+.pm-dummy-rev { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.5rem; font-size: 12px; color: #3b0764; }
+.pm-dummy-rev:empty { display: none; }
+.pm-rev-label { font-weight: 900; letter-spacing: 0.08em; font-size: 10.5px; color: #86198f; }
+.pm-rev-wk { background: #fff; border: 1px solid #e9d5ff; border-radius: 6px; padding: 0.1rem 0.45rem; white-space: nowrap; }
+.pm-rev-month { background: #f5d0fe; border: 1px solid #c026d3; border-radius: 6px; padding: 0.1rem 0.5rem; white-space: nowrap; font-weight: 600; }
+.pm-rev-month.pm-rev-away { background: #fff; border-style: dashed; }
+.pm-rev-up { color: #15803d; font-weight: 800; }
+.pm-rev-down { color: #b91c1c; font-weight: 800; }
+.pm-rev-pct-ok { color: #15803d; font-weight: 800; }
+.pm-rev-pct-low { color: #c2410c; font-weight: 800; }
+.pm-rev-note { color: #86198f; font-weight: 600; }
+/* ---------- full screen (2026-10-29): body.pm-fs while the display is ours (the button, or F11) — the page links, the
+   title and the paddings go and the header is one row, so the day / week cells get the screen ---------- */
+body.pm-fs .fm-header-left, body.pm-fs .fm-title { display: none; }
+body.pm-fs .fm-header { padding: 0.15rem 0.5rem; gap: 0.5rem; }
+body.pm-fs .pm-view-stack { flex-direction: row; gap: 0.3rem; }
+body.pm-fs .pm-when-label { min-width: 11rem; }
+body.pm-fs .fm-search { width: 10rem; }
+body.pm-fs .fm-notice { margin: 0.2rem 0.4rem 0; padding: 0.15rem 0.6rem; font-size: 11.5px; }
+body.pm-fs .pm-hidden { margin: 0.2rem 0.4rem 0; padding: 0.15rem 0.5rem; }
+body.pm-fs .pm-main { padding: 0.3rem 0.4rem; }
+#pm-fullscreen { border-color: #1d4ed8; }
+.pm-dummy-nosave { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; border-radius: 999px; padding: 0.05rem 0.5rem; font-size: 11px; font-weight: 700; white-space: nowrap; cursor: help; }
+.pm-dummy-nosave[hidden] { display: none; }
+body.pm-fs .pm-dummy-bar { margin: 0.2rem 0.4rem 0; padding: 0.15rem 0.5rem; gap: 0.4rem; border-width: 1px; }
+body.pm-fs .pm-dummy-rev { gap: 0.2rem 0.35rem; }
+
+/* ---------- Warnings pop-up (2026-10-29): the sq ft colour levels and the POTENTIAL RISK limit, saved for everyone ---------- */
+.pm-warn-panel { width: 21rem; font-size: 12.5px; color: #0f172a; }
+.pm-warn-title { font-weight: 800; font-size: 13px; padding-bottom: 0.3rem; border-bottom: 1px solid #e2e8f0; margin-bottom: 0.4rem; }
+.pm-warn-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.5rem; padding: 0.3rem 0; border-bottom: 1px dashed #e2e8f0; }
+.pm-warn-what { flex-basis: 100%; font-weight: 700; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: #475569; }
+.pm-warn-row label { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; }
+.pm-warn-row label span { white-space: nowrap; }
+.pm-warn-row label .pm-sq-warn, .pm-warn-row label .pm-sq-over { font-weight: 800; }
+.pm-warn-row input { width: 4.2rem; font: inherit; padding: 2px 4px; border: 1px solid #cbd5e1; border-radius: 4px; }
+.pm-warn-hint { flex-basis: 100%; font-size: 11px; color: #64748b; }
+.pm-warn-actions { display: flex; flex-wrap: wrap; gap: 0.3rem; padding-top: 0.4rem; }
+.pm-warn-btn-on { border-color: #b91c1c; }
+
+/* dummy mode (2026-10-29): sq ft · cu ft on the collapsed card */
+.pm-chip-inv { font-size: 10.5px; color: #0f766e; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- dummy mode follows the scheduler's calendar rules (2026-10-29) ---------- */
+.pm-dummy-rules { font-size: 11px; color: #86198f; border: 1px dashed #d946ef; border-radius: 999px; padding: 0.05rem 0.55rem; white-space: nowrap; cursor: help; }
+body.pm-dummy .pm-cell.pm-past .fm-cards, body.pm-dummy .pm-cell.pm-past .pm-cal-body { background-image: repeating-linear-gradient(135deg, rgba(100, 116, 139, 0.14) 0 6px, transparent 6px 14px); }
+body.pm-dummy .pm-cell.pm-past .pm-section-head::after, body.pm-dummy .pm-cell.pm-past .pm-cal-date::after { content: '\1F512'; font-size: 10px; margin-left: 0.3rem; }
+body.pm-dummy .pm-cell.pm-holiday { background: #fee2e2; }
+body.pm-dummy .pm-cell.pm-holiday .pm-section-head::after, body.pm-dummy .pm-cell.pm-holiday .pm-cal-date::after { content: 'HOLIDAY'; margin-left: 0.4rem; background: #b91c1c; color: #fff; font-size: 9.5px; font-weight: 800; letter-spacing: 0.05em; padding: 0 0.4rem; border-radius: 999px; }
+body.pm-dummy .pm-cell.pm-holiday.pm-past .pm-section-head::after, body.pm-dummy .pm-cell.pm-holiday.pm-past .pm-cal-date::after { content: 'HOLIDAY'; }
+.pm-movebox-past { color: #64748b; font-weight: 600; }
+
+/* ---------- APPLY a dummy to the live Plant Scheduler (2026-10-29): two warning stages ---------- */
+.pm-dummy-apply.pm-apply-ready { background: #166534; color: #fff; border-color: #166534; font-weight: 800; }
+.pm-dummy-revert { border-color: #b45309; color: #b45309; }
+.pm-applied-tag { background: #166534; color: #fff; font-size: 10px; font-weight: 800; padding: 0.05rem 0.4rem; border-radius: 3px; margin-left: 0.3rem; }
+.pm-apply .fm-modal-box { width: min(960px, 94vw); max-height: 88vh; display: flex; flex-direction: column; }
+.pm-apply .fm-modal-head { align-items: center; }
+.pm-apply-stage { margin-left: 0.6rem; font-size: 11px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: #a21caf; background: #fdf4ff; border: 1px solid #e9d5ff; border-radius: 999px; padding: 0.05rem 0.6rem; }
+.pm-apply-body { flex: 1 1 auto; min-height: 0; overflow: auto; }
+.pm-apply-sum { font-size: 13px; margin: 0.4rem 0 0.6rem; }
+.pm-apply-warn { background: #fef2f2; border: 2px solid #dc2626; color: #7f1d1d; border-radius: 8px; padding: 0.5rem 0.8rem; margin: 0.4rem 0 0.6rem; font-size: 12.5px; }
+.pm-apply-warn ul { margin: 0.3rem 0 0.3rem 1.1rem; padding: 0; }
+.pm-apply-warn li { margin-bottom: 0.15rem; }
+.pm-apply-final { background: #fff7ed; border-color: #ea580c; color: #431407; font-size: 13px; }
+.pm-apply-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.pm-apply-table th, .pm-apply-table td { border-bottom: 1px solid #e2e8f0; padding: 0.2rem 0.45rem; text-align: left; vertical-align: top; }
+.pm-apply-table th { background: #f1f5f9; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: #475569; }
+.pm-apply-table tr.pm-apply-bad td { background: #fee2e2; }
+.pm-apply-dates { white-space: nowrap; }
+.pm-apply-note { color: #475569; }
+.pm-apply-form { display: flex; flex-wrap: wrap; gap: 0.6rem 1.4rem; align-items: center; padding: 0.4rem 0 0.2rem; font-size: 13px; }
+.pm-apply-form label { display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 600; }
+.pm-apply-form input { font: inherit; font-size: 13px; padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 6px; width: 16rem; }
+.pm-apply-form #pm-apply-by { width: 6rem; }
+.pm-apply-foot { flex: 0 0 auto; display: flex; justify-content: flex-end; gap: 0.5rem; padding: 0.6rem 0.9rem; border-top: 1px solid #e2e8f0; }
+.pm-apply-go { background: #dc2626; color: #fff; border-color: #dc2626; font-weight: 800; padding: 0.3rem 1rem; }
+.pm-apply-go:disabled { opacity: 0.45; cursor: not-allowed; }

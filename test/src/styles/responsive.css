@@ -1,0 +1,56 @@
+/* Responsive Media Queries */
+
+/* Tablet and smaller desktop */
+@media (max-width: 1200px) {
+  .schedule-grid {
+    grid-template-columns: minmax(120px, 1fr) repeat(7, minmax(150px, 1fr));
+  }
+}
+
+/* Mobile devices */
+@media (max-width: 768px) {
+  .container {
+    padding: 1rem;
+  }
+
+  h1 {
+    font-size: 2rem;
+  }
+
+  .controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .schedule-grid {
+    display: block;
+  }
+
+  .grid-header,
+  .department-label {
+    display: none;
+  }
+
+  .grid-cell {
+    border: none;
+    padding: 0 0 1rem 0;
+  }
+
+  .project-content {
+    width: 95%;
+    margin: 1rem auto;
+  }
+
+  .project-cards-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .project-header {
+    padding: 1rem;
+  }
+
+  .project-body {
+    padding: 1rem;
+  }
+}

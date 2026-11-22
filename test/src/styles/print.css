@@ -1,0 +1,1735 @@
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    margin: 0;
+    padding: 2rem;
+    background-color: #f8f9fa;
+    color: #212529;
+}
+h1 {
+    text-align: center;
+    color: #343a40;
+    font-size: 2.5rem;
+    margin-bottom: 2rem;
+}
+.week-container {
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    background-color: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+h2 {
+    color: #007bff;
+    border-bottom: 2px solid #dee2e6;
+    padding-bottom: 0.5rem;
+    margin-top: 0;
+}
+ul {
+    list-style-type: none;
+    padding-left: 0;
+}
+li {
+    padding: 0.75rem 0;
+    border-bottom: 1px solid #e9ecef;
+}
+li:last-child {
+    border-bottom: none;
+}
+
+/* Print-specific styles for project_starts.html */
+@media print {
+    body {
+        background-color: white !important;
+        color: black !important;
+        margin: 0;
+        padding: 0.5in;
+        font-size: 12pt;
+    }
+    h1 {
+        color: black !important;
+        page-break-after: avoid;
+        font-size: 18pt;
+    }
+    .week-container {
+        background-color: white !important;
+        border: 1px solid #ccc;
+        box-shadow: none !important;
+        page-break-inside: avoid;
+        margin-bottom: 1rem;
+    }
+    h2 {
+        color: black !important;
+        border-bottom: 1px solid #000;
+        page-break-after: avoid;
+    }
+    ul {
+        margin: 0;
+        padding: 0;
+    }
+    li {
+        border-bottom: 1px solid #000;
+        padding: 0.25rem 0;
+        page-break-inside: avoid;
+    }
+    li:last-child {
+        border-bottom: none;
+    }
+}
+
+/* Print-specific styles for index.html (weekly and daily reports) */
+
+/* Page orientation is now dynamically set via JavaScript based on user selection */
+/* @page {
+    size: letter landscape;
+    margin: 0.25in;
+} */
+
+@media print {
+
+    /* CRITICAL: Override stray body styles from base.css that interfere with print */
+    body {
+        transform: none !important;
+        width: 100% !important;
+        height: auto !important;
+        overflow: visible !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    /* Hide all screen content, show only print content */
+    body > * {
+        display: none !important;
+    }
+
+    .print-preview-content {
+        display: block !important;
+        position: relative;
+        width: 100%;
+        height: auto;
+        margin: 0;
+        padding: 0;
+    }
+
+    /* Flexible print page container - no fixed dimensions */
+    .print-page {
+        page-break-after: auto;
+        page-break-inside: avoid;
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100%;
+        height: auto;
+        box-sizing: border-box;
+        background: white;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: center !important;
+        align-items: center !important;
+    }
+
+    .print-page-day {
+        /* Daily print pages use portrait orientation via dynamic styles */
+    }
+
+    .print-page:last-child {
+        page-break-after: avoid !important;
+        break-after: avoid !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    /* Flexible table layout - scales to fit content */
+    .print-table {
+        width: 100%;
+        max-width: 100%;
+        border-collapse: collapse;
+        font-size: 1em; /* Relative size - will scale with container */
+        background: white;
+        margin: 0;
+        table-layout: fixed;
+    }
+
+    .print-table th, .print-table td {
+        border: 1px solid #666;
+        padding: 0.3em;
+        text-align: center;
+        vertical-align: top;
+        font-size: 1em;
+        width: 16.66%;
+        font-weight: 500;
+    }
+
+    .print-table th {
+        background: #e8e8e8;
+        font-weight: 700;
+        font-size: 1.1em !important;
+        padding: 0.4em;
+        line-height: 1.3;
+    }
+
+    .print-table tfoot td {
+        background: #e8e8e8 !important;
+        font-weight: 700 !important;
+        border-top: 2px solid #666 !important;
+        padding: 0.4em !important;
+        font-size: 1.15em !important;
+    }
+
+    /* Flexible cell sizing - no fixed heights */
+    .print-grid-cell {
+        background: #f5f5f5;
+        padding: 0.3em;
+        /* Height will be determined by content and density class */
+    }
+
+    /* Density classes for dynamic scaling based on task count */
+    .print-page.few-tasks .print-grid-cell {}
+
+    .print-page.normal-tasks .print-grid-cell {}
+
+    .print-page.many-tasks .print-grid-cell {}
+
+    .print-page.very-many-tasks .print-grid-cell {}
+
+    .print-task-grid {
+        border: none;
+        background: white;
+        padding: 0.1em;
+        margin: 0.05em 0;
+        font-size: 1em;
+        color: black;
+        display: block;
+    }
+
+    /* Task card styling with flexible sizes */
+    .print-task-card {
+        font-size: 1em;
+        padding: 0.1em;
+        margin: 0.1em 0;
+        background: white;
+        border: 1px solid #ccc;
+        border-radius: 0.2em;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+    }
+
+    .print-task-title {
+        font-weight: 700 !important;
+        font-size: 1.0em !important;
+        margin-bottom: 0.1em;
+        color: white !important;
+        text-align: center;
+        background-color: var(--bg-color, #3B82F6) !important;
+        padding: 0.15em 0.4em !important;
+        border-radius: 0.2em !important;
+        display: block !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+        print-color-adjust: exact !important;
+        -webkit-print-color-adjust: exact !important;
+    }
+
+
+    .print-task-day-counter {
+        font-size: 0.75em !important;
+        font-weight: 600 !important;
+        color: #666 !important;
+        text-align: center;
+        margin-bottom: 0.2em;
+        background: #fef3c7;
+        padding: 0.1em 0.3em;
+        border-radius: 0.1em;
+        display: inline-block;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    /* Pieces count — casting inventory total (qty + extras), a slimmer band
+       beneath the day counter. Mirrors the on-screen .task-pieces-count. */
+    .print-task-pieces-count {
+        font-size: 1.08em !important; /* match .print-task-description */
+        font-weight: 600 !important;
+        color: #475569 !important;
+        text-align: center;
+        margin-bottom: 0.2em;
+        background: #f1f5f9;
+        padding: 0.1em 0.3em;
+        border-radius: 0.1em;
+        display: inline-block;
+        width: 100%;
+        box-sizing: border-box;
+        print-color-adjust: exact !important;
+        -webkit-print-color-adjust: exact !important;
+    }
+
+    /* Color log title + cast method + batch count — bands beneath the pieces
+       count. Mirror the on-screen .task-color-log / .task-cast-method /
+       .task-batch-count. */
+    .print-task-color-log,
+    .print-task-cast-method,
+    .print-task-batch-count {
+        font-size: 1.08em !important; /* match .print-task-description */
+        font-weight: 600 !important;
+        color: #475569 !important;
+        text-align: center;
+        margin-bottom: 0.2em;
+        background: #f8fafc;
+        padding: 0.1em 0.3em;
+        border-radius: 0.1em;
+        display: inline-block;
+        width: 100%;
+        box-sizing: border-box;
+        print-color-adjust: exact !important;
+        -webkit-print-color-adjust: exact !important;
+    }
+
+    /* Casting inventory readout: pieces per type under the summary line (2026-10-21). */
+    .print-task-inv-types {
+        font-size: 0.95em !important;
+        color: #475569 !important;
+        margin-bottom: 0.2em;
+        padding: 0 0.3em;
+        font-variant-numeric: tabular-nums;
+    }
+    .print-task-inv-type { display: flex; justify-content: center; gap: 0.4em; }
+    .print-task-inv-type span:last-child { font-weight: 700 !important; }
+    .print-task-inv-more { font-style: italic; text-align: center; }
+    .print-task-section-label {
+        font-size: 0.75em !important;
+        font-weight: 700 !important;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: #64748b !important;
+        text-align: center;
+        margin-top: 0.1em;
+    }
+    /* Batch tickets still to be printed (Cast cards). */
+    .print-task-layout-cond {
+        font-size: 0.95em !important;
+        font-weight: 800 !important;
+        letter-spacing: 0.03em;
+        text-align: center;
+        margin-bottom: 0.2em;
+        background: #4c1d95 !important;
+        color: #ffffff !important;
+        padding: 0.15em 0.3em;
+    }
+    .print-task-batch-print {
+        font-size: 0.95em !important;
+        font-weight: 800 !important;
+        letter-spacing: 0.03em;
+        text-align: center;
+        margin-bottom: 0.2em;
+        background: #dc2626 !important;
+        color: #ffffff !important;
+        padding: 0.15em 0.3em;
+        border-radius: 0.1em;
+        display: inline-block;
+        width: 100%;
+        box-sizing: border-box;
+        print-color-adjust: exact !important;
+        -webkit-print-color-adjust: exact !important;
+    }
+
+    /* Missing-data placeholder state — Cast cards with a casting link but no
+       portal data for a readout. Mirrors the on-screen .task-missing-data. */
+    .print-task-missing-data {
+        font-style: italic !important;
+        color: #b91c1c !important;
+        background: #fee2e2 !important;
+    }
+
+    /* The casting's description (Casting Inventory header), just under the title (2026-11-06). */
+    .print-task-casting-desc {
+        font-size: 0.95em !important;
+        font-weight: 600 !important;
+        font-style: italic;
+        text-align: center;
+        margin-bottom: 0.15em;
+        color: #111 !important;
+    }
+
+    /* Casting side row — Cast department only, sits just under the title. */
+    .print-task-casting-side {
+        font-size: 1.0em !important;
+        font-weight: 700 !important;
+        text-align: center;
+        margin-bottom: 0.2em;
+        color: #111 !important;
+    }
+
+    .print-task-description {
+        font-size: 1.08em !important;
+        font-weight: 600 !important;
+        margin-bottom: 0.25em;
+        color: #222 !important;
+        text-align: center;
+        line-height: 1.3;
+        /* Show the full description on day/week prints — the card and row grow
+           with the text, using the empty space instead of clipping. The dense
+           "optimized" page keeps a clamp (below) where space is genuinely tight. */
+        overflow: visible;
+        overflow-wrap: break-word;
+        word-break: break-word;
+    }
+
+    .print-task-details {
+        font-size: 0.97em !important;
+        font-weight: 600 !important;
+        color: #444 !important;
+        text-align: center;
+        margin-top: 0.2em;
+        padding-top: 0.2em;
+        border-top: 1px solid #ddd;
+    }
+
+    .print-department-header {
+        font-weight: 700;
+        font-size: 2.5em;
+        padding: 0.5em 0.3em;
+        writing-mode: vertical-rl;
+        text-orientation: mixed;
+        width: 2.5em;
+        border: 1px solid #666;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 10em;
+        print-color-adjust: exact !important;
+        -webkit-print-color-adjust: exact !important;
+        letter-spacing: 0.05em;
+    }
+
+    .print-department-header-day {
+        writing-mode: horizontal-tb !important;
+        text-orientation: mixed !important;
+        width: 100% !important;
+        min-height: 0 !important;
+        padding: 0.6em 0.4em !important;
+        font-size: 2.2em !important;
+    }
+
+    .print-dept-summary {
+        font-weight: 700 !important;
+        font-size: 1.15em !important;
+        color: black !important;
+        text-align: center !important;
+        background: #e8e8e8 !important;
+        padding: 0.4em 0.5em !important;
+        border-top: 2px solid #666 !important;
+    }
+
+    /* Daily print specific adjustments */
+    .daily-print .print-dept-summary {
+        font-size: 2em !important;
+    }
+
+    .print-page.daily-print th,
+    .print-page.daily-print td {
+        padding: 0.3em;
+    }
+
+    .print-page.daily-print .print-grid-cell {
+        min-height: 4em;
+    }
+
+    .print-page.daily-print .print-task-card {
+        min-height: 4em;
+        font-size: 1.1em;
+        padding: 0.3em;
+    }
+
+    .print-page.daily-print .print-task-title {
+        font-size: 1.2em;
+        padding: 0.2em;
+    }
+
+    .print-page.daily-print .print-task-casting-side {
+        font-size: 1.35em !important;
+    }
+
+    .print-page.daily-print .print-task-description {
+        font-size: 1.27em;
+        margin-bottom: 0.3em;
+    }
+
+    .print-page.daily-print .print-task-details {
+        font-size: 1.17em;
+        padding-top: 0.2em;
+    }
+
+    /* Simplified page break rules */
+    .print-page:not(:last-child) {
+        page-break-after: always !important;
+        break-after: page !important;
+    }
+
+    /* Optimized department pages for large task counts */
+    .print-page-optimized {
+        width: 100% !important;
+        height: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        box-sizing: border-box !important;
+        background: white !important;
+        page-break-after: auto !important;
+        page-break-inside: avoid !important;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: flex-start !important;
+        align-items: center !important;
+    }
+
+    /* Enhanced scaling for departments with many tasks */
+    .print-page-optimized .print-table {
+        width: 100% !important;
+        max-width: 100% !important;
+        font-size: 6pt !important;
+        border-collapse: collapse !important;
+        table-layout: fixed !important;
+        margin: 0 !important;
+    }
+
+    .print-page-optimized .print-table th,
+    .print-page-optimized .print-table td {
+        border: 1px solid #666 !important;
+        padding: 0.1em !important;
+        text-align: center !important;
+        vertical-align: top !important;
+        font-size: 6pt !important;
+        font-weight: 500 !important;
+        width: auto !important;
+    }
+
+    .print-page-optimized .print-task-card {
+        font-size: 6pt !important;
+        padding: 0.05em !important;
+        margin: 0.02em 0 !important;
+        border: 1px solid #ccc !important;
+        border-radius: 0.05em !important;
+        box-shadow: none !important;
+        background: white !important;
+    }
+
+    .print-page-optimized .print-task-title {
+        font-size: 7pt !important;
+        padding: 0.1em 0.2em !important;
+        margin-bottom: 0.05em !important;
+        line-height: 1.1 !important;
+    }
+
+    .print-page-optimized .print-task-casting-side {
+        font-size: 7pt !important;
+        font-weight: 700 !important;
+        margin-bottom: 0.05em !important;
+        line-height: 1.1 !important;
+    }
+
+    .print-page-optimized .print-project-description {
+        font-size: 6.5pt !important;
+        font-weight: 600 !important;
+        color: #444 !important;
+        text-align: center !important;
+        margin-bottom: 0.05em !important;
+        line-height: 1.1 !important;
+    }
+
+    .print-page-optimized .print-task-description {
+        font-size: 6pt !important;
+        font-weight: 600 !important;
+        margin-bottom: 0.05em !important;
+        color: #222 !important;
+        text-align: center !important;
+        line-height: 1.1 !important;
+        /* Dense many-task pages are genuinely tight — keep a clamp so one long
+           description can't overrun the sheet. Raised from 4 to 6 lines. */
+        display: -webkit-box !important;
+        -webkit-box-orient: vertical !important;
+        -webkit-line-clamp: 6 !important;
+        line-clamp: 6 !important;
+        overflow: hidden !important;
+    }
+
+    .print-page-optimized .print-task-details {
+        font-size: 5.5pt !important;
+        font-weight: 600 !important;
+        color: #444 !important;
+        text-align: center !important;
+        margin-top: 0.05em !important;
+        padding-top: 0.05em !important;
+        border-top: 1px solid #ddd !important;
+    }
+
+    .print-page-optimized .print-department-header {
+        font-size: 8pt !important;
+        padding: 0.2em 0.1em !important;
+        margin: 0 !important;
+        border: 1px solid #666 !important;
+        writing-mode: vertical-rl !important;
+        text-orientation: mixed !important;
+        width: 1.8em !important;
+        min-height: 6em !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        letter-spacing: 0.02em !important;
+    }
+
+    .print-page-optimized .print-department-header-day {
+        writing-mode: horizontal-tb !important;
+        text-orientation: mixed !important;
+        width: 100% !important;
+        min-height: 0 !important;
+        padding: 0.3em 0.2em !important;
+        font-size: 8pt !important;
+    }
+
+    .print-page-optimized .print-dept-summary {
+        font-size: 6pt !important;
+        font-weight: 700 !important;
+        color: black !important;
+        margin: 0.05em 0 0 0 !important;
+        padding: 0.1em 0.2em !important;
+        text-align: center !important;
+        border: 1px solid #666 !important;
+        background: #f9f9f9 !important;
+    }
+
+    /* ============================================
+       FROZEN DAILY REPORT STYLES
+       ============================================ */
+
+    /* Override page orientation for frozen daily - force single page */
+    .frozen-daily-report .print-page {
+        page-break-after: auto;
+        page-break-inside: avoid;
+        width: 100%;
+        height: auto;
+        max-width: 10in;
+        margin: 0 auto;
+    }
+
+    /* Header section - scaled up 10% */
+    .frozen-daily-header {
+        text-align: center;
+        border-bottom: 2px solid #000;
+        padding: 0.15em 0;
+        margin-bottom: 0.2em;
+        background: #f5f5f5;
+        border: 2px solid #000;
+        border-bottom: 2px solid #000;
+    }
+
+    .frozen-daily-header h1 {
+        font-size: 15.4pt !important;
+        font-weight: 700 !important;
+        margin: 0 0 0.11em 0 !important;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #000 !important;
+    }
+
+    .frozen-subtitle {
+        font-size: 9.9pt !important;
+        color: #555 !important;
+        margin: 0 !important;
+        font-style: italic;
+        font-weight: 500;
+    }
+
+    /* Summary table - scaled up 10% */
+    .frozen-summary-table {
+        width: 95%;
+        max-width: 9.5in;
+        border-collapse: collapse;
+        margin: 0 auto 0.2em auto;
+        font-size: 8.8pt !important;
+        border: 2px solid #000;
+    }
+
+    .frozen-summary-table thead th {
+        background: #333 !important;
+        color: white !important;
+        font-weight: 700 !important;
+        font-size: 9.9pt !important;
+        text-align: left !important;
+        padding: 0.28em 0.33em !important;
+        border-right: 2px solid #000 !important;
+        border-bottom: 2px solid #000 !important;
+        print-color-adjust: exact !important;
+        -webkit-print-color-adjust: exact !important;
+    }
+
+    .frozen-summary-table thead th:last-child {
+        border-right: none;
+    }
+
+    .frozen-summary-table thead th.dept-col {
+        width: 20%;
+    }
+
+    .frozen-summary-table thead th.revenue-col {
+        width: 18%;
+        text-align: right !important;
+    }
+
+    .frozen-summary-table thead th.actual-col {
+        width: 20%;
+        text-align: center !important;
+    }
+
+    .frozen-summary-table thead th.overtime-col {
+        width: 22%;
+        text-align: center !important;
+    }
+
+    .frozen-summary-table thead th.qc-col {
+        width: 20%;
+        text-align: center !important;
+    }
+
+    .frozen-summary-table tbody td {
+        padding: 0.22em 0.33em !important;
+        border-right: 1px solid #999 !important;
+        border-bottom: 1px solid #999 !important;
+        font-size: 8.8pt !important;
+    }
+
+    .frozen-summary-table tbody td:last-child {
+        border-right: none;
+    }
+
+    .frozen-summary-table tbody tr:last-child td {
+        border-bottom: none;
+    }
+
+    .frozen-summary-table tbody td.dept-name {
+        font-weight: 600 !important;
+        text-align: left !important;
+        color: white !important;
+        font-size: 9.9pt !important;
+        print-color-adjust: exact !important;
+        -webkit-print-color-adjust: exact !important;
+        border-right: 2px solid #000 !important;
+    }
+
+    .frozen-summary-table tbody td.target-revenue {
+        font-weight: 700 !important;
+        text-align: right !important;
+        font-size: 9.9pt !important;
+        background: white !important;
+        border-right: 2px solid #000 !important;
+    }
+
+    .frozen-summary-table tbody td.actual-blank {
+        text-align: center !important;
+        color: #bbb !important;
+        letter-spacing: -0.03em;
+        background: #fafafa !important;
+        font-size: 8.8pt !important;
+        border-right: 2px solid #000 !important;
+    }
+
+    .frozen-summary-table tbody td.overtime-blank {
+        text-align: center !important;
+        color: #bbb !important;
+        letter-spacing: -0.03em;
+        background: #fafafa !important;
+        font-size: 8.8pt !important;
+    }
+
+    .frozen-summary-table tbody td.qc-blank {
+        text-align: center !important;
+        color: #bbb !important;
+        letter-spacing: -0.03em;
+        background: #fafafa !important;
+        font-size: 8.8pt !important;
+    }
+
+    .frozen-summary-table tfoot {
+        border-top: 2px solid #000 !important;
+    }
+
+    .frozen-summary-table tfoot td {
+        background: #e8e8e8 !important;
+        font-weight: 700 !important;
+        font-size: 11pt !important;
+        padding: 0.33em !important;
+        border-right: 2px solid #000 !important;
+        print-color-adjust: exact !important;
+        -webkit-print-color-adjust: exact !important;
+    }
+
+    .frozen-summary-table tfoot td:last-child {
+        border-right: none;
+    }
+
+    .frozen-summary-table tfoot td.total-label {
+        text-align: left !important;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        font-size: 11pt !important;
+    }
+
+    .frozen-summary-table tfoot td.total-revenue {
+        text-align: right !important;
+        font-size: 11pt !important;
+    }
+
+    .frozen-summary-table tfoot td.total-actual {
+        text-align: center !important;
+        color: #666 !important;
+        letter-spacing: -0.03em;
+        background: #fafafa !important;
+    }
+
+    .frozen-summary-table tfoot td.total-overtime {
+        text-align: center !important;
+        color: #666 !important;
+        letter-spacing: -0.03em;
+        background: #fafafa !important;
+    }
+
+    .frozen-summary-table tfoot td.total-qc {
+        text-align: center !important;
+        background: #e8e8e8 !important;
+        print-color-adjust: exact !important;
+        -webkit-print-color-adjust: exact !important;
+    }
+
+    /* Notes section - scaled up 10% */
+    .frozen-notes-section {
+        display: table;
+        width: 95%;
+        max-width: 9.5in;
+        border: 2px solid #000;
+        margin: 0.2em auto 0 auto;
+        table-layout: fixed;
+    }
+
+    .frozen-notes-column {
+        display: table-cell;
+        width: 50%;
+        border-right: 1px solid #000;
+        padding: 0;
+        vertical-align: top;
+    }
+
+    .frozen-notes-column:last-child {
+        border-right: none;
+    }
+
+    .frozen-notes-header {
+        background: #333 !important;
+        color: white !important;
+        font-weight: 700 !important;
+        font-size: 8.8pt !important;
+        text-align: center !important;
+        padding: 0.22em !important;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        border-bottom: 1px solid #000;
+        print-color-adjust: exact !important;
+        -webkit-print-color-adjust: exact !important;
+    }
+
+    .frozen-notes-lines {
+        padding: 0.15em 0.28em;
+        background: white;
+        min-height: 0.7in;
+    }
+
+    .frozen-note-line {
+        font-size: 8.8pt !important;
+        color: #ccc !important;
+        padding: 0.15em 0;
+        border-bottom: 1px solid #ccc;
+        letter-spacing: -0.04em;
+        line-height: 1.3;
+    }
+
+    .frozen-note-line:last-child {
+        border-bottom: 1px solid #ccc;
+    }
+
+    /* Remarks section below Wins and Losses */
+    .frozen-remarks-section {
+        width: 95%;
+        max-width: 9.5in;
+        border: 2px solid #000;
+        margin: 0.2em auto 0 auto;
+    }
+
+    .frozen-remarks-header {
+        background: #333 !important;
+        color: white !important;
+        font-weight: 700 !important;
+        font-size: 8.8pt !important;
+        text-align: center !important;
+        padding: 0.22em !important;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        border-bottom: 1px solid #000;
+        print-color-adjust: exact !important;
+        -webkit-print-color-adjust: exact !important;
+    }
+
+    .frozen-remarks-lines {
+        padding: 0.15em 0.28em;
+        background: white;
+        min-height: 0.6in;
+    }
+
+    .frozen-remark-line {
+        font-size: 8.8pt !important;
+        color: #ccc !important;
+        padding: 0.15em 0;
+        border-bottom: 1px solid #ccc;
+        letter-spacing: -0.04em;
+        line-height: 1.3;
+    }
+
+    .frozen-remark-line:last-child {
+        border-bottom: 1px solid #ccc;
+    }
+
+    /* ============================================
+       PHASE START REPORT STYLES
+       ============================================ */
+
+    /* Override page orientation for phase start - portrait letter size */
+    .phase-start-report .print-page {
+        page-break-after: auto;
+        page-break-inside: auto;
+        width: 100%;
+        height: auto;
+        max-width: 7.5in;
+        margin: 0 auto;
+        padding: 0.25in;
+        font-size: 8pt;
+    }
+
+    /* Header section - compact */
+    .phase-start-header {
+        text-align: center;
+        border-bottom: 2px solid #000;
+        padding: 0.15em 0;
+        margin-bottom: 0.3em;
+        background: #f5f5f5;
+        border: 1px solid #000;
+    }
+
+    .phase-start-header h1 {
+        font-size: 12pt !important;
+        font-weight: 700 !important;
+        margin: 0 0 0.1em 0 !important;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #000 !important;
+    }
+
+    .phase-start-header .week-range {
+        font-size: 9pt !important;
+        color: #333 !important;
+        margin: 0 !important;
+        font-weight: 500;
+    }
+
+    /* Two-column layout */
+    .phase-start-columns {
+        display: flex;
+        gap: 0.3em;
+    }
+
+    .phase-start-column {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .phase-start-section-title {
+        font-size: 8pt !important;
+        font-weight: 700 !important;
+        text-align: center;
+        margin: 0 0 0.15em 0 !important;
+        padding: 0.1em;
+        background: #e0e0e0;
+        border: 1px solid #000;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+    }
+
+    /* Department/Project blocks */
+    .phase-start-block {
+        margin-bottom: 0.15em;
+        page-break-inside: avoid;
+    }
+
+    .phase-start-dept-header {
+        font-size: 7pt !important;
+        font-weight: 700 !important;
+        padding: 0.1em 0.3em !important;
+        text-transform: uppercase;
+        letter-spacing: 0.02em;
+        border: 1px solid #000;
+        border-bottom: none;
+        print-color-adjust: exact !important;
+        -webkit-print-color-adjust: exact !important;
+    }
+
+    .phase-start-project-header {
+        font-size: 7pt !important;
+        font-weight: 700 !important;
+        padding: 0.1em 0.3em !important;
+        background: #333 !important;
+        color: #fff !important;
+        border: 1px solid #000;
+        border-bottom: none;
+        print-color-adjust: exact !important;
+        -webkit-print-color-adjust: exact !important;
+    }
+
+    /* Tables */
+    .phase-start-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 7pt !important;
+        margin: 0;
+    }
+
+    .phase-start-table tr {
+        border-bottom: 1px solid #ddd;
+    }
+
+    .phase-start-table tr:last-child {
+        border-bottom: 1px solid #000;
+    }
+
+    .phase-start-table td {
+        padding: 0.05em 0.25em;
+        vertical-align: middle;
+        line-height: 1.15;
+    }
+
+    .ps-cell-name {
+        font-weight: 600;
+        color: #000;
+        border-left: 1px solid #000;
+    }
+
+    .ps-cell-date {
+        width: auto;
+        text-align: right;
+        color: #555;
+        font-size: 6.5pt !important;
+        white-space: nowrap;
+        border-right: 1px solid #000;
+    }
+
+    /* Department color chip in project section */
+    .ps-dept-color {
+        display: inline-block;
+        width: 0.5em;
+        height: 0.5em;
+        border-radius: 1px;
+        vertical-align: middle;
+        margin-right: 0.15em;
+        print-color-adjust: exact !important;
+        -webkit-print-color-adjust: exact !important;
+    }
+
+    /* Empty state */
+    .phase-start-empty {
+        text-align: center;
+        padding: 1em;
+        font-size: 9pt !important;
+        color: #666 !important;
+        font-style: italic;
+    }
+
+    /* ============================================
+       BOARD SCHEDULE (11×17 landscape)
+       One page per (day, side) — 10 pages per week. Each page is
+       top-justified so the user folds it in half horizontally; the
+       printed top half becomes a ~17"×5.5" pin-up strip with the
+       blank bottom half folded behind it.
+       Page size is set dynamically in executePrint() to 17in × 11in.
+       ============================================ */
+
+    .board-11x17-page {
+        width: 100%;
+        height: 10.75in;      /* 11in page - 0 top margin - 0.25in bottom = 10.75in */
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: flex-start !important;
+        align-items: stretch !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+        color: #000;
+        page-break-after: always !important;
+    }
+
+    .board-11x17-page:last-child {
+        page-break-after: auto !important;
+    }
+
+    /* Each side-page is split: top half holds everything, bottom half is
+       intentionally blank, with the fold-line marker landing right on the
+       physical 5.5in centerline of the 11in sheet. */
+    .board-side-page-top {
+        flex: 0 0 5.25in;      /* content fills 0 - 5.25in from top of sheet */
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        min-height: 0;
+    }
+
+    .board-fold-line {
+        flex: 0 0 0.25in;      /* 5.25 - 5.5in from top → fold sits at 5.5in (center) */
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+    }
+
+    .board-fold-line::before,
+    .board-fold-line::after {
+        content: '';
+        flex: 1;
+        border-top: 1.5px dashed #aaa;
+        margin: 0 0.2in;
+    }
+
+    .board-fold-line span {
+        font-size: 8pt;
+        color: #888;
+        font-style: italic;
+        letter-spacing: 0.05em;
+    }
+
+    .board-side-page-bottom {
+        flex: 1 1 auto;        /* eats the remaining ~5" - blank */
+        min-height: 0;
+    }
+
+    /* ---- Day header (top of page, slim) ---- */
+    .board-day-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        padding: 0 0.1in 0.06in 0.1in;
+        border-bottom: 2px solid #000;
+        margin-bottom: 0.08in;
+        flex: 0 0 auto;
+    }
+
+    .board-day-header-left {
+        display: flex;
+        align-items: baseline;
+        gap: 0.2in;
+    }
+
+    .board-day-big {
+        font-size: 38pt;
+        font-weight: 900;
+        letter-spacing: 0.03em;
+    }
+
+    .board-day-fulldate {
+        font-size: 16pt;
+        font-weight: 600;
+        color: #333;
+    }
+
+    .board-day-side-tag {
+        font-size: 20pt;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        background: #111 !important;
+        color: #fff !important;
+        padding: 0.05in 0.18in;
+        border-radius: 3px;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    .board-day-header-right {
+        font-size: 12pt;
+        font-weight: 600;
+        color: #555;
+    }
+
+    /* ---- Side strip (one per side, ~5" tall × 17" wide) ---- */
+    .board-strip {
+        flex: 1 1 0;
+        display: flex;
+        flex-direction: row;
+        align-items: stretch;
+        border: 2.5px solid #000;
+        box-sizing: border-box;
+        overflow: hidden;
+        min-height: 0;
+    }
+
+    .board-strip-side-label {
+        flex: 0 0 1.8in;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        border-right: 2px solid #000;
+        padding: 0.1in;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    /* Match the yellow side stickers on the shop board */
+    .board-strip-side-b {
+        background: #facc15 !important; /* yellow */
+        color: #000 !important;
+    }
+    .board-strip-side-a {
+        background: #facc15 !important;
+        color: #000 !important;
+    }
+
+    .board-strip-side-letter {
+        font-size: 140pt;
+        font-weight: 900;
+        line-height: 0.9;
+    }
+
+    .board-strip-side-word {
+        font-size: 22pt;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        margin-top: 0.08in;
+    }
+
+    .board-strip-content {
+        flex: 1 1 auto;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 0.28in;
+        padding: 0.15in 0.3in;
+        min-width: 0;
+    }
+
+    .board-strip-empty {
+        align-items: center;
+        justify-content: center;
+        background:
+            repeating-linear-gradient(
+                135deg,
+                #fafafa,
+                #fafafa 10px,
+                #f0f0f0 10px,
+                #f0f0f0 20px
+            ) !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    .board-strip-empty-note {
+        font-size: 18pt;
+        color: #777;
+        font-style: italic;
+    }
+
+    .board-activity {
+        display: flex;
+        align-items: center;
+        gap: 0.3in;
+        line-height: 1.05;
+    }
+
+    /* ---- Activity chips: match in-app department colors ---- */
+    .board-chip {
+        display: inline-block;
+        font-size: 36pt;
+        font-weight: 900;
+        letter-spacing: 0.05em;
+        padding: 0.1in 0.28in;
+        border-radius: 4px;
+        min-width: 2.6in;
+        text-align: center;
+        color: #fff;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    .board-chip-LAYOUT {
+        background: #A16207 !important;  /* matches in-app Layout color */
+        color: #fff !important;
+    }
+
+    .board-chip-CAST {
+        background: #EF4444 !important;  /* matches in-app Cast color */
+        color: #fff !important;
+    }
+
+    .board-chip-DEMOLD {
+        background: #F97316 !important;  /* matches in-app Demold color */
+        color: #fff !important;
+    }
+
+    .board-activity-label {
+        font-size: 56pt;
+        font-weight: 800;
+        color: #111;
+        flex: 1;
+        word-break: break-word;
+        line-height: 1.0;
+    }
+
+    /* Auto-shrink when a strip holds 3+ activities so the content stays
+       above the fold line. With long project names that wrap to two
+       lines, three 56pt rows overflow the 5" top half; 38pt keeps them
+       comfortably inside. */
+    .board-strip-count-3 .board-activity-label,
+    .board-strip-count-4 .board-activity-label {
+        font-size: 38pt;
+        line-height: 1.0;
+    }
+
+    .board-strip-count-3 .board-chip,
+    .board-strip-count-4 .board-chip {
+        font-size: 26pt;
+        min-width: 1.9in;
+        padding: 0.07in 0.2in;
+    }
+
+    .board-strip-count-3 .board-strip-content,
+    .board-strip-count-4 .board-strip-content {
+        gap: 0.15in;
+        padding: 0.12in 0.25in;
+    }
+
+    .board-strip-count-3 .board-activity,
+    .board-strip-count-4 .board-activity {
+        gap: 0.22in;
+    }
+
+    /* ---- Unresolved bucket page ---- */
+    .board-unresolved-page {
+        padding: 0.25in !important;
+        display: block !important;
+        height: auto !important;
+    }
+
+    .board-unresolved-title {
+        font-size: 16pt;
+        font-weight: 800;
+        color: #7a1212;
+        border-bottom: 2px solid #7a1212;
+        padding-bottom: 0.06in;
+        margin-bottom: 0.15in;
+    }
+
+    .board-unresolved-list {
+        margin: 0;
+        padding-left: 0.3in;
+        font-size: 13pt;
+        list-style: disc;
+    }
+
+    .board-unresolved-list li {
+        margin: 0.1in 0;
+        display: flex;
+        align-items: center;
+        gap: 0.15in;
+    }
+
+    .board-unresolved-list .board-chip {
+        font-size: 11pt;
+        min-width: 1in;
+        padding: 0.03in 0.12in;
+    }
+
+    .board-unresolved-list .board-activity-label {
+        font-size: 13pt;
+        font-weight: 600;
+    }
+
+    .board-unresolved-day {
+        color: #555;
+        font-size: 11pt;
+        font-style: italic;
+    }
+
+    .board-unresolved-note {
+        margin-top: 0.2in;
+        font-size: 10pt;
+        color: #555;
+        font-style: italic;
+    }
+
+    /* =========================================================
+       Buy-In Sheets — hand-fill manager form, letter landscape.
+       One page per production crew. Expected Value is autopopulated
+       from sum(hours) × $135/hr; every other column is blank for
+       hand-fill. Layout mirrors the source PDF (Buy In Sheet.pdf).
+       ========================================================= */
+    .buy-in-report .print-page {
+        page-break-after: always;
+        page-break-inside: avoid;
+        display: block !important;
+        justify-content: flex-start !important;
+        align-items: stretch !important;
+        padding: 0.2in 0.6in 0.2in 0.6in !important;
+        width: 100%;
+        height: 100%;
+        /* Keep below the ~7.5in printable height of letter landscape so slight metric differences between PCs can't push onto a second page */
+        min-height: 6.8in;
+        box-sizing: border-box;
+        background: white;
+        font-family: 'Calibri', 'Arial', Helvetica, sans-serif;
+        color: #000;
+    }
+    .buy-in-report .print-page:last-child {
+        page-break-after: avoid;
+    }
+
+    .buy-in-company {
+        text-align: right;
+        font-size: 11pt;
+        font-weight: 500;
+        letter-spacing: 0.02em;
+        margin-bottom: 0.12in;
+    }
+
+    .buy-in-summary {
+        display: flex;
+        gap: 0.5in;
+        align-items: baseline;
+        font-size: 14pt;
+        font-weight: 700;
+        margin-bottom: 0.18in;
+    }
+    .buy-in-summary-item {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 0.08in;
+    }
+    .buy-in-summary .buy-in-fill {
+        display: inline-block;
+        min-width: 2.2in;
+        border-bottom: 1.5px solid #000;
+        height: 1.1em;
+    }
+    .buy-in-currency, .buy-in-unit {
+        font-weight: 700;
+    }
+
+    .buy-in-meta {
+        display: flex;
+        justify-content: space-between;
+        gap: 0.6in;
+        margin-bottom: 0.12in;
+        font-size: 12pt;
+    }
+    .buy-in-meta-row {
+        display: flex;
+        align-items: baseline;
+        gap: 0.12in;
+    }
+    .buy-in-meta-row:first-child {
+        flex: 1;
+    }
+    .buy-in-meta .buy-in-label,
+    .buy-in-members .buy-in-label {
+        font-weight: 700;
+    }
+    .buy-in-meta-row:first-child .buy-in-value {
+        flex: 1;
+    }
+    .buy-in-meta .buy-in-value {
+        font-weight: 500;
+        border-bottom: 1.5px solid #000;
+        min-width: 2.6in;
+        padding: 0 0.05in 0.02in;
+    }
+
+    /* Crew value is a dept-colored chip — overrides the default underlined
+       Date-style value so the dept color reads as the primary identifier. */
+    .buy-in-meta .buy-in-value.buy-in-crew-chip {
+        display: inline-block;
+        border-bottom: none;
+        border-radius: 0.05in;
+        padding: 0.05in 0.18in;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+        min-width: 1.6in;
+        text-align: center;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    .buy-in-members {
+        display: flex;
+        align-items: baseline;
+        gap: 0.12in;
+        margin-bottom: 0.18in;
+        font-size: 12pt;
+    }
+    .buy-in-members .buy-in-fill-wide {
+        flex: 1;
+        border-bottom: 1.5px solid #000;
+        height: 1.2em;
+    }
+
+    .buy-in-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 11pt;
+        table-layout: fixed;
+    }
+    /* Never slice a row across pages if the sheet still overflows on an outlier printer */
+    .buy-in-table tr {
+        page-break-inside: avoid;
+        break-inside: avoid;
+    }
+    .buy-in-table th {
+        font-size: 10pt;
+        font-weight: 700;
+        text-align: left;
+        padding: 0.09in 0.12in;
+        background-color: #DCDCDC;
+        border: none;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        letter-spacing: 0.04em;
+        vertical-align: middle;
+    }
+    .buy-in-table th.buy-in-th-actual,
+    .buy-in-table th.buy-in-th-percent {
+        background-color: #FBE5C3;
+    }
+
+    /* DAY header is a two-line stack: "DAY" / "June Week 3" sub-label. */
+    .buy-in-table th.buy-in-th-day {
+        line-height: 1.15;
+    }
+    .buy-in-th-day-main {
+        display: block;
+    }
+    .buy-in-th-day-week {
+        display: block;
+        font-size: 9pt;
+        font-weight: 500;
+        letter-spacing: 0.02em;
+        margin-top: 0.02in;
+        color: #333;
+    }
+    .buy-in-table tbody td {
+        padding: 0.17in 0.12in 0.06in 0.12in;
+        font-weight: 500;
+        vertical-align: bottom;
+        font-size: 11pt;
+    }
+    /* Value cells use a larger font and center the autopopulated /
+       to-be-hand-filled NUMBER within the column. The $ stays anchored to
+       the left edge and the % stays anchored to the right edge — that way
+       the printed form keeps the writing-line behavior of the source PDF
+       (manager writes the number in the middle, $ / % sit in fixed spots). */
+    .buy-in-table tbody td.buy-in-cell-expected,
+    .buy-in-table tbody td.buy-in-cell-actual,
+    .buy-in-table tbody td.buy-in-cell-delta,
+    .buy-in-table tbody td.buy-in-cell-percent {
+        font-size: 14pt;
+        text-align: center;
+        position: relative;
+    }
+    /* Anchor the $ to the left and % to the right of NON-split cells. Split
+       cells (Crate/Ship combined sheet) keep $ inline with each half. */
+    .buy-in-table tbody td.buy-in-cell-expected:not(.buy-in-cell-split) > .buy-in-currency,
+    .buy-in-table tbody td.buy-in-cell-actual:not(.buy-in-cell-split) > .buy-in-currency,
+    .buy-in-table tbody td.buy-in-cell-delta:not(.buy-in-cell-split) > .buy-in-currency {
+        position: absolute;
+        left: 0.12in;
+        bottom: 0.06in;
+    }
+    .buy-in-table tbody td.buy-in-cell-percent:not(.buy-in-cell-split) > .buy-in-unit {
+        position: absolute;
+        right: 0.12in;
+        bottom: 0.06in;
+    }
+    /* With $ absolutely-positioned, drop the inline padding on .buy-in-amount
+       inside non-split cells so the centered number sits cleanly. */
+    .buy-in-table tbody td.buy-in-cell-expected:not(.buy-in-cell-split) > .buy-in-amount,
+    .buy-in-table tbody td.buy-in-cell-actual:not(.buy-in-cell-split) > .buy-in-amount,
+    .buy-in-table tbody td.buy-in-cell-delta:not(.buy-in-cell-split) > .buy-in-amount,
+    .buy-in-table tbody td.buy-in-cell-percent:not(.buy-in-cell-split) > .buy-in-amount {
+        padding-left: 0;
+        padding-right: 0;
+        text-align: center;
+    }
+    .buy-in-table tbody td.buy-in-cell-day {
+        padding-bottom: 0.1in;
+        border-bottom: none;
+        vertical-align: middle;
+    }
+    .buy-in-cell-day {
+        font-weight: 500;
+        width: 14%;
+    }
+    .buy-in-cell-expected,
+    .buy-in-cell-actual,
+    .buy-in-cell-delta,
+    .buy-in-cell-percent {
+        width: 21.5%;
+    }
+    .buy-in-table tbody td.buy-in-cell-expected,
+    .buy-in-table tbody td.buy-in-cell-actual,
+    .buy-in-table tbody td.buy-in-cell-delta,
+    .buy-in-table tbody td.buy-in-cell-percent {
+        border-bottom: 1.5px solid #000;
+    }
+
+    /* Value-cell innards: keep $ and the amount on a single baseline. We use
+       flex with align-items:baseline so the $ sits flush against the writing
+       area (matching the PDF) and amounts that are pre-filled don't drop
+       below the line. */
+    .buy-in-cell-expected,
+    .buy-in-cell-actual,
+    .buy-in-cell-delta,
+    .buy-in-cell-percent {
+        white-space: nowrap;
+    }
+    .buy-in-table .buy-in-currency {
+        display: inline-block;
+        font-weight: 700;
+        vertical-align: baseline;
+    }
+    .buy-in-table .buy-in-amount {
+        display: inline-block;
+        vertical-align: baseline;
+        padding-left: 0.08in;
+        padding-right: 0.05in;
+    }
+    .buy-in-cell-percent .buy-in-amount {
+        padding-left: 0;
+        padding-right: 0.08in;
+        text-align: right;
+    }
+    .buy-in-cell-percent .buy-in-unit {
+        display: inline-block;
+        vertical-align: baseline;
+        font-weight: 700;
+    }
+
+    /* Thin spacer row visual: blank gap between Saturday and the WEEKLY TOTAL */
+    .buy-in-table tbody tr:last-child td {
+        padding-bottom: 0.12in;
+    }
+
+    .buy-in-total-row td {
+        font-weight: 700;
+        padding: 0.12in 0.12in 0.1in 0.12in !important;
+        background-color: #DCDCDC;
+        border-top: 2px solid #000;
+        border-bottom: 1.5px solid #000;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        vertical-align: middle;
+        font-size: 11pt;
+        white-space: nowrap;
+    }
+    /* WEEKLY TOTAL value cells get the same enlarged + centered treatment as
+       the body rows so the autopopulated total sits visually in line with
+       each day's number above it. $ stays anchored left, % anchored right. */
+    .buy-in-total-row td.buy-in-cell-expected,
+    .buy-in-total-row td.buy-in-cell-actual,
+    .buy-in-total-row td.buy-in-cell-delta,
+    .buy-in-total-row td.buy-in-cell-percent {
+        font-size: 14pt;
+        text-align: center;
+        position: relative;
+    }
+    .buy-in-total-row td.buy-in-cell-expected:not(.buy-in-cell-split) > .buy-in-currency,
+    .buy-in-total-row td.buy-in-cell-actual:not(.buy-in-cell-split) > .buy-in-currency,
+    .buy-in-total-row td.buy-in-cell-delta:not(.buy-in-cell-split) > .buy-in-currency {
+        position: absolute;
+        left: 0.12in;
+        top: 50%;
+        transform: translateY(-50%);
+    }
+    .buy-in-total-row td.buy-in-cell-percent:not(.buy-in-cell-split) > .buy-in-unit {
+        position: absolute;
+        right: 0.12in;
+        top: 50%;
+        transform: translateY(-50%);
+    }
+    .buy-in-total-row td.buy-in-cell-expected:not(.buy-in-cell-split) > .buy-in-amount,
+    .buy-in-total-row td.buy-in-cell-actual:not(.buy-in-cell-split) > .buy-in-amount,
+    .buy-in-total-row td.buy-in-cell-delta:not(.buy-in-cell-split) > .buy-in-amount,
+    .buy-in-total-row td.buy-in-cell-percent:not(.buy-in-cell-split) > .buy-in-amount {
+        padding-left: 0;
+        padding-right: 0;
+        text-align: center;
+    }
+    .buy-in-total-row td.buy-in-cell-day {
+        padding-left: 0.12in !important;
+        letter-spacing: 0.02em;
+    }
+    .buy-in-total-row .buy-in-cell-actual,
+    .buy-in-total-row .buy-in-cell-percent {
+        background-color: #FBE5C3 !important;
+    }
+
+    /* =========================================================
+       Buy-In Combined (Crate / Ship) — split-column variant.
+       Each value cell is two halves separated by a "/" divider:
+         Crate (= Crating + Load summed) on the left,
+         Ship on the right.
+       The header gets a CRATE / SHIPPING sub-row under each column.
+       ========================================================= */
+    .buy-in-table-combined thead .buy-in-subhead th.buy-in-th-sub {
+        font-size: 8pt;
+        font-weight: 500;
+        letter-spacing: 0.04em;
+        padding: 0 0.12in 0.06in 0.12in;
+        background-color: #DCDCDC;
+        color: #333;
+        text-align: left;
+    }
+    .buy-in-table-combined thead .buy-in-subhead th.buy-in-th-actual.buy-in-th-sub,
+    .buy-in-table-combined thead .buy-in-subhead th.buy-in-th-percent.buy-in-th-sub {
+        background-color: #FBE5C3;
+    }
+    .buy-in-table-combined thead tr:first-child th {
+        padding-bottom: 0.02in;
+    }
+
+    .buy-in-cell-split {
+        display: table-cell;
+    }
+    .buy-in-cell-split .buy-in-split-half {
+        display: inline-block;
+        vertical-align: baseline;
+        white-space: nowrap;
+    }
+    .buy-in-cell-split .buy-in-split-half .buy-in-amount {
+        min-width: 0.55in;
+    }
+    .buy-in-cell-percent.buy-in-cell-split .buy-in-split-half .buy-in-amount {
+        min-width: 0.45in;
+        text-align: right;
+        padding-right: 0.04in;
+    }
+    .buy-in-cell-split .buy-in-split-sep {
+        display: inline-block;
+        padding: 0 0.06in;
+        font-weight: 500;
+        color: #333;
+        vertical-align: baseline;
+    }
+
+    /* WEEKLY TOTAL on the combined sheet collapses $ to single values and
+       only keeps the % cell split. The split rule above already handles
+       sizing — just need to make sure the inline split element doesn't
+       break across lines. */
+    .buy-in-total-row-combined .buy-in-cell-percent.buy-in-cell-split {
+        font-weight: 700;
+    }
+}

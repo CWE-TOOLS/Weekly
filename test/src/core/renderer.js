@@ -1,0 +1,371 @@
+/**
+ * Unified Rendering Engine
+ *
+ * This module consolidates all rendering logic for the application,
+ * providing a single, efficient pipeline for updating the DOM.
+ * It is designed to be idempotent and performant, minimizing
+ * unnecessary re-renders and DOM manipulations.
+ */
+
+import { logger } from '../utils/logger.js';
+import * as state from './state.js';
+import { loadWeekIndex, loadWeekDate, removeState, STORAGE_KEYS } from './storage.js';
+import { renderWeekGrid } from '../components/week-renderer.js';
+import { getMonday, parseDate, getLocalDateString, createWeekDates, clearParseDateCache } from '../utils/date-utils.js';
+import { equalizeAllCardHeights, setGridWidths, scrollToWeek } from '../utils/grid-layout-manager.js';
+import { emit, on, EVENTS } from './event-bus.js';
+import {
+    canUseSmartUpdate,
+    smartUpdateSchedule,
+    preserveScrollPosition
+} from '../utils/smart-renderer.js';
+import { clearSyntheticTasks, injectSyntheticTasks, getAllTasks, getAllWeekStartDates, getIsEditingUnlocked } from './state.js';
+import { SYNTHETIC_DEPARTMENT_NAMES } from '../config/department-config.js';
+import { generateAllSyntheticTasks } from '../utils/schedule-utils.js';
+
+let isRendering = false;
+
+/**
+ * Group filtered tasks by their week Monday and compute the sorted list of all Mondays.
+ * @param {Array} filteredTasks - Currently filtered tasks
+ * @returns {{ tasksByWeek: Object, allMondays: Date[] }}
+ */
+function groupTasksByWeek(filteredTasks) {
+    const tasksByWeek = {};
+    const currentMonday = getMonday(new Date());
+
+    filteredTasks.forEach(task => {
+        if (!task.project) return;
+        let taskDate = parseDate(task.date);
+        let taskToStore = task;
+        if (!taskDate) {
+            taskToStore = { ...task, missingDate: true };
+            taskDate = currentMonday;
+        }
+        const monday = getMonday(taskDate);
+        const mondayString = getLocalDateString(monday);
+        if (!tasksByWeek[mondayString]) {
+            tasksByWeek[mondayString] = [];
+        }
+        tasksByWeek[mondayString].push(taskToStore);
+    });
+
+    const mondayStrings = Object.keys(tasksByWeek);
+    let allMondays = [];
+
+    if (mondayStrings.length === 0) {
+        const currentMondayString = getLocalDateString(currentMonday);
+        allMondays = [currentMonday];
+        tasksByWeek[currentMondayString] = [];
+    } else {
+        mondayStrings.sort();
+        const minMonday = new Date(mondayStrings[0] + 'T00:00:00');
+        const maxMonday = new Date(mondayStrings[mondayStrings.length - 1] + 'T00:00:00');
+        let current = new Date(minMonday);
+
+        while (current <= maxMonday) {
+            const mondayString = getLocalDateString(current);
+            allMondays.push(new Date(current));
+            if (!tasksByWeek[mondayString]) {
+                tasksByWeek[mondayString] = [];
+            }
+            current.setDate(current.getDate() + 7);
+        }
+
+        const currentMondayString = getLocalDateString(currentMonday);
+        if (!allMondays.some(d => d.getTime() === currentMonday.getTime())) {
+            allMondays.push(currentMonday);
+            allMondays.sort((a, b) => a - b);
+            if (!tasksByWeek[currentMondayString]) {
+                tasksByWeek[currentMondayString] = [];
+            }
+        }
+    }
+
+    // Filter out weeks that contain only manual tasks (or are empty).
+    // The current week is always kept so navigation has a stable anchor.
+    const currentMondayString = getLocalDateString(currentMonday);
+    allMondays = allMondays.filter(monday => {
+        const mondayString = getLocalDateString(monday);
+        if (mondayString === currentMondayString) return true;
+        const weekTasks = tasksByWeek[mondayString] || [];
+        const hasSheetsTask = weekTasks.some(t => !t.isManual);
+        if (!hasSheetsTask) {
+            delete tasksByWeek[mondayString];
+            return false;
+        }
+        return true;
+    });
+
+    return { tasksByWeek, allMondays };
+}
+
+/**
+ * Single-pass computation of the maximum tasks per department across all dates.
+ * @param {Array} filteredTasks - Currently filtered tasks
+ * @returns {Object} Map of department name to maximum task count
+ */
+function buildMaxTasksPerDept(filteredTasks) {
+    const taskCountByDeptDate = new Map();
+    filteredTasks.forEach(task => {
+        if (!task.project || !task.department) return;
+        const taskDate = parseDate(task.date) || getMonday(new Date());
+        const key = `${task.department}|${taskDate.toDateString()}`;
+        taskCountByDeptDate.set(key, (taskCountByDeptDate.get(key) || 0) + 1);
+    });
+    const maxTasksPerDept = {};
+    for (const [key, count] of taskCountByDeptDate) {
+        const dept = key.split('|')[0];
+        maxTasksPerDept[dept] = Math.max(maxTasksPerDept[dept] || 0, count);
+    }
+    for (const dept of SYNTHETIC_DEPARTMENT_NAMES) {
+        maxTasksPerDept[dept] = 1;
+    }
+    return maxTasksPerDept;
+}
+
+/**
+ * Resolve the current viewed week index using fallback chain:
+ * previously viewed week (matched by date) -> current Monday -> next future Monday -> last week.
+ * Saved week position from previous sessions is intentionally ignored —
+ * the app always opens on the current week.
+ * @param {Date[]} allMondays - All available week start dates
+ * @param {Date|null} previousViewedMonday - Monday of the week viewed before this render
+ * @returns {number} Resolved week index
+ */
+function resolveWeekIndex(allMondays, previousViewedMonday) {
+    // 1. Keep the week the user was viewing, matched by DATE — the weeks list
+    //    can grow or shrink between renders, so a bare index would silently
+    //    land on a different week (or stay pinned to 0 after an empty render).
+    if (previousViewedMonday) {
+        const previousMondayStr = getLocalDateString(previousViewedMonday);
+        const preservedIndex = allMondays.findIndex(d => getLocalDateString(d) === previousMondayStr);
+        if (preservedIndex !== -1) {
+            return preservedIndex;
+        }
+    }
+
+    const currentMonday = getMonday(new Date());
+    const currentMondayStr = getLocalDateString(currentMonday);
+
+    // Clear week-position keys persisted by older versions so they don't linger
+    if (loadWeekDate()) {
+        removeState(STORAGE_KEYS.CURRENT_WEEK_DATE);
+    }
+    if (loadWeekIndex(null) !== null) {
+        removeState(STORAGE_KEYS.CURRENT_WEEK_INDEX);
+    }
+
+    // 2. Default to current week
+    let currentViewedWeekIndex = allMondays.findIndex(d => getLocalDateString(d) === currentMondayStr);
+    if (currentViewedWeekIndex !== -1) {
+        return currentViewedWeekIndex;
+    }
+
+    // 3. Current week not in data — find nearest future week, or last week
+    currentViewedWeekIndex = allMondays.findIndex(d => d > currentMonday);
+    return currentViewedWeekIndex !== -1 ? currentViewedWeekIndex : allMondays.length - 1;
+}
+
+/**
+ * Schedule the post-render layout pass: grid widths -> card heights -> scroll to week -> restore vertical scroll -> emit events.
+ * @param {HTMLElement} container - Schedule container element
+ * @param {HTMLElement} wrapper - Schedule wrapper element
+ * @param {number} weekIndex - Target week index to scroll to
+ * @param {Date[]} allMondays - All available week start dates
+ * @param {number} savedScrollTop - Vertical scroll position to restore
+ */
+const LAZY_WEEK_RADIUS = 1;          // weeks drawn on each side of the one on screen
+let lazyRenderCtx = null;            // { allMondays, maxTasksPerDept, isEditingUnlocked } of the last full render
+
+function lazyWeekPlaceholder(mondayDate) {
+    const el = document.createElement('div');
+    el.className = 'schedule-grid schedule-grid-lazy';
+    el.dataset.lazyMonday = getLocalDateString(mondayDate);
+    return el;
+}
+
+/** Fill the empty frames around week `weekIndex` (called whenever the viewed week changes). */
+export function ensureWeeksRendered(weekIndex) {
+    const container = document.getElementById('schedule-container');
+    const wrapper = document.getElementById('schedule-wrapper');
+    if (!container || !wrapper || !lazyRenderCtx) return;
+    const grids = container.querySelectorAll('.schedule-grid');
+    let filled = 0;
+    for (let i = weekIndex - LAZY_WEEK_RADIUS; i <= weekIndex + LAZY_WEEK_RADIUS; i++) {
+        const grid = grids[i];
+        if (!grid || !grid.classList.contains('schedule-grid-lazy')) continue;
+        const monday = lazyRenderCtx.allMondays[i];
+        if (!monday) continue;
+        const real = renderWeekGrid(monday, lazyRenderCtx.maxTasksPerDept, lazyRenderCtx.isEditingUnlocked);
+        real.style.width = grid.style.width;
+        grid.replaceWith(real);
+        filled++;
+    }
+    if (filled) {
+        equalizeAllCardHeights();
+        emit(EVENTS.SCHEDULE_RENDERED);
+    }
+}
+on(EVENTS.WEEK_CHANGED, (e) => { if (e && typeof e.weekIndex === 'number') ensureWeeksRendered(e.weekIndex); });
+
+function scheduleLayoutAndScroll(container, wrapper, weekIndex, allMondays, savedScrollTop) {
+    requestAnimationFrame(() => {
+        setGridWidths(container, wrapper);
+        equalizeAllCardHeights();
+
+        requestAnimationFrame(() => {
+            scrollToWeek(wrapper, container, weekIndex);
+
+            if (typeof savedScrollTop === 'number') {
+                wrapper.scrollTop = savedScrollTop;
+            }
+
+            const finalWeekIndex = Math.min(weekIndex, allMondays.length - 1);
+            emit(EVENTS.WEEK_CHANGED, { weekIndex: finalWeekIndex, weekDate: allMondays[finalWeekIndex] });
+
+            wrapper.style.willChange = 'auto';
+        });
+    });
+}
+
+/**
+ * Main render function for the entire application.
+ * This is the single entry point for all rendering operations.
+ */
+export async function render() {
+    if (isRendering) {
+        logger.warn('Render already in progress. Skipping.');
+        return;
+    }
+
+    isRendering = true;
+    logger.info('Starting unified render...');
+
+    try {
+        clearParseDateCache();
+
+        const container = document.getElementById('schedule-container');
+        const wrapper = document.getElementById('schedule-wrapper');
+
+        if (!container || !wrapper) {
+            logger.error('Schedule container or wrapper not found');
+            return;
+        }
+
+        let filteredTasks = state.getFilteredTasks();
+        const previousFilteredTasks = state.getPreviousFilteredTasks();
+
+        // Attempt smart update first to preserve scroll position
+        // Only generate synthetic tasks when smart update is a possibility
+        // (on full-render path they'd be immediately cleared — wasted work)
+        if (previousFilteredTasks.length > 0) {
+            // Generate synthetic tasks BEFORE smart update comparison
+            // Problem: previousFilteredTasks has synthetic tasks (from last render)
+            //          but filteredTasks doesn't (not generated yet)
+            // Solution: Generate and inject synthetic tasks into current state
+            //           so both old and new have them for accurate comparison
+            const allWeekStartDates = getAllWeekStartDates();
+            if (allWeekStartDates.length > 0) {
+                const allSyntheticTasks = [];
+
+                allWeekStartDates.forEach(monday => {
+                    const weekDates = createWeekDates(monday);
+                    const syntheticTasksByDept = generateAllSyntheticTasks(weekDates, monday, getAllTasks);
+                    allSyntheticTasks.push(...Object.values(syntheticTasksByDept).flat());
+                });
+
+                if (allSyntheticTasks.length > 0) {
+                    injectSyntheticTasks(allSyntheticTasks);
+                    filteredTasks = state.getFilteredTasks();
+                    logger.debug('Renderer: Injected synthetic tasks before smart update', {
+                        count: allSyntheticTasks.length,
+                        weeks: allWeekStartDates.length
+                    });
+                }
+            }
+
+            // Weeks that are still empty frames cannot be patched card by card: redraw (cheap now, three weeks).
+            if (!container.querySelector('.schedule-grid-lazy') && canUseSmartUpdate(container, previousFilteredTasks, filteredTasks)) {
+
+                logger.info('🔄 Attempting smart update to preserve scroll position...');
+
+                const restoreScroll = preserveScrollPosition(wrapper);
+                const stats = smartUpdateSchedule(container, previousFilteredTasks, filteredTasks);
+
+                if (stats !== null) {
+                    logger.info('✅ Smart update successful:', stats);
+
+                    // Recalculate heights BEFORE restoring scroll to prevent jumping
+                    requestAnimationFrame(() => {
+                        equalizeAllCardHeights();
+                        restoreScroll(); // Restores BOTH scrollTop and scrollLeft AFTER heights are stable
+                        requestAnimationFrame(() => {
+                            emit(EVENTS.SCHEDULE_RENDERED);
+                        });
+                    });
+
+                    isRendering = false;
+                    return; // Early exit - skip full render (synthetic tasks preserved)
+                }
+
+                logger.warn('⚠️ Smart update not possible, falling back to full render');
+            }
+        }
+
+        // Clear any existing synthetic tasks before doing a FULL render
+        // (This happens after smart update check, so we only clear if doing full render)
+        clearSyntheticTasks();
+
+        // FALLBACK: Capture vertical scroll before full render
+        const savedScrollTop = wrapper.scrollTop;
+
+        if (filteredTasks.length === 0) {
+            const currentMonday = getMonday(new Date());
+            state.setAllWeekStartDates([currentMonday]);
+            state.setCurrentViewedWeekIndex(0);
+            const emptyMsg = document.createElement('div');
+            emptyMsg.className = 'no-tasks-message';
+            emptyMsg.textContent = 'No tasks found for the selected criteria.';
+            container.replaceChildren(emptyMsg);
+            emit(EVENTS.WEEK_CHANGED, { weekIndex: 0, weekDate: currentMonday });
+            isRendering = false;
+            return;
+        }
+
+        // Capture the viewed week's DATE before the weeks list is replaced,
+        // so resolveWeekIndex can restore the same week even when the new
+        // list has different indexes for the same Mondays.
+        const previousViewedMonday = state.getCurrentWeekDate();
+
+        const { tasksByWeek, allMondays } = groupTasksByWeek(filteredTasks);
+        state.setAllWeekStartDates(allMondays);
+
+        const maxTasksPerDept = buildMaxTasksPerDept(filteredTasks);
+
+        // Build new content while old content is still visible (no blank flash)
+        const isEditingUnlocked = getIsEditingUnlocked();
+        const weekIndex = resolveWeekIndex(allMondays, previousViewedMonday);
+        // Only the week on screen and its two neighbours are drawn now; the other weeks are empty frames of the
+        // same width that get filled the moment someone moves to them (2026-10-23). Cuts the first draw from
+        // every week in memory (14+) to three.
+        lazyRenderCtx = { allMondays, maxTasksPerDept, isEditingUnlocked };
+        const fragment = document.createDocumentFragment();
+        allMondays.forEach((mondayDate, i) => {
+            fragment.appendChild(Math.abs(i - weekIndex) <= LAZY_WEEK_RADIUS
+                ? renderWeekGrid(mondayDate, maxTasksPerDept, isEditingUnlocked)
+                : lazyWeekPlaceholder(mondayDate));
+        });
+        container.replaceChildren(fragment);
+        state.setCurrentViewedWeekIndex(weekIndex);
+
+        scheduleLayoutAndScroll(container, wrapper, weekIndex, allMondays, savedScrollTop);
+
+        emit(EVENTS.SCHEDULE_RENDERED);
+
+    } catch (error) {
+        logger.error('An error occurred during render:', error);
+    } finally {
+        isRendering = false;
+    }
+}

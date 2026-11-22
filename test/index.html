@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Weekly task schedule viewer with department filtering and real-time collaboration">
+    <meta name="theme-color" content="#667eea">
+    <!-- TEST COPY of the weekly view (see test/README.md). Same live data as the main page. -->
+    <meta name="robots" content="noindex, nofollow">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧪</text></svg>">
+    <title>TEST – Weekly Schedule Task Viewer</title>
+    <style>@media print { #test-banner { display: none !important; } }</style>
+
+    <!-- Modular CSS Files -->
+    <link rel="stylesheet" href="src/styles/variables.css">
+    <link rel="stylesheet" href="src/styles/base.css">
+    <link rel="stylesheet" href="src/styles/layout.css">
+
+    <!-- Component CSS Files (modularized from components.css) -->
+    <link rel="stylesheet" href="src/styles/task-card.css?v=20261106-1">
+    <link rel="stylesheet" href="src/styles/buttons.css">
+    <link rel="stylesheet" href="src/styles/modals.css">
+    <link rel="stylesheet" href="src/styles/actual-hours-modal.css">
+    <link rel="stylesheet" href="src/styles/labor-popover.css">
+    <link rel="stylesheet" href="src/styles/schedule-grid.css">
+    <link rel="stylesheet" href="src/styles/department-filter.css">
+    <link rel="stylesheet" href="src/styles/context-menu.css">
+    <link rel="stylesheet" href="src/styles/notifications.css">
+    <link rel="stylesheet" href="src/styles/misc-components.css?v=20261110-6">
+
+    <link rel="stylesheet" href="src/styles/responsive.css">
+    <link rel="stylesheet" href="src/styles/print.css?v=20261106-1">
+
+    <!-- Modular Print System Scripts -->
+    <!-- Load print-utils first as it exports window.PrintUtils used by other modules -->
+    <script type="module" src="src/features/print/print-utils.js?v=20261106-1"></script>
+    <script type="module" src="src/features/print/print-layout.js"></script>
+    <script type="module" src="src/features/print/print-renderer.js"></script>
+    <script type="module" src="src/features/print/print-debug.js"></script>
+</head>
+<body>
+    <!-- Test banner: marks this as the test copy. Saves here change the LIVE schedule. -->
+    <div id="test-banner" role="status" style="position:sticky;top:0;z-index:10000;background:#b45309;color:#fff;font:600 14px/1.4 system-ui,sans-serif;text-align:center;padding:6px 12px;">
+        🧪 TEST VERSION of the weekly view. Changes you make here save to the LIVE schedule.
+        <a href="../" style="color:#fff;text-decoration:underline;margin-left:8px;">Open the live page</a>
+    </div>
+    <!-- Error Notification (Phase 8) -->
+    <div id="error-notification" class="error-notification hidden">
+        <div class="error-content">
+            <span class="error-icon">⚠️</span>
+            <span class="error-message"></span>
+            <button class="error-close" aria-label="Close">&times;</button>
+            <button class="error-retry hidden">Retry</button>
+        </div>
+    </div>
+
+    <!-- Loading Overlay (Phase 8) — visible from first paint so the UI never
+         flashes before init; JS removes it when the app is ready -->
+    <div id="loading-overlay" class="loading-overlay">
+        <div class="loading-content">
+            <div class="loading-spinner"></div>
+            <div class="loading-message">Loading schedule…</div>
+            <div class="loading-progress">
+                <div class="loading-progress-bar"></div>
+            </div>
+        </div>
+    </div>
+    <noscript><style>#loading-overlay { display: none; }</style></noscript>
+    <script nomodule>document.getElementById('loading-overlay').classList.add('hidden');</script>
+
+    <!-- Status Banner (Phase 8) -->
+    <div id="status-banner" class="status-banner hidden">
+        <div class="status-content">
+            <span class="status-message"></span>
+        </div>
+    </div>
+
+    <!-- Offline Indicator (Phase 9) -->
+    <div id="offline-indicator" class="offline-indicator hidden">
+        <span class="offline-icon">⚠️</span>
+        <span>Offline Mode</span>
+        <span class="offline-queue" id="offline-queue-count"></span>
+    </div>
+
+    <!-- Critical Error (Phase 8) -->
+    <div id="app-error" class="app-error hidden">
+        <div class="app-error-content">
+            <h2>⚠️ Application Error</h2>
+            <p id="error-message">Failed to start application. Please refresh the page.</p>
+            <button onclick="location.reload()">Refresh Page</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="controls">
+            <div class="filter-group">
+                <div id="multi-select-dropdown" class="multi-select-dropdown" style="margin-left: auto;">
+                    <button id="multi-select-btn" class="multi-select-btn" aria-haspopup="listbox" aria-expanded="false">
+                        <span id="multi-select-label">All Departments</span>
+                        <svg class="dropdown-arrow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.25 4.25a.75.75 0 01-1.06 0L5.23 8.27a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                   <div id="multi-select-panel" class="multi-select-panel" role="listbox">
+                        <div class="multi-select-actions">
+                            <button id="select-all-btn">Show All</button>
+                            <button id="select-none-btn">Show None</button>
+                        </div>
+                        <ul id="department-list">
+                            <!-- Department checkboxes will be populated by JavaScript -->
+                        </ul>
+                    </div>
+                </div>
+                <div class="search-group">
+                    <input type="text" id="project-search" placeholder="Search projects..." class="search-input">
+                    <div id="search-results" class="search-results" style="display: none;">
+                        <!-- Search results will be populated by JavaScript -->
+                    </div>
+                </div>
+                <div id="loading" class="loading">
+                    <div>Loading tasks...</div>
+                    <div class="loading-spinner"></div>
+                </div>
+            </div>
+            <div class="navigation-group">
+                <button id="prev-week-btn">&larr; Previous</button>
+                <h2 id="week-display"></h2>
+                <button id="next-week-btn">Next &rarr;</button>
+                <button id="current-week-btn" class="current-week-btn" title="Jump to the current week (Alt+Home)">Current Week</button>
+            </div>
+            <div class="action-group">
+               <select id="lang-select" class="lang-select" aria-label="Language">
+                   <option value="en">English</option>
+                   <option value="es">Español</option>
+               </select>
+               <div id="google_translate_element" class="translate-widget-hidden"></div>
+               <button id="refresh-btn">Refresh Data</button>
+               <span id="data-freshness" class="data-freshness" aria-live="polite">Updating…</span>
+               <span id="schedule-source" class="schedule-source" hidden></span>
+               <a href="../scheduler.html" id="scheduler-btn" class="scheduler-link" title="Open the Plant Scheduler">Plant Scheduler</a>
+               <button type="button" id="week-batch-btn" title="Print every batch ticket for the castings that cast in the week on screen, with the materials rolled up per cast day and for the week">Batch tickets (week)</button>
+                <a href="../project-portal.html" id="project-portal-btn" class="icon-btn" aria-label="Project Portal" title="Project Portal" style="display: inline-flex; align-items: center; justify-content: center; text-decoration: none;">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                    </svg>
+                </a>
+                <button id="revenue-btn" class="icon-btn" aria-label="Revenue Summary" title="Revenue Summary">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="12" y1="1" x2="12" y2="23"/>
+                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                    </svg>
+                </button>
+                <button id="print-btn" class="icon-btn" aria-label="Print Schedule">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="6,9 6,2 18,2 18,9"/>
+                        <path d="m6,18H4a2,2 0 0,1 -2,-2v-5a2,2 0 0,1 2,-2h16a2,2 0 0,1 2,2v5a2,2 0 0,1 -2,2h-2"/>
+                        <rect x="6" y="14" width="12" height="8"/>
+                    </svg>
+                </button>
+                <button id="fullscreen-btn" class="icon-btn" aria-label="Toggle Fullscreen">
+                    <svg id="fullscreen-icon-expand" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+                    </svg>
+                    <svg id="fullscreen-icon-compress" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+                        <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 0 2-2h3M3 16h3a2 2 0 0 0 2-2v-3"/>
+                    </svg>
+                </button>
+                <button id="main-editing-btn" class="icon-btn editing-btn" aria-label="Unlock Editing">
+                    <svg id="unlock-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                        <circle cx="12" cy="16" r="1"/>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                    <svg id="lock-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                        <circle cx="12" cy="16" r="1"/>
+                        <path d="M7 11V7a5 5 0 0 1 9.9-1"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <div id="error" class="error" style="display: none;"></div>
+
+        <div class="schedule-wrapper" id="schedule-wrapper">
+            <div class="schedule-container" id="schedule-container">
+                <!-- Schedule weeks will be populated by JavaScript -->
+            </div>
+        </div>
+
+        <!-- Context Menu -->
+        <div class="context-menu" id="context-menu" role="menu">
+            <div class="context-menu-item build-plan" data-action="build-plan" role="menuitem">
+                <div class="menu-text">
+                    <span class="menu-icon">📋</span><small>View detailed project schedule</small>
+                </div>
+            </div>
+            <div class="context-menu-item input-actual-hours" data-action="input-actual-hours" role="menuitem">
+                <div class="menu-text">
+                    <span class="menu-icon">⏱️</span><small>Input actual hours</small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Project View Modal -->
+        <div class="project-modal" id="project-modal">
+            <div class="project-content">
+                <div class="project-header">
+                    <div class="project-title-group">
+                        <h2 class="project-title" id="project-title">Build Plan</h2>
+                        <div class="casting-nav" id="casting-nav" style="display: none;">
+                            <button class="casting-nav-btn" id="casting-prev-btn" title="Previous casting">&lsaquo;</button>
+                            <span class="casting-nav-label" id="casting-nav-label"></span>
+                            <button class="casting-nav-btn" id="casting-next-btn" title="Next casting">&rsaquo;</button>
+                        </div>
+                    </div>
+                    <div class="header-actions">
+                        <button id="unlock-editing-btn">🔒 Unlock Editing</button>
+                        <button id="edit-plan-btn" style="display: none;">✏️ Edit Plan</button>
+                        <button id="lock-editing-btn" class="small-lock-btn" style="display: none;" title="Lock Editing">🔒</button>
+                        <button id="save-changes-btn" style="display: none;">💾 Save Changes</button>
+                        <button id="cancel-changes-btn" style="display: none;">❌ Cancel Changes</button>
+                        <button class="project-close" id="project-close">&times;</button>
+                    </div>
+                </div>
+
+                <!-- Success Notification -->
+                <div id="project-success-notification" class="project-success-notification">
+                    ✅ Changes saved successfully!
+                </div>
+                <div class="project-body">
+                    <div class="project-schedule-grid" id="project-schedule-grid">
+                        <!-- Project schedule will be populated by JavaScript -->
+                    </div>
+                </div>
+
+                <!-- Loading Overlay -->
+                <div id="project-loading-overlay" class="project-loading-overlay" style="display: none;">
+                    <div class="loading-spinner"></div>
+                    <p>Saving changes...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Password Modal -->
+        <div class="password-modal" id="password-modal">
+            <div class="password-content">
+                <div class="password-header">
+                    <h3>Unlock Editing</h3>
+                    <button id="password-close">&times;</button>
+                </div>
+                <div class="password-body">
+                    <label for="password-input">Enter password:</label>
+                    <input type="password" id="password-input" placeholder="Enter password">
+                    <div class="password-actions">
+                        <button id="password-submit">Unlock</button>
+                        <button id="password-cancel">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Print Modal -->
+        <div class="print-modal" id="print-modal">
+            <div class="print-content">
+                <div class="print-header">
+                    <h2 class="print-title">Print Schedule</h2>
+                    <button class="print-close" id="print-close">&times;</button>
+                </div>
+
+                <div class="print-body">
+                    <div class="print-options">
+                        <div class="print-type-section">
+                            <label class="print-option-label">Print Type:</label>
+                            <div class="radio-group">
+                                <label class="radio-label">
+                                    <input type="radio" name="print-type" value="week" checked>
+                                    <span class="radio-text">Print Week</span>
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="print-type" value="day">
+                                    <span class="radio-text">Print Day</span>
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="print-type" value="frozen-daily">
+                                    <span class="radio-text">Frozen Daily</span>
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="print-type" value="phase-start">
+                                    <span class="radio-text">Phase Start Report</span>
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="print-type" value="board-11x17">
+                                    <span class="radio-text">Board Schedule (11×17)</span>
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="print-type" value="buy-in">
+                                    <span class="radio-text">Buy-In Sheets</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="week-select-section" id="week-select-section">
+                            <label for="print-week-select" class="print-option-label">Select Week:</label>
+                            <select id="print-week-select" class="week-select">
+                                <!-- Options populated by JS -->
+                            </select>
+                        </div>
+
+                        <div class="date-select-section" id="day-select-section" style="display: none;">
+                            <label for="print-date-select" class="print-option-label">Select Date:</label>
+                            <input type="date" id="print-date-select" class="date-select">
+                        </div>
+
+                        <div class="date-select-section" id="frozen-daily-select-section" style="display: none;">
+                            <label for="frozen-daily-date-select" class="print-option-label">Select Date:</label>
+                            <input type="date" id="frozen-daily-date-select" class="date-select">
+                        </div>
+
+                        <div class="departments-section" id="departments-section">
+                            <label class="print-option-label">Select Departments:</label>
+                            <div class="departments-actions">
+                                <button id="check-all-depts" class="dept-action-btn">Check All</button>
+                                <button id="uncheck-all-depts" class="dept-action-btn">Uncheck All</button>
+                            </div>
+                            <div class="departments-grid">
+                                <!-- Checkboxes populated by JS -->
+                            </div>
+                        </div>
+
+                        <div class="orientation-section" id="orientation-section" style="display: none;">
+                            <label class="print-option-label">Page Orientation:</label>
+                            <div class="radio-group">
+                                <label class="radio-label">
+                                    <input type="radio" name="print-orientation" value="portrait">
+                                    <span class="radio-text">Portrait</span>
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="print-orientation" value="landscape" checked>
+                                    <span class="radio-text">Landscape</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="board-saturday-section" id="board-saturday-section" style="display: none;">
+                            <label class="radio-label">
+                                <input type="checkbox" id="print-board-saturday" checked>
+                                <span class="radio-text">Include Saturday (separate page; Mon Cast → Sat Layout)</span>
+                            </label>
+                            <div id="board-unresolved-preview" class="board-unresolved-preview"></div>
+                        </div>
+                    </div>
+
+                    <div class="print-actions">
+                        <button type="button" id="print-execute-btn" class="print-execute-btn">Print Selected</button>
+                        <button type="button" id="print-cancel-btn" class="print-cancel-btn">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- Add Card Modal -->
+        <div class="add-card-modal" id="add-card-modal">
+            <div class="add-card-content">
+                <div class="add-card-header">
+                    <h3>Add New Task</h3>
+                    <button class="add-card-close" id="add-card-close">&times;</button>
+                </div>
+                <div class="add-card-body">
+                    <form id="add-card-form">
+                        <div class="form-group">
+                            <label for="task-project">Project Name *</label>
+                            <input type="text" id="task-project" name="project" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="task-description">Description</label>
+                            <textarea id="task-description" name="description" rows="3"></textarea>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="task-department">Department *</label>
+                                <select id="task-department" name="department" required>
+                                    <option value="">Select Department</option>
+                                    <option value="Special Events">Special Events</option>
+                                    <option value="CNC">CNC</option>
+                                    <option value="Parts">Parts</option>
+                                    <option value="Mill">Mill</option>
+                                    <option value="Form Out">Form Out</option>
+                                    <option value="Cast">Cast</option>
+                                    <option value="Batch">Batch</option>
+                                    <option value="Demold">Demold</option>
+                                    <option value="Finish">Finish</option>
+                                    <option value="Seal">Seal</option>
+                                    <option value="Final Insp.">Final Insp.</option>
+                                    <option value="Special">Special</option>
+                                    <option value="Crating">Crating</option>
+                                    <option value="Load">Load</option>
+                                    <option value="Ship">Ship</option>
+                                    <option value="Samples">Samples</option>
+                                    <option value="Facilities">Facilities</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="task-casting-side">Casting Side (optional)</label>
+                                <select id="task-casting-side" name="castingSide">
+                                    <option value="">No side</option>
+                                    <option value="A">Side A</option>
+                                    <option value="B">Side B</option>
+                                    <option value="AB">Both — A and B</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="task-date">Date *</label>
+                                <input type="date" id="task-date" name="date" required>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="task-hours">Hours</label>
+                                <input type="number" id="task-hours" name="hours" step="0.5" min="0">
+                            </div>
+                            <div class="form-group">
+                                <label for="task-day-number">Day Number</label>
+                                <input type="number" id="task-day-number" name="dayNumber" min="1">
+                            </div>
+                            <div class="form-group">
+                                <label for="task-total-days">Total Days</label>
+                                <input type="number" id="task-total-days" name="totalDays" min="1">
+                            </div>
+                        </div>
+                        <div class="form-actions">
+                            <button type="button" id="add-card-cancel" class="btn-secondary">Cancel</button>
+                            <button type="submit" id="add-card-submit" class="btn-primary">Add Task</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Actual Hours Input Modal -->
+        <div class="actual-hours-modal" id="actual-hours-modal">
+            <div class="actual-hours-content">
+                <div class="actual-hours-header">
+                    <h3>Input Actual Hours</h3>
+                    <p class="task-name" id="actual-hours-task-name"></p>
+                </div>
+                <div class="actual-hours-body">
+                    <div class="hours-display">
+                        <div class="hours-display-value" id="hours-display-value">0</div>
+                        <div class="hours-display-label">Hours</div>
+                    </div>
+                    <div class="hours-keypad">
+                        <button class="keypad-btn" data-digit="1">1</button>
+                        <button class="keypad-btn" data-digit="2">2</button>
+                        <button class="keypad-btn" data-digit="3">3</button>
+                        <button class="keypad-btn" data-digit="4">4</button>
+                        <button class="keypad-btn" data-digit="5">5</button>
+                        <button class="keypad-btn" data-digit="6">6</button>
+                        <button class="keypad-btn" data-digit="7">7</button>
+                        <button class="keypad-btn" data-digit="8">8</button>
+                        <button class="keypad-btn" data-digit="9">9</button>
+                        <button class="keypad-btn action-btn clear" id="hours-clear-btn">C</button>
+                        <button class="keypad-btn zero" data-digit="0">0</button>
+                        <button class="keypad-btn action-btn backspace" id="hours-backspace-btn">←</button>
+                    </div>
+                    <div class="hours-actions">
+                        <button class="hours-cancel-btn" id="hours-cancel-btn">Cancel</button>
+                        <button class="hours-confirm-btn" id="hours-confirm-btn">Confirm</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Print Preview Content -->
+        <div class="print-preview-content" id="print-preview-content">
+            <!-- Print content will be dynamically generated here -->
+        </div>
+
+        <!-- Floating Add Task Button -->
+        <button class="fab-btn" id="fab-add-task" title="Add New Task" aria-label="Add New Task">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+        </button>
+    </div>
+
+    <!-- Main Application Entry Point (ES6 Module) -->
+    <script type="module" src="src/main.js?v=2026110601"></script>
+    <script type="module" src="src/features/scheduler-crew-preview.js?v=20261023-1"></script>
+
+    <!-- Google Translate Widget -->
+    <script type="text/javascript">
+      function googleTranslateElementInit() {
+        new google.translate.TranslateElement({
+          pageLanguage: 'en',
+          includedLanguages: 'es',
+          layout: google.translate.TranslateElement.InlineLayout.SIMPLE,
+          autoDisplay: false
+        }, 'google_translate_element');
+      }
+    </script>
+    <script type="text/javascript">
+      (function() {
+        // The Google Translate widget (about a second of script on every open) loads only when a language other
+        // than English is wanted: picked now, or remembered in the cookie from before. 2026-10-23
+        let translateLoading = false;
+        function loadTranslate() {
+          if (translateLoading || document.querySelector('.goog-te-combo')) return;
+          translateLoading = true;
+          const s = document.createElement('script');
+          s.src = '//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit';
+          document.body.appendChild(s);
+        }
+        function setLang(lang) {
+          // Google Translate uses a cookie to remember language; also trigger via the hidden select
+          document.cookie = 'googtrans=/en/' + lang + ';path=/';
+          document.cookie = 'googtrans=/en/' + lang + ';path=/;domain=' + location.hostname;
+          const select = document.querySelector('.goog-te-combo');
+          if (select) {
+            select.value = lang === 'en' ? '' : lang;
+            select.dispatchEvent(new Event('change'));
+          } else if (lang !== 'en') {
+            loadTranslate();   // the widget reads the cookie when it initialises and translates straight away
+          }
+        }
+        // Restore on load from cookie
+        function getCurrentLang() {
+          const m = document.cookie.match(/googtrans=\/en\/(\w[\w-]*)/);
+          return m ? m[1] : 'en';
+        }
+        document.addEventListener('DOMContentLoaded', () => {
+          const customSelect = document.getElementById('lang-select');
+          if (!customSelect) return;
+          const lang = getCurrentLang();
+          customSelect.value = lang;
+          if (lang !== 'en') loadTranslate();
+          customSelect.addEventListener('change', (e) => setLang(e.target.value));
+        });
+      })();
+    </script>
+    <script type="module" src="src/utils/auto-update.js?v=20261023-1"></script>
+</body>
+</html>

@@ -1,0 +1,563 @@
+/* Task Cards */
+.task-card {
+  color: var(--text-primary);
+  border-radius: var(--border-radius-md);
+  padding: 0.35rem;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  min-height: 140px;
+  background-color: var(--background-secondary);
+  position: relative;
+}
+
+.task-card.department-cnc {
+  background-color: var(--color-cnc);
+  color: var(--color-cnc-text);
+}
+
+.task-card.department-parts {
+  background-color: var(--color-parts);
+  color: var(--color-parts-text);
+}
+
+.task-card.department-mill {
+  background-color: var(--color-mill);
+  color: var(--color-mill-text);
+}
+
+.task-card.department-form-out {
+  background-color: var(--color-form-out);
+  color: var(--color-form-out-text);
+}
+
+.task-card.department-cast {
+  background-color: var(--color-cast);
+  color: var(--color-cast-text);
+}
+
+.task-card.department-batch {
+  background-color: var(--color-batch);
+  color: var(--color-batch-text);
+}
+
+.task-card.department-layout {
+  background-color: var(--color-layout);
+  color: var(--color-layout-text);
+}
+
+.task-card.department-demold {
+  background-color: var(--color-demold);
+  color: var(--color-demold-text);
+}
+
+.task-card.department-finish {
+  background-color: var(--color-finish);
+  color: var(--color-finish-text);
+}
+
+.task-card.department-seal {
+  background-color: var(--color-seal);
+  color: var(--color-seal-text);
+}
+
+.task-card.department-final-insp {
+  background-color: var(--color-final-insp);
+  color: var(--color-final-insp-text);
+}
+
+.task-card.department-special {
+  background-color: var(--color-special) !important;
+  color: var(--color-special-text) !important;
+}
+
+.task-card.department-special-events {
+  background-color: #EF4444;
+  color: #FFFFFF;
+}
+
+.task-card.department-crating {
+  background-color: var(--color-crating);
+  color: var(--color-crating-text);
+}
+
+.task-card.department-load {
+  background-color: var(--color-load);
+  color: var(--color-load-text);
+}
+
+.task-card.department-ship {
+  background-color: var(--color-ship);
+  color: var(--color-ship-text);
+}
+.task-card.department-samples {
+  background-color: var(--color-samples);
+  color: var(--color-samples-text);
+}
+.task-card.department-facilities {
+  background-color: var(--color-facilities);
+  color: var(--color-facilities-text);
+}
+
+.task-card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.task-card::after {
+  content: '⋮';
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  font-size: 1.2rem;
+  color: rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.task-card:hover::after {
+  opacity: 1;
+}
+
+/* Special Events Task Card Styling */
+.task-card.department-special-events .project-description,
+.task-card.department-special-events .task-day-counter,
+.task-card.department-special-events .task-description,
+.task-card.department-special-events .task-details {
+  display: none;
+}
+
+.task-card.department-special-events {
+  justify-content: center;
+}
+
+.task-card.department-special-events .task-title {
+  font-size: 1.5rem;
+  margin-bottom: 0;
+}
+
+/* Task Card Content */
+.task-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 0.25rem;
+  color: inherit;
+  text-align: center;
+}
+
+.task-cast-number {
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 0.25rem;
+  color: inherit;
+  text-align: center;
+}
+
+.task-casting-side {
+  font-weight: 700;
+  font-size: 1.05rem;
+  margin-bottom: 0.25rem;
+  color: inherit;
+  text-align: center;
+}
+
+.edit-casting-side {
+  display: block;
+  width: 100%;
+  margin-bottom: 0.35rem;
+  padding: 0.25rem 0.35rem;
+  font-size: 0.85rem;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+  background-color: rgba(255, 255, 255, 0.9);
+  color: #333;
+}
+
+.task-description {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+  color: inherit;
+  flex-grow: 1;
+  text-align: center;
+  white-space: pre-wrap;
+}
+
+.project-description {
+  font-size: 0.8rem;
+  font-weight: 400;
+  font-style: italic;
+  margin-bottom: 0.25rem;
+  color: inherit;
+  text-align: center;
+  opacity: 0.75;
+}
+
+.missing-description {
+  color: #ef4444;
+  font-weight: 600;
+  opacity: 1;
+  background-color: #fee2e2;
+  border-radius: 4px;
+  padding: 2px 4px;
+}
+
+.task-details {
+  font-size: 1rem;
+  color: inherit;
+  opacity: 0.9;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  padding-top: 0.25rem;
+  margin-top: auto;
+}
+
+.task-details strong {
+  color: inherit;
+  font-weight: 600;
+}
+
+/* Actual Hours Styling — high-contrast tag so the value is legible
+   on every department card color. */
+.task-details .actual-hours {
+  color: inherit;
+  font-weight: 600;
+  margin-left: 0.35rem;
+}
+
+.task-details .actual-hours-value {
+  display: inline-block;
+  background: #ffffff;
+  color: #dc2626;
+  font-weight: 700;
+  padding: 1px 0.45rem;
+  border-radius: 4px;
+  margin-left: 0.25rem;
+  min-width: 1.4rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  vertical-align: baseline;
+}
+
+.task-day-counter {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-align: center;
+  padding: 0.25rem 0;
+  margin: 0.15rem -0.35rem 0.15rem -0.35rem;
+  background-color: rgba(0, 0, 0, 0.08);
+  color: inherit;
+}
+
+/* Pieces count — casting inventory total (qty + extras) for casting-linked
+   tasks, rendered as a slimmer, lighter band flush beneath the day counter. */
+.task-pieces-count {
+  font-size: 1rem; /* match .task-description */
+  font-weight: 600;
+  text-align: center;
+  padding: 0.15rem 0;
+  margin: -0.15rem -0.35rem 0.15rem -0.35rem;
+  background-color: rgba(0, 0, 0, 0.04);
+  color: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Color log title + cast method + batch count — lighter bands stacked flush
+   beneath the pieces count (or the day counter when there is no pieces band).
+   The negative top margin cancels the previous band's bottom margin so all
+   bands sit flush, matching how day-counter + pieces already stack. */
+.task-color-log,
+.task-cast-method,
+.task-batch-count {
+  font-size: 1rem; /* match .task-description */
+  font-weight: 600;
+  text-align: center;
+  padding: 0.15rem 0;
+  margin: -0.15rem -0.35rem 0.15rem -0.35rem;
+  background-color: rgba(0, 0, 0, 0.04);
+  color: inherit;
+}
+
+.task-batch-count {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Casting inventory readout (2026-10-21): summary line + pieces per type. */
+.task-inv-summary {
+  font-size: 0.86rem;
+  line-height: 1.25;
+}
+.task-inv-types {
+  margin: -0.15rem -0.35rem 0.15rem -0.35rem;
+  padding: 0.1rem 0.45rem 0.2rem;
+  background-color: rgba(0, 0, 0, 0.03);
+  font-size: 0.82rem;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+}
+.task-inv-type {
+  display: flex;
+  justify-content: center;
+  gap: 0.4rem;
+}
+.task-inv-type-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-inv-type-qty {
+  font-weight: 700;
+}
+.task-inv-types-collapsed .task-inv-type {
+  display: none;
+}
+.task-inv-toggle {
+  display: block;
+  width: calc(100% - 0.4rem);
+  margin: 0.15rem auto 0.1rem;
+  border: 1.5px solid rgba(255, 255, 255, 0.85);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 0.12rem 0.5rem;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #0f172a;
+  cursor: pointer;
+  text-align: center;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+.task-inv-toggle:hover {
+  background: #ffffff;
+}
+
+/* Sections of the card in different shades of its colour (2026-10-21): inventory darker, colour log lighter. */
+.task-inv-summary,
+.task-inv-types {
+  background-color: rgba(0, 0, 0, 0.09);
+}
+.task-color-log,
+.task-cast-method,
+.task-batch-count {
+  background-color: rgba(255, 255, 255, 0.18);
+}
+.task-section-label {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.85;
+  text-align: center;
+  padding: 0.2rem 0 0;
+  margin: -0.15rem -0.35rem 0.15rem -0.35rem;
+  background-color: rgba(255, 255, 255, 0.18);
+  color: inherit;
+}
+
+/* Batch tickets still to be printed (Cast cards; from the Releasability Board). */
+.task-layout-cond {
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-align: center;
+  padding: 0.2rem 0.3rem;
+  margin: -0.1rem -0.35rem 0.25rem -0.35rem;
+  background-color: #4c1d95;
+  color: #ffffff;
+}
+
+.task-batch-print {
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-align: center;
+  padding: 0.2rem 0.2rem;
+  margin: -0.15rem -0.35rem 0.15rem -0.35rem;
+  background-color: #dc2626;
+  color: #ffffff;
+}
+
+/* Missing-data placeholder state — Cast cards with a casting link but no
+   portal data for a readout. Reuses the app's warning red (.missing-description). */
+.task-missing-data {
+  font-style: italic;
+  color: #ef4444;
+  background-color: #fee2e2;
+}
+
+.task-card-placeholder {
+  min-height: 140px;
+  background: transparent;
+  border: none;
+  position: relative;
+  /* No transition - instant feedback is better UX for drag operations */
+}
+
+/* Hover indicator for empty cells when editing is enabled */
+.task-card-placeholder.add-enabled {
+  cursor: pointer;
+}
+
+.task-card-placeholder.add-enabled:hover {
+  background: rgba(var(--accent-primary-rgb, 79, 70, 229), 0.05);
+  border: 2px dashed rgba(var(--accent-primary-rgb, 79, 70, 229), 0.3);
+  border-radius: var(--border-radius-md);
+}
+
+.task-card-placeholder.add-enabled:hover::before {
+  content: '+';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 3rem;
+  color: var(--accent-primary);
+  opacity: 0.4;
+  font-weight: 300;
+  pointer-events: none;
+}
+
+.task-card-placeholder.add-enabled:hover::after {
+  content: 'Click to add task';
+  position: absolute;
+  bottom: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  opacity: 0.7;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* ===================================
+   Drag and Drop Visual Feedback
+   =================================== */
+
+/* Cursor styles for draggable elements */
+.task-card[draggable="true"] {
+  cursor: grab;
+}
+
+.task-card.not-draggable {
+  cursor: default;
+}
+
+/* Global cursor change during drag */
+body.dragging-active {
+  cursor: grabbing !important;
+}
+
+body.dragging-active * {
+  cursor: grabbing !important;
+}
+
+/* Dragged card styling - lightweight */
+.task-card.dragging {
+  opacity: 0.4;
+  /* Performance optimization: Opacity changes are GPU-accelerated and efficient */
+}
+
+/* Drag handle icon for draggable cards */
+.task-card[draggable="true"]::before {
+  content: '⠿';
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  font-size: 1.2rem;
+  color: rgba(0, 0, 0, 0.3);
+  opacity: 0;
+  pointer-events: none;
+  font-weight: bold;
+  line-height: 1;
+}
+
+.task-card[draggable="true"]:hover::before {
+  opacity: 0.6;
+}
+
+/* Empty cell highlighting when dragging is active */
+body.dragging-active .task-card-placeholder {
+  background: rgba(79, 70, 229, 0.05);
+  border: 2px dashed rgba(79, 70, 229, 0.3);
+  border-radius: var(--border-radius-md);
+  /* Performance hint: Inform browser these properties will change during drag operations
+     This allows the browser to optimize rendering by creating a separate composite layer */
+  will-change: background, border;
+}
+
+/* Valid drop zone styling - simple and fast */
+.task-card-placeholder.drag-over {
+  background: rgba(34, 197, 94, 0.1) !important;
+  border: 2px solid #22c55e !important;
+  border-radius: var(--border-radius-md);
+  /* No will-change needed here as it's already declared on the base placeholder during drag */
+}
+
+/* Invalid drop zone styling - simple and fast */
+.task-card-placeholder.drag-invalid {
+  background: rgba(239, 68, 68, 0.1) !important;
+  border: 2px solid #ef4444 !important;
+  border-radius: var(--border-radius-md);
+  /* No will-change needed here as it's already declared on the base placeholder during drag */
+}
+
+/* Success animation on drop - quick and simple */
+.task-card.drop-success {
+  animation: dropSuccess 0.3s ease-out;
+}
+
+/* Quick success flash */
+@keyframes dropSuccess {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.task-card.editing {
+  position: relative;
+  box-shadow: 0 0 0 2px var(--accent-primary);
+}
+
+.task-card.editing .task-edit-btn,
+.task-card.editing .task-plan-btn {
+  display: none;
+}
+
+.edit-description {
+  width: 100%;
+  min-height: 60px;
+  padding: 0.625rem 0.875rem;
+  border: 1.5px solid var(--border-primary);
+  border-radius: var(--border-radius-md);
+  font-size: 0.875rem;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+               Helvetica, Arial, sans-serif;
+  resize: vertical;
+  background-color: var(--background-primary);
+  color: var(--text-primary);
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+.edit-description:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+  background: var(--background-secondary);
+}
+
+/* Task Card (Base styles - NOT from components.css, already here) */
+/* The following styles were already in this file and are kept as-is */
+
+/* The casting's description (Casting Inventory header), under the cast number (2026-11-06) */
+.task-casting-desc {
+  font-weight: 600;
+  font-size: 0.85rem;
+  font-style: italic;
+  margin-bottom: 0.25rem;
+  color: inherit;
+  text-align: center;
+}

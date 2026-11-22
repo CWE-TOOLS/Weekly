@@ -1,0 +1,118 @@
+/* Multi-Select Dropdown and Department Filter Styles */
+
+.multi-select-dropdown {
+  position: relative;
+  display: inline-block;
+  min-width: 220px;
+}
+
+.multi-select-btn {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.625rem 1rem;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--border-radius-md);
+  background-color: var(--background-secondary);
+  cursor: pointer;
+  font-size: 0.875rem;
+  text-align: left;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.multi-select-btn:focus {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px var(--accent-primary);
+}
+
+.multi-select-btn .dropdown-arrow {
+  width: 1rem;
+  height: 1rem;
+  transition: transform 0.2s ease-in-out;
+}
+
+.multi-select-dropdown.open .dropdown-arrow {
+  transform: rotate(180deg);
+}
+
+.multi-select-panel {
+  display: none;
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 0;
+  width: 100%;
+  background-color: var(--background-secondary);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--border-primary);
+  z-index: 100;
+  overflow: hidden;
+}
+
+.multi-select-dropdown.open .multi-select-panel {
+  display: block;
+}
+
+.multi-select-actions {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.multi-select-actions button {
+  flex: 1;
+  padding: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: none;
+  border-radius: var(--border-radius-md);
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.multi-select-actions button:first-child {
+  margin-right: 0.5rem;
+  background-color: var(--accent-primary);
+  color: white;
+}
+
+.multi-select-actions button:first-child:hover {
+  background-color: var(--accent-primary-hover);
+}
+
+.multi-select-actions button:last-child {
+  background-color: var(--border-primary);
+  color: var(--text-primary);
+}
+
+.multi-select-actions button:last-child:hover {
+  background-color: var(--border-secondary);
+}
+
+#department-list {
+  list-style: none;
+  padding: 0.5rem 0;
+}
+
+#department-list li {
+  padding: 0.6rem 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  font-size: 0.875rem;
+}
+
+#department-list li:hover {
+  background-color: var(--background-primary);
+}
+
+#department-list input[type="checkbox"] {
+  margin-right: 0.75rem;
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--accent-primary);
+}

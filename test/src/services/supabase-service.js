@@ -1,0 +1,949 @@
+/**
+ * Supabase Service
+ * Handles all Supabase operations including task CRUD, real-time sync, and refresh signals
+ * @module services/supabase-service
+ */
+
+import { SUPABASE, REFRESH_CONFIG } from '../config/api-config.js';
+import { normalizeDepartment } from '../utils/ui-utils.js';
+import { UI_DELAY, NOTIFICATION_DURATION, NETWORK_TIMING } from '../config/timing-constants.js';
+import { POSITION_OFFSET, Z_INDEX, INDICATOR_STYLE } from '../config/layout-constants.js';
+
+import { logger } from '../utils/logger.js';
+import { normalizeProjectName, taskDescCastingKey, taskDescNameKey } from '../utils/ui-utils.js';
+import { isInDegradedMode } from '../utils/browser-compat.js';
+import { fetchTaskDescriptionsREST, loadManualTasksREST } from './supabase-rest-fallback.js';
+// Supabase client and channel state
+let supabaseClient = null;
+let refreshChannel = null;
+let initializationPromise = null; // Guard against concurrent initialization
+let customRefreshHandler = null; // Custom refresh handler for different pages
+const tasksTable = SUPABASE.TASKS_TABLE;
+
+/**
+ * Live multi-user refresh (2026-10-19). Every page load gets an id; every successful
+ * insert/update/upsert/delete made through the shared client broadcasts
+ * { action: 'portal_changed:<table>', table, project, castingId, clientId } so the other
+ * open portals can reload the tab that shows that table. A page ignores its own signals.
+ */
+export const CLIENT_ID = (() => {
+    // A page embedded in the portal (the Jane Street batching frame) shares its parent's id, so its
+    // saves do not come back to the parent as "someone else".
+    try { if (window.parent && window.parent !== window && window.parent.__portalClientId) return window.parent.__portalClientId; } catch (_) { /* cross-origin */ }
+    return Math.random().toString(36).slice(2) + Date.now().toString(36);
+})();
+try { window.__portalClientId = CLIENT_ID; } catch (_) { /* ignore */ }
+const WRITE_METHODS = ['insert', 'update', 'upsert', 'delete'];
+const SILENT_TABLES = new Set(['sheets_cache', 'sheets_cache_status']);
+export const PORTAL_CHANGED = 'portal_changed:';
+
+function pickField(payload, field) {
+    const first = Array.isArray(payload) ? payload[0] : payload;
+    const v = first && typeof first === 'object' ? first[field] : undefined;
+    return v === undefined || v === null ? null : String(v);
+}
+
+function installWriteAnnouncer(client) {
+    if (!client || client.__writeAnnouncer) return;
+    client.__writeAnnouncer = true;
+    const origFrom = client.from.bind(client);
+    client.from = (table) => {
+        const qb = origFrom(table);
+        if (SILENT_TABLES.has(table)) return qb;
+        for (const m of WRITE_METHODS) {
+            if (typeof qb[m] !== 'function') continue;
+            const orig = qb[m].bind(qb);
+            qb[m] = (...args) => {
+                const fb = orig(...args);
+                const info = {
+                    table,
+                    project: m === 'delete' ? null : (pickField(args[0], 'project_number') || pickField(args[0], 'project_id')),
+                    castingId: m === 'delete' ? null : pickField(args[0], 'casting_id')
+                };
+                // Filters carry the project / casting for update + delete.
+                if (typeof fb.eq === 'function') {
+                    const origEq = fb.eq.bind(fb);
+                    fb.eq = (col, val) => {
+                        if (col === 'project_number' && val != null) info.project = String(val);
+                        if (col === 'casting_id' && val != null) info.castingId = String(val);
+                        return origEq(col, val);
+                    };
+                }
+                if (typeof fb.in === 'function') {
+                    const origIn = fb.in.bind(fb);
+                    fb.in = (col, vals) => {
+                        if (col === 'casting_id' && Array.isArray(vals) && vals.length && !info.castingId) info.castingId = String(vals[0]);
+                        return origIn(col, vals);
+                    };
+                }
+                const origThen = fb.then.bind(fb);
+                fb.then = (onOk, onErr) => origThen((res) => {
+                    if (res && !res.error) announceWrite(info);
+                    return onOk ? onOk(res) : res;
+                }, onErr);
+                return fb;
+            };
+        }
+        return qb;
+    };
+}
+
+function announceWrite(info) {
+    const project = info.project || (typeof window !== 'undefined' && window.__portalProject) || null;
+    sendRefreshSignal({ action: PORTAL_CHANGED + info.table, table: info.table, project, castingId: info.castingId || null, clientId: CLIENT_ID })
+        .catch(() => { /* best effort */ });
+}
+
+/** Signal metadata helpers shared by the receiving pages. */
+export function signalInfo(payload) { return (payload && payload.payload && payload.payload.info) || {}; }
+export function isPortalChange(payload) { return String(signalInfo(payload).action || '').startsWith(PORTAL_CHANGED); }
+export function isOwnSignal(payload) { return signalInfo(payload).clientId === CLIENT_ID; }
+
+// Realtime reconnect state — the refresh-signal websocket can silently die
+// after sleep/network drops; reconnect with exponential backoff so cross-client
+// updates keep flowing without a manual page reload.
+let refreshReconnectAttempts = 0;
+let refreshReconnectTimer = null;
+
+function scheduleRefreshReconnect() {
+    if (refreshReconnectTimer) return; // one pending reconnect at a time
+    refreshReconnectAttempts += 1;
+    const delay = Math.min(30000, 1000 * Math.pow(2, refreshReconnectAttempts - 1)); // 1s,2s,4s… cap 30s
+    logger.warn(`Reconnecting refresh subscription in ${delay}ms (attempt ${refreshReconnectAttempts})`);
+    refreshReconnectTimer = setTimeout(() => {
+        refreshReconnectTimer = null;
+        setupRefreshSubscription();
+    }, delay);
+}
+
+/**
+ * Initialize Supabase for task management and refresh signaling
+ *
+ * Loads the Supabase client library if needed, creates client instance,
+ * and sets up real-time subscription for refresh signals from other clients.
+ *
+ * @returns {Promise<Object>} Supabase client instance
+ * @throws {Error} If Supabase library fails to load
+ *
+ * @example
+ * const client = await initializeSupabase();
+ * // Returns singleton Supabase client instance
+ */
+export async function initializeSupabase() {
+    // Skip Supabase initialization in degraded mode (old browsers)
+    if (isInDegradedMode()) {
+        logger.info('⚠️ Supabase initialization skipped (degraded mode)');
+        return null;
+    }
+
+    // Return existing client if already initialized
+    if (supabaseClient) {
+        return supabaseClient;
+    }
+
+    // Return existing initialization promise if already in progress
+    if (initializationPromise) {
+        return initializationPromise;
+    }
+
+    // Create new initialization promise
+    initializationPromise = (async () => {
+        try {
+            // Load Supabase library if not already loaded
+            if (!window.supabase) {
+                await new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = SUPABASE.CDN_URL;
+                    script.onload = resolve;
+                    script.onerror = reject;
+                    document.head.appendChild(script);
+                });
+            }
+
+            supabaseClient = window.supabase.createClient(SUPABASE.URL, SUPABASE.ANON_KEY);
+            installWriteAnnouncer(supabaseClient);
+
+            // Subscribe to refresh signals
+            setupRefreshSubscription();
+
+            logger.info('✅ Supabase initialized');
+            return supabaseClient;
+        } finally {
+            // Clear the initialization promise so future calls can check supabaseClient directly
+            initializationPromise = null;
+        }
+    })();
+
+    return initializationPromise;
+}
+
+/**
+ * Get Supabase client instance
+ *
+ * Returns the singleton Supabase client instance if initialized, or null otherwise.
+ *
+ * @returns {Object|null} Supabase client or null if not initialized
+ *
+ * @example
+ * const client = getSupabaseClient();
+ * if (client) {
+ *   // Use client for queries
+ * }
+ */
+export function getSupabaseClient() {
+    return supabaseClient;
+}
+
+/**
+ * Set up subscription to refresh signals
+ */
+function setupRefreshSubscription() {
+    // Tear down any prior (likely dead) channel before re-subscribing.
+    if (refreshChannel) {
+        try { refreshChannel.unsubscribe(); } catch (_) { /* ignore */ }
+    }
+    // Create a channel for refresh signals
+    refreshChannel = supabaseClient
+        .channel(REFRESH_CONFIG.CHANNEL_NAME)
+        .on('broadcast', { event: REFRESH_CONFIG.EVENT_NAME }, (payload) => {
+            logger.debug('🔄 Refresh signal received:', payload);
+            handleRefreshSignal(payload);
+        })
+        .subscribe((status) => {
+            if (status === 'SUBSCRIBED') {
+                logger.debug('✅ Subscribed to refresh signals');
+                // Healthy again — reset backoff and cancel any pending reconnect.
+                refreshReconnectAttempts = 0;
+                if (refreshReconnectTimer) { clearTimeout(refreshReconnectTimer); refreshReconnectTimer = null; }
+            } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                logger.warn(`⚠️ Refresh subscription ${status} — scheduling reconnect`);
+                scheduleRefreshReconnect();
+            }
+        });
+}
+
+/**
+ * Register a custom refresh handler for the current page
+ * This allows different pages (weekly schedule, releasability board) to handle refreshes differently
+ * @param {Function} handler - Async function to call when refresh signal received
+ */
+export function registerRefreshHandler(handler) {
+    customRefreshHandler = handler;
+    logger.debug('✅ Custom refresh handler registered');
+}
+
+// Refresh-signal coalescing — bulk edits (e.g. pasting many task descriptions)
+// broadcast one signal per save, and a full data reload per signal can exhaust
+// the Supabase connection pool (each reload re-downloads task_descriptions in
+// 1000-row pages). Signals collect for a short window and at most one reload
+// runs at a time; a window that fires mid-reload re-arms itself.
+const REFRESH_COALESCE_MS = 4000;
+let pendingRefreshPayloads = [];
+let refreshWindowTimer = null;
+let refreshReloadInFlight = false;
+
+/**
+ * Handle refresh signal — queues it into the current coalescing window
+ * @param {Object} payload - Refresh signal payload
+ */
+function handleRefreshSignal(payload) {
+    if (isPortalChange(payload) && isOwnSignal(payload)) return;   // our own save — nothing to reload
+    pendingRefreshPayloads.push(payload);
+    if (!refreshWindowTimer) {
+        refreshWindowTimer = setTimeout(processPendingRefreshSignals, REFRESH_COALESCE_MS);
+    }
+}
+
+async function processPendingRefreshSignals() {
+    refreshWindowTimer = null;
+    if (refreshReloadInFlight) {
+        // Previous reload still running — check back after another window
+        refreshWindowTimer = setTimeout(processPendingRefreshSignals, REFRESH_COALESCE_MS);
+        return;
+    }
+
+    const payloads = pendingRefreshPayloads;
+    pendingRefreshPayloads = [];
+    if (payloads.length === 0) return;
+
+    logger.debug(`🔄 Processing ${payloads.length} coalesced refresh signal(s) (silent mode)...`);
+    refreshReloadInFlight = true;
+    try {
+        await runRefresh(payloads);
+        logger.debug('✅ Data refreshed from all sources (silent)');
+    } catch (error) {
+        logger.error('❌ Failed to refresh data:', error);
+    } finally {
+        refreshReloadInFlight = false;
+    }
+}
+
+/**
+ * Run one data reload covering a whole batch of refresh signals
+ * @param {Array<Object>} payloads - Coalesced refresh signal payloads
+ */
+async function runRefresh(payloads) {
+    // No visual indicator - silent refresh per user preference
+    // Smart rendering will handle updates without disruption
+
+    // A change of the weekly's source setting: forget the memoised source before anyone reloads (2026-10-28)
+    if (payloads.some(p => isPortalChange(p) && signalInfo(p).table === 'plant_schedule_settings') && typeof window !== 'undefined' && typeof window.__resetWeeklySourceMemo === 'function') window.__resetWeeklySourceMemo();
+    // Use custom handler if registered (e.g., releasability board)
+    if (customRefreshHandler) {
+        await customRefreshHandler(payloads[payloads.length - 1], payloads);
+        return;
+    }
+
+    // Fallback to weekly schedule page handler
+    // Skip only when every signal in the batch is a releasability-only action or a portal
+    // table the weekly does not read (its own tables keep triggering a reload).
+    // 2026-10-28: plant_schedule_settings carries the "weekly reads the Plant Scheduler" switch, so a change
+    // there always reloads (and forgets the memoised source); plant_schedule rows matter only while the
+    // scheduler is the source (weekly-source-service keeps window.__weeklySource up to date).
+    const WEEKLY_TABLES = new Set([tasksTable, 'task_descriptions', 'plant_schedule_settings']);
+    if (typeof window !== 'undefined' && window.__weeklySource === 'scheduler') WEEKLY_TABLES.add('plant_schedule');
+    const isReleasabilityAction = (payload) => {
+        const info = signalInfo(payload);
+        const action = info.action;
+        if (isPortalChange(payload)) return !WEEKLY_TABLES.has(info.table);
+        return action === 'releasability_status_updated' ||
+               action === 'releasability_project_deleted';
+    };
+    if (payloads.every(isReleasabilityAction)) {
+        logger.debug('⏭️ Ignoring releasability-only refresh batch in weekly schedule');
+        return;
+    }
+
+    // Reload data using fetchAllTasks from data-service
+    // This will fetch from both Google Sheets and Supabase, merge, and update state
+    // Use suppressEvents=false to emit events for UI refresh (no loading spinner for remote sync)
+    if (window.dataService && window.dataService.fetchAllTasks) {
+        await window.dataService.fetchAllTasks(false); // emit events to trigger UI update
+    } else {
+        logger.warn('⚠️ No refresh handler available (dataService.fetchAllTasks not on window)');
+    }
+}
+
+/**
+ * Show refresh indicator
+ */
+function showRefreshIndicator() {
+    const indicator = document.createElement('div');
+    indicator.textContent = '🔄 Refreshing...';
+    indicator.style.cssText = `
+        position: fixed;
+        top: ${POSITION_OFFSET.INDICATOR}px;
+        right: ${POSITION_OFFSET.INDICATOR}px;
+        background: #3b82f6;
+        color: white;
+        padding: ${INDICATOR_STYLE.PADDING_VERTICAL_PX}px ${INDICATOR_STYLE.PADDING_HORIZONTAL_PX}px;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 500;
+        z-index: ${Z_INDEX.INDICATOR};
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    `;
+
+    document.body.appendChild(indicator);
+    setTimeout(() => {
+        if (indicator.parentNode) {
+            indicator.parentNode.removeChild(indicator);
+        }
+    }, UI_DELAY.REFRESH_INDICATOR);
+}
+
+/**
+ * Show notification
+ * @param {string} message - Notification message
+ * @param {string} type - Notification type (info, success, error)
+ */
+function showNotification(message, type = 'info') {
+    logger.debug(`[${type.toUpperCase()}] ${message}`);
+
+    const notification = document.createElement('div');
+    notification.textContent = message;
+    notification.style.cssText = `
+        position: fixed;
+        top: ${POSITION_OFFSET.NOTIFICATION}px;
+        right: ${POSITION_OFFSET.NOTIFICATION}px;
+        background: ${type === 'success' ? '#22c55e' : type === 'error' ? '#ef4444' : '#3b82f6'};
+        color: white;
+        padding: ${INDICATOR_STYLE.NOTIFICATION_PADDING_VERTICAL_PX}px ${INDICATOR_STYLE.NOTIFICATION_PADDING_HORIZONTAL_PX}px;
+        border-radius: 8px;
+        font-weight: 500;
+        z-index: ${Z_INDEX.NOTIFICATION};
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    `;
+
+    document.body.appendChild(notification);
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.parentNode.removeChild(notification);
+        }
+    }, NOTIFICATION_DURATION.ERROR);
+}
+
+const SEND_REFRESH_COALESCE_MS = 1500;
+const pendingBroadcasts = new Map(); // action -> { trailingInfo, timer }
+
+/**
+ * Send a refresh signal to all other clients
+ *
+ * Broadcasts a refresh event via Supabase real-time channels to notify
+ * other connected clients to reload their data. Call this after successfully
+ * updating Google Sheets or Supabase to keep all clients in sync.
+ *
+ * @param {Object} [updateInfo={}] - Optional metadata about the update
+ * @returns {Promise<void>}
+ *
+ * @example
+ * // After saving task changes
+ * await saveTaskToSupabase(task);
+ * await sendRefreshSignal({action: 'task_updated', taskId: task.id});
+ */
+export async function sendRefreshSignal(updateInfo = {}) {
+    // Skip in degraded mode
+    if (isInDegradedMode()) {
+        logger.debug('⚠️ Refresh signals unavailable (degraded mode)');
+        return;
+    }
+
+    if (!supabaseClient) {
+        logger.warn('⚠️ Supabase not initialized, cannot send refresh signal');
+        return;
+    }
+
+    // Send-side coalescing: bulk edits call this once per save, but receivers
+    // do a full reload per broadcast, so one broadcast per action per window is
+    // plenty. The first call in a burst sends immediately; the rest fold into a
+    // single trailing broadcast carrying the latest info.
+    const action = (updateInfo && updateInfo.action) || 'update';
+    const pending = pendingBroadcasts.get(action);
+    if (pending) {
+        pending.trailingInfo = updateInfo;
+        return;
+    }
+    pendingBroadcasts.set(action, {
+        trailingInfo: null,
+        timer: setTimeout(() => {
+            const entry = pendingBroadcasts.get(action);
+            pendingBroadcasts.delete(action);
+            if (entry && entry.trailingInfo) {
+                broadcastRefresh(entry.trailingInfo);
+            }
+        }, SEND_REFRESH_COALESCE_MS)
+    });
+
+    await broadcastRefresh(updateInfo);
+}
+
+async function broadcastRefresh(updateInfo) {
+    try {
+        logger.debug('📡 Sending refresh signal to all clients...');
+
+        // Send broadcast signal
+        const { error } = await supabaseClient
+            .channel(REFRESH_CONFIG.CHANNEL_NAME)
+            .send({
+                type: 'broadcast',
+                event: REFRESH_CONFIG.EVENT_NAME,
+                payload: {
+                    timestamp: new Date().toISOString(),
+                    source: 'web_app',
+                    info: updateInfo
+                }
+            });
+
+        if (error) {
+            logger.error('❌ Failed to send refresh signal:', error);
+        } else {
+            logger.debug('✅ Refresh signal sent successfully');
+        }
+
+    } catch (error) {
+        logger.error('❌ Error sending refresh signal:', error);
+    }
+}
+
+/**
+ * Fetch task descriptions from Supabase
+ *
+ * Fetches all task descriptions from the task_descriptions table and returns them
+ * as a Map keyed by "project|department|day_number" for fast lookup.
+ *
+ * @returns {Promise<Map<string, {description: string, castingSide: string|null}>>} Map keyed by composite key
+ *
+ * @example
+ * const descriptions = await fetchTaskDescriptions();
+ * const entry = descriptions.get('Project A|Mill 1|1');
+ * entry.description; // 'Task desc'
+ * entry.castingSide; // 'A' | 'B' | null
+ */
+export async function fetchTaskDescriptions() {
+    // Use REST API fallback in degraded mode
+    if (isInDegradedMode()) {
+        logger.debug('⚠️ Using REST API fallback for task descriptions (degraded mode)');
+        return await fetchTaskDescriptionsREST();
+    }
+
+    if (!supabaseClient) {
+        await initializeSupabase();
+    }
+
+    try {
+        logger.debug('📥 Fetching task descriptions from Supabase...');
+
+        // PostgREST caps any single response at the server's max-rows (5000 here),
+        // so .limit(10000) silently returns only the first 5000 rows. Once the table
+        // grows past that the newest rows fall off and their descriptions vanish from
+        // the weekly view. Page through with .range() until a short page is returned.
+        const PAGE_SIZE = 1000;
+        const data = [];
+        for (let from = 0; ; from += PAGE_SIZE) {
+            const { data: page, error } = await supabaseClient
+                .from('task_descriptions')
+                .select('project, project_number, casting_number, department, day_number, description, casting_side')
+                .range(from, from + PAGE_SIZE - 1);
+
+            if (error) {
+                throw error;
+            }
+            if (!page || page.length === 0) break;
+            for (const row of page) data.push(row);
+            if (page.length < PAGE_SIZE) break;
+        }
+
+        logger.info(`📊 Supabase returned ${data.length} task description rows (paginated)`);
+
+        // Convert array to Map for fast lookup. Casting-aware rows (project_number +
+        // casting_number set) emit the casting key; legacy rows emit the name key.
+        // mergeTaskDescriptions() then prefers the casting key and falls back to name.
+        // Value: { description, castingSide } — castingSide is null unless set.
+        const descriptionsMap = new Map();
+
+        if (data) {
+            data.forEach(row => {
+                const pnum = (row.project_number != null ? String(row.project_number).trim() : '');
+                const cnum = (row.casting_number != null ? String(row.casting_number).trim() : '');
+                const value = {
+                    description: row.description || '',
+                    castingSide: row.casting_side || null
+                };
+                if (pnum && cnum) {
+                    descriptionsMap.set(taskDescCastingKey(pnum, cnum, row.department, row.day_number), value);
+                } else {
+                    descriptionsMap.set(taskDescNameKey(row.project, row.department, row.day_number), value);
+                }
+            });
+
+            logger.info(`✅ Loaded ${descriptionsMap.size} task descriptions from Supabase`);
+        }
+
+        return descriptionsMap;
+    } catch (error) {
+        logger.error('❌ Failed to fetch task descriptions from Supabase:', error);
+        // Return empty Map on error - graceful fallback
+        return new Map();
+    }
+}
+
+/**
+ * Load manual tasks from Supabase
+ *
+ * Fetches all manually-created tasks from Supabase, converts them to match
+ * the Google Sheets task structure, and calculates day counters.
+ *
+ * @returns {Promise<Array<Object>>} Array of manual tasks with isManual flag set
+ *
+ * @example
+ * const manualTasks = await loadManualTasks();
+ * // Returns: [{id: 'custom-1', project: 'Manual Project', isManual: true, ...}]
+ */
+export async function loadManualTasks() {
+    // Use REST API fallback in degraded mode
+    if (isInDegradedMode()) {
+        logger.debug('⚠️ Using REST API fallback for manual tasks (degraded mode)');
+        return await loadManualTasksREST();
+    }
+
+    if (!supabaseClient) {
+        await initializeSupabase();
+    }
+
+    try {
+        const { data, error } = await supabaseClient
+            .from(tasksTable)
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            throw error;
+        }
+
+        // Convert Supabase data to match Google Sheets task structure
+        const manualTasks = data.map(row => ({
+            id: row.id,
+            week: row.week,
+            project: row.project,
+            projectDescription: row.project_description || '',
+            description: row.description || '',
+            date: row.date,
+            department: normalizeDepartment(row.department),
+            castingSide: (row.casting_side === 'A' || row.casting_side === 'B') ? row.casting_side : null,
+            value: row.value || '',
+            hours: row.hours || '',
+            dayNumber: row.day_number || '',
+            totalDays: row.total_days || '',
+            dayCounter: '',
+            missingDate: !row.date,
+            isManual: true // Flag to identify manual tasks
+        }));
+
+        // Calculate day counters for manual tasks (requires calculateProjectDayCounts function)
+        if (window.calculateProjectDayCounts) {
+            window.calculateProjectDayCounts(manualTasks);
+        }
+
+        return manualTasks;
+    } catch (error) {
+        logger.error('❌ Failed to load manual tasks:', error);
+        return [];
+    }
+}
+
+/**
+ * Update task in Supabase
+ *
+ * Updates an existing manual task in Supabase with new date and week values.
+ * Includes timeout protection to prevent hanging requests.
+ *
+ * @param {Object} task - Task object containing id, date, and week
+ * @param {string} task.id - Task ID
+ * @param {string} task.date - New date value
+ * @param {string} task.week - New week value
+ * @returns {Promise<boolean>} True if update successful
+ * @throws {Error} If update fails or times out
+ *
+ * @example
+ * await updateTaskInSupabase({
+ *   id: 'task-123',
+ *   date: '2025-01-15',
+ *   week: '2025-01-13'
+ * });
+ */
+export async function updateTaskInSupabase(task) {
+    if (!supabaseClient) {
+        await initializeSupabase();
+    }
+
+    // Add timeout to prevent hanging
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), NETWORK_TIMING.FETCH_TIMEOUT);
+
+    try {
+        const { data, error } = await supabaseClient
+            .from(tasksTable)
+            .update({
+                date: task.date,
+                week: task.week,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', task.id)
+            .select(); // Add this to return updated rows
+
+        clearTimeout(timeoutId);
+
+        if (error) {
+            logger.error('Supabase update error:', error);
+            throw error;
+        }
+
+        if (!data || data.length === 0) {
+            const errorMsg = `Failed to update task: No task found with ID "${task.id}"`;
+            logger.error(errorMsg);
+            throw new Error(errorMsg);
+        }
+
+        logger.debug('Task updated successfully in Supabase:', { id: task.id, date: task.date, week: task.week });
+        return true;
+    } catch (error) {
+        clearTimeout(timeoutId);
+        logger.error('❌ Failed to update task in Supabase:', error);
+        throw error;
+    }
+}
+/**
+ * Update a manual task in Supabase with new data
+ * @param {Object} task - The full task object to update
+ * @returns {Promise<Object>} Updated task data from Supabase
+ * @throws {Error} If update fails
+ */
+export async function updateManualTask(task) {
+    if (!supabaseClient) {
+        await initializeSupabase();
+    }
+
+    const updateData = {
+        project: task.project,
+        project_description: task.projectDescription,
+        description: task.description,
+        date: task.date,
+        week: task.week,
+        department: task.department,
+        casting_side: ['A', 'B', 'AB'].includes(task.castingSide) ? task.castingSide : null,
+        value: task.value,
+        hours: task.hours,
+        day_number: task.dayNumber,
+        total_days: task.totalDays,
+        updated_at: new Date().toISOString()
+    };
+
+    try {
+        const { data, error } = await supabaseClient
+            .from(tasksTable)
+            .update(updateData)
+            .eq('id', task.id)
+            .select();
+
+        if (error) {
+            logger.error('Supabase manual task update error:', error);
+            throw error;
+        }
+
+        if (!data || data.length === 0) {
+            const errorMsg = `Failed to update manual task: No task found with ID "${task.id}"`;
+            logger.error(errorMsg);
+            throw new Error(errorMsg);
+        }
+
+        logger.debug('Manual task updated successfully in Supabase:', { id: task.id });
+        return data[0];
+    } catch (error) {
+        logger.error('❌ Failed to update manual task in Supabase:', error);
+        throw error;
+    }
+}
+
+/**
+ * Save a new task to Supabase
+ *
+ * Creates a new manual task in Supabase with all provided fields.
+ * Generates ID if not provided.
+ *
+ * @param {Object} taskData - Task data to save
+ * @param {string} [taskData.id] - Task ID (auto-generated if omitted)
+ * @param {string} taskData.week - Week date
+ * @param {string} taskData.project - Project name
+ * @param {string} taskData.date - Task date
+ * @param {string} taskData.department - Department name
+ * @returns {Promise<Object>} Saved task data from Supabase
+ * @throws {Error} If save fails
+ *
+ * @example
+ * const newTask = await saveTaskToSupabase({
+ *   week: '2025-01-13',
+ *   project: 'Custom Project',
+ *   date: '2025-01-15',
+ *   department: 'Mill'
+ * });
+ */
+export async function saveTaskToSupabase(taskData) {
+    if (!supabaseClient) {
+        await initializeSupabase();
+    }
+
+    try {
+        const { data, error } = await supabaseClient
+            .from(tasksTable)
+            .insert([{
+                id: taskData.id || `task-${Date.now()}`,
+                week: taskData.week,
+                project: taskData.project,
+                project_description: taskData.projectDescription || '',
+                description: taskData.description || '',
+                date: taskData.date,
+                department: taskData.department,
+                casting_side: ['A', 'B', 'AB'].includes(taskData.castingSide) ? taskData.castingSide : null,
+                value: taskData.value || '',
+                hours: taskData.hours || '',
+                day_number: taskData.dayNumber || '',
+                total_days: taskData.totalDays || '',
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+            }]);
+
+        if (error) {
+            throw error;
+        }
+
+        logger.debug('✅ Task saved to Supabase');
+        return data;
+    } catch (error) {
+        logger.error('❌ Failed to save task to Supabase:', error);
+        throw error;
+    }
+}
+
+/**
+ * Delete a task from Supabase
+ *
+ * Permanently removes a manual task from Supabase by ID.
+ *
+ * @param {string} taskId - ID of task to delete
+ * @returns {Promise<boolean>} True if deletion successful
+ * @throws {Error} If deletion fails
+ *
+ * @example
+ * await deleteTaskFromSupabase('task-123');
+ */
+export async function deleteTaskFromSupabase(taskId) {
+    if (!supabaseClient) {
+        await initializeSupabase();
+    }
+
+    try {
+        const { error } = await supabaseClient
+            .from(tasksTable)
+            .delete()
+            .eq('id', taskId);
+
+        if (error) {
+            throw error;
+        }
+
+        logger.debug('✅ Task deleted from Supabase');
+        return true;
+    } catch (error) {
+        logger.error('❌ Failed to delete task from Supabase:', error);
+        throw error;
+    }
+}
+
+/**
+ * Save task descriptions to Supabase
+ *
+ * Upserts task descriptions to the task_descriptions table using batch operations.
+ * Automatically sends refresh signal to other clients after successful save.
+ *
+ * @param {Array<{project: string, department: string, day_number: string, description: string}>} descriptions - Array of task descriptions to save
+ * @returns {Promise<boolean>} True if save successful
+ * @throws {Error} If save fails
+ *
+ * @example
+ * await saveTaskDescriptions([
+ *   {project: 'Project A', department: 'Mill 1', day_number: '1', description: 'Task desc'},
+ *   {project: 'Project A', department: 'Mill 1', day_number: '2', description: 'Another desc'}
+ * ]);
+ */
+export async function saveTaskDescriptions(descriptions) {
+    if (!supabaseClient) {
+        await initializeSupabase();
+    }
+
+    const startTime = performance.now();
+
+    try {
+        logger.info(`📝 Saving ${descriptions.length} task descriptions to Supabase...`);
+
+        // Validate input
+        if (!Array.isArray(descriptions) || descriptions.length === 0) {
+            logger.warn('⚠️ No task descriptions to save');
+            return true;
+        }
+
+        // Partition into casting-aware records (project_number + casting_number) and
+        // legacy name-keyed records, then upsert each with its own conflict target.
+        // A single weekly/optimizer edit is homogeneous; the project-modal bulk save
+        // can be mixed (some tasks have casting numbers, some don't).
+        const castingRecords = [];
+        const legacyRecords = [];
+
+        descriptions.forEach((desc, index) => {
+            const description = (desc.description != null ? desc.description : '');
+            const pnum = (desc.project_number != null ? String(desc.project_number).trim() : '');
+            const cnum = (desc.casting_number != null ? String(desc.casting_number).trim() : '');
+
+            let record;
+            if (pnum && cnum) {
+                if (!desc.department || !desc.day_number) {
+                    logger.error(`❌ Invalid casting description at index ${index}:`, desc);
+                    throw new Error(`Missing department/day_number in casting description at index ${index}`);
+                }
+                // Casting-aware row: no legacy `project` name, so it can't collide on
+                // the legacy (project, department, day_number) unique index across castings.
+                record = {
+                    project_number: pnum,
+                    casting_number: cnum,
+                    department: desc.department,
+                    day_number: desc.day_number,
+                    description: description,
+                    updated_at: new Date().toISOString()
+                };
+            } else {
+                if (!desc.project || !desc.department || !desc.day_number) {
+                    logger.error(`❌ Invalid description at index ${index}:`, desc);
+                    throw new Error(`Missing required fields in description at index ${index}`);
+                }
+                record = {
+                    project: desc.project, // IMPORTANT: Do NOT trim - preserve exact project name
+                    department: desc.department,
+                    day_number: desc.day_number,
+                    description: description,
+                    updated_at: new Date().toISOString()
+                };
+            }
+
+            // Only include casting_side when the caller explicitly provided one
+            // (cast-task edits). Omitting the column leaves the existing DB value
+            // untouched on upsert conflict — so non-cast saves don't clobber it.
+            if (Object.prototype.hasOwnProperty.call(desc, 'casting_side')) {
+                record.casting_side = desc.casting_side === 'A' || desc.casting_side === 'B'
+                    ? desc.casting_side
+                    : null;
+            }
+
+            (pnum && cnum ? castingRecords : legacyRecords).push(record);
+        });
+
+        if (castingRecords.length) {
+            const { error } = await supabaseClient
+                .from('task_descriptions')
+                .upsert(castingRecords, {
+                    onConflict: 'project_number,casting_number,department,day_number',
+                    returning: 'minimal'
+                });
+            if (error) {
+                logger.error('❌ Supabase casting upsert error:', error);
+                throw error;
+            }
+        }
+
+        if (legacyRecords.length) {
+            const { error } = await supabaseClient
+                .from('task_descriptions')
+                .upsert(legacyRecords, {
+                    onConflict: 'project,department,day_number',
+                    returning: 'minimal'
+                });
+            if (error) {
+                logger.error('❌ Supabase legacy upsert error:', error);
+                throw error;
+            }
+        }
+
+        const saveTime = (performance.now() - startTime).toFixed(0);
+        logger.info(`✅ Successfully saved ${castingRecords.length} casting + ${legacyRecords.length} legacy task descriptions in ${saveTime}ms`);
+
+        // Send refresh signal to other clients
+        await sendRefreshSignal({
+            action: 'task_descriptions_updated',
+            count: descriptions.length
+        });
+
+        return true;
+    } catch (error) {
+        const errorTime = (performance.now() - startTime).toFixed(0);
+        logger.error(`❌ Failed to save task descriptions after ${errorTime}ms:`, error);
+        throw error;
+    }
+}

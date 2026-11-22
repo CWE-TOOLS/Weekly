@@ -1,0 +1,102 @@
+/* CSS Custom Properties and Variables */
+:root {
+  /* Background Colors */
+  --background-primary: #F3F4F6;
+  --background-secondary: #FFFFFF;
+
+  /* Text Colors */
+  --text-primary: #1F2937;
+  --text-secondary: #6B7280;
+
+  /* Border Colors */
+  --border-primary: #E5E7EB;
+  --border-secondary: #D1D5DB;
+
+  /* Accent Colors */
+  --accent-primary: #4F46E5;
+  --accent-primary-hover: #4338CA;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+
+  /* Border Radius */
+  --border-radius-md: 0.5rem;
+  --border-radius-lg: 0.75rem;
+
+  /* Surface Tokens (warm neutrals) */
+  --surface-default: #F8F7F4;
+  --surface-container: #FFFFFE;
+  --surface-container-low: #F5F4F1;
+  --surface-container-high: #EEEDEA;
+  --surface-dim: #E6E5E2;
+
+  /* Elevation Shadows (Material Design 3) */
+  --elevation-1: 0 1px 3px 0 rgb(0 0 0 / 0.08), 0 1px 2px -1px rgb(0 0 0 / 0.08);
+  --elevation-2: 0 4px 6px -1px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.06);
+  --elevation-3: 0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.06);
+
+  /* Transitions (Material Design 3 easing) */
+  --transition-fast: 150ms cubic-bezier(0.2, 0, 0, 1);
+  --transition-medium: 250ms cubic-bezier(0.2, 0, 0, 1);
+
+  /* Spacing Scale */
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 0.75rem;
+  --space-lg: 1rem;
+  --space-xl: 1.5rem;
+  --space-2xl: 2rem;
+
+  /* Department Colors */
+  --color-cnc: #607D8B;
+  --color-cnc-text: #FFFFFF;
+
+  --color-parts: #4FC3F7;
+  --color-parts-text: #0F172A;
+
+  --color-mill: #06B6D4;
+  --color-mill-text: #FFFFFF;
+
+  --color-form-out: #3B82F6;
+  --color-form-out-text: #FFFFFF;
+
+  --color-cast: #EF4444;
+  --color-cast-text: #FFFFFF;
+
+  --color-batch: #800000;
+  --color-batch-text: #FFFFFF;
+
+  --color-layout: #A16207;
+  --color-layout-text: #FFFFFF;
+
+  --color-demold: #F97316;
+  --color-demold-text: #FFFFFF;
+
+  --color-finish: #8B5CF6;
+  --color-finish-text: #FFFFFF;
+
+  --color-seal: #6B7280;
+  --color-seal-text: #FFFFFF;
+
+  --color-final-insp: #0D9488;
+  --color-final-insp-text: #FFFFFF;
+
+  --color-special: #EC4899;
+  --color-special-text: #FFFFFF;
+
+  --color-crating: #A16207;
+  --color-crating-text: #FFFFFF;
+
+  --color-load: #F59E0B;
+  --color-load-text: #FFFFFF;
+
+  --color-ship: #22C55E;
+  --color-ship-text: #FFFFFF;
+
+  --color-samples: #047857;
+  --color-samples-text: #FFFFFF;
+
+  --color-facilities: #9CA3AF;
+  --color-facilities-text: #FFFFFF;
+}

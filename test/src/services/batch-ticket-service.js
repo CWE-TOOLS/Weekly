@@ -1,0 +1,198 @@
+/**
+ * Batch Ticket Service
+ * Persists per-casting batch ticket settings + manual batch-type overrides.
+ *
+ * Schema: batch_tickets
+ *   - One row per (casting_id, color_log_id, cast_day), plus at most one legacy row
+ *     with NULL color_log_id per casting (see migration/batch-tickets-multi-color.sql and
+ *     migration/batch-tickets-cast-day.sql). cast_day is 1 unless the casting is split over its
+ *     cast days (2026-11-20); it is only SENT for day 2+, so a database without the column keeps
+ *     saving Day 1 tickets exactly as before.
+ *   - Cascades on casting delete.
+ *
+ * @module services/batch-ticket-service
+ */
+
+import { initializeSupabase, getSupabaseClient } from './supabase-service.js';
+import { logger } from '../utils/logger.js';
+
+const TABLE = 'batch_tickets';
+
+const FORM_TO_DB = {
+    cuFt: 'cu_ft',
+    faceSqFt: 'face_sq_ft',
+    cuFtPer250: 'cu_ft_per_250',
+    pigReduction: 'pig_reduction',
+    pigReduceFirstBackup: 'pig_reduce_first_backup',
+    omitAggFinalBackup: 'omit_agg_final_backup',
+    omitFibersFace: 'omit_fibers_face',
+    cowbayFinalBackup: 'cowbay_final_backup',
+    batchedBy: 'batched_by',
+    outTemp: 'out_temp',
+    waterTemp: 'water_temp',
+    notes: 'notes',
+    batchAssignments: 'batch_assignments',
+    colorLogId: 'color_log_id',
+    castDay: 'cast_day'
+};
+
+async function getClient() {
+    let client = getSupabaseClient();
+    if (!client) client = await initializeSupabase();
+    return client;
+}
+
+function toDb(formObj) {
+    const out = {};
+    for (const [formKey, dbKey] of Object.entries(FORM_TO_DB)) {
+        if (formObj[formKey] !== undefined) {
+            const v = formObj[formKey];
+            if (dbKey === 'cast_day') { if (parseInt(v, 10) > 1) out[dbKey] = parseInt(v, 10); continue; }   // Day 1 is the column's default
+            if (v === '' && (dbKey === 'cu_ft' || dbKey === 'face_sq_ft' || dbKey === 'cu_ft_per_250' || dbKey === 'pig_reduction')) {
+                out[dbKey] = null;
+            } else if (v === '' && dbKey === 'color_log_id') {
+                out[dbKey] = null;
+            } else {
+                out[dbKey] = v;
+            }
+        }
+    }
+    return out;
+}
+
+export function rowToForm(row) {
+    if (!row) return null;
+    return {
+        id: row.id,
+        castingId: row.casting_id,
+        cuFt: row.cu_ft != null ? String(row.cu_ft) : '',
+        faceSqFt: row.face_sq_ft != null ? String(row.face_sq_ft) : '',
+        cuFtPer250: row.cu_ft_per_250 != null ? String(row.cu_ft_per_250) : '4.28',
+        pigReduction: row.pig_reduction != null ? String(row.pig_reduction) : '50',
+        pigReduceFirstBackup: !!row.pig_reduce_first_backup,
+        omitAggFinalBackup: !!row.omit_agg_final_backup,
+        omitFibersFace: !!row.omit_fibers_face,
+        cowbayFinalBackup: !!row.cowbay_final_backup,
+        batchedBy: row.batched_by || '',
+        outTemp: row.out_temp || '',
+        waterTemp: row.water_temp || '',
+        notes: row.notes || '',
+        batchAssignments: Array.isArray(row.batch_assignments) ? row.batch_assignments : [],
+        colorLogId: row.color_log_id || null,
+        castDay: parseInt(row.cast_day, 10) > 1 ? parseInt(row.cast_day, 10) : 1
+    };
+}
+
+export function emptyForm(castingId) {
+    return {
+        id: null,
+        castingId: castingId || null,
+        cuFt: '',
+        faceSqFt: '',
+        cuFtPer250: '4.28',
+        pigReduction: '50',
+        pigReduceFirstBackup: false,
+        omitAggFinalBackup: false,
+        omitFibersFace: false,
+        cowbayFinalBackup: false,
+        batchedBy: '',
+        outTemp: '',
+        waterTemp: '',
+        notes: '',
+        batchAssignments: [],
+        colorLogId: null,
+        castDay: 1
+    };
+}
+
+/**
+ * Load all batch tickets whose casting belongs to a given list of casting IDs.
+ * Used to bulk-prefetch when activating the tab. A casting may have several
+ * tickets (one per color log, plus an optional NULL-color legacy one).
+ * @param {Array<string>} castingIds
+ * @returns {Promise<Map<string, Array<Object>>>} keyed by casting_id, values ordered by created_at
+ */
+export async function loadBatchTicketsForCastings(castingIds) {
+    const map = new Map();
+    if (!castingIds?.length) return map;
+    const client = await getClient();
+    if (!client) return map;
+
+    const { data, error } = await client
+        .from(TABLE)
+        .select('*')
+        .in('casting_id', castingIds)
+        .order('created_at', { ascending: true });
+
+    if (error) {
+        logger.error('[batch-ticket] loadForCastings error:', error);
+        throw error;
+    }
+    for (const row of data || []) {
+        if (!map.has(row.casting_id)) map.set(row.casting_id, []);
+        map.get(row.casting_id).push(rowToForm(row));
+    }
+    return map;
+}
+
+/**
+ * Delete a batch ticket by row id.
+ * @param {string} id
+ */
+export async function deleteBatchTicket(id) {
+    if (!id) return;
+    const client = await getClient();
+    if (!client) throw new Error('Supabase client unavailable');
+
+    const { error } = await client
+        .from(TABLE)
+        .delete()
+        .eq('id', id);
+
+    if (error) {
+        logger.error('[batch-ticket] delete error:', error);
+        throw error;
+    }
+}
+
+/**
+ * Insert or update the batch ticket for a casting.
+ * @param {string} castingId
+ * @param {Object} formObj
+ * @returns {Promise<Object>} updated form-shaped record
+ */
+export async function saveBatchTicketForCasting(castingId, formObj) {
+    if (!castingId) throw new Error('castingId required');
+    const client = await getClient();
+    if (!client) throw new Error('Supabase client unavailable');
+
+    const payload = toDb(formObj);
+    payload.casting_id = castingId;
+
+    let row;
+    if (formObj.id) {
+        const { data, error } = await client
+            .from(TABLE)
+            .update(payload)
+            .eq('id', formObj.id)
+            .select()
+            .maybeSingle();
+        if (error) {
+            logger.error('[batch-ticket] update error:', error);
+            throw error;
+        }
+        row = data;
+    } else {
+        const { data, error } = await client
+            .from(TABLE)
+            .insert(payload)
+            .select()
+            .maybeSingle();
+        if (error) {
+            logger.error('[batch-ticket] insert error:', error);
+            throw error;
+        }
+        row = data;
+    }
+    return rowToForm(row);
+}
