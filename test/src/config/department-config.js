@@ -22,8 +22,130 @@ export const DEPARTMENT_ORDER = [
     'Crating',
     'Load',
     'Ship',
-    'Facilities'
+    'Facilities',
+    // Cranbury building: always a block below every Dunhams department
+    'Crating (Cranbury)',
+    'Seal (Cranbury)',
+    'Special (Cranbury)',
+    'Ship (Cranbury)'
 ];
+
+// ---------------------------------------------------------------------------
+// Buildings: Dunhams (every existing department) and Cranbury.
+// A Cranbury task keeps its normal Dunhams name in Sheet column E; the marker is a
+// "-C" suffix on the task code (Sheet column F, task.value), e.g. "build-C", "Seal - C".
+// ---------------------------------------------------------------------------
+export const BUILDING_DUNHAMS = 'Dunhams';
+export const BUILDING_CRANBURY = 'Cranbury';
+
+/** The Cranbury departments, in display order. Cranbury has one crate department (Build + Load). */
+export const CRANBURY_DEPARTMENTS = [
+    'Crating (Cranbury)',
+    'Seal (Cranbury)',
+    'Special (Cranbury)',
+    'Ship (Cranbury)'
+];
+
+/** Cranbury department -> its Dunhams counterpart (same colours, same code prefix) */
+const CRANBURY_TO_DUNHAMS = {
+    'Crating (Cranbury)': 'Crating',
+    'Seal (Cranbury)': 'Seal',
+    'Special (Cranbury)': 'Special',
+    'Ship (Cranbury)': 'Ship'
+};
+
+/** Dunhams department -> the Cranbury department a "-C" task of it becomes */
+const DUNHAMS_TO_CRANBURY = {
+    'Crating': 'Crating (Cranbury)',
+    'Load': 'Crating (Cranbury)',
+    'Seal': 'Seal (Cranbury)',
+    'Special': 'Special (Cranbury)',
+    'Ship': 'Ship (Cranbury)'
+};
+
+/** Task-code suffix that marks a Cranbury task: "-C", "- C", " -C" ... at the end, any case */
+export const CRANBURY_CODE_SUFFIX = /-\s*C\s*$/i;
+
+/** True for a Cranbury department name */
+export function isCranbury(dept) {
+    return Object.prototype.hasOwnProperty.call(CRANBURY_TO_DUNHAMS, dept);
+}
+
+/** 'Cranbury' or 'Dunhams' */
+export function buildingOf(dept) {
+    return isCranbury(dept) ? BUILDING_CRANBURY : BUILDING_DUNHAMS;
+}
+
+/** Dunhams counterpart of a Cranbury department ('Seal (Cranbury)' -> 'Seal'); any other department unchanged */
+export function dunhamsCounterpart(dept) {
+    return CRANBURY_TO_DUNHAMS[dept] || dept;
+}
+
+/** True when a task code carries the Cranbury "-C" suffix */
+export function isCranburyTaskCode(taskCode) {
+    return CRANBURY_CODE_SUFFIX.test(String(taskCode == null ? '' : taskCode));
+}
+
+/**
+ * The Cranbury department for a (normalized) department + task code, or null when the task is not
+ * a Cranbury task (no "-C" suffix, or a department Cranbury does not have).
+ * @param {string} department - normalized department (e.g. 'Crating', 'Load', 'Seal')
+ * @param {string} taskCode - Sheet column F / plant_schedule task code
+ * @returns {string|null}
+ */
+export function cranburyDepartmentFor(department, taskCode) {
+    if (isCranbury(department)) return department;
+    if (!isCranburyTaskCode(taskCode)) return null;
+    return DUNHAMS_TO_CRANBURY[department] || null;
+}
+
+/**
+ * A department typed directly as Cranbury ('Seal (Cranbury)', 'Seal-C', 'seal - c', 'Crate-C', 'Cranbury Ship')
+ * -> its canonical Cranbury name, else null.
+ */
+export function normalizeCranburyDepartment(dept) {
+    if (!dept) return null;
+    const s = String(dept).toLowerCase().trim();
+    let base = null;
+    let m;
+    if ((m = /^(.*?)\s*\(\s*cranbury\s*\)$/.exec(s))) base = m[1];
+    else if ((m = /^(.*?)\s*-\s*c$/.exec(s))) base = m[1];
+    else if ((m = /^(.*?)\s*-?\s*cranbury$/.exec(s))) base = m[1];
+    else if ((m = /^cranbury\s*-?\s*(.*)$/.exec(s))) base = m[1];
+    if (base == null) return null;
+    base = base.trim();
+    if (['crate', 'crating', 'load', 'build', 'crate / load', 'crate/load'].includes(base)) return 'Crating (Cranbury)';
+    if (base === 'seal') return 'Seal (Cranbury)';
+    if (base === 'special' || base === 'speciality' || base === 'specialty') return 'Special (Cranbury)';
+    if (base === 'ship') return 'Ship (Cranbury)';
+    return null;
+}
+
+/**
+ * Move a loaded task to its building. Call after task.department is normalized.
+ * - keeps the original department as task.sheetDepartment;
+ * - a "-C" task of Crating/Load/Seal/Special/Ship gets the Cranbury department;
+ * - a Cranbury task keeps its staging-note key (task.stagingDepartment) on the original department, so existing
+ *   task_descriptions rows still match and the live page sees the same notes;
+ * - sets task.building.
+ * The displayed task code (task.value) is never changed.
+ * @param {Object} task
+ * @param {string} [taskCode=task.value] - the task code to test for the "-C" suffix
+ * @returns {Object} the same task
+ */
+export function applyBuilding(task, taskCode) {
+    if (!task) return task;
+    const code = taskCode === undefined ? task.value : taskCode;
+    const original = task.department || '';
+    if (task.sheetDepartment === undefined) task.sheetDepartment = original;
+    const cranbury = cranburyDepartmentFor(original, code);
+    if (cranbury && cranbury !== original) {
+        task.department = cranbury;
+        if (!task.stagingDepartment) task.stagingDepartment = original;
+    }
+    task.building = buildingOf(task.department);
+    return task;
+}
 
 // Department to day column mapping (for Google Sheets)
 export const DEPARTMENT_DAY_MAPPING = {
@@ -141,6 +263,11 @@ export const DEPARTMENT_COLORS = {
         text: '#FFFFFF'
     }
 };
+// Cranbury departments use the colours of their Dunhams counterpart (class form of 'Seal (Cranbury)' is 'seal-cranbury')
+DEPARTMENT_COLORS['crating-cranbury'] = DEPARTMENT_COLORS.crating;
+DEPARTMENT_COLORS['seal-cranbury'] = DEPARTMENT_COLORS.seal;
+DEPARTMENT_COLORS['special-cranbury'] = DEPARTMENT_COLORS.special;
+DEPARTMENT_COLORS['ship-cranbury'] = DEPARTMENT_COLORS.ship;
 
 /**
  * Normalize department name to standard format
@@ -149,6 +276,8 @@ export const DEPARTMENT_COLORS = {
  */
 export function normalizeDepartment(dept) {
     if (!dept) return '';
+    const cranbury = normalizeCranburyDepartment(dept);   // 'Seal (Cranbury)', 'Seal-C', 'Crate-C' ...
+    if (cranbury) return cranbury;
     const normalized = dept.toLowerCase().trim();
 
     // Handle case-insensitive matching for department names

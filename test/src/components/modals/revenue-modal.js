@@ -6,7 +6,7 @@
  */
 
 import { getAllTasks } from '../../core/state.js';
-import { normalizeDepartment, normalizeDepartmentClass, DEPARTMENT_COLORS } from '../../config/department-config.js';
+import { normalizeDepartment, normalizeDepartmentClass, DEPARTMENT_COLORS, isCranburyTaskCode } from '../../config/department-config.js';
 import { parseDate, getWeekMonth, getMonday } from '../../utils/date-utils.js';
 import { logger } from '../../utils/logger.js';
 
@@ -32,8 +32,23 @@ const REVENUE_DEPARTMENTS = [
     { department: 'Ship', displayName: 'Ship', colorKey: 'ship' }
 ];
 
+/**
+ * Cranbury building (2026-11): its own block after the Dunhams rows, each department in its Dunhams
+ * counterpart's colours. Crate / Load / Final Insp. (Cranbury) fold into their own "Crate Total" row,
+ * as the Dunhams ones do (see revenueDepartmentOf for how Load and Final Insp. are told apart).
+ */
+const CRANBURY_REVENUE_DEPARTMENTS = [
+    { department: 'Crating (Cranbury)', displayName: 'Crate (Cranbury)', colorKey: 'crating' },
+    { department: 'Load (Cranbury)', displayName: 'Load (Cranbury)', colorKey: 'load' },
+    { department: 'Final Insp. (Cranbury)', displayName: 'Final Insp. (Cranbury)', colorKey: 'final-insp' },
+    { department: 'Seal (Cranbury)', displayName: 'Seal (Cranbury)', colorKey: 'seal' },
+    { department: 'Special (Cranbury)', displayName: 'Speciality (Cranbury)', colorKey: 'special' },
+    { department: 'Ship (Cranbury)', displayName: 'Ship (Cranbury)', colorKey: 'ship' }
+];
+
 /** Departments that get summed into the "Crate Total" subtotal row */
 const CRATE_GROUP = ['Crating', 'Load', 'Final Insp.'];
+const CRANBURY_CRATE_GROUP = ['Crating (Cranbury)', 'Load (Cranbury)', 'Final Insp. (Cranbury)'];
 
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -126,6 +141,28 @@ function toDateKey(d) {
 }
 
 /**
+ * The revenue row a task counts on. Same as its department, except in Cranbury, where the Crate group is split
+ * like the Dunhams one (Crate / Load / Final Insp.):
+ * - a Cranbury crate task whose code starts with "load" ("load-C", "Load - C"; the Sheet files these under
+ *   Crating) or whose sheet department was Load counts on 'Load (Cranbury)';
+ * - a Final Insp. task with a "-C" code counts on 'Final Insp. (Cranbury)' instead of the Dunhams Final Insp.
+ * @param {Object} task
+ * @returns {string}
+ */
+function revenueDepartmentOf(task) {
+    const dept = normalizeDepartment(task.department);
+    if (dept === 'Crating (Cranbury)') {
+        const sheetDept = normalizeDepartment(task.sheetDepartment || '');
+        if (sheetDept === 'Load' || /^\s*load/i.test(String(task.value || ''))) {
+            return 'Load (Cranbury)';
+        }
+        return dept;
+    }
+    if (dept === 'Final Insp.' && isCranburyTaskCode(task.value)) return 'Final Insp. (Cranbury)';
+    return dept;
+}
+
+/**
  * Build a lookup: dateKey -> department -> total hours
  * @returns {Object}
  */
@@ -139,7 +176,7 @@ function buildTaskLookup() {
         const hours = parseFloat(task.hours) || 0;
         if (hours === 0) continue;
 
-        const dept = normalizeDepartment(task.department);
+        const dept = revenueDepartmentOf(task);
 
         // Parse date (handles M/D/YYYY and YYYY-MM-DD formats)
         const parsed = parseDate(task.date);
@@ -348,6 +385,24 @@ function injectStyles() {
             transform: rotate(90deg);
         }
 
+        .revenue-building-header {
+            background: #4b5563;
+            color: #fff;
+            font-weight: 700;
+            font-size: 12px;
+            letter-spacing: 0.12em;
+            padding: 6px 6px;
+            margin-top: 6px;
+        }
+
+        .revenue-monthly-buildings {
+            display: block;
+            font-size: 15px;
+            font-weight: 600;
+            color: #4b5563;
+            margin-bottom: 6px;
+        }
+
         .revenue-monthly-total {
             text-align: center;
             padding: 20px;
@@ -381,6 +436,8 @@ function render() {
     body.innerHTML = '';
 
     let monthlyTotal = 0;
+    let monthlyDunhams = 0;
+    let monthlyCranbury = 0;
 
     weeks.forEach((week, weekIndex) => {
         const section = document.createElement('div');
@@ -421,8 +478,22 @@ function render() {
             deptDailyRevenue.push(dailyValues);
         }
 
+        // Cranbury departments: summed separately, then added to the grand total
+        const dunhamsDaily = dailyTotals.slice();
+        const cranburyDaily = week.days.map(() => 0);
+        const cranburyDeptDaily = CRANBURY_REVENUE_DEPARTMENTS.map(deptConfig => week.days.map((day, i) => {
+            const dateKey = toDateKey(day);
+            const hours = (lookup[dateKey] && lookup[dateKey][deptConfig.department]) || 0;
+            const revenue = hours * RATE;
+            cranburyDaily[i] += revenue;
+            dailyTotals[i] += revenue;
+            return revenue;
+        }));
+
         const weekTotal = dailyTotals.reduce((a, b) => a + b, 0);
         monthlyTotal += weekTotal;
+        monthlyDunhams += dunhamsDaily.reduce((a, b) => a + b, 0);
+        monthlyCranbury += cranburyDaily.reduce((a, b) => a + b, 0);
 
         // Department rows
         // Pre-calculate Crate group subtotals
@@ -518,12 +589,49 @@ function render() {
             }
         });
 
-        // NET REVENUE row
+        // Dunhams Total, then the Cranbury section and its total
+        section.appendChild(buildTotalRow('Dunhams Total', dunhamsDaily));
+
+        const cranburyHeader = document.createElement('div');
+        cranburyHeader.className = 'revenue-building-header';
+        cranburyHeader.textContent = 'CRANBURY';
+        section.appendChild(cranburyHeader);
+
+        // Cranbury rows: Crate / Load / Final Insp. under a collapsible "Crate Total", as in Dunhams
+        const cranburyCrateDaily = week.days.map(() => 0);
+        const cranburyCrateChildren = [];
+        CRANBURY_REVENUE_DEPARTMENTS.forEach((deptConfig, i) => {
+            const row = buildDeptRow(deptConfig, cranburyDeptDaily[i]);
+            if (!CRANBURY_CRATE_GROUP.includes(deptConfig.department)) {
+                section.appendChild(row);
+                return;
+            }
+            row.classList.add('revenue-crate-child');
+            cranburyCrateChildren.push(row);
+            cranburyDeptDaily[i].forEach((val, dayIdx) => { cranburyCrateDaily[dayIdx] += val; });
+            if (cranburyCrateChildren.length === CRANBURY_CRATE_GROUP.length) {
+                const subtotalRow = buildDeptRow({ displayName: 'Crate Total', colorKey: 'crating' }, cranburyCrateDaily);
+                subtotalRow.classList.add('revenue-subtotal-row');
+                subtotalRow.firstChild.innerHTML = '<span class="crate-toggle">&#9654;</span> Crate Total';
+                subtotalRow.lastChild.style.fontWeight = '';
+                section.appendChild(subtotalRow);
+                cranburyCrateChildren.forEach(childRow => section.appendChild(childRow));
+                subtotalRow.addEventListener('click', () => {
+                    const isOpen = subtotalRow.classList.toggle('open');
+                    cranburyCrateChildren.forEach(r => r.classList.toggle('expanded', isOpen));
+                });
+            }
+        });
+
+        section.appendChild(buildTotalRow('Cranbury Total', cranburyDaily));
+
+        // GRAND TOTAL (the NET REVENUE row): both buildings
         const netRow = document.createElement('div');
         netRow.className = 'revenue-net-row';
 
         const netLabel = document.createElement('div');
-        netLabel.textContent = 'NET REVENUE';
+        netLabel.textContent = 'GRAND TOTAL';
+        netLabel.title = 'Net revenue, Dunhams + Cranbury';
         netRow.appendChild(netLabel);
 
         dailyTotals.forEach(val => {
@@ -543,8 +651,69 @@ function render() {
     // Monthly total
     const monthlyTotalEl = document.createElement('div');
     monthlyTotalEl.className = 'revenue-monthly-total';
-    monthlyTotalEl.textContent = `MONTHLY TOTAL: ${formatCurrency(monthlyTotal)}`;
+    const buildingsEl = document.createElement('span');
+    buildingsEl.className = 'revenue-monthly-buildings';
+    buildingsEl.textContent = `Dunhams: ${formatCurrency(monthlyDunhams)}  ·  Cranbury: ${formatCurrency(monthlyCranbury)}`;
+    monthlyTotalEl.appendChild(buildingsEl);
+    monthlyTotalEl.appendChild(document.createTextNode(`MONTHLY GRAND TOTAL: ${formatCurrency(monthlyTotal)}`));
     body.appendChild(monthlyTotalEl);
+}
+
+/**
+ * A department row (label in the department colour, 6 day cells, week total), as the Dunhams rows are drawn.
+ * @param {{displayName: string, colorKey: string}} deptConfig
+ * @param {number[]} dailyValues
+ * @returns {HTMLElement}
+ */
+function buildDeptRow(deptConfig, dailyValues) {
+    const row = document.createElement('div');
+    row.className = 'revenue-dept-row';
+    const label = document.createElement('div');
+    label.textContent = deptConfig.displayName;
+    const colors = DEPARTMENT_COLORS[deptConfig.colorKey];
+    if (colors) {
+        label.style.backgroundColor = colors.background;
+        label.style.color = colors.text;
+        row.style.backgroundColor = colors.background + '30';
+    }
+    row.appendChild(label);
+    let rowTotal = 0;
+    dailyValues.forEach(val => {
+        const cell = document.createElement('div');
+        cell.textContent = formatCurrency(val);
+        row.appendChild(cell);
+        rowTotal += val;
+    });
+    const totalCell = document.createElement('div');
+    totalCell.textContent = formatCurrency(rowTotal);
+    totalCell.style.fontWeight = '600';
+    row.appendChild(totalCell);
+    return row;
+}
+
+/**
+ * A building subtotal row (Dunhams Total / Cranbury Total), in the light-green .revenue-fab-row style.
+ * @param {string} labelText
+ * @param {number[]} dailyValues
+ * @returns {HTMLElement}
+ */
+function buildTotalRow(labelText, dailyValues) {
+    const row = document.createElement('div');
+    row.className = 'revenue-fab-row';
+    const label = document.createElement('div');
+    label.textContent = labelText;
+    row.appendChild(label);
+    let total = 0;
+    dailyValues.forEach(val => {
+        const cell = document.createElement('div');
+        cell.textContent = formatCurrency(val);
+        row.appendChild(cell);
+        total += val;
+    });
+    const totalCell = document.createElement('div');
+    totalCell.textContent = formatCurrency(total);
+    row.appendChild(totalCell);
+    return row;
 }
 
 // ============================================================================

@@ -12,18 +12,18 @@
     <style>@media print { #test-banner { display: none !important; } }</style>
 
     <!-- Modular CSS Files -->
-    <link rel="stylesheet" href="src/styles/variables.css">
+    <link rel="stylesheet" href="src/styles/variables.css?v=20261122-1">
     <link rel="stylesheet" href="src/styles/base.css">
-    <link rel="stylesheet" href="src/styles/layout.css">
+    <link rel="stylesheet" href="src/styles/layout.css?v=20261122-2">
 
     <!-- Component CSS Files (modularized from components.css) -->
-    <link rel="stylesheet" href="src/styles/task-card.css?v=20261106-1">
+    <link rel="stylesheet" href="src/styles/task-card.css?v=20261122-1">
     <link rel="stylesheet" href="src/styles/buttons.css">
-    <link rel="stylesheet" href="src/styles/modals.css">
+    <link rel="stylesheet" href="src/styles/modals.css?v=20261122-1">
     <link rel="stylesheet" href="src/styles/actual-hours-modal.css">
     <link rel="stylesheet" href="src/styles/labor-popover.css">
     <link rel="stylesheet" href="src/styles/schedule-grid.css">
-    <link rel="stylesheet" href="src/styles/department-filter.css">
+    <link rel="stylesheet" href="src/styles/department-filter.css?v=20261122-1">
     <link rel="stylesheet" href="src/styles/context-menu.css">
     <link rel="stylesheet" href="src/styles/notifications.css">
     <link rel="stylesheet" href="src/styles/misc-components.css?v=20261110-6">
@@ -33,7 +33,7 @@
 
     <!-- Modular Print System Scripts -->
     <!-- Load print-utils first as it exports window.PrintUtils used by other modules -->
-    <script type="module" src="src/features/print/print-utils.js?v=20261106-1"></script>
+    <script type="module" src="src/features/print/print-utils.js?v=20261122-1"></script>
     <script type="module" src="src/features/print/print-layout.js"></script>
     <script type="module" src="src/features/print/print-renderer.js"></script>
     <script type="module" src="src/features/print/print-debug.js"></script>
@@ -399,6 +399,12 @@
                                     <option value="Ship">Ship</option>
                                     <option value="Samples">Samples</option>
                                     <option value="Facilities">Facilities</option>
+                                    <optgroup label="Cranbury">
+                                        <option value="Crating (Cranbury)">Crating (Cranbury)</option>
+                                        <option value="Seal (Cranbury)">Seal (Cranbury)</option>
+                                        <option value="Special (Cranbury)">Special (Cranbury)</option>
+                                        <option value="Ship (Cranbury)">Ship (Cranbury)</option>
+                                    </optgroup>
                                 </select>
                             </div>
                             <div class="form-group">
@@ -487,8 +493,8 @@
     </div>
 
     <!-- Main Application Entry Point (ES6 Module) -->
-    <script type="module" src="src/main.js?v=2026110601"></script>
-    <script type="module" src="src/features/scheduler-crew-preview.js?v=20261023-1"></script>
+    <script type="module" src="src/main.js?v=2026112201"></script>
+    <script type="module" src="src/features/scheduler-crew-preview.js?v=20261122-1"></script>
 
     <!-- Google Translate Widget -->
     <script type="text/javascript">

@@ -1426,3 +1426,23 @@
   box-shadow: none;
   opacity: 0.6;
 }
+/* Cranbury building (same colours as the Dunhams counterpart) */
+.print-preview-viewport .print-department-header.department-crating-cranbury { background-color: #A16207 !important; color: #FFFFFF !important; }
+.print-preview-viewport .print-department-header.department-seal-cranbury { background-color: #6B7280 !important; color: #FFFFFF !important; }
+.print-preview-viewport .print-department-header.department-special-cranbury { background-color: #EC4899 !important; color: #FFFFFF !important; }
+.print-preview-viewport .print-department-header.department-ship-cranbury { background-color: #22C55E !important; color: #FFFFFF !important; }
+
+/* Print picker: building group label (Dunhams / Cranbury) */
+.departments-grid .dept-chip-group-label {
+  margin-top: 0.5rem;
+  padding: 0 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.departments-grid .dept-chip-group-label:first-child {
+  margin-top: 0;
+}

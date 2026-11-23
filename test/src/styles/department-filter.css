@@ -116,3 +116,20 @@
   height: 1rem;
   accent-color: var(--accent-primary);
 }
+
+/* Building section heading (Cranbury) inside the department list */
+#department-list li.dept-section-heading {
+  cursor: default;
+  margin-top: 0.25rem;
+  padding: 0.5rem 1rem 0.25rem;
+  border-top: 1px solid var(--border-primary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+#department-list li.dept-section-heading:hover {
+  background-color: transparent;
+}

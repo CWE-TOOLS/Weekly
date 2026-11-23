@@ -5,6 +5,7 @@
  */
 
 import { logger } from './logger.js';
+import { normalizeCranburyDepartment } from '../config/department-config.js';
 import { UI_DELAY, NOTIFICATION_DURATION } from '../config/timing-constants.js';
 import { POSITION_OFFSET, Z_INDEX, NOTIFICATION_STYLE } from '../config/layout-constants.js';
 
@@ -162,6 +163,8 @@ export function stripHtml(html) {
  */
 export function normalizeDepartment(dept) {
     if (!dept) return '';
+    const cranbury = normalizeCranburyDepartment(dept);   // 'Seal (Cranbury)', 'Seal-C', 'Crate-C' ...
+    if (cranbury) return cranbury;
     const normalized = dept.toLowerCase().trim();
     // Handle case-insensitive matching for department names
     if (normalized === 'special events') return 'Special Events';

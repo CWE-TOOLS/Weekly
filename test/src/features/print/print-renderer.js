@@ -12,7 +12,7 @@ import { parseDate, getWeekMonth, getWeekOfMonth } from '../../utils/date-utils.
 import * as PrintLayout from './print-layout.js';
 import * as DepartmentUtils from '../../utils/department-utils.js';
 import { generateAllSyntheticTasks } from '../../utils/schedule-utils.js';
-import { DEPARTMENT_COLORS, normalizeDepartmentClass } from '../../config/department-config.js';
+import { DEPARTMENT_COLORS, normalizeDepartmentClass, isCranbury, BUILDING_DUNHAMS, BUILDING_CRANBURY } from '../../config/department-config.js';
 
 // ============================================
 // PAGE ASSEMBLY
@@ -361,6 +361,7 @@ function generateFrozenDailyContent(targetDate, allTasks) {
 
     // Calculate revenue for each department
     const departmentSummaries = [];
+    const cranburySummaries = [];
     let crateRevenue = 0;
     let loadRevenue = 0;
     let hasCrate = false;
@@ -400,6 +401,17 @@ function generateFrozenDailyContent(targetDate, allTasks) {
 
         const targetRevenue = Math.round(totalHours * REVENUE.HOURLY_RATE);
 
+        // Cranbury lines go after every Dunhams line (Crating (Cranbury) is printed as "Crate (Cranbury)")
+        if (isCranbury(dept)) {
+            cranburySummaries.push({
+                department: dept,
+                label: dept === 'Crating (Cranbury)' ? 'Crate (Cranbury)' : dept,
+                building: BUILDING_CRANBURY,
+                targetRevenue: targetRevenue
+            });
+            return;
+        }
+
         // Special handling for Crating and Load - combine into one line
         if (dept === 'Crating') {
             crateRevenue = targetRevenue;
@@ -413,6 +425,7 @@ function generateFrozenDailyContent(targetDate, allTasks) {
 
         departmentSummaries.push({
             department: dept,
+            building: BUILDING_DUNHAMS,
             targetRevenue: targetRevenue
         });
     });
@@ -422,6 +435,7 @@ function generateFrozenDailyContent(targetDate, allTasks) {
         const combinedTotal = crateRevenue + loadRevenue;
         departmentSummaries.push({
             department: 'Crating + Load',
+            building: BUILDING_DUNHAMS,
             targetRevenue: combinedTotal,
             breakdown: {
                 crate: crateRevenue,
@@ -429,6 +443,9 @@ function generateFrozenDailyContent(targetDate, allTasks) {
             }
         });
     }
+
+    // Then the Cranbury lines (the summary table adds Dunhams / Cranbury totals before the grand total)
+    departmentSummaries.push(...cranburySummaries);
 
     // Create summary table
     const summaryTable = PrintLayout.createFrozenDailySummaryTable(departmentSummaries);
@@ -1150,13 +1167,22 @@ function _buildBoardUnresolvedPage(unresolved) {
 // one drives the iteration order in the renderer.
 const BUY_IN_DEPARTMENTS = [
     'CNC', 'Parts', 'Mill', 'Form Out', 'Cast', 'Batch', 'Samples', 'Demold', 'Layout',
-    'Finish', 'Seal', 'Final Insp.', 'Special', 'Crate / Ship'
+    'Finish', 'Seal', 'Final Insp.', 'Special', 'Crate / Ship',
+    // Cranbury building: its own pages after the Dunhams ones
+    'Seal (Cranbury)', 'Special (Cranbury)', 'Crate / Ship (Cranbury)'
 ];
 
 // Special combined-sheet name: rendered with split CRATE/SHIPPING columns
 // rather than the standard single-value buy-in layout. Crate = Crating + Load
 // hours summed; Ship = Ship hours alone.
 const BUY_IN_CRATE_SHIP = 'Crate / Ship';
+
+// The combined Crate / Ship sheets, one per building: which departments sum into the CRATE and SHIP columns.
+// Cranbury has one crate department (Build + Load), so its Crate is 'Crating (Cranbury)' alone.
+const BUY_IN_CRATE_SHIP_SHEETS = {
+    'Crate / Ship': { crate: ['Crating', 'Load'], ship: ['Ship'] },
+    'Crate / Ship (Cranbury)': { crate: ['Crating (Cranbury)'], ship: ['Ship (Cranbury)'] }
+};
 
 const BUY_IN_DAYS = [
     { label: 'Monday',    offset: 0 },
@@ -1358,7 +1384,8 @@ function _calculateBuyInExpectedForDeptsOnDay(deptList, dayDate, allTasks) {
  * TOTAL row collapses the dollar columns to one combined sum (Crate + Ship)
  * but keeps the % column split since percentages don't add.
  */
-function _buildBuyInCombinedCrateShipPage(weekDates, allTasks, dateRangeLabel, weekOfMonthLabel) {
+function _buildBuyInCombinedCrateShipPage(weekDates, allTasks, dateRangeLabel, weekOfMonthLabel, sheetName = BUY_IN_CRATE_SHIP) {
+    const sheet = BUY_IN_CRATE_SHIP_SHEETS[sheetName] || BUY_IN_CRATE_SHIP_SHEETS[BUY_IN_CRATE_SHIP];
     const page = document.createElement('div');
     page.className = 'print-page buy-in-page buy-in-page-combined';
 
@@ -1394,7 +1421,7 @@ function _buildBuyInCombinedCrateShipPage(weekDates, allTasks, dateRangeLabel, w
     meta.innerHTML = `
         <div class="buy-in-meta-row">
             <span class="buy-in-label">Crew:</span>
-            <span class="buy-in-value buy-in-crew-chip" style="background-color: ${crateColors.background}; color: ${crateColors.text};">Crate / Ship</span>
+            <span class="buy-in-value buy-in-crew-chip" style="background-color: ${crateColors.background}; color: ${crateColors.text};">${sheetName}</span>
         </div>
         <div class="buy-in-meta-row">
             <span class="buy-in-label">Date:</span>
@@ -1444,8 +1471,8 @@ function _buildBuyInCombinedCrateShipPage(weekDates, allTasks, dateRangeLabel, w
 
     BUY_IN_DAYS.forEach(d => {
         const dayDate = weekDates[d.offset];
-        const crateExpected = _calculateBuyInExpectedForDeptsOnDay(['Crating', 'Load'], dayDate, allTasks);
-        const shipExpected = _calculateBuyInExpectedForDeptsOnDay(['Ship'], dayDate, allTasks);
+        const crateExpected = _calculateBuyInExpectedForDeptsOnDay(sheet.crate, dayDate, allTasks);
+        const shipExpected = _calculateBuyInExpectedForDeptsOnDay(sheet.ship, dayDate, allTasks);
         weeklyCrate += crateExpected;
         weeklyShip += shipExpected;
 
@@ -1551,8 +1578,8 @@ function generateBuyInContent(weekDates, allTasks, selectedDepts) {
         : BUY_IN_DEPARTMENTS;
 
     deptsToRender.forEach(dept => {
-        const page = (dept === BUY_IN_CRATE_SHIP)
-            ? _buildBuyInCombinedCrateShipPage(weekDates, allTasks, dateRangeLabel, weekOfMonthLabel)
+        const page = BUY_IN_CRATE_SHIP_SHEETS[dept]
+            ? _buildBuyInCombinedCrateShipPage(weekDates, allTasks, dateRangeLabel, weekOfMonthLabel, dept)
             : _buildBuyInPage(dept, weekDates, allTasks, syntheticTasksByDept, dateRangeLabel, weekOfMonthLabel);
         printContainer.appendChild(page);
     });

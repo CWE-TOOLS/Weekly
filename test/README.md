@@ -34,3 +34,20 @@ Only these, so they are easy to skip when promoting:
    bump the root `version.json`, then commit and push. The live page updates.
 5. Re-sync the test copy from live before the next feature, so it doesn't drift.
    Copy `index.html` and `src/` over again and re-apply the test-only differences.
+
+## Cranbury (second building, test only for now)
+
+- **Rule:** a task is Cranbury when its task code (Sheet column F, `task.value`; `plant_schedule.task` on the
+  scheduler path) ends in `-C` (`/-\s*C\s*$/i`). Crating and Load become `Crating (Cranbury)`; Seal, Special and
+  Ship become `<Dept> (Cranbury)`. Other departments are left alone. The project name is never tested, and
+  the displayed code is unchanged.
+- **Helpers:** everything lives in `src/config/department-config.js`: `CRANBURY_DEPARTMENTS`, `isCranbury`,
+  `buildingOf`, `dunhamsCounterpart`, `isCranburyTaskCode`, `cranburyDepartmentFor`, `applyBuilding` and
+  `normalizeCranburyDepartment`. The latter is used by both `normalizeDepartment` copies (config + `ui-utils.js`).
+- **Shared cache:** the parsed sheet cache (Supabase + localStorage) is shared with the live page, so the
+  mapping is applied *after* the cache, on copies, in `sheets-service.js` `fetchTasks` (`withBuildings`).
+  The cached data stays exactly what the live page parses.
+- **Keys:** day numbers are counted per *sheet* department, and staging notes keep the sheet department
+  (`stagingDepartment`), so notes match the live page. Actual hours are keyed on the Cranbury department.
+- **Print pickers:** Week/Day/Buy-In selections store a `<key>_shown` record, so newly added entries
+  (Cranbury) start ticked even when an older selection is saved.

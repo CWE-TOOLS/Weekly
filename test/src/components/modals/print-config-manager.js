@@ -7,7 +7,7 @@
 import { getAllTasks, getAllWeekStartDates, getCurrentViewedWeekIndex } from '../../core/state.js';
 import { normalizeDepartmentClass } from '../../utils/ui-utils.js';
 import { getMonday, getLocalDateString, getWeekMonth, getWeekOfMonth, DAYS_IN_WORK_WEEK } from '../../utils/date-utils.js';
-import { DEPARTMENT_ORDER, SYNTHETIC_DEPARTMENT_NAMES, DEPARTMENT_COLORS } from '../../config/department-config.js';
+import { DEPARTMENT_ORDER, SYNTHETIC_DEPARTMENT_NAMES, DEPARTMENT_COLORS, isCranbury, dunhamsCounterpart, BUILDING_DUNHAMS, BUILDING_CRANBURY } from '../../config/department-config.js';
 
 import { logger } from '../../utils/logger.js';
 // Configuration state
@@ -37,10 +37,23 @@ let currentDeptListKind = 'default';
 // (Crate = Crating + Load summed, Ship = Ship alone). See
 // BUY_IN_CRATE_SHIP_LABEL in print-renderer.js for the renderer-side handling.
 export const BUY_IN_CRATE_SHIP = 'Crate / Ship';
+// Cranbury building (2026-11): its own pages after the Dunhams ones. "Crate / Ship (Cranbury)" sums
+// 'Crating (Cranbury)' (Build + Load) against 'Ship (Cranbury)', like the Dunhams Crate / Ship.
+export const BUY_IN_CRATE_SHIP_CRANBURY = 'Crate / Ship (Cranbury)';
+export const BUY_IN_CRANBURY_DEPARTMENTS = ['Seal (Cranbury)', 'Special (Cranbury)', BUY_IN_CRATE_SHIP_CRANBURY];
 export const BUY_IN_DEPARTMENTS = [
     'CNC', 'Parts', 'Mill', 'Form Out', 'Cast', 'Batch', 'Samples', 'Demold', 'Layout',
-    'Finish', 'Seal', 'Final Insp.', 'Special', BUY_IN_CRATE_SHIP
+    'Finish', 'Seal', 'Final Insp.', 'Special', BUY_IN_CRATE_SHIP,
+    ...BUY_IN_CRANBURY_DEPARTMENTS
 ];
+
+/** Building of a print-picker entry (a department, or a Buy-In combined entry) */
+export function printEntryBuilding(entry) {
+    return (isCranbury(entry) || entry === BUY_IN_CRATE_SHIP_CRANBURY) ? BUILDING_CRANBURY : BUILDING_DUNHAMS;
+}
+
+/** Entries added after people saved a print selection: they start ticked (see _isEntryTicked) */
+const NEW_PRINT_ENTRIES = new Set([...DEPARTMENT_ORDER.filter(isCranbury), ...BUY_IN_CRANBURY_DEPARTMENTS]);
 
 /**
  * Set which department list kind the picker should render. Either 'default'
@@ -226,21 +239,17 @@ export function getFilteredDepartments() {
         dept !== 'Sample' && dept !== 'Custom'
     ))];
 
-    // Sort departments, keeping Samples and Facilities at the very end
+    // Sort departments, keeping Samples and Facilities at the end of the Dunhams list,
+    // then the Cranbury departments as a block of their own
     const endDepts = ['Samples', 'Facilities'];
-    departments.sort((a, b) => {
-        const aEnd = endDepts.indexOf(a);
-        const bEnd = endDepts.indexOf(b);
-        if (aEnd !== -1 && bEnd !== -1) return aEnd - bEnd;
-        if (aEnd !== -1) return 1;
-        if (bEnd !== -1) return -1;
-        const aIndex = DEPARTMENT_ORDER.indexOf(a);
-        const bIndex = DEPARTMENT_ORDER.indexOf(b);
-        if (aIndex === -1 && bIndex === -1) return a.localeCompare(b);
-        if (aIndex === -1) return 1;
-        if (bIndex === -1) return -1;
-        return aIndex - bIndex;
-    });
+    const rank = (d) => {
+        const i = DEPARTMENT_ORDER.indexOf(d);
+        if (isCranbury(d)) return 3000 + i;
+        const e = endDepts.indexOf(d);
+        if (e !== -1) return 2000 + e;
+        return i === -1 ? 1000 : i;
+    };
+    departments.sort((a, b) => (rank(a) - rank(b)) || a.localeCompare(b));
 
     allDepartmentsForPrint = departments;
     return departments;
@@ -263,15 +272,24 @@ export function populateDepartmentsGrid(departmentsGridElement, onChangeCallback
     departmentsGridElement.innerHTML = '';
 
     const storageKey = _deptStorageKey();
-    const savedPrintDepartments = localStorage.getItem(storageKey)
-        ? JSON.parse(localStorage.getItem(storageKey))
-        : null;
-    const defaultSelectedDepts = savedPrintDepartments !== null ? savedPrintDepartments : departments;
+    const savedPrintDepartments = _readJson(storageKey);
+    const savedMeta = _readJson(storageKey + SHOWN_SUFFIX);
+    const hasCranbury = departments.some(d => printEntryBuilding(d) === BUILDING_CRANBURY);
 
-    departments.forEach(dept => {
-        const deptKey = normalizeDepartmentClass(dept);
+    departments.forEach((dept, i) => {
+        // Grouped by building: a "Dunhams" label at the top and a "Cranbury" label before the Cranbury block
+        if (hasCranbury) {
+            const building = printEntryBuilding(dept);
+            if (i === 0 || building !== printEntryBuilding(departments[i - 1])) {
+                const groupLabel = document.createElement('div');
+                groupLabel.className = 'dept-chip-group-label';
+                groupLabel.textContent = building;
+                departmentsGridElement.appendChild(groupLabel);
+            }
+        }
+        const deptKey = normalizeDepartmentClass(dunhamsCounterpart(dept));
         const color = DEPARTMENT_COLORS[deptKey]?.background || '#6B7280';
-        const isSelected = defaultSelectedDepts.includes(dept);
+        const isSelected = _isEntryTicked(dept, savedPrintDepartments, savedMeta);
 
         const chip = document.createElement('label');
         chip.className = `dept-chip${isSelected ? ' selected' : ''}`;
@@ -298,7 +316,41 @@ export function populateDepartmentsGrid(departmentsGridElement, onChangeCallback
 export function saveDepartmentSelection() {
     const selectedDepts = Array.from(document.querySelectorAll('.departments-grid input[type="checkbox"]:checked'))
         .map(cb => cb.value);
+    const shownDepts = Array.from(document.querySelectorAll('.departments-grid input[type="checkbox"]'))
+        .map(cb => cb.value);
     localStorage.setItem(_deptStorageKey(), JSON.stringify(selectedDepts));
+    // What was on screen when this selection was saved, so an entry that appears later starts ticked
+    try {
+        localStorage.setItem(_deptStorageKey() + SHOWN_SUFFIX, JSON.stringify({ selected: selectedDepts, shown: shownDepts }));
+    } catch (e) { /* storage full / blocked: new entries just fall back to the legacy rule */ }
+}
+
+const SHOWN_SUFFIX = '_shown';
+
+function _readJson(key) {
+    try {
+        const raw = localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+        return null;
+    }
+}
+
+/**
+ * Whether a picker entry starts ticked.
+ * - nothing saved: everything ticked;
+ * - saved and ticked: ticked;
+ * - saved without it: ticked only if it was not on screen when that selection was saved (a new department / entry).
+ *   When the saved list was written without that record (older code, or the live page, which shares this
+ *   localStorage), the Cranbury entries count as new so they still start ticked.
+ */
+function _isEntryTicked(entry, saved, meta) {
+    if (!Array.isArray(saved)) return true;
+    if (saved.includes(entry)) return true;
+    const metaMatches = meta && Array.isArray(meta.shown) && Array.isArray(meta.selected)
+        && meta.selected.length === saved.length && meta.selected.every((d, i) => d === saved[i]);
+    if (metaMatches) return !meta.shown.includes(entry);
+    return NEW_PRINT_ENTRIES.has(entry);
 }
 
 /**

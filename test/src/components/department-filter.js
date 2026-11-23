@@ -7,11 +7,15 @@
 import { getAllTasks, setFilteredTasks } from '../core/state.js';
 import { emit, on, EVENTS } from '../core/event-bus.js';
 import { saveState, loadState } from '../core/storage.js';
-import { DEPARTMENT_ORDER, SYNTHETIC_DEPARTMENT_NAMES, normalizeDepartmentClass } from '../config/department-config.js';
+import { DEPARTMENT_ORDER, SYNTHETIC_DEPARTMENT_NAMES, normalizeDepartmentClass, CRANBURY_DEPARTMENTS, isCranbury } from '../config/department-config.js';
 
 import { logger } from '../utils/logger.js';
 
-const NEW_DEPARTMENTS = ['CNC', 'Parts'];   // added 2026-10 (the Optimizer split Mill into CNC + Parts)
+// Departments added after people saved a selection: they start ticked (see populateDepartmentCheckboxes)
+const NEW_DEPARTMENTS = [
+    'CNC', 'Parts',            // added 2026-10 (the Optimizer split Mill into CNC + Parts)
+    ...CRANBURY_DEPARTMENTS    // added 2026-11 (the Cranbury building)
+];
 
 /**
  * Get currently selected departments from checkboxes
@@ -64,13 +68,9 @@ export function filterTasks(silent = false) {
         filtered = [];
     } else {
         const effective = new Set([...selectedDepartments, ...SYNTHETIC_DEPARTMENT_NAMES]);
-        const deptsInData = [...new Set(allTasks.map(task => task.department))].filter(dept => dept && !SYNTHETIC_DEPARTMENT_NAMES.has(dept));
-        const allDeptsSelected = selectedDepartments.length === deptsInData.length;
-        if (allDeptsSelected) {
-            filtered = [...allTasks];
-        } else {
-            filtered = allTasks.filter(task => effective.has(task.department));
-        }
+        // Show exactly the ticked departments (plus Batch/Layout). Departments the list doesn't offer, such as
+        // stray Sheet rows like "Department" or "Custom", stay hidden, as they do on the live page.
+        filtered = allTasks.filter(task => effective.has(task.department));
     }
 
     // Update state - pass silent flag to prevent TASKS_FILTERED event
@@ -112,7 +112,15 @@ export function populateDepartmentCheckboxes() {
     }
     saveState('knownDepartments', departments);
 
-    departments.forEach(dept => {
+    departments.forEach((dept, i) => {
+        // Cranbury building: its own section below the Dunhams departments
+        if (isCranbury(dept) && !isCranbury(departments[i - 1])) {
+            const heading = document.createElement('li');
+            heading.className = 'dept-section-heading';
+            heading.textContent = 'Cranbury';
+            heading.setAttribute('role', 'presentation');
+            list.appendChild(heading);
+        }
         const listItem = document.createElement('li');
 
         const checkbox = document.createElement('input');
