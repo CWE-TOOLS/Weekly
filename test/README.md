@@ -38,8 +38,10 @@ Only these, so they are easy to skip when promoting:
 ## Cranbury (second building, test only for now)
 
 - **Rule:** a task is Cranbury when its task code (Sheet column F, `task.value`; `plant_schedule.task` on the
-  scheduler path) ends in `-C` (`/-\s*C\s*$/i`). Crating and Load become `Crating (Cranbury)`; Seal, Special and
-  Ship become `<Dept> (Cranbury)`. Other departments are left alone. The project name is never tested, and
+  scheduler path) ends in `-C` (`/-\s*C\s*$/i`). Load becomes `Load (Cranbury)`, and so does a Crating task whose
+  code starts with "load" (the Sheet files Cranbury load tasks under Crating as `load-C` / `Load - C`); other
+  Crating tasks become `Crating (Cranbury)`. Seal, Special and Ship become `<Dept> (Cranbury)`. As in Dunhams,
+  the Buy-In `Crate / Ship (Cranbury)` sheet sums Crating + Load (Cranbury) against Ship (Cranbury). Other departments are left alone. The project name is never tested, and
   the displayed code is unchanged.
 - **Helpers:** everything lives in `src/config/department-config.js`: `CRANBURY_DEPARTMENTS`, `isCranbury`,
   `buildingOf`, `dunhamsCounterpart`, `isCranburyTaskCode`, `cranburyDepartmentFor`, `applyBuilding` and

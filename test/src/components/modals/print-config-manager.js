@@ -38,7 +38,7 @@ let currentDeptListKind = 'default';
 // BUY_IN_CRATE_SHIP_LABEL in print-renderer.js for the renderer-side handling.
 export const BUY_IN_CRATE_SHIP = 'Crate / Ship';
 // Cranbury building (2026-11): its own pages after the Dunhams ones. "Crate / Ship (Cranbury)" sums
-// 'Crating (Cranbury)' (Build + Load) against 'Ship (Cranbury)', like the Dunhams Crate / Ship.
+// 'Crating (Cranbury)' + 'Load (Cranbury)' against 'Ship (Cranbury)', like the Dunhams Crate / Ship.
 export const BUY_IN_CRATE_SHIP_CRANBURY = 'Crate / Ship (Cranbury)';
 export const BUY_IN_CRANBURY_DEPARTMENTS = ['Seal (Cranbury)', 'Special (Cranbury)', BUY_IN_CRATE_SHIP_CRANBURY];
 export const BUY_IN_DEPARTMENTS = [

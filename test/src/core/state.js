@@ -67,6 +67,7 @@ export const DEPARTMENT_ORDER = [
     'Facilities',
     // Cranbury building (department-config CRANBURY_DEPARTMENTS): a block below every Dunhams department
     'Crating (Cranbury)',
+    'Load (Cranbury)',
     'Seal (Cranbury)',
     'Special (Cranbury)',
     'Ship (Cranbury)'

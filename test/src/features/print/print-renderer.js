@@ -401,7 +401,7 @@ function generateFrozenDailyContent(targetDate, allTasks) {
 
         const targetRevenue = Math.round(totalHours * REVENUE.HOURLY_RATE);
 
-        // Cranbury lines go after every Dunhams line (Crating (Cranbury) is printed as "Crate (Cranbury)")
+        // Cranbury lines go after every Dunhams line (Crating + Load (Cranbury) are combined below)
         if (isCranbury(dept)) {
             cranburySummaries.push({
                 department: dept,
@@ -444,7 +444,24 @@ function generateFrozenDailyContent(targetDate, allTasks) {
         });
     }
 
-    // Then the Cranbury lines (the summary table adds Dunhams / Cranbury totals before the grand total)
+    // Then the Cranbury lines (the summary table adds Dunhams / Cranbury totals before the grand total).
+    // Crating + Load (Cranbury) fold into one line with a breakdown, like the Dunhams Crating + Load.
+    const cranburyCrate = cranburySummaries.find(s => s.department === 'Crating (Cranbury)');
+    const cranburyLoad = cranburySummaries.find(s => s.department === 'Load (Cranbury)');
+    if (cranburyCrate || cranburyLoad) {
+        const crate = cranburyCrate ? cranburyCrate.targetRevenue : 0;
+        const load = cranburyLoad ? cranburyLoad.targetRevenue : 0;
+        const combined = {
+            department: 'Crating (Cranbury)', // its colour
+            label: 'Crating + Load (Cranbury)',
+            building: BUILDING_CRANBURY,
+            targetRevenue: crate + load,
+            breakdown: { crate, load }
+        };
+        const at = cranburySummaries.indexOf(cranburyCrate || cranburyLoad);
+        cranburySummaries.splice(at, 1, combined);
+        if (cranburyCrate && cranburyLoad) cranburySummaries.splice(cranburySummaries.indexOf(cranburyLoad), 1);
+    }
     departmentSummaries.push(...cranburySummaries);
 
     // Create summary table
@@ -1178,10 +1195,10 @@ const BUY_IN_DEPARTMENTS = [
 const BUY_IN_CRATE_SHIP = 'Crate / Ship';
 
 // The combined Crate / Ship sheets, one per building: which departments sum into the CRATE and SHIP columns.
-// Cranbury has one crate department (Build + Load), so its Crate is 'Crating (Cranbury)' alone.
+// Like Dunhams (Crate = Crating + Load), the Cranbury Crate is 'Crating (Cranbury)' + 'Load (Cranbury)'.
 const BUY_IN_CRATE_SHIP_SHEETS = {
     'Crate / Ship': { crate: ['Crating', 'Load'], ship: ['Ship'] },
-    'Crate / Ship (Cranbury)': { crate: ['Crating (Cranbury)'], ship: ['Ship (Cranbury)'] }
+    'Crate / Ship (Cranbury)': { crate: ['Crating (Cranbury)', 'Load (Cranbury)'], ship: ['Ship (Cranbury)'] }
 };
 
 const BUY_IN_DAYS = [

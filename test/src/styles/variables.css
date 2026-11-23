@@ -103,6 +103,8 @@
   /* Cranbury building: each department uses its Dunhams counterpart's colours */
   --color-crating-cranbury: var(--color-crating);
   --color-crating-cranbury-text: var(--color-crating-text);
+  --color-load-cranbury: var(--color-load);
+  --color-load-cranbury-text: var(--color-load-text);
   --color-seal-cranbury: var(--color-seal);
   --color-seal-cranbury-text: var(--color-seal-text);
   --color-special-cranbury: var(--color-special);

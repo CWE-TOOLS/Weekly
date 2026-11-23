@@ -328,6 +328,11 @@ body { top: 0 !important; }
   color: var(--color-crating-cranbury-text);
 }
 
+.department-label.department-load-cranbury {
+  background-color: var(--color-load-cranbury);
+  color: var(--color-load-cranbury-text);
+}
+
 .department-label.department-seal-cranbury {
   background-color: var(--color-seal-cranbury);
   color: var(--color-seal-cranbury-text);

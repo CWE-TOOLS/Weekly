@@ -35,7 +35,7 @@ const REVENUE_DEPARTMENTS = [
 /**
  * Cranbury building (2026-11): its own block after the Dunhams rows, each department in its Dunhams
  * counterpart's colours. Crate / Load / Final Insp. (Cranbury) fold into their own "Crate Total" row,
- * as the Dunhams ones do (see revenueDepartmentOf for how Load and Final Insp. are told apart).
+ * as the Dunhams ones do (see revenueDepartmentOf for how Final Insp. (Cranbury) is told apart).
  */
 const CRANBURY_REVENUE_DEPARTMENTS = [
     { department: 'Crating (Cranbury)', displayName: 'Crate (Cranbury)', colorKey: 'crating' },
@@ -141,23 +141,14 @@ function toDateKey(d) {
 }
 
 /**
- * The revenue row a task counts on. Same as its department, except in Cranbury, where the Crate group is split
- * like the Dunhams one (Crate / Load / Final Insp.):
- * - a Cranbury crate task whose code starts with "load" ("load-C", "Load - C"; the Sheet files these under
- *   Crating) or whose sheet department was Load counts on 'Load (Cranbury)';
- * - a Final Insp. task with a "-C" code counts on 'Final Insp. (Cranbury)' instead of the Dunhams Final Insp.
+ * The revenue row a task counts on. Same as its department ('Load (Cranbury)' is already its own department:
+ * department-config applyBuilding moves "load" coded Cranbury crate tasks there), except that a Final Insp.
+ * task with a "-C" code counts on 'Final Insp. (Cranbury)' instead of the Dunhams Final Insp.
  * @param {Object} task
  * @returns {string}
  */
 function revenueDepartmentOf(task) {
     const dept = normalizeDepartment(task.department);
-    if (dept === 'Crating (Cranbury)') {
-        const sheetDept = normalizeDepartment(task.sheetDepartment || '');
-        if (sheetDept === 'Load' || /^\s*load/i.test(String(task.value || ''))) {
-            return 'Load (Cranbury)';
-        }
-        return dept;
-    }
     if (dept === 'Final Insp.' && isCranburyTaskCode(task.value)) return 'Final Insp. (Cranbury)';
     return dept;
 }

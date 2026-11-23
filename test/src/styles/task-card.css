@@ -568,6 +568,11 @@ body.dragging-active .task-card-placeholder {
   color: var(--color-crating-cranbury-text);
 }
 
+.task-card.department-load-cranbury {
+  background-color: var(--color-load-cranbury);
+  color: var(--color-load-cranbury-text);
+}
+
 .task-card.department-seal-cranbury {
   background-color: var(--color-seal-cranbury);
   color: var(--color-seal-cranbury-text);

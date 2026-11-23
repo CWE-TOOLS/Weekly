@@ -35,6 +35,7 @@ const PRINT_UTILS = {
         'Facilities',
         // Cranbury building: a block after every Dunhams department
         'Crating (Cranbury)',
+        'Load (Cranbury)',
         'Seal (Cranbury)',
         'Special (Cranbury)',
         'Ship (Cranbury)'
@@ -65,6 +66,7 @@ function getDepartmentColorMapping() {
         'facilities': { bg: '#9CA3AF', text: '#FFFFFF' },
         // Cranbury: same colours as the Dunhams counterpart
         'crating-cranbury': { bg: '#A16207', text: '#FFFFFF' },
+        'load-cranbury': { bg: '#F59E0B', text: '#FFFFFF' },
         'seal-cranbury': { bg: '#6B7280', text: '#FFFFFF' },
         'special-cranbury': { bg: '#EC4899', text: '#FFFFFF' },
         'ship-cranbury': { bg: '#22C55E', text: '#FFFFFF' }

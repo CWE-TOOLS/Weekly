@@ -25,6 +25,7 @@ export const DEPARTMENT_ORDER = [
     'Facilities',
     // Cranbury building: always a block below every Dunhams department
     'Crating (Cranbury)',
+    'Load (Cranbury)',
     'Seal (Cranbury)',
     'Special (Cranbury)',
     'Ship (Cranbury)'
@@ -38,9 +39,10 @@ export const DEPARTMENT_ORDER = [
 export const BUILDING_DUNHAMS = 'Dunhams';
 export const BUILDING_CRANBURY = 'Cranbury';
 
-/** The Cranbury departments, in display order. Cranbury has one crate department (Build + Load). */
+/** The Cranbury departments, in display order. Like Dunhams, Cranbury has Crating (Build) and Load. */
 export const CRANBURY_DEPARTMENTS = [
     'Crating (Cranbury)',
+    'Load (Cranbury)',
     'Seal (Cranbury)',
     'Special (Cranbury)',
     'Ship (Cranbury)'
@@ -49,6 +51,7 @@ export const CRANBURY_DEPARTMENTS = [
 /** Cranbury department -> its Dunhams counterpart (same colours, same code prefix) */
 const CRANBURY_TO_DUNHAMS = {
     'Crating (Cranbury)': 'Crating',
+    'Load (Cranbury)': 'Load',
     'Seal (Cranbury)': 'Seal',
     'Special (Cranbury)': 'Special',
     'Ship (Cranbury)': 'Ship'
@@ -57,11 +60,14 @@ const CRANBURY_TO_DUNHAMS = {
 /** Dunhams department -> the Cranbury department a "-C" task of it becomes */
 const DUNHAMS_TO_CRANBURY = {
     'Crating': 'Crating (Cranbury)',
-    'Load': 'Crating (Cranbury)',
+    'Load': 'Load (Cranbury)',
     'Seal': 'Seal (Cranbury)',
     'Special': 'Special (Cranbury)',
     'Ship': 'Ship (Cranbury)'
 };
+
+/** Task-code prefix of a Cranbury load task filed under Crating in the Sheet ("load-C", "Load - C") */
+export const CRANBURY_LOAD_CODE_PREFIX = /^\s*load/i;
 
 /** Task-code suffix that marks a Cranbury task: "-C", "- C", " -C" ... at the end, any case */
 export const CRANBURY_CODE_SUFFIX = /-\s*C\s*$/i;
@@ -94,8 +100,13 @@ export function isCranburyTaskCode(taskCode) {
  * @returns {string|null}
  */
 export function cranburyDepartmentFor(department, taskCode) {
+    const loadCode = CRANBURY_LOAD_CODE_PREFIX.test(String(taskCode == null ? '' : taskCode));
+    // a crate department typed as Cranbury in column E ('Crate-C') with a "load" code is a Cranbury load task too
+    if (department === 'Crating (Cranbury)' && loadCode) return 'Load (Cranbury)';
     if (isCranbury(department)) return department;
     if (!isCranburyTaskCode(taskCode)) return null;
+    // Cranbury load tasks are filed under Crating in the Sheet with a "load" code ("load-C", "Load - C")
+    if (department === 'Crating' && loadCode) return 'Load (Cranbury)';
     return DUNHAMS_TO_CRANBURY[department] || null;
 }
 
@@ -114,7 +125,8 @@ export function normalizeCranburyDepartment(dept) {
     else if ((m = /^cranbury\s*-?\s*(.*)$/.exec(s))) base = m[1];
     if (base == null) return null;
     base = base.trim();
-    if (['crate', 'crating', 'load', 'build', 'crate / load', 'crate/load'].includes(base)) return 'Crating (Cranbury)';
+    if (base === 'load') return 'Load (Cranbury)';
+    if (['crate', 'crating', 'build', 'crate / load', 'crate/load'].includes(base)) return 'Crating (Cranbury)';
     if (base === 'seal') return 'Seal (Cranbury)';
     if (base === 'special' || base === 'speciality' || base === 'specialty') return 'Special (Cranbury)';
     if (base === 'ship') return 'Ship (Cranbury)';
@@ -124,7 +136,8 @@ export function normalizeCranburyDepartment(dept) {
 /**
  * Move a loaded task to its building. Call after task.department is normalized.
  * - keeps the original department as task.sheetDepartment;
- * - a "-C" task of Crating/Load/Seal/Special/Ship gets the Cranbury department;
+ * - a "-C" task of Crating/Load/Seal/Special/Ship gets the Cranbury department (a "-C" Crating task whose code
+ *   starts with "load", e.g. "load-C", gets 'Load (Cranbury)');
  * - a Cranbury task keeps its staging-note key (task.stagingDepartment) on the original department, so existing
  *   task_descriptions rows still match and the live page sees the same notes;
  * - sets task.building.
@@ -141,7 +154,8 @@ export function applyBuilding(task, taskCode) {
     const cranbury = cranburyDepartmentFor(original, code);
     if (cranbury && cranbury !== original) {
         task.department = cranbury;
-        if (!task.stagingDepartment) task.stagingDepartment = original;
+        // (an already-Cranbury department, e.g. 'Crate-C' re-keyed to Load (Cranbury), keeps its sheet spelling)
+        if (!task.stagingDepartment) task.stagingDepartment = isCranbury(original) ? (task.sheetDepartment || original) : original;
     }
     task.building = buildingOf(task.department);
     return task;
@@ -265,6 +279,7 @@ export const DEPARTMENT_COLORS = {
 };
 // Cranbury departments use the colours of their Dunhams counterpart (class form of 'Seal (Cranbury)' is 'seal-cranbury')
 DEPARTMENT_COLORS['crating-cranbury'] = DEPARTMENT_COLORS.crating;
+DEPARTMENT_COLORS['load-cranbury'] = DEPARTMENT_COLORS.load;
 DEPARTMENT_COLORS['seal-cranbury'] = DEPARTMENT_COLORS.seal;
 DEPARTMENT_COLORS['special-cranbury'] = DEPARTMENT_COLORS.special;
 DEPARTMENT_COLORS['ship-cranbury'] = DEPARTMENT_COLORS.ship;
