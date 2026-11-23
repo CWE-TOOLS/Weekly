@@ -605,6 +605,104 @@ async function rowFieldCommitted(itemId, castingId, f, beforeRaw, nowRaw) {
     refreshTypeMasterStatus();
 }
 
+// ---------------------------------------------------------------- "Fill blanks from master" on a casting (2026-11-23)
+// User: "casting inventory has missing values that are in the master ... i don't want to go through the work of
+// putting them in manually". One button per casting: every BLANK box of its rows takes the value that is known for
+// the row's type. Known = what the master list holds; where the master has none, the one value every other casting
+// row of that type agrees on (the master then takes it too). Castings that disagree fill nothing. A box that holds
+// a value is never touched.
+
+/** The value known for one field of a type: { value, from: 'master' | 'castings' }, { differ: true }, or null. */
+function knownValue(type, f, cache) {
+    const k = norm(type) + '|' + f;
+    if (cache.has(k)) return cache.get(k);
+    const e = findType(type);
+    let out = null;
+    if (e && !blank(e[f])) out = { value: e[f], from: 'master' };
+    else {
+        const seen = spread(type, f);
+        if (seen.length === 1) out = { value: NUM_FIELDS.has(f) ? parseField(f, seen[0].value) : seen[0].value, from: 'castings' };
+        else if (seen.length > 1) out = { differ: true };
+    }
+    cache.set(k, out);
+    return out;
+}
+/** What the button would do on a casting: { fills: [{ row, f, value, from }], differ: [type names] }; null = no list in use. */
+function fillPlan(castingId) {
+    if (!ctx || !typeMasterActive() || !ctx.castings().some(c => c.id === castingId)) return null;
+    const fills = [], differ = new Set(), cache = new Map();
+    for (const row of ctx.inventoryOf(castingId)) {
+        if (blank(row.type)) continue;
+        for (const f of SYNC_FIELDS) {
+            if (!blank(row[f])) continue;
+            const k = knownValue(row.type, f, cache);
+            if (!k) continue;
+            if (k.differ) differ.add(String(row.type).trim()); else fills.push({ row, f, value: k.value, from: k.from });
+        }
+    }
+    return { fills, differ: [...differ] };
+}
+/** The button of a casting card, or '' while the job has no type master list. */
+export function typeMasterFillButtonHtml(castingId) {
+    const plan = fillPlan(castingId);
+    if (!plan) return '';
+    const n = plan.fills.length;
+    const fields = [...new Set(plan.fills.map(x => FIELD_WORDS[x.f]))].join(', ');
+    const rows = new Set(plan.fills.map(x => x.row.id)).size;
+    const tip = n
+        ? `Fills ${plural(n, 'blank box', 'blank boxes')} on ${plural(rows, 'row')} of this casting (${fields}) with the values the type master list knows for each type. Boxes that already hold a value are never changed.`
+        : 'Nothing to fill: every blank box of this casting is also unknown on the type master list' + (plan.differ.length ? ` (the other castings hold different values for ${plan.differ.join(', ')})` : '') + '.';
+    return `<button type="button" class="pp-add-btn pp-inv-fill-master" data-action="fill-from-master" data-casting-id="${esc(castingId)}"${n ? '' : ' disabled'} title="${esc(tip)}">Fill blanks from master${n ? ` (${n})` : ''}</button>`;
+}
+/** Fill the blank boxes of one casting's rows from what is known for each type. One save per set of equal rows. */
+export function typeMasterFill(castingId) { return ctx.trackSave(fillNow(castingId)); }
+async function fillNow(castingId) {
+    const casting = ctx.castings().find(c => c.id === castingId);
+    if (!casting) return;
+    if (ctx.editBlocked(casting)) return;                             // ready (final): the page says so
+    const plan = fillPlan(castingId);
+    if (!plan || !plan.fills.length) { ctx.toast('Nothing to fill: the type master list knows no value for the blank boxes of this casting.', 'info', 5000); return; }
+    const byRow = new Map();
+    for (const x of plan.fills) { if (!byRow.has(x.row.id)) byRow.set(x.row.id, { row: x.row, patch: {} }); byRow.get(x.row.id).patch[x.f] = x.value; }
+    const groups = new Map();                                         // rows that take the same values save together
+    for (const g of byRow.values()) { const k = JSON.stringify(g.patch); if (!groups.has(k)) groups.set(k, { patch: g.patch, rows: [] }); groups.get(k).rows.push(g.row); }
+    let boxes = 0, rowsDone = 0, failed = 0;
+    const done = [];
+    for (const { patch, rows } of groups.values()) {
+        const was = rows.map(r => Object.fromEntries(Object.keys(patch).map(f => [f, r[f]])));
+        rows.forEach(r => { Object.assign(r, patch); for (const f of Object.keys(patch)) setRowDom(r.id, f, patch[f]); });
+        try {
+            const c = await client();
+            for (let i = 0; i < rows.length; i += 80) {
+                const { error } = await c.from('casting_inventory').update(patch).in('id', rows.slice(i, i + 80).map(r => r.id));
+                if (error) throw error;
+            }
+            rowsDone += rows.length; boxes += rows.length * Object.keys(patch).length;
+            for (const r of rows) for (const f of Object.keys(patch)) done.push(r.id + '|' + f);
+        } catch (err) {
+            rows.forEach((r, i) => { Object.assign(r, was[i]); for (const f of Object.keys(patch)) setRowDom(r.id, f, was[i][f]); });
+            failed += rows.length;
+            logger.error('[type-master] fill from master failed:', err);
+        }
+    }
+    // A value taken from the other castings is now the type's known value: the master keeps it.
+    const saved = new Set(done);
+    for (const x of plan.fills) {
+        if (x.from !== 'castings' || !saved.has(x.row.id + '|' + x.f)) continue;
+        const e = findType(x.row.type);
+        if (e && blank(e[x.f])) { mutate(opSet(e.id, { [x.f]: x.value }, { ...e })); setMasterDom(e.id, x.f, x.value); }
+    }
+    if (rowsDone) { try { ctx.afterChange(castingId); } catch (err) { logger.warn('[type-master] afterChange failed:', err); } }
+    const fields = [...new Set(plan.fills.filter(x => saved.has(x.row.id + '|' + x.f)).map(x => FIELD_WORDS[x.f]))].join(', ');
+    const parts = [];
+    if (rowsDone) parts.push(`Cast ${casting.casting_number || '?'}: filled ${plural(boxes, 'blank box', 'blank boxes')} on ${plural(rowsDone, 'row')} (${fields}).`);
+    if (failed) parts.push(`${plural(failed, 'row')} could not be saved.`);
+    if (plan.differ.length) parts.push(`Left blank, the other castings hold different values: ${plan.differ.join(', ')}.`);
+    ctx.toast(parts.join(' '), failed ? 'error' : 'success', (failed || plan.differ.length) ? 9000 : 4000);
+    ctx.renderCastings();
+    refreshTypeMasterStatus();
+}
+
 // ---------------------------------------------------------------- editing the master
 
 async function commitMasterField(el) {

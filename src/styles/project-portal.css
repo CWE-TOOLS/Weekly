@@ -7187,3 +7187,7 @@ body.pp-clay-zoom-open { overflow: hidden; }
 .pp-bt-days-foot { min-height: 17px; margin: 0 0 12px; font-size: 12px; line-height: 1.4; color: #15803d; }
 .pp-bt-days-foot.pp-bt-days-foot-warn { color: #c2410c; }
 .pp-bt-days-modal .pp-modal-actions button { padding: 9px 18px; font-size: 13.5px; }
+/* Casting card: fill the blank boxes of its rows from the type master list (2026-11-23). */
+.pp-inv-fill-master { margin-left: 8px; }
+.pp-inv-fill-master:not(:disabled) { border-color: #0d9488; color: #0f766e; font-weight: 700; }
+.pp-inv-fill-master:not(:disabled):hover { background: #ccfbf1; color: #134e4a; }

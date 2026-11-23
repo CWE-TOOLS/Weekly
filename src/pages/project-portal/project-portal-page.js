@@ -148,7 +148,7 @@ import {
 } from '../../services/casting-layout-service.js';
 import { registerRefreshHandler, isPortalChange, isOwnSignal, signalInfo } from '../../services/supabase-service.js';
 // Type master list (2026-11-11): the job's types + totals above the castings; casting rows pick their type from it.
-import { initTypeMaster, loadTypeMaster, renderTypeMaster, refreshTypeMasterStatus, typeMasterActive, typeCellHtml, typeMasterOverCheck, typeMasterPasteCheck, typeMasterMissing, typeMasterEntries, TM_NEW } from './type-master.js?v=20261119-4';
+import { initTypeMaster, loadTypeMaster, renderTypeMaster, refreshTypeMasterStatus, typeMasterActive, typeCellHtml, typeMasterOverCheck, typeMasterPasteCheck, typeMasterMissing, typeMasterEntries, typeMasterFillButtonHtml, typeMasterFill, TM_NEW } from './type-master.js?v=20261123-1';
 import { initInventorySearch, renderInventorySearch } from './inventory-search.js?v=20261116-1';
 import '../../utils/number-wheel-guard.js';   // the mouse wheel must not change a focused hour box (user 2026-11-03)
 
@@ -1497,7 +1497,7 @@ function renderCastings() {
     list.querySelectorAll('.pp-cast-card').forEach(card => {
         if (!ciLockedById(card.dataset.castingId)) return;
         card.classList.add('pp-cast-card-locked');
-        card.querySelectorAll('.pp-inv-row input:not(.pp-inv-day-input), .pp-inv-row select, .pp-inv-add, .pp-inv-import-remakes, [data-action="paste-components"], [data-action="cut-selected"], .pp-inv-row-cut, .pp-inv-row-delete, .pp-inv-row-select, .pp-inv-select-all')
+        card.querySelectorAll('.pp-inv-row input:not(.pp-inv-day-input), .pp-inv-row select, .pp-inv-add, .pp-inv-import-remakes, .pp-inv-fill-master, [data-action="paste-components"], [data-action="cut-selected"], .pp-inv-row-cut, .pp-inv-row-delete, .pp-inv-row-select, .pp-inv-select-all')
             .forEach(el => { el.disabled = true; });
     });
 
@@ -1623,6 +1623,7 @@ function renderInventoryBody(casting, items) {
             </div>
             <button type="button" class="pp-add-btn pp-inv-add" data-action="add-inventory" data-casting-id="${escapeAttr(casting.id)}">+ Add Component</button>
             <button type="button" class="pp-add-btn pp-inv-import-remakes" data-action="open-import-remakes" data-casting-id="${escapeAttr(casting.id)}" ${candidateCount === 0 ? 'disabled' : ''} title="${escapeAttr(importTitle)}">${escapeHtml(importLabel)}</button>
+            ${typeMasterFillButtonHtml(casting.id)}
         </div>
     `;
 }
@@ -11348,6 +11349,9 @@ function wireEvents() {
             handleAddInventoryItem(castingId);
         } else if (action === 'open-import-remakes') {
             if (!btn.disabled) openImportRemakesModal(castingId);
+        } else if (action === 'fill-from-master') {
+            // a value still being typed is saved first, so the fill sees the rows as they are
+            if (!btn.disabled) flushPendingSaves().then(() => typeMasterFill(castingId));
         } else if (action === 'copy-components') {
             if (!btn.disabled) handleCopyComponents(castingId);
         } else if (action === 'paste-components') {
