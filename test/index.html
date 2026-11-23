@@ -9,7 +9,29 @@
     <meta name="robots" content="noindex, nofollow">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧪</text></svg>">
     <title>TEST – Weekly Schedule Task Viewer</title>
-    <style>@media print { #test-banner { display: none !important; } }</style>
+    <style>
+        @media print { #test-banner, #test-guide { display: none !important; } }
+        #test-guide-btn { margin-left: 12px; padding: 2px 10px; border: 0; border-radius: 4px; background: #fff; color: #b45309; font: 600 13px/1.5 system-ui, sans-serif; cursor: pointer; }
+        #test-guide-btn:hover { background: #ffedd5; }
+        /* the page's global h2 / li / margin rules would otherwise leak in */
+        #test-guide { margin: auto; width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 48px); padding: 0; border: 0; border-radius: 10px; box-shadow: 0 20px 50px rgba(0,0,0,.35); font: 14px/1.5 system-ui, sans-serif; color: #1f2937; text-align: left; }
+        #test-guide::backdrop { background: rgba(17,24,39,.55); }
+        #test-guide .tg-head { position: sticky; top: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px; background: #b45309; color: #fff; }
+        #test-guide h2 { margin: 0; padding: 0; border: 0; font-size: 18px; color: #fff; -webkit-text-fill-color: #fff; }
+        #test-guide .tg-close { border: 0; background: none; color: #fff; font-size: 26px; line-height: 1; cursor: pointer; }
+        #test-guide .tg-body { padding: 4px 20px 20px; }
+        #test-guide h3 { margin: 18px 0 6px; font-size: 16px; color: #92400e; border-bottom: 1px solid #fde68a; padding-bottom: 4px; }
+        #test-guide h4 { margin: 14px 0 4px; font-size: 14px; }
+        #test-guide p, #test-guide ul { margin: 4px 0; }
+        #test-guide ul { padding-left: 20px; }
+        #test-guide li { margin: 3px 0; padding: 0; border: 0; list-style: disc; }
+        #test-guide code { background: #f3f4f6; border-radius: 3px; padding: 0 4px; font-size: 13px; }
+        #test-guide .tg-table { border-collapse: collapse; margin: 4px 0; width: 100%; }
+        #test-guide .tg-table th, #test-guide .tg-table td { border: 1px solid #e5e7eb; padding: 4px 8px; text-align: left; vertical-align: top; }
+        #test-guide .tg-table th { background: #f9fafb; }
+        #test-guide .tg-note { color: #6b7280; font-size: 13px; }
+        #test-guide .tg-warn { background: #fef3c7; border-radius: 4px; padding: 4px 8px; list-style-position: inside; margin-left: -20px; }
+    </style>
 
     <!-- Modular CSS Files -->
     <link rel="stylesheet" href="src/styles/variables.css?v=20261122-2">
@@ -43,7 +65,58 @@
     <div id="test-banner" role="status" style="position:sticky;top:0;z-index:10000;background:#b45309;color:#fff;font:600 14px/1.4 system-ui,sans-serif;text-align:center;padding:6px 12px;">
         🧪 TEST VERSION of the weekly view. Changes you make here save to the LIVE schedule.
         <a href="../" style="color:#fff;text-decoration:underline;margin-left:8px;">Open the live page</a>
+        <button type="button" id="test-guide-btn" onclick="document.getElementById('test-guide').showModal()">What's new &amp; how it works</button>
     </div>
+    <!-- Test-only guide for the owner: what this copy adds and how it relates to the live page -->
+    <dialog id="test-guide" aria-labelledby="test-guide-title" onclick="if (event.target === this) this.close()">
+        <div class="tg-head">
+            <h2 id="test-guide-title">🧪 What's new on this test page</h2>
+            <button type="button" class="tg-close" aria-label="Close" onclick="this.closest('dialog').close()">×</button>
+        </div>
+        <div class="tg-body">
+            <h3>Cranbury, the second building</h3>
+            <p>The weekly view now splits work between the two buildings: <b>Dunhams</b> (the current building) and <b>Cranbury</b> (South River Rd).</p>
+
+            <h4>Which tasks are Cranbury</h4>
+            <ul>
+                <li>A task is Cranbury when its <b>task code ends in a dash and C</b>: <code>build-C</code>, <code>rack-C</code>, <code>load-C</code>, <code>seal-C</code>, <code>ship-C</code>. Spaces around the dash are fine (<code>Load - C</code>).</li>
+                <li>No dash, no Cranbury: <code>build C</code> stays Dunhams. To move a task, fix its code in the Sheet; the page picks it up on the next refresh.</li>
+                <li>Only the code counts. The project name is never checked.</li>
+            </ul>
+
+            <h4>The Cranbury departments</h4>
+            <table class="tg-table">
+                <tr><th>Department</th><th>Gets these -C tasks</th></tr>
+                <tr><td>Crating (Cranbury)</td><td>Crating tasks: build-C, rack-C, pan-C …</td></tr>
+                <tr><td>Load (Cranbury)</td><td>Load tasks, and Crating tasks coded load-C</td></tr>
+                <tr><td>Seal (Cranbury)</td><td>Seal tasks</td></tr>
+                <tr><td>Special (Cranbury)</td><td>Special tasks</td></tr>
+                <tr><td>Ship (Cranbury)</td><td>Ship tasks</td></tr>
+            </table>
+            <p class="tg-note">Other departments (CNC through Finish) are Dunhams only, even with a -C code.</p>
+
+            <h4>Where you'll see it</h4>
+            <ul>
+                <li><b>Weekly grid:</b> after the Dunhams departments, a dark <b>CRANBURY</b> bar, then the Cranbury rows in the same colours as their Dunhams twins.</li>
+                <li><b>All Departments dropdown:</b> a Cranbury section at the bottom. The new departments start ticked.</li>
+                <li><b>Print → Weekly / Daily:</b> each Cranbury department prints its own page, listed after the Dunhams ones.</li>
+                <li><b>Print → Frozen daily:</b> the Cranbury lines come after Dunhams, then Dunhams Total, Cranbury Total and the overall TOTAL. Cranbury Crating + Load share one line with the split shown, like Dunhams.</li>
+                <li><b>Print → Buy-In:</b> grouped by building. Cranbury gets Seal, Special and Crate / Ship (Cranbury) pages.</li>
+                <li><b>$ Revenue:</b> Dunhams rows, <b>Dunhams Total</b>, then the <b>CRANBURY</b> block and <b>Cranbury Total</b>, then <b>GRAND TOTAL</b>. Click <b>▶ Crate Total</b> in either building to open Crate / Load / Final Insp. The month line at the bottom shows both buildings.</li>
+                <li><b>Staging notes</b> are the same ones the live page shows.</li>
+            </ul>
+
+            <h3>How this test page works</h3>
+            <ul>
+                <li class="tg-warn"><b>It uses the real data.</b> It reads the same Google Sheet and saves to the same database as the live page. Moving, editing, adding or deleting a task, or entering actual hours here, changes the real schedule for everyone.</li>
+                <li><b>Only the page itself is different.</b> The live page doesn't know about Cranbury yet: there, -C tasks still show under the normal Dunhams departments.</li>
+                <li>The Plant Scheduler, Project Portal and Batch tickets buttons open the <b>live</b> versions of those pages.</li>
+                <li>Your selected departments, viewed week and print choices are shared with the live page (same browser, same site).</li>
+                <li>When a change is published, this page reloads itself within a few minutes.</li>
+                <li>Once you approve, the same changes get copied to the live page.</li>
+            </ul>
+        </div>
+    </dialog>
     <!-- Error Notification (Phase 8) -->
     <div id="error-notification" class="error-notification hidden">
         <div class="error-content">
