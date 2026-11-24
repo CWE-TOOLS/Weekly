@@ -66,7 +66,7 @@
  * @module pages/project-portal/jig-list
  */
 
-import { loadJigListsForProject, saveJigListForCasting } from '../../services/jig-list-service.js?v=20261112-1';
+import { loadJigListsForProject, saveJigListForCasting } from '../../services/jig-list-service.js?v=20261124-2';
 import { loadCastingInventory } from '../../services/inventory-service.js';
 import { logger } from '../../utils/logger.js';
 

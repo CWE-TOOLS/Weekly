@@ -239,11 +239,11 @@ export function scrimForInventory(rows, data) {
     const list = skipKeys.size ? all.filter(r => !skipKeys.has(inventoryPartKey(r))) : all;
     const skipped = [...new Set(all.filter(r => !list.includes(r)).map(r => String(r.type || '').trim() || '(no type)'))];
     if (!skipped.length) return scrimForCounted(all, data);
-    if (!list.length) return { text: 'Scrim: none (every part is on No jig/scrim in the Jig List import).', detail: `No jig/scrim: ${skipped.join(', ')}\n${SCRIM_RULE}`, warn: false };
+    if (!list.length) return { text: 'Scrim: none (every part is on No jig/scrim in the Jig List import).', detail: `No jig/scrim: ${skipped.join(', ')}\n${SCRIM_RULE}`, warn: false, linFt: 0 };
     const res = scrimForCounted(list, data);
     if (!scrimLayersFromJigData(data)) return res;   // "layers not set" stays a plain message
     const names = skipped.length <= 10 ? skipped.join(', ') : `${skipped.length} types`;
-    return { text: `${res.text} — no scrim on ${names} (No jig/scrim)`, detail: `Not counted, No jig/scrim in the Jig List import: ${skipped.join(', ')}\n${res.detail}`, warn: res.warn };
+    return { text: `${res.text} — no scrim on ${names} (No jig/scrim)`, detail: `Not counted, No jig/scrim in the Jig List import: ${skipped.join(', ')}\n${res.detail}`, warn: res.warn, linFt: res.linFt };
 }
 
 /** The scrim figures for the rows that do get scrim. */
@@ -272,7 +272,28 @@ function scrimForCounted(list, data) {
     if (unmapped.size) text += ` — not counted, type not on the Jig List: ${[...unmapped].join(', ')}`;
     if (partial) text += ' (some inventory rows have no ff sq ft — partial)';
     const detail = [...lines, `Total ${f2(total)} sq ft = ${f2(rolls)} ${rolls === 1 ? 'roll' : 'rolls'} = ${f1(linFt)} lin ft`, SCRIM_RULE].join('\n');
-    return { text, detail, warn: unmapped.size > 0 || partial };
+    return { text, detail, warn: unmapped.size > 0 || partial, linFt };
+}
+
+/** The scrim line for several castings added up (Mix Day Totals on "Job", 2026-11-24): { text, detail, warn }.
+ *  items = [{ name, rows, data }]: a casting's label, its inventory rows and its jig-list data. A casting whose
+ *  scrim layers are not known is never guessed: it is left out and named. */
+export function scrimForCastings(items, what = 'the job') {
+    let lin = 0, n = 0, warn = false; const lines = [], out = [];
+    for (const it of items || []) {
+        if (!Array.isArray(it.rows) || !it.rows.length) continue;
+        const res = scrimForInventory(it.rows, it.data);
+        if (!res.text) continue;
+        if (!Number.isFinite(res.linFt)) { out.push(it.name); continue; }
+        lin += res.linFt; n++;
+        if (res.warn) warn = true;
+        lines.push(`${it.name}: ${f1(res.linFt)} lin ft${res.warn ? ' (partial, see that casting)' : ''}`);
+    }
+    if (!n && !out.length) return { text: '', detail: '', warn: false };
+    let text = n ? `Scrim: ${f1(lin)} lin ft of roll for ${what} (${n} ${n === 1 ? 'casting' : 'castings'})` : 'Scrim: not computed';
+    if (warn) text += ' (partial, see the castings)';
+    if (out.length) text += ` — not counted, scrim layers not set: ${out.join(', ')}`;
+    return { text, detail: [...lines, `Total ${f1(lin)} lin ft`, SCRIM_RULE].join('\n'), warn: warn || out.length > 0, linFt: lin };
 }
 
 const SCRIM_RULE = 'Takeoff rule: ff sq ft × layers = sq ft; a roll is 300 ft × 3.3 ft = 990 sq ft; lin ft = sq ft ÷ 3.3';
@@ -292,8 +313,8 @@ export function scrimSummary(faceSqFt, ffComplete, layerInfo) {
     const rolls = total / SCRIM_ROLL_SQ_FT;
     const linFt = total / SCRIM_ROLL_WIDTH_FT;
     const partial = ffComplete === false ? ' (some inventory rows have no ff sq ft — partial)' : '';
-    if (layers === 0) return { text: 'Scrim: none (no scrim layers on the Jig List cross-section).', detail: SCRIM_RULE, warn: false };
+    if (layers === 0) return { text: 'Scrim: none (no scrim layers on the Jig List cross-section).', detail: SCRIM_RULE, warn: false, linFt: 0 };
     const text = `Scrim: ${f1(linFt)} lin ft of roll (${layers} ${layers === 1 ? 'layer' : 'layers'})${partial}`;
     const detail = `${f2(face)} ff sq ft × ${layers} = ${f2(total)} sq ft = ${f2(rolls)} ${rolls === 1 ? 'roll' : 'rolls'} = ${f1(linFt)} lin ft\n${SCRIM_RULE}`;
-    return { text, detail, warn: ffComplete === false };
+    return { text, detail, warn: ffComplete === false, linFt };
 }

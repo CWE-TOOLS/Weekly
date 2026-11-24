@@ -192,9 +192,14 @@ function storedQty(d, ff, coatsNote) {
 }
 
 /** Quantities for `face` sq ft of finished face: [{ id, label, unit, qty, how, noRate, notes, rateText }]. */
-export function finishingRows(logs, face) {
-    const ff = Math.max(0, num(face));
-    return finishingItems(logs).map(it => {
+export function finishingRows(logs, face, groups = null) {
+    const whole = Math.max(0, num(face));
+    // "Job" totals (2026-11-24): groups = one { logs, face } per casting; a product is counted for the face of
+    // the castings whose own notes name it, so a colour that is not sealed adds nothing to the sealer.
+    const keysOf = groups ? groups.map(g => new Set(finishingItems(g.logs).map(x => x.key))) : null;
+    return finishingItems(logs).map(src => {
+        const ff = groups ? groups.reduce((sum, g, i) => sum + (keysOf[i].has(src.key) ? Math.max(0, num(g.face)) : 0), 0) : whole;
+        const it = { ...src, ff };
         if (rated(it.def)) {                                       // a rate stored in the portal: it replaces the built-in rule
             const s = storedQty(it.def, ff, it.coatsNote);
             return { ...it, unit: it.def.unit, qty: s.qty, how: s.how, parts: [], noRate: false, coats: s.coats, rateText: rateText(it.def), stored: true };
@@ -231,12 +236,15 @@ export function finishingRows(logs, face) {
  * product claims are listed with "+ Add missing product" (initFinishingEditor() answers the clicks).
  * @param {Array<Object>} logs - colour logs with finishingNotes / sealingNotes
  * @param {number} face - finished-face sq ft of the casting
- * @param {{cls?: string, partial?: boolean}} [opts] - cls: CSS class prefix ('pp-bt-totals-fin' on the portal, 'totals-fin' on the Jane page)
+ * @param {{cls?: string, partial?: boolean, groups?: Array<{logs: Array<Object>, face: number}>, scope?: string, count?: number}} [opts] -
+ *   cls: CSS class prefix ('pp-bt-totals-fin' on the portal, 'totals-fin' on the Jane page); groups + scope ('job' | 'phase')
+ *   + count: the totals box is on "Job" (2026-11-24), one group per counted casting, `face` their sum
  */
-export function finishingProductsHtml(logs, face, { cls = 'pp-bt-totals-fin', partial = false } = {}) {
+export function finishingProductsHtml(logs, face, { cls = 'pp-bt-totals-fin', partial = false, groups = null, scope = '', count = 0 } = {}) {
     if (!noteSegments(logs).length) return '';
     ensureStyle();
-    const rows = finishingRows(logs, face);
+    const rows = finishingRows(logs, face, groups);
+    const scopeText = scope ? ` (the ${scope}, ${count} ${count === 1 ? 'casting' : 'castings'})` : '';
     const missing = finishingUnmatched(logs);
     const ff = Math.max(0, num(face));
     const lines = rows.map(r => {
@@ -245,11 +253,11 @@ export function finishingProductsHtml(logs, face, { cls = 'pp-bt-totals-fin', pa
             : `<b>${esc(r2(r.qty))} ${esc(r.unit)}</b>`;
         const tip = r.noRate ? 'No rate yet — click to set it' : `${r.rateText} — click to see or change the rate`;
         const how = r.noRate ? '' : ` <span class="${cls}-how">— ${esc(r.how)}</span>`;
-        return `<li class="${cls}-row"><button type="button" class="${cls}-label finp-name" data-finp-edit="${esc(r.id)}" title="${esc(tip)}">${esc(r.label)}</button>: ${qty}${how}<span class="${cls}-note">from the log: “${esc(r.notes.join(' / '))}”</span></li>`;
+        return `<li class="${cls}-row" data-finp-face="${esc(r2(r.ff))}"><button type="button" class="${cls}-label finp-name" data-finp-edit="${esc(r.id)}" title="${esc(tip)}">${esc(r.label)}</button>: ${qty}${how}<span class="${cls}-note">from the log: “${esc(r.notes.join(' / '))}”</span></li>`;
     }).join('');
     const chips = missing.map(seg => `<button type="button" class="finp-chip" data-finp-add="${esc(seg)}" title="Add this as a product with its rate">“${esc(seg)}”</button>`).join(' ');
-    return `<div class="${cls}" data-finp-face="${esc(r2(ff))}">
-        <div class="${cls}-title">Finishing &amp; sealing products — from the Color Log notes, for ${esc(r2(ff))} sq ft of finished face${partial ? ' (some inventory rows have no FF sq ft yet)' : ''}</div>
+    return `<div class="${cls}" data-finp-face="${esc(r2(ff))}" data-finp-scope="${esc(scope)}">
+        <div class="${cls}-title">Finishing &amp; sealing products — from the Color Log notes, for ${esc(r2(ff))} sq ft of finished face${esc(scopeText)}${partial ? ' (some inventory rows have no FF sq ft yet)' : ''}</div>
         ${lines ? `<ul class="${cls}-list">${lines}</ul>` : ''}
         <div class="finp-missing">${missing.length ? `<span class="finp-missing-label">Not counted, no product for:</span> ${chips} ` : ''}<button type="button" class="finp-add" data-finp-add="">+ Add missing product</button></div>
         <div class="${cls}-foot">Click a product to see or change its rate. A rate is stored once and used by every job. Quantities are rounded up to whole units.</div>
@@ -320,8 +328,9 @@ export function initFinishingEditor(opts = {}) {
         if (!btn) return;
         e.preventDefault();
         const face = num(btn.closest('[data-finp-face]')?.dataset.finpFace, 0);
-        if (btn.hasAttribute('data-finp-edit')) openPop(btn, { id: btn.getAttribute('data-finp-edit'), face });
-        else openPop(btn, { id: null, name: btn.getAttribute('data-finp-add') || '', face });
+        const scope = btn.closest('[data-finp-scope]')?.dataset.finpScope || '';     // 'job' | 'phase' while the totals box adds up more than the casting
+        if (btn.hasAttribute('data-finp-edit')) openPop(btn, { id: btn.getAttribute('data-finp-edit'), face, scope });
+        else openPop(btn, { id: null, name: btn.getAttribute('data-finp-add') || '', face, scope });
     });
 }
 
@@ -336,8 +345,9 @@ function builtinStart(c) {
     return { amount: '', unit: c.unit, area: '', perCoat: !!c.askCoats };          // two-part kit: no single number to show
 }
 
-function openPop(anchor, { id, name = '', face = 0 }) {
+function openPop(anchor, { id, name = '', face = 0, scope = '' }) {
     if (popClose) popClose();
+    const what = scope === 'job' || scope === 'phase' ? scope : 'casting';
     const cat = id ? catalog().find(c => c.id === id) : null;
     if (id && !cat) { sayToast('That product is no longer on the list. The page is refreshed.', 'info'); changed(); return; }
     const d = cat?.def || null;
@@ -412,9 +422,9 @@ function openPop(anchor, { id, name = '', face = 0 }) {
     const preview = () => {
         const v = read();
         const box = $('#finp-preview');
-        if (!(v.amount > 0 && v.area > 0 && v.unit)) { box.textContent = builtin && v.blankRate && num(cat.rate) > 0 ? 'No stored rate: the built-in shop rule is used.' : 'Type the rate to see what this casting needs.'; return; }
+        if (!(v.amount > 0 && v.area > 0 && v.unit)) { box.textContent = builtin && v.blankRate && num(cat.rate) > 0 ? 'No stored rate: the built-in shop rule is used.' : `Type the rate to see what this ${what} needs.`; return; }
         const s = storedQty(v, face, 1);
-        box.innerHTML = `This casting, ${esc(r2(face))} sq ft: <b>${esc(String(s.qty))} ${esc(v.unit)}</b> <span style="color:#475569">(${esc(r2(s.exact))}, rounded up${v.perCoat ? '; one coat' : ''})</span>`;
+        box.innerHTML = `This ${what}, ${esc(r2(face))} sq ft: <b>${esc(String(s.qty))} ${esc(v.unit)}</b> <span style="color:#475569">(${esc(r2(s.exact))}, rounded up${v.perCoat ? '; one coat' : ''})</span>`;
     };
     const fail = (msg) => { const el = $('#finp-err'); el.textContent = msg; el.hidden = false; };
     const busy = (on) => pop.querySelectorAll('button').forEach(b => { b.disabled = on; });

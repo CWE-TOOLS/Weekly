@@ -429,7 +429,8 @@ export function batchTotalsRows(entries) {
 }
 
 /** @param {string} [opts.finishingHtml] - the finishing & sealing products block (finishing-products.js), under the notes, before the scrim (2026-11-06) */
-export function renderBatchTotals(entries, casting = null, { scrimHtml = '', finishingHtml = '' } = {}) {
+/** title / headHtml / noteHtml (2026-11-24): the box's own title, the Day / Job switch beside it, a line under it. */
+export function renderBatchTotals(entries, casting = null, { scrimHtml = '', finishingHtml = '', title: titleOpt = '', headHtml = '', noteHtml = '' } = {}) {
     entries = (entries || []).filter(e => e?.plan?.batches?.length && e.log);
     if (!entries.length) return '';
     const all = batchTotalsRows(entries);
@@ -451,7 +452,7 @@ export function renderBatchTotals(entries, casting = null, { scrimHtml = '', fin
 
     if (!rows) return '';
 
-    const title = entries.length > 1 ? 'Mix Day Totals — All Colors & Batches' : 'Mix Day Totals — All Batches';
+    const title = titleOpt ? escapeHtml(titleOpt) : (entries.length > 1 ? 'Mix Day Totals — All Colors & Batches' : 'Mix Day Totals — All Batches');
     // Color Log finishing / sealing notes under the totals (2026-10-26): one pair per colour log on the casting,
     // so the mix-day sheet carries what the finishing and sealing crews need to know.
     const logs = [];
@@ -463,7 +464,8 @@ export function renderBatchTotals(entries, casting = null, { scrimHtml = '', fin
     }).join('');
     return `
         <div class="pp-bt-totals-panel">
-            <div class="pp-bt-totals-title">${title}</div>
+            <div class="pp-bt-totals-head"><div class="pp-bt-totals-title">${title}</div>${headHtml}</div>
+            ${noteHtml}
             <table class="pp-bt-totals-table">
                 <thead><tr><th>Material</th><th class="pp-bt-totals-num">Total Qty</th><th>Unit</th></tr></thead>
                 <tbody>${rows}</tbody>

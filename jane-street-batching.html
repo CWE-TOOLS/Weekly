@@ -58,6 +58,18 @@ button, select, input, textarea { font: inherit; }
 .totals-fin-norate { color: #b45309; font-weight: 700; }
 .totals-fin-foot { margin-top: 4px; color: #64748b; font-size: 11px; }
 .totals-scrim.warn { color: #b45309; }
+/* Mix Day Totals: Day / Job switch (2026-11-24) */
+.totals-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; margin-bottom: 10px; }
+.totals-head h2 { margin: 0; }
+.scope { display: inline-flex; border: 1px solid var(--accent); border-radius: 8px; overflow: hidden; }
+.scope button { border: 0; background: #fff; color: var(--accent); font: inherit; font-size: 12px; font-weight: 700; padding: 4px 14px; cursor: pointer; }
+.scope button + button { border-left: 1px solid var(--accent); }
+.scope button:hover { background: #f0fdfa; }
+.scope button.on, .scope button.on:hover { background: var(--accent); color: #fff; }
+.totals-scope-note { font-size: 12px; color: #475569; margin: -4px 0 10px; }
+.totals-scope-note b { color: var(--ink); }
+.totals-scope-note .skip { color: #b45309; font-weight: 700; }
+@media print { .scope { display: none; } }
 @media (max-width: 700px) { .totals-notes { grid-template-columns: 1fr; } }
 .note { background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: 10px 12px; font-size: 13px; margin-bottom: 14px; }
 .pills { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
@@ -624,7 +636,7 @@ function describeSizes(plan) {
 // ======================================================================
 async function loadData() {
     const [ps, cs, cl, bt, tr, inv, jig, fin] = await Promise.all(
-        ['projects-service.js', 'castings-service.js', 'color-log-service.js', 'batch-ticket-service.js', 'tracking-service.js', 'inventory-service.js', 'jig-list-service.js?v=20261112-1', 'finishing-products.js?v=20261124-1']
+        ['projects-service.js', 'castings-service.js', 'color-log-service.js', 'batch-ticket-service.js', 'tracking-service.js', 'inventory-service.js', 'jig-list-service.js?v=20261124-2', 'finishing-products.js?v=20261124-2']
             .map(f => import(SERVICES + f))
     );
     S.svc = { ps, bt, inv, jig, fin };
@@ -1099,8 +1111,24 @@ function totalsRows(entries) {
     return order.map(k => totals[k]);
 }
 
+/** The Day / Job switch of the totals box (2026-11-24): Day = the casting on screen, Job = every batched casting added up. */
+function scopeToggleHtml() {
+    const now = S.totalsScope === 'job' ? 'job' : 'day';
+    const b = (k, label, tip) => `<button type="button" class="${k === now ? 'on' : ''}" data-totals-scope="${k}" title="${tip}" aria-pressed="${k === now}">${label}</button>`;
+    return `<span class="scope" role="group" aria-label="What the totals add up">${b('day', 'Day', 'The mix day on screen: this casting')}${b('job', 'Job', 'Every batched casting of the job, added up')}</span>`;
+}
 function renderTotals(entries, castingId = null) {
-    entries = entries.filter(e => e.plan?.batches?.length && e.log);
+    const usable = (list) => list.filter(e => e.plan?.batches?.length && e.log);
+    const job = S.totalsScope === 'job';
+    let counted = [], skipped = [];
+    if (job) {
+        // every casting of the job that has a batch ticket; one with none yet is not guessed, it is named as not counted
+        const groups = S.castings.map(c => ({ casting: c, name: c.casting_number || '?', entries: usable(getTicketList(c.id).map(t => ({ ticket: t, log: logById(t.colorLogId), plan: planFor(t) }))) }));
+        counted = groups.filter(g => g.entries.length);
+        skipped = groups.filter(g => !g.entries.length);
+        entries = counted.flatMap(g => g.entries);
+    }
+    entries = usable(entries);
     if (!entries.length) return '';
     const items = totalsRows(entries);
     let rows = '';
@@ -1119,8 +1147,31 @@ function renderTotals(entries, castingId = null) {
         const suffix = logs.length > 1 && log.name ? ` — ${log.name}` : '';
         return `<div class="totals-notes">${noteBlock('Color Log finishing notes' + suffix, String(log.finishingNotes || '').trim())}${noteBlock('Color Log sealing notes' + suffix, String(log.sealingNotes || '').trim())}</div>`;
     }).join('');
-    return `<div class="card"><h2>Mix Day Totals — ${entries.length > 1 ? 'all colors &amp; batches' : 'all batches'}</h2>
-        <table class="tbl"><thead><tr><th>Material</th><th class="num">Total Qty</th><th>Unit</th></tr></thead><tbody>${rows}</tbody></table>${notesHtml}${castingId ? finishingLineHtml(castingId, logs) : ''}${castingId ? scrimLineHtml(castingId) : ''}</div>`;
+    let title = `Mix Day Totals — ${entries.length > 1 ? 'all colors &amp; batches' : 'all batches'}`;
+    let noteHtml = '', finHtml = castingId ? finishingLineHtml(castingId, logs) : '', scrimHtml = castingId ? scrimLineHtml(castingId) : '';
+    if (job) {
+        const n = counted.length + skipped.length;
+        const howMany = skipped.length ? `${counted.length} of ${n}` : `all ${n}`;
+        title = `Job Totals — ${howMany} ${n === 1 ? 'casting' : 'castings'}`;
+        const names = skipped.slice(0, 15).map(g => g.name).join(', ') + (skipped.length > 15 ? ` and ${skipped.length - 15} more` : '');
+        noteHtml = `<div class="totals-scope-note">Adds up the batch tickets of <b>${howMany}</b> ${n === 1 ? 'casting' : 'castings'} of the job.${skipped.length ? ` <span class="skip">No batch ticket yet, not counted: ${esc(names)}.</span>` : ''}</div>`;
+        finHtml = ''; scrimHtml = '';
+        if (S.svc?.fin) {
+            // each casting's own colour logs for its own finished face, added up
+            const fin = counted.map(g => {
+                const own = [];
+                for (const e of g.entries) if (!own.some(l => l.id === e.log.id)) own.push(e.log);
+                return { logs: own, ...S.svc.fin.faceSqFtOfInventory(S.inv.get(g.casting.id) || []) };
+            });
+            finHtml = S.svc.fin.finishingProductsHtml(logs, fin.reduce((sum, g) => sum + g.face, 0), { cls: 'totals-fin', partial: fin.some(g => g.partial), groups: fin, scope: 'job', count: counted.length });
+        }
+        if (S.svc?.jig?.scrimForCastings) {
+            const sc = S.svc.jig.scrimForCastings(counted.map(g => ({ name: g.name, rows: S.inv.get(g.casting.id) || [], data: (S.jigs || new Map()).get(g.casting.id) })), 'the job');
+            if (sc.text) scrimHtml = `<div class="totals-scrim${sc.warn ? ' warn' : ''}" title="${esc(sc.detail || '')}">${esc(sc.text)}</div>`;
+        }
+    }
+    return `<div class="card"><div class="totals-head"><h2>${title}</h2>${scopeToggleHtml()}</div>${noteHtml}
+        <table class="tbl"><thead><tr><th>Material</th><th class="num">Total Qty</th><th>Unit</th></tr></thead><tbody>${rows}</tbody></table>${notesHtml}${finHtml}${scrimHtml}</div>`;
 }
 
 // ======================================================================
@@ -1486,6 +1537,13 @@ root.addEventListener('click', (e) => {
     }
     const color = e.target.closest('[data-color]');
     if (color) { S.activeColor.set(S.activeCastingId, color.dataset.color); render(); return; }
+    const scope = e.target.closest('[data-totals-scope]');
+    if (scope) {                                                 // Mix Day Totals: Day / Job switch (2026-11-24)
+        S.totalsScope = scope.dataset.totalsScope === 'job' ? 'job' : 'day';
+        const c = S.castings.find(x => x.id === S.activeCastingId) || S.castings[0];
+        if (c) renderPreview(c, getActiveTicket(c.id));
+        return;
+    }
     if (e.target.closest('[data-import-all]')) { handleImport(true); return; }
     if (e.target.closest('[data-import]')) { handleImport(false); return; }
     if (e.target.closest('[data-types-reset]')) {

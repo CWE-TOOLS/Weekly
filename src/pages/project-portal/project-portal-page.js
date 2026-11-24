@@ -111,7 +111,7 @@ import {
     roundSig,
     FROM_LBS
 } from '../../utils/batch-calc.js';
-import { getSpecialBatching } from '../../config/special-batching.js?v=20261124-1';
+import { getSpecialBatching } from '../../config/special-batching.js?v=20261124-2';
 import { fetchAllTasks } from '../../services/data-service.js';
 import { loadActualHoursForProject } from '../../services/actual-hours-service.js';
 import { parseDate } from '../../utils/date-utils.js';
@@ -131,13 +131,13 @@ import {
 import { renderCastingLayout, computeLayoutRects, parseDimension, tableBlockRects, CASTING_AREAS } from './casting-layout.js?v=20261112-1';
 import { attachLayoutDrag } from './casting-layout-drag.js?v=20261120-1';
 import { LAYOUT_DAYS_PREFIX, normLayoutDays, resolveLayoutDays, layoutDayRows, layoutDaysEmpty, layoutDaysCanon, castDayDates, layoutDayOf, layoutDaysSplit, layoutDaySide, placeKeys, inventoryPieceRows, inventoryRowsOfDay, batchDaysStamp, batchDaysPrinted } from '../../utils/layout-days.js?v=20261120-7';
-import { activateJigListTab } from './jig-list.js?v=20261112-1';
+import { activateJigListTab } from './jig-list.js?v=20261124-2';
 import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, APPROVALS_TAB_ITEMS } from '../../config/milestones-config.js?v=20261119-1';
-import { SLUMP_TARGET_DEFAULTS, FINAL_BACKUP_PIG_REDUCTION_PCT, parsePigReduction, BT_IMPORT_META, btOverrides, btImportStamp, btStampDate, additiveAmount, batchTotalsRows, renderBatchTotals, clampSlumpTarget, formatSlumpLabel, renderSlumpGraphic, renderBatchTicketCard, BATCH_PRINT_CSS } from '../../services/batch-ticket-render.js';
-import { finishingProductsHtml, faceSqFtOfInventory, loadFinishingDefs, initFinishingEditor } from '../../services/finishing-products.js?v=20261124-1';   // moved out 2026-10-30 so the weekly's week print shares the ticket code
+import { SLUMP_TARGET_DEFAULTS, FINAL_BACKUP_PIG_REDUCTION_PCT, parsePigReduction, BT_IMPORT_META, btOverrides, btImportStamp, btStampDate, additiveAmount, batchTotalsRows, renderBatchTotals, clampSlumpTarget, formatSlumpLabel, renderSlumpGraphic, renderBatchTicketCard, BATCH_PRINT_CSS } from '../../services/batch-ticket-render.js?v=20261124-2';
+import { finishingProductsHtml, faceSqFtOfInventory, loadFinishingDefs, initFinishingEditor } from '../../services/finishing-products.js?v=20261124-2';   // moved out 2026-10-30 so the weekly's week print shares the ticket code
 import { invHash as invHashShared, invFingerprintRows, invColourFingerprintRows } from '../../services/inventory-marks.js';
 import { loadMilestonesForProject, saveMilestone, isMilestonesMigrationPending, loadLayoutConditions, loadLayoutConditionsForCastings, LAYOUT_CONDITION_PREFIX, layoutConditionNote, parseLayoutCondition, sideWords } from '../../services/milestones-service.js';
-import { loadJigListsForProject as loadJigListsForScrim, scrimForInventory } from '../../services/jig-list-service.js?v=20261112-1';
+import { loadJigListsForProject as loadJigListsForScrim, scrimForInventory, scrimForCastings } from '../../services/jig-list-service.js?v=20261124-2';
 import { loadReadyFlags, setReadyFlag, loadSettingRows, setSettingRow, loadScheduleForCastings, OPT_SCHEDULER_PREFIX } from '../../services/schedule-service.js?v=20261120-1';
 import { tasksForDepartment, teamOfDepartment, taskForPhase, STAGING_NAME_OF_TEAM, REVENUE_PER_HOUR } from '../../config/scheduler-config.js?v=20261027-1';
 import {
@@ -602,6 +602,7 @@ async function showListView() {
     batchTicketsLoadedFor = null;
     batchTickets.clear();
     currentBatchCastingId = null;
+    btTotalsScope = 'day';
     currentBatchColorSel.clear();
     jobMemosLoadedFor = null;
     currentJobMemos = [];
@@ -632,6 +633,7 @@ async function showFormView(projectNumber, draftOverrides = null) {
     batchTicketsLoadedFor = null;
     batchTickets.clear();
     currentBatchCastingId = null;
+    btTotalsScope = 'day';
     currentBatchColorSel.clear();
     for (const p of batchTicketSaveTimers.values()) clearTimeout(p.timer);
     batchTicketSaveTimers.clear();
@@ -11205,6 +11207,12 @@ function wireEvents() {
             handleSelectBatchColor(colorPill.dataset.colorKey || '');
             return;
         }
+        const scopeBtn = e.target.closest('[data-bt-totals-scope]');
+        if (scopeBtn) {                                          // Mix Day Totals: Day / Job switch (2026-11-24)
+            btTotalsScope = scopeBtn.dataset.btTotalsScope || 'day';
+            renderBatchTicketsContent();
+            return;
+        }
         if (e.target.closest('[data-bt-import]')) {
             handleImportBatchFromTracking(currentBatchCastingId);
         }
@@ -11869,6 +11877,59 @@ function scrimLineHtml(casting, day = null) {
     if (!text) return '';
     return `<div class="pp-bt-totals-scrim${warn ? ' pp-bt-totals-scrim-warn' : ''}" title="${escapeAttr(detail || '')}">${escapeHtml(text)}</div>`;
 }
+// ---- Mix Day Totals: Day / Job switch (2026-11-24) ----
+// user: "set up the batching mix day totals to toggle between day and job". Day = the casting on screen, as always.
+// Job = every casting of the job that has a batch ticket, added up (materials, finishing products, scrim); a casting
+// with no ticket yet is not guessed, it is named as not counted. A job with phases gets a Phase step in between,
+// because its castings repeat their numbers per phase. Kept while the job stays open; another job starts on Day.
+let btTotalsScope = 'day';
+const btPhased = () => !!currentPhasesEnabled && currentPhases.length > 1;
+function btTotalsScopeNow() {
+    if (btTotalsScope === 'phase') return btPhased() ? 'phase' : 'job';
+    return btTotalsScope === 'job' ? 'job' : 'day';
+}
+function btTotalsToggleHtml() {
+    const now = btTotalsScopeNow();
+    const opts = [['day', 'Day', 'The mix day on screen: this casting']];
+    if (btPhased()) opts.push(['phase', 'Phase', 'Every batched casting of the phase on screen, added up']);
+    opts.push(['job', 'Job', btPhased() ? 'Every batched casting of the job, all phases, added up' : 'Every batched casting of the job, added up']);
+    return `<span class="pp-bt-scope" role="group" aria-label="What the totals add up">${opts.map(([k, label, tip]) =>
+        `<button type="button" class="pp-bt-scope-btn${k === now ? ' is-on' : ''}" data-bt-totals-scope="${k}" title="${escapeAttr(tip)}" aria-pressed="${k === now}">${label}</button>`).join('')}</span>`;
+}
+/** The totals box under the batch plan: the casting on screen (Day), or the phase / job added up. */
+function btTotalsPanelHtml(casting) {
+    const scope = btTotalsScopeNow();
+    const headHtml = btTotalsToggleHtml();
+    if (scope === 'day') {
+        // Mix Day Totals are for the WHOLE casting: every color ticket of every cast day combined (user, 2026-11-20).
+        const entries = buildBatchTotalsEntries(casting);
+        return renderBatchTotals(entries, casting, { scrimHtml: scrimLineHtml(casting), finishingHtml: finishingLineHtml(casting, entries), headHtml });
+    }
+    const list = scope === 'phase' ? getCastingsForActivePhase() : currentCastings;
+    const phaseName = (id) => currentPhases.find(ph => ph.id === id)?.phase_name || '';
+    const nameOf = (c) => (scope === 'job' && btPhased() && phaseName(c.phase_id) ? phaseName(c.phase_id) + ' · ' : '') + (c.casting_number || '?');
+    const groups = list.map(c => ({ casting: c, name: nameOf(c), entries: buildBatchTotalsEntries(c) }));
+    const counted = groups.filter(g => g.entries.length);
+    const skipped = groups.filter(g => !g.entries.length);
+    const what = scope === 'phase' ? 'the phase' : 'the job';
+    const howMany = skipped.length ? `${counted.length} of ${groups.length}` : `all ${groups.length}`;
+    const title = (scope === 'phase' ? `Phase Totals — ${phaseName(currentPhaseId) || 'this phase'}` : 'Job Totals') + ` — ${howMany} ${groups.length === 1 ? 'casting' : 'castings'}`;
+    const names = skipped.slice(0, 15).map(g => g.name).join(', ') + (skipped.length > 15 ? ` and ${skipped.length - 15} more` : '');
+    const noteHtml = `<div class="pp-bt-totals-scope-note">Adds up the batch tickets of <b>${howMany}</b> ${groups.length === 1 ? 'casting' : 'castings'} of ${what}.`
+        + (skipped.length ? ` <span class="pp-bt-totals-scope-skip">No batch ticket yet, not counted: ${escapeHtml(names)}.</span>` : '') + '</div>';
+    // finishing & sealing products: each casting's own colour logs for its own finished face, added up
+    const fin = counted.map(g => {
+        const logs = [];
+        for (const e of g.entries) if (e.log && !logs.some(l => l.id === e.log.id)) logs.push(e.log);
+        return { logs, ...faceSqFtOfInventory(getInventoryFor(g.casting.id)) };
+    });
+    const allLogs = [];
+    for (const g of fin) for (const l of g.logs) if (!allLogs.some(x => x.id === l.id)) allLogs.push(l);
+    const finishingHtml = finishingProductsHtml(allLogs, fin.reduce((sum, g) => sum + g.face, 0), { partial: fin.some(g => g.partial), groups: fin, scope, count: counted.length });
+    const sc = scrimForCastings(counted.map(g => ({ name: g.name, rows: getInventoryFor(g.casting.id), data: btJigLists.get(g.casting.id) })), what);
+    const scrimHtml = sc.text ? `<div class="pp-bt-totals-scrim${sc.warn ? ' pp-bt-totals-scrim-warn' : ''}" title="${escapeAttr(sc.detail || '')}">${escapeHtml(sc.text)}</div>` : '';
+    return renderBatchTotals(counted.flatMap(g => g.entries), casting, { scrimHtml, finishingHtml, headHtml, title, noteHtml });
+}
 async function activateBatchTicketsTab() {
     if (currentProjectNumber) syncCastDatesWithWeekly();   // runs alongside; redraws when the weekly answers
     await Promise.all([ensureJigListsForScrim(), loadFinishingDefs()]);
@@ -12494,10 +12555,9 @@ function renderBatchPreview(casting, ticket) {
 
     const sectionHeader = renderBatchSectionHeader(plan);
     const assign = renderBatchAssignTable(plan);
-    // Day totals combine every color ticket on this casting, not just the one being viewed.
-    // Mix Day Totals are for the WHOLE casting: every color ticket of every cast day combined (user, 2026-11-20).
-    const totalsEntries = buildBatchTotalsEntries(casting);
-    const totalsPanel = renderBatchTotals(totalsEntries, casting, { scrimHtml: scrimLineHtml(casting), finishingHtml: finishingLineHtml(casting, totalsEntries) });
+    // Day totals combine every color ticket on this casting, not just the one being viewed; the box's Day / Job
+    // switch (2026-11-24) adds up the phase or the whole job instead.
+    const totalsPanel = btTotalsPanelHtml(casting);
     const tickets = renderBatchTicketCards(casting, ticket, plan);
 
     return `
