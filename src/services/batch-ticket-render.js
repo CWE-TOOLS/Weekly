@@ -652,6 +652,15 @@ export function buildTicketPages({ casting, projectName = '', tickets = [], logs
 // "Batching out of date": does the ticket still match the Casting Inventory? (the portal's red banner, shared)
 // ---------------------------------------------------------------------------------------------------------------
 
+/** A batched ticket in a colour none of the casting's pieces has any more (2026-11-24): the pieces were given another
+ *  colour after it was made. It is LEFT OVER: flagged, never printed, never totalled, so it cannot turn Batching
+ *  Sheets green. rows = the casting's inventory rows (one cast day's rows for a split casting). Not judged while the
+ *  inventory carries no colour at all: there is nothing to compare with. */
+export function leftOverTicket(ticket, rows) {
+    if (!ticket || !ticket.colorLogId || String(ticket.cuFt ?? '').trim() === '') return false;
+    const coloured = (rows || []).filter(r => r && r.color_log_id);
+    return coloured.length > 0 && !coloured.some(r => r.color_log_id === ticket.colorLogId);
+}
 /** Cu ft / face sq ft the Casting Inventory adds up to for one ticket (with several colour tickets, only that colour's rows). */
 export function inventoryTotalsFor(rows, ticket, multiColor = false) {
     let list = rows || [];

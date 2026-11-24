@@ -111,7 +111,7 @@ import {
     roundSig,
     FROM_LBS
 } from '../../utils/batch-calc.js';
-import { getSpecialBatching } from '../../config/special-batching.js?v=20261124-2';
+import { getSpecialBatching } from '../../config/special-batching.js?v=20261124-3';
 import { fetchAllTasks } from '../../services/data-service.js';
 import { loadActualHoursForProject } from '../../services/actual-hours-service.js';
 import { parseDate } from '../../utils/date-utils.js';
@@ -133,7 +133,7 @@ import { attachLayoutDrag } from './casting-layout-drag.js?v=20261120-1';
 import { LAYOUT_DAYS_PREFIX, normLayoutDays, resolveLayoutDays, layoutDayRows, layoutDaysEmpty, layoutDaysCanon, castDayDates, layoutDayOf, layoutDaysSplit, layoutDaySide, placeKeys, inventoryPieceRows, inventoryRowsOfDay, batchDaysStamp, batchDaysPrinted } from '../../utils/layout-days.js?v=20261120-7';
 import { activateJigListTab } from './jig-list.js?v=20261124-2';
 import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, APPROVALS_TAB_ITEMS } from '../../config/milestones-config.js?v=20261119-1';
-import { SLUMP_TARGET_DEFAULTS, FINAL_BACKUP_PIG_REDUCTION_PCT, parsePigReduction, BT_IMPORT_META, btOverrides, btImportStamp, btStampDate, additiveAmount, batchTotalsRows, renderBatchTotals, clampSlumpTarget, formatSlumpLabel, renderSlumpGraphic, renderBatchTicketCard, BATCH_PRINT_CSS } from '../../services/batch-ticket-render.js?v=20261124-2';
+import { SLUMP_TARGET_DEFAULTS, FINAL_BACKUP_PIG_REDUCTION_PCT, parsePigReduction, BT_IMPORT_META, btOverrides, btImportStamp, btStampDate, additiveAmount, batchTotalsRows, renderBatchTotals, clampSlumpTarget, formatSlumpLabel, renderSlumpGraphic, renderBatchTicketCard, BATCH_PRINT_CSS, leftOverTicket } from '../../services/batch-ticket-render.js?v=20261124-3';
 import { finishingProductsHtml, faceSqFtOfInventory, loadFinishingDefs, initFinishingEditor } from '../../services/finishing-products.js?v=20261124-2';   // moved out 2026-10-30 so the weekly's week print shares the ticket code
 import { invHash as invHashShared, invFingerprintRows, invColourFingerprintRows } from '../../services/inventory-marks.js';
 import { loadMilestonesForProject, saveMilestone, isMilestonesMigrationPending, loadLayoutConditions, loadLayoutConditionsForCastings, LAYOUT_CONDITION_PREFIX, layoutConditionNote, parseLayoutCondition, sideWords } from '../../services/milestones-service.js';
@@ -1326,6 +1326,7 @@ async function loadAllInventoryForCurrentProject() {
     try {
         currentCastingInventory = await loadAllInventoryForProject(ids);
         currentCastingInventoryLoadedFor = currentProjectNumber;
+        invColourSnap();
     } catch (err) {
         logger.error('[project-portal] loadAllInventoryForProject failed:', err);
         currentCastingInventory = new Map();
@@ -5142,7 +5143,10 @@ function stampPrinted(castingIds, milestone) {
     for (const id of (castingIds || []).filter(Boolean)) {
         const final = !CI_DEPENDENT.includes(milestone) || ciFinal(id);
         // A print made through the hold remembers the inventory it saw (2026-10-27): "Casting Inventory ready" settles it.
-        msSet(id, milestone, final ? MS.GREEN : MS.ORANGE, { note: final ? null : withInvMark(EARLY_PRINT_NOTE, invEarlyMarks(id, milestone)), stamp: true });
+        // The color log print remembers the colours it was printed for (2026-11-24): a casting switched to another
+        // color log afterwards goes orange again (deriveColorLogMilestones).
+        const colourNote = milestone === 'Color Log' && currentCastingInventoryLoadedFor === currentProjectNumber ? withInvMark('', 'cl=' + invColourSet(id)) : null;
+        msSet(id, milestone, final ? MS.GREEN : MS.ORANGE, { note: final ? colourNote : withInvMark(EARLY_PRINT_NOTE, invEarlyMarks(id, milestone)), stamp: true });
     }
 }
 /** Batch tickets printed (2026-11-20). A casting split over its cast days is only green once EVERY day that casts
@@ -5244,7 +5248,48 @@ function invHash(s) { return invHashShared(s); }
 /** Fingerprint of the inventory as one print sees it: the sorted set of its rows' relevant fields (row order ignored, rows added/removed counted). */
 function invFingerprint(castingId, milestone) { return invFingerprintRows(getInventoryFor(castingId), milestone); }   // shared with the weekly's week print (2026-10-30)
 /** All per-print fingerprints as one marker body: b=…;l=…;t=…;c=…;j=… */
-function invMarks(castingId) { return CI_DEPENDENT.map(m => INV_MARK_KEYS[m] + '=' + invFingerprint(castingId, m)).join(';') + ';bc=' + invColourFingerprint(castingId); }
+function invMarks(castingId) { return CI_DEPENDENT.map(m => INV_MARK_KEYS[m] + '=' + invFingerprint(castingId, m)).join(';') + ';bc=' + invColourFingerprint(castingId) + ';tc=' + invTypeColourFingerprint(castingId); }
+// ---- Colour changes reach Final Tracking and the Color Log too (2026-11-24) ----
+// user: "link final tracking to color log changes. that tracking shows the color log per type ... and needs to be
+// reprinted if it changes"; "the color log changed for the casting, it turns orange ... stays orange until ... printed".
+// Final Tracking: the lock also remembers the colour of every type (tc=...), kept apart from its t=... mark so the
+// marks already stored on live stay valid. A lock from before tc falls back on the casting's colour set (bc=...).
+// Color Log: its print stores the colours it was printed for on its own row ([inv:cl=...]); a light that went green
+// before that is compared with the colours this browser first loaded (invColourSeen).
+/** Colour per type as the Final Tracking sheet shows it: the set of type + color log pairs, order ignored. */
+function invTypeColourFingerprint(castingId) {
+    const list = [...new Set(getInventoryFor(castingId).map(r => String(r.type || '').trim() + '|' + String(r.color_log_id || '')))].sort();
+    return invHash(list.join('\n')) + '-' + list.length;
+}
+/** One value of the marker stored on the Casting Inventory row ('' when that lock predates it). */
+function invMarkPart(castingId, key) {
+    const m = String(msRow(castingId, 'Casting Inventory')?.note || '').match(INV_MARK_RE);
+    const part = m ? m[1].split(';').find(x => x.startsWith(key + '=')) : null;
+    return part ? part.slice(key.length + 1) : '';
+}
+function invTrackingColoursAsPrinted(castingId) {
+    const tc = invMarkPart(castingId, 'tc');
+    if (tc) return tc === invTypeColourFingerprint(castingId);
+    const bc = invBaselineColour(castingId);
+    return !bc || bc === invColourFingerprint(castingId);
+}
+/** The color logs a casting's pieces use (blank ones left out), order ignored. */
+function invColourSet(castingId) {
+    const ids = [...new Set(getInventoryFor(castingId).map(r => String(r.color_log_id || '')).filter(Boolean))].sort();
+    return invHash(ids.join('|')) + '-' + ids.length;
+}
+const invColourSeen = new Map();   // castingId -> the colour set when this browser first loaded the inventory
+let invColourSeenFor = null;
+function invColourSnap() {
+    if (invColourSeenFor !== currentProjectNumber) { invColourSeen.clear(); invColourSeenFor = currentProjectNumber; }
+    for (const id of currentCastingInventory.keys()) if (!invColourSeen.has(id)) invColourSeen.set(id, invColourSet(id));
+}
+const COLOR_CHANGED_NOTE = 'Color changed after the color log was printed — print the color log again';
+function colourLogMark(r) {
+    const m = String(r?.note || '').match(INV_MARK_RE);
+    const part = m ? m[1].split(';').find(x => x.startsWith('cl=')) : null;
+    return part ? part.slice(3) : '';
+}
 /** The colour logs the inventory uses (rows with pieces), order ignored — stored as bc=… so a colour change is always a reprint. */
 function invColourFingerprint(castingId) { return invColourFingerprintRows(getInventoryFor(castingId)); }
 /** The colour fingerprint stored at the last "ready" ('' when that lock predates it). */
@@ -5276,6 +5321,7 @@ const EARLY_CHANGED_NOTE = 'Printed before Casting Inventory was final and the i
 function invEarlyMarks(castingId, milestone) {
     let m = (INV_MARK_KEYS[milestone] || 'x') + '=' + invFingerprint(castingId, milestone);
     if (milestone === 'Batching Sheets') m += ';bc=' + invColourFingerprint(castingId);
+    if (milestone === 'Final Tracking') m += ';tc=' + invTypeColourFingerprint(castingId);
     return m;
 }
 /** Settle the early prints of a casting against the inventory as it is now: { same: [...], changed: [...] }. */
@@ -5289,7 +5335,8 @@ function ciEarlyPrintsSettle(castingId) {
         const parts = Object.fromEntries(mk[1].split(';').map(p => p.split('=')));
         const key = INV_MARK_KEYS[m];
         const asPrinted = !!parts[key] && parts[key] === invFingerprint(castingId, m)
-            && (m !== 'Batching Sheets' || (!!parts.bc && parts.bc === invColourFingerprint(castingId)));
+            && (m !== 'Batching Sheets' || (!!parts.bc && parts.bc === invColourFingerprint(castingId)))
+            && (m !== 'Final Tracking' || !parts.tc || parts.tc === invTypeColourFingerprint(castingId));   // an early print from before tc: sizes only, as before
         if (asPrinted) { msSet(castingId, m, MS.GREEN, { note: null }); same.push(m); }
         else { msSet(castingId, m, MS.ORANGE, { note: EARLY_CHANGED_NOTE }); changed.push(m); }
     }
@@ -5309,7 +5356,8 @@ function msInventoryChanged(castingId) {
     for (const m of CI_DEPENDENT) {
         const r = msRow(castingId, m);
         if (!r) continue;
-        const asPrinted = !!base[m] && invFingerprint(castingId, m) === base[m];
+        const asPrinted = !!base[m] && invFingerprint(castingId, m) === base[m]
+            && (m !== 'Final Tracking' || invTrackingColoursAsPrinted(castingId));   // the sheet shows the colour of every type
         if (asPrinted) {
             if (r.status === MS.ORANGE && r.note === INV_CHANGED_NOTE) msSet(castingId, m, MS.GREEN, { note: null });   // this print's fields are back as printed; the stamp stays
         } else if (r.status === MS.GREEN && !String(r.note || '').startsWith(LAYOUT_CONDITION_PREFIX)) {
@@ -5321,8 +5369,21 @@ function msInventoryChanged(castingId) {
 /** Color Log: red = no color on the casting, orange = color entered, green = color log printed since. */
 function deriveColorLogMilestones() {
     if (!msOn() || !msProjectTouched()) return;
+    const invLoaded = currentCastingInventoryLoadedFor === currentProjectNumber;
     for (const c of currentCastings) {
         const r = msRow(c.id, 'Color Log');
+        const changedNote = !!r && r.status === MS.ORANGE && msNote(r) === COLOR_CHANGED_NOTE;
+        if (r && invLoaded && (r.status === MS.GREEN || changedNote)) {
+            // printed for these colours: the print's own record, else what this browser first saw while it was green
+            const printed = colourLogMark(r) || (r.status === MS.GREEN ? invColourSeen.get(c.id) : '') || '';
+            if (printed) {
+                const now = invColourSet(c.id);
+                if (r.status === MS.GREEN && printed !== now) msSet(c.id, 'Color Log', MS.ORANGE, { note: withInvMark(COLOR_CHANGED_NOTE, 'cl=' + printed) });
+                else if (changedNote && printed === now) msSet(c.id, 'Color Log', MS.GREEN, { note: withInvMark('', 'cl=' + printed) });   // back as printed
+            }
+            continue;
+        }
+        if (changedNote) continue;
         if (r && r.status === MS.GREEN) continue;
         const hasColor = getInventoryFor(c.id).some(it => it.color_log_id);
         const want = hasColor ? MS.ORANGE : MS.RED;
@@ -5529,7 +5590,7 @@ function msWhen(r) { return r?.stamped_at ? new Date(r.stamped_at).toLocaleStrin
 function msLine(castingId, milestone, label) {
     const r = msRow(castingId, milestone);
     const s = r?.status || MS.RED, when = msWhen(r);
-    const tip = (r?.note ? r.note + '. ' : '') + (when ? 'Since ' + when : 'Not done yet');
+    const tip = (msNote(r) ? msNote(r) + '. ' : '') + (when ? 'Since ' + when : 'Not done yet');
     return `<div class="pp-ms-line" title="${escapeAttr(tip)}">${msDot(s)}<span class="pp-ms-label">${escapeHtml(label || milestone)}</span>${when ? `<span class="pp-ms-when">${escapeHtml(when)}</span>` : ''}</div>`;
 }
 function msCiLine(castingId) { const s = ciStatus(castingId); return `<div class="pp-ms-line pp-ms-line-ci">${msDot(s)}<span class="pp-ms-label">${escapeHtml(CI_STATE[s].label)}</span></div>`; }
@@ -7818,7 +7879,7 @@ async function runTrackingSync(opts = {}) {
         await loadAllInventoryForCurrentProject();
     } else if (opts.fresh) {
         // Re-read without touching the Castings tab's edit marks / tick boxes (a plain data refresh).
-        try { currentCastingInventory = await loadAllInventoryForProject(currentCastings.map(c => c.id)); }
+        try { currentCastingInventory = await loadAllInventoryForProject(currentCastings.map(c => c.id)); invColourSnap(); }
         catch (err) { logger.error('[project-portal] fresh inventory read for the tracking check failed:', err); }
     }
     if (currentCastingComponents.size === 0) {
@@ -9249,6 +9310,7 @@ async function reloadColorLinkedRowsForProject() {
     ]);
     currentCastingComponents = compsMap;
     currentCastingInventory = invMap;
+    invColourSnap();
 }
 
 // ---------- Multi-color helpers ----------
@@ -11808,7 +11870,12 @@ function printSpecialBatchingNow() {
     const build = getSpecialBatchingFrame()?.contentWindow?.jsbBuildPrintHtml;
     if (typeof build !== 'function') { showToast('The batching page is still loading — try again in a moment', 'error'); return true; }
     const html = build();
-    if (!html) { showToast('Enter Total Cu Ft to generate tickets', 'error'); return true; }
+    if (!html) {
+        let why = '';
+        try { why = getSpecialBatchingFrame()?.contentWindow?.jsbNothingToPrint?.() || ''; } catch (err) { /* an older copy of the page */ }
+        showToast(why || 'Enter Total Cu Ft to generate tickets', 'error', why ? 14000 : undefined);
+        return true;
+    }
     const w = window.open('', '_blank');
     if (!w) { showToast('Pop-up blocked — allow pop-ups for printing', 'error'); return true; }
     w.document.open();
@@ -12061,6 +12128,16 @@ function batchInventoryTotals(castingId, ticket) {
     return { cuFt: roundSig(cuFt, 2), ff: roundSig(ff, 2), cuFtComplete: rows.every(r => has(r.cu_ft)), ffComplete: rows.every(r => has(r.ff_sq_ft)) };
 }
 
+/** A batched ticket nothing is cast in any more (left over): flagged red, never printed, never totalled, so it
+ *  cannot turn Batching Sheets green. Split casting: nothing of its colour casts on its day (2026-11-20).
+ *  Any casting (2026-11-24): its colour is on none of the pieces, they were given another colour after it was made. */
+function btLeftOver(castingId, ticket) {
+    if (!ticket || String(ticket.cuFt ?? '').trim() === '') return false;
+    if (btDays(castingId) && !batchInventoryTotals(castingId, ticket)) return true;
+    if (currentCastingInventoryLoadedFor !== currentProjectNumber) return false;      // nothing to judge by yet
+    return leftOverTicket(ticket, btDayRows(castingId, btDayOf(ticket)));
+}
+
 let batchInventoryLoading = false;
 /**
  * Big red warning when the ticket's Total Cu Ft / Face Sq Ft no longer match what the Casting
@@ -12081,7 +12158,13 @@ function renderBatchStaleBanner(casting, ticket) {
         return '';
     }
     const t = batchInventoryTotals(casting.id, ticket);
-    if (!t && btDays(casting.id) && String(ticket.cuFt ?? '').trim() !== '') {
+    if (!btDays(casting.id) && btLeftOver(casting.id, ticket)) {
+        return `<div class="pp-bt-stale" role="alert">
+            <div class="pp-bt-stale-title">&#9888; NOTHING IN THIS CASTING IS THIS COLOR ANY MORE</div>
+            <div class="pp-bt-stale-text">This ticket was made for pieces that have since been given another color (Casting Inventory, Color column). It is left over: it is <b>not printed</b> and not counted in the totals, so it cannot turn Batching Sheets green. Batch the casting in the color its pieces have now, then remove this ticket with the &times; on its pill &mdash; or set the pieces back to this color.</div>
+        </div>`;
+    }
+    if (btDays(casting.id) && btLeftOver(casting.id, ticket)) {
         return `<div class="pp-bt-stale" role="alert">
             <div class="pp-bt-stale-title">&#9888; NOTHING OF THIS COLOR CASTS ON DAY ${btDayOf(ticket)} ANY MORE</div>
             <div class="pp-bt-stale-text">This ticket was made for pieces that have since been moved to another cast day (Casting Inventory, Day columns). It is left over: it is <b>not printed</b>. Remove it with the &times; on its pill, or move the pieces back to Day ${btDayOf(ticket)}.</div>
@@ -12154,6 +12237,7 @@ function btReprintCheck(castingId) {
     let seen = false;
     for (const ticket of getBatchTicketList(castingId)) {
         if (ticket.cuFt === null || ticket.cuFt === undefined || String(ticket.cuFt).trim() === '') continue;
+        if (btLeftOver(castingId, ticket)) continue;   // left over: it is never printed, so it decides nothing (2026-11-24)
         const t = batchInventoryTotals(castingId, ticket);
         if (!t) return 'changed';   // this ticket's colour has no inventory rows any more
         if (!t.cuFtComplete || !t.ffComplete) return 'none';
@@ -12381,7 +12465,8 @@ function renderBatchColorPills(list, activeTicket) {
         const remove = isActive && list.length > 1
             ? `<span class="pp-bt-color-pill-x" data-bt-color-remove title="Remove this color ticket">&times;</span>`
             : '';
-        return `<button type="button" class="pp-bt-pill pp-bt-color-pill${isActive ? ' pp-bt-pill-active' : ''}" data-bt-color-pill data-color-key="${escapeAttr(btKey(t))}">${escapeHtml(batchTicketPillLabel(t))}${remove}</button>`;
+        const lo = btLeftOver(t.castingId || currentBatchCastingId, t);      // left over: never printed (2026-11-24)
+        return `<button type="button" class="pp-bt-pill pp-bt-color-pill${isActive ? ' pp-bt-pill-active' : ''}${lo ? ' pp-bt-pill-leftover' : ''}" data-bt-color-pill data-color-key="${escapeAttr(btKey(t))}"${lo ? ' title="Left over: nothing is cast in this color any more. Not printed."' : ''}>${lo ? '&#9888; ' : ''}${escapeHtml(batchTicketPillLabel(t))}${remove}</button>`;
     }).join('');
     let addSel = '';
     if (currentMultiColorEnabled) {
@@ -12579,7 +12664,7 @@ function buildBatchTotalsEntries(casting, day = null) {
     for (const t of getBatchTicketList(casting.id)) {
         if (day && btDayOf(t) !== day) continue;
         // split casting: a ticket left over on a day none of its color casts on any more is not printed, so not totalled
-        if (btDays(casting.id) && String(t.cuFt ?? '').trim() !== '' && !batchInventoryTotals(casting.id, t)) continue;
+        if (btLeftOver(casting.id, t)) continue;       // and (2026-11-24) a ticket in a colour no piece has any more
         const totalCuFt = parseFloat(t.cuFt);
         if (!totalCuFt || totalCuFt <= 0) continue;
         const log = getActiveBatchColorLog(casting, t);
@@ -16290,7 +16375,8 @@ function btPrintable(castingId) {
     // Every color ticket that yields batches; each plan restarts numbering.
     for (const ticket of list) {
         // split casting: a ticket of a day none of its colour casts on any more is left over, never printed
-        if (btDays(castingId) && String(ticket.cuFt ?? '').trim() !== '' && !batchInventoryTotals(castingId, ticket)) { leftOver.push(batchTicketPillLabel(ticket)); continue; }
+        // any casting (2026-11-24): a ticket in a colour none of the pieces has any more is left over too
+        if (btLeftOver(castingId, ticket)) { leftOver.push(batchTicketPillLabel(ticket)); continue; }
         const activeLog = getActiveBatchColorLog(casting, ticket);
         const sandLbs = getColorLogSandLbs(activeLog);
         if (!sandLbs) continue;
@@ -16315,6 +16401,10 @@ function handlePrintBatchTicketsNow(castingId, days = null) {
     const printable = Array.isArray(days) ? every.filter(p => days.includes(btDayOf(p.ticket))) : every;
 
     if (!printable.length) {
+        if (!every.length && leftOver.length) {
+            showToast(`Nothing to print: the only batched ticket (${leftOver.join(', ')}) is left over — no piece of this casting ${btDays(castingId) ? 'casts in that color on that day' : 'is that color'} any more. Batch the casting in the color its pieces have now (Import from Tracking), then print.`, 'error', 14000);
+            return false;
+        }
         // Keep the single-ticket error behavior, judged against the active ticket.
         const ticket = getBatchTicketFor(castingId);
         const activeLog = getActiveBatchColorLog(casting, ticket);
@@ -16329,7 +16419,7 @@ function handlePrintBatchTicketsNow(castingId, days = null) {
     const projectName = document.getElementById('pp-f-project_name')?.value || '';
     btLastPrintedDays = btDays(castingId)
         ? { printed: [...new Set(printable.map(p => btDayOf(p.ticket)))], batched: [...new Set(every.map(p => btDayOf(p.ticket)))] } : null;
-    if (leftOver.length) showToast(`Not printed (nothing of that color casts on that day any more): ${leftOver.join(', ')}`, 'info', 8000);
+    if (leftOver.length) showToast(`Not printed, left over (${btDays(castingId) ? 'nothing of that color casts on that day any more' : 'no piece of this casting is that color any more'}): ${leftOver.join(', ')}`, 'info', 10000);
 
     const pages = printable.map(({ ticket, activeLog, plan }) => {
         const sampleName = activeLog?.name || '';

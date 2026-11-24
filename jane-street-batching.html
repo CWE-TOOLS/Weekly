@@ -501,6 +501,17 @@ function getTicketList(castingId) {
     return S.tickets.get(castingId) || [];
 }
 
+/** A batched ticket in a colour none of the casting's pieces has any more (2026-11-24): the pieces were given another
+ *  colour after it was made. LEFT OVER: flagged red, never printed, never totalled, so it cannot turn Batching Sheets
+ *  green. Same rule as leftOverTicket() in the portal's batch-ticket-render.js. */
+function isLeftOver(castingId, ticket) {
+    if (!ticket || !ticket.colorLogId || String(ticket.cuFt ?? '').trim() === '') return false;
+    const coloured = (S.inv.get(castingId) || []).filter(r => r && r.color_log_id);
+    return coloured.length > 0 && !coloured.some(r => r.color_log_id === ticket.colorLogId);
+}
+/** The tickets of a casting that count: printed and totalled (every ticket but the left-over ones). */
+function printList(castingId) { return getTicketList(castingId).filter(t => !isLeftOver(castingId, t)); }
+
 function getActiveTicket(castingId) {
     const list = getTicketList(castingId);
     const sel = S.activeColor.get(castingId);
@@ -743,6 +754,23 @@ function formatWhen(iso, short = false) {
 
 async function refreshInventory() {
     S.inv = await S.svc.inv.loadAllInventoryForProject(S.castings.map(c => c.id)) || new Map();
+}
+
+/** Remove the left-over ticket on screen (its colour is on none of the casting's pieces any more). */
+async function removeLeftOver() {
+    const casting = S.castings.find(c => c.id === S.activeCastingId);
+    const ticket = casting && getActiveTicket(casting.id);
+    if (!ticket || !isLeftOver(casting.id, ticket)) return;
+    const name = logById(ticket.colorLogId)?.name || 'this color';
+    if (!confirm(`Remove the left-over "${name}" batch ticket of cast ${casting.casting_number || '?'}?\n\nNo piece of this casting is that color any more. Its saved batch plan is deleted; the other tickets of the casting stay.`)) return;
+    clearTimeout(pendingSaves.get(ticket)); pendingSaves.delete(ticket);
+    try { await ticket._chain; if (ticket.id) await S.svc.bt.deleteBatchTicket(ticket.id); }
+    catch (err) { console.error('[batching] remove left-over ticket failed', err); toast('Could not remove the ticket — check your connection.', true); return; }
+    S.tickets.set(casting.id, getTicketList(casting.id).filter(t => t !== ticket));
+    S.activeColor.delete(casting.id);
+    updateSaveStatus();
+    render();
+    toast(`Left-over ${name} ticket removed.`);
 }
 
 async function handleImport(all) {
@@ -1123,7 +1151,7 @@ function renderTotals(entries, castingId = null) {
     let counted = [], skipped = [];
     if (job) {
         // every casting of the job that has a batch ticket; one with none yet is not guessed, it is named as not counted
-        const groups = S.castings.map(c => ({ casting: c, name: c.casting_number || '?', entries: usable(getTicketList(c.id).map(t => ({ ticket: t, log: logById(t.colorLogId), plan: planFor(t) }))) }));
+        const groups = S.castings.map(c => ({ casting: c, name: c.casting_number || '?', entries: usable(printList(c.id).map(t => ({ ticket: t, log: logById(t.colorLogId), plan: planFor(t) }))) }));
         counted = groups.filter(g => g.entries.length);
         skipped = groups.filter(g => !g.entries.length);
         entries = counted.flatMap(g => g.entries);
@@ -1288,6 +1316,10 @@ function renderOverview() {
         for (const t of getTicketList(c.id)) {
             const plan = planFor(t);
             const sel = c.id === S.activeCastingId ? ' sel' : '';
+            if (isLeftOver(c.id, t)) {
+                rows += `<tr class="click${sel}" data-cast="${esc(c.id)}"><td>${esc(c.casting_number)}</td><td>${esc(logById(t.colorLogId)?.name || '')}</td><td colspan="8"><span class="chip stale-chip">LEFT OVER</span> no piece of this casting is this color any more — not printed, not counted</td></tr>`;
+                continue;
+            }
             if (!plan) {
                 rows += `<tr class="click${sel}" data-cast="${esc(c.id)}"><td>${esc(c.casting_number)}</td><td>${esc(logById(t.colorLogId)?.name || '')}</td><td colspan="8" style="color:var(--muted)">no cu ft entered yet — use Import from Casting Inventory</td></tr>`;
                 continue;
@@ -1339,6 +1371,7 @@ function reprintCheck(castingId) {
     let seen = false;
     for (const ticket of getTicketList(castingId)) {
         if (String(ticket.cuFt ?? '').trim() === '') continue;
+        if (isLeftOver(castingId, ticket)) continue;   // left over: never printed, so it decides nothing (2026-11-24)
         const t = inventoryTotals(castingId, ticket);
         if (!t) return 'changed';
         if (!t.cuFtComplete || !t.ffComplete) return 'none';
@@ -1359,6 +1392,11 @@ function freshNote(casting, ticket) {
     return compared.join(' · ') + ((!t.cuFtComplete || !t.ffComplete) ? ' · some inventory rows are blank, so not everything could be compared' : '');
 }
 function staleBannerHtml(casting, ticket) {
+    if (isLeftOver(casting.id, ticket)) {
+        return `<div class="stale" role="alert"><div class="t">&#9888; NOTHING IN THIS CASTING IS THIS COLOR ANY MORE</div>
+            <div>This ticket was made for pieces that have since been given another color in the Casting Inventory. It is left over: it is <strong>not printed</strong> and not counted in the totals, so it cannot turn Batching Sheets green. Batch the casting in the color its pieces have now, then remove this ticket — or set the pieces back to this color.</div>
+            <button class="btn stale-btn" data-leftover-remove>Remove this left-over ticket</button></div>`;
+    }
     const diffs = staleDiffs(casting, ticket);
     const t = diffs.length ? inventoryTotals(casting.id, ticket) : null;
     if (t && t.cuFtComplete && t.ffComplete && ticketSameAsInventory(casting, ticket, t)) {
@@ -1499,7 +1537,7 @@ function renderPreview(casting, ticket) {
         <tr><td><span class="dot ${b.type}"></span>${b.num}</td><td class="num">${b.batchSandLbs} lb</td><td class="num">${roundSig(b.cuFt, 2)}</td>
         <td><select data-assign="${idx}">${Object.entries(TYPE_LABEL).map(([k, v]) => `<option value="${k}"${k === b.type ? ' selected' : ''}>${v}</option>`).join('')}</select></td></tr>`).join('');
 
-    const entries = getTicketList(casting.id).map(t => ({ ticket: t, log: logById(t.colorLogId), plan: planFor(t) }));
+    const entries = printList(casting.id).map(t => ({ ticket: t, log: logById(t.colorLogId), plan: planFor(t) }));   // left-over tickets are not totalled
 
     el.innerHTML = `
         <div class="card">
@@ -1544,6 +1582,7 @@ root.addEventListener('click', (e) => {
         if (c) renderPreview(c, getActiveTicket(c.id));
         return;
     }
+    if (e.target.closest('[data-leftover-remove]')) { removeLeftOver(); return; }
     if (e.target.closest('[data-import-all]')) { handleImport(true); return; }
     if (e.target.closest('[data-import]')) { handleImport(false); return; }
     if (e.target.closest('[data-types-reset]')) {
@@ -1705,7 +1744,7 @@ function printDocHtml(title, pages) {
 function buildPrintHtml() {
     const casting = S.castings.find(c => c.id === S.activeCastingId);
     if (!casting) return '';
-    const pages = ticketPagesHtml(casting, getTicketList(casting.id), new Date());
+    const pages = ticketPagesHtml(casting, printList(casting.id), new Date());   // a left-over ticket is never printed
     if (!pages.trim()) return '';
     return printDocHtml(`Batch Tickets (face ${S.sizing.face} lb / back ups ${S.sizing.backup} lb) — ${S.project?.project_name || ''} — Cast ${casting.casting_number || ''}`, pages);
 }
@@ -1714,7 +1753,7 @@ function buildPrintHtml() {
 function buildPrintAllHtml(ids) {
     const chosen = S.castings.filter(c => ids.includes(c.id));
     const printedOn = new Date();
-    const pages = chosen.map(c => ticketPagesHtml(c, getTicketList(c.id), printedOn)).join('');
+    const pages = chosen.map(c => ticketPagesHtml(c, printList(c.id), printedOn)).join('');
     if (!pages.trim()) return '';
     const casts = chosen.map(c => c.casting_number || '?').join(', ');
     return printDocHtml(`Batch Tickets (face ${S.sizing.face} lb / back ups ${S.sizing.backup} lb) — ${S.project?.project_name || ''} — Casts ${casts}`, pages);
@@ -1756,7 +1795,7 @@ function requestPortalPrint(ids) {
 // ---------- Print all casts: pick the castings, print them in one go ----------
 const picker = document.getElementById('print-picker');
 function castTicketCount(c) {
-    return getTicketList(c.id).reduce((n, t) => n + (planFor(t)?.batches.length || 0), 0);
+    return printList(c.id).reduce((n, t) => n + (planFor(t)?.batches.length || 0), 0);
 }
 function openPrintPicker() {
     if (!S.castings.length) { toast('This project has no castings yet.', true); return; }
@@ -1812,10 +1851,17 @@ document.getElementById('btn-print-all').addEventListener('click', () => {
     if (picker.hidden) openPrintPicker(); else closePrintPicker();
 });
 window.jsbBuildPrintHtml = buildPrintHtml;   // the portal's top-bar Print button uses this when the page is embedded
+/** Why the casting on screen has nothing to print (the portal's Print button shows it too). */
+function nothingToPrintMsg() {
+    const lo = getTicketList(S.activeCastingId).filter(t => isLeftOver(S.activeCastingId, t));
+    return lo.length ? `Nothing to print: the only batched ticket (${lo.map(t => logById(t.colorLogId)?.name || '?').join(', ')}) is left over — no piece of this casting is that color any more. Import the casting in the color its pieces have now, then print.`
+                     : 'Enter Total Cu Ft first — there are no tickets to print for this casting.';
+}
+window.jsbNothingToPrint = nothingToPrintMsg;
 
 document.getElementById('btn-print').addEventListener('click', () => {
     const html = buildPrintHtml();
-    if (!html) { toast('Enter Total Cu Ft first — there are no tickets to print for this casting.', true); return; }
+    if (!html) { toast(nothingToPrintMsg(), true); return; }
     openPrintWindow(html, [S.activeCastingId]);
 });
 
@@ -1882,13 +1928,14 @@ window.jsbWeekTickets = async (ids, printedOn = new Date(), castDates = {}) => {
     return (ids || []).map(id => {
         const c = S.castings.find(x => x.id === id);
         if (!c) return { id, pages: '', rows: [], batches: 0, reason: 'casting not on this page' };
-        const tickets = getTicketList(id);
+        const tickets = printList(id);          // a left-over ticket is never printed
+        const leftOver = getTicketList(id).length > tickets.length;
         const entries = tickets.map(tk => ({ ticket: tk, log: logById(tk.colorLogId), plan: planFor(tk) })).filter(e => e.plan?.batches?.length && e.log);
         const pages = ticketPagesHtml(c, tickets, printedOn, castDates[id] || null);
         const diffs = tickets.flatMap(tk => staleDiffs(c, tk).map(([label, was, now]) => `${label} ${was} → ${now}`));
         return { id, castingNumber: c.casting_number, pages, rows: totalsRows(entries), batches: entries.reduce((n, e) => n + e.plan.batches.length, 0),
                  stale: { verdict: reprintCheck(id), diffs },
-                 reason: pages ? null : (tickets.length ? 'no batches (cu ft or color log sand missing)' : 'no batch ticket') };
+                 reason: pages ? null : (leftOver ? 'the only batched ticket is in a color no piece of this casting has any more' : (tickets.length ? 'no batches (cu ft or color log sand missing)' : 'no batch ticket')) };
     });
 };
 boot();

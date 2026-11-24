@@ -23,7 +23,7 @@ import { loadAllInventoryForProject } from '../../services/inventory-service.js'
 import { loadMilestonesForProjects, saveMilestone } from '../../services/milestones-service.js';
 import { MS, milestonesApply } from '../../config/milestones-config.js';
 import { getSpecialBatching } from '../../config/special-batching.js';
-import { buildTicketPages, batchTotalsRows, sumTotalsRows, renderTotalsTable, BATCH_PRINT_CSS, SLUMP_TARGET_DEFAULTS, clampSlumpTarget, staleVerdict, activeColorLogFor } from '../../services/batch-ticket-render.js';
+import { buildTicketPages, batchTotalsRows, sumTotalsRows, renderTotalsTable, BATCH_PRINT_CSS, SLUMP_TARGET_DEFAULTS, clampSlumpTarget, staleVerdict, activeColorLogFor, leftOverTicket } from '../../services/batch-ticket-render.js?v=20261124-3';
 import { EARLY_PRINT_NOTE, invEarlyMarksRows, withInvMark } from '../../services/inventory-marks.js';
 import { escapeHtml } from '../../utils/security-utils.js';
 import { loadSettingRows } from '../../services/schedule-service.js';
@@ -198,14 +198,20 @@ async function build() {
             const dayTickets = (d.tickets.get(casting.id) || []).filter(tk => dayOfTicket(tk) === (it.split ? it.dayN : 1));
             const dayInvRows = it.split ? inventoryRowsOfDay(r.invRows, it.cfg, it.dayOf, it.dayN) : r.invRows;
             if (it.split) { r.dayLabel = `Day ${it.dayN} of ${it.dayOf}`; r.split = { n: it.dayN, of: it.dayOf, cfg: it.cfg }; }
+            // A ticket in a colour no piece has any more is left over: not printed, so it cannot stamp the board (2026-11-24).
+            const colourName = (tk) => d.logs.find(l => l && l.id === tk.colorLogId)?.name || 'another color';
+            const leftOver = dayTickets.filter(tk => leftOverTicket(tk, dayInvRows));
+            const liveTickets = leftOver.length ? dayTickets.filter(tk => !leftOver.includes(tk)) : dayTickets;
+            if (leftOver.length) r.leftOver = leftOver.map(colourName).join(', ');
             const out = buildTicketPages({
-                casting, projectName: r.projectName, tickets: dayTickets, logs: d.logs, components: d.comps.get(casting.id) || [],
+                casting, projectName: r.projectName, tickets: liveTickets, logs: d.logs, components: d.comps.get(casting.id) || [],
                 slumpTargets: d.slump, printedOn: S.printedOn, castDate: it.date,
                 castLabel: it.split ? `${casting.casting_number || ''} \u2014 DAY ${it.dayN} OF ${it.dayOf}` : null
             });
             r.pages = out.pages; r.rows = batchTotalsRows(out.entries); r.batches = out.batches; r.reason = out.reason;
+            if (!out.pages && r.leftOver) r.reason = `the only batched ticket (${r.leftOver}) is in a color no piece of this casting has any more`;
             const comps = d.comps.get(casting.id) || [];
-            r.stale = staleVerdict({ tickets: dayTickets, rows: dayInvRows, logFor: (tk) => activeColorLogFor({ ticket: tk, components: comps, logs: d.logs }) });
+            r.stale = staleVerdict({ tickets: liveTickets, rows: dayInvRows, logFor: (tk) => activeColorLogFor({ ticket: tk, components: comps, logs: d.logs }) });
         }
     }
     S.results = results;
@@ -220,6 +226,7 @@ function coverHtml(results) {
         const flags = [];
         if (r.stale?.verdict === 'changed') flags.push('<span class="wb-bad">BATCHING OUT OF DATE' + (r.stale.diffs.length ? ' — ' + escapeHtml(r.stale.diffs.join(' · ')) : '') + '</span>');
         if (r.onBoard && !r.ciFinal) flags.push('<span class="wb-warn">inventory not final</span>');
+        if (r.leftOver) flags.push('<span class="wb-warn">not printed: left-over ticket in ' + escapeHtml(r.leftOver) + ' (no piece is that color any more)</span>');
         return flags.length ? flags.join('<br>') : 'tickets';
     };
     const rows = results.map(r => `<tr class="${r.pages ? '' : 'wb-miss'}"><td>${escapeHtml(r.date || '')}</td><td>${escapeHtml(r.projectNumber)} · ${escapeHtml(r.projectName)}</td><td>Cast ${escapeHtml(r.castingNumber)}${r.dayLabel ? ' \u00b7 ' + escapeHtml(r.dayLabel) : ''}</td><td class="wb-num">${r.batches || ''}</td><td>${statusOf(r)}</td></tr>`).join('');
@@ -311,7 +318,7 @@ async function stampPrinted() {
             const printed = (S.results || []).filter(x => x.pages && x.casting && x.casting.id === r.casting.id && x.split).map(x => x.split.n);
             const needed = Array.from({ length: r.split.of }, (_, i) => i + 1).filter(n => inventoryRowsOfDay(r.invRows, r.split.cfg, r.split.of, n).length > 0);
             const tks = S.projects.get(r.projectNumber)?.tickets?.get(r.casting.id) || [];
-            const unbatched = needed.filter(n => !tks.some(tk => (parseInt(tk.castDay, 10) > 1 ? parseInt(tk.castDay, 10) : 1) === n && parseFloat(tk.cuFt) > 0));
+            const unbatched = needed.filter(n => !tks.some(tk => (parseInt(tk.castDay, 10) > 1 ? parseInt(tk.castDay, 10) : 1) === n && parseFloat(tk.cuFt) > 0 && !leftOverTicket(tk, inventoryRowsOfDay(r.invRows, r.split.cfg, r.split.of, n))));
             const partial = batchDaysStamp(needed, printed, S.ms?.byCasting.get(r.casting.id)?.get('Batching Sheets') || null, unbatched);
             if (partial) {
                 try { await saveMilestone({ projectNumber: r.projectNumber, castingId: r.casting.id, milestone: 'Batching Sheets', status: MS.ORANGE, locked: false, note: partial, stampedAt: now }); n++; }
