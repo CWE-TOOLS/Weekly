@@ -111,7 +111,7 @@ import {
     roundSig,
     FROM_LBS
 } from '../../utils/batch-calc.js';
-import { getSpecialBatching } from '../../config/special-batching.js?v=20261109-1';
+import { getSpecialBatching } from '../../config/special-batching.js?v=20261124-1';
 import { fetchAllTasks } from '../../services/data-service.js';
 import { loadActualHoursForProject } from '../../services/actual-hours-service.js';
 import { parseDate } from '../../utils/date-utils.js';
@@ -134,7 +134,7 @@ import { LAYOUT_DAYS_PREFIX, normLayoutDays, resolveLayoutDays, layoutDayRows, l
 import { activateJigListTab } from './jig-list.js?v=20261112-1';
 import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, APPROVALS_TAB_ITEMS } from '../../config/milestones-config.js?v=20261119-1';
 import { SLUMP_TARGET_DEFAULTS, FINAL_BACKUP_PIG_REDUCTION_PCT, parsePigReduction, BT_IMPORT_META, btOverrides, btImportStamp, btStampDate, additiveAmount, batchTotalsRows, renderBatchTotals, clampSlumpTarget, formatSlumpLabel, renderSlumpGraphic, renderBatchTicketCard, BATCH_PRINT_CSS } from '../../services/batch-ticket-render.js';
-import { finishingProductsHtml, faceSqFtOfInventory } from '../../services/finishing-products.js?v=20261106-1';   // moved out 2026-10-30 so the weekly's week print shares the ticket code
+import { finishingProductsHtml, faceSqFtOfInventory, loadFinishingDefs, initFinishingEditor } from '../../services/finishing-products.js?v=20261124-1';   // moved out 2026-10-30 so the weekly's week print shares the ticket code
 import { invHash as invHashShared, invFingerprintRows, invColourFingerprintRows } from '../../services/inventory-marks.js';
 import { loadMilestonesForProject, saveMilestone, isMilestonesMigrationPending, loadLayoutConditions, loadLayoutConditionsForCastings, LAYOUT_CONDITION_PREFIX, layoutConditionNote, parseLayoutCondition, sideWords } from '../../services/milestones-service.js';
 import { loadJigListsForProject as loadJigListsForScrim, scrimForInventory } from '../../services/jig-list-service.js?v=20261112-1';
@@ -11850,6 +11850,9 @@ async function ensureJigListsForScrim() {
 }
 /** The scrim line for a casting: face sq ft from the Casting Inventory × scrim layers from the Jig List cross-section. */
 /** Finishing & sealing products for the casting's finished face, off its colour logs' notes (2026-11-06). */
+// 2026-11-24: products and rates are defined in the portal (one shared settings row, read on every opening of the
+// tab); the block's own buttons open the rate pop-up, and a saved rate redraws the totals.
+initFinishingEditor({ onChange: () => renderBatchTicketsContent(), toast: (msg, kind) => showToast(msg, kind, 5000) });
 function finishingLineHtml(casting, entries, day = null) {
     if (!casting) return '';
     const logs = [];
@@ -11868,7 +11871,7 @@ function scrimLineHtml(casting, day = null) {
 }
 async function activateBatchTicketsTab() {
     if (currentProjectNumber) syncCastDatesWithWeekly();   // runs alongside; redraws when the weekly answers
-    await ensureJigListsForScrim();
+    await Promise.all([ensureJigListsForScrim(), loadFinishingDefs()]);
     const needsSave    = document.getElementById('pp-bt-needs-save');
     const needsCL      = document.getElementById('pp-bt-needs-color-log');
     const noCastings   = document.getElementById('pp-bt-no-castings');
