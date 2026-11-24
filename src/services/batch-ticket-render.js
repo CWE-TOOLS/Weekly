@@ -686,7 +686,9 @@ export function planSignatureFor({ ticket, log, cuFt, faceSqFt }) {
         totalCuFt, faceSqFt: parseFloat(faceSqFt) || 0, cuFtPer250: parseFloat(ticket.cuFtPer250) || 4.28,
         castMethod: log?.castMethod || 'sprayUp', colorLogSandLbs: sandLbs, manualOverrides: btOverrides(ticket)
     });
-    return JSON.stringify([Math.round((plan.faceCuFt || 0) * 1000) / 1000, plan.batches.map(b => [b.batchSandLbs, b.type, Math.round(b.cuFt * 1000) / 1000])]);
+    // The batches only (2026-11-24): the face cu ft behind them is not compared - a Face Sq Ft change that leaves
+    // every batch as printed is no reprint (0383 T7, direct cast: 8 batches unchanged, yet the board stayed orange).
+    return JSON.stringify(plan.batches.map(b => [b.batchSandLbs, b.type, Math.round(b.cuFt * 1000) / 1000]));
 }
 
 /**

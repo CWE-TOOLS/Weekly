@@ -23,8 +23,8 @@ import { loadAllInventoryForProject } from '../../services/inventory-service.js'
 import { loadMilestonesForProjects, saveMilestone } from '../../services/milestones-service.js';
 import { MS, milestonesApply } from '../../config/milestones-config.js';
 import { getSpecialBatching } from '../../config/special-batching.js';
-import { buildTicketPages, batchTotalsRows, sumTotalsRows, renderTotalsTable, BATCH_PRINT_CSS, SLUMP_TARGET_DEFAULTS, clampSlumpTarget, staleVerdict, activeColorLogFor, leftOverTicket } from '../../services/batch-ticket-render.js?v=20261124-3';
-import { EARLY_PRINT_NOTE, invEarlyMarksRows, withInvMark, printRebase } from '../../services/inventory-marks.js?v=20261124-3';
+import { buildTicketPages, batchTotalsRows, sumTotalsRows, renderTotalsTable, BATCH_PRINT_CSS, SLUMP_TARGET_DEFAULTS, clampSlumpTarget, staleVerdict, activeColorLogFor, leftOverTicket } from '../../services/batch-ticket-render.js?v=20261124-4';
+import { EARLY_PRINT_NOTE, invEarlyMarksRows, withInvMark, printRebase } from '../../services/inventory-marks.js?v=20261124-4';
 import { escapeHtml } from '../../utils/security-utils.js';
 import { loadSettingRows } from '../../services/schedule-service.js';
 import { LAYOUT_DAYS_PREFIX, resolveLayoutDays, layoutDaysSplit, castDayDates, inventoryRowsOfDay, batchDaysStamp } from '../../utils/layout-days.js';

@@ -1357,7 +1357,9 @@ function staleDiffs(casting, ticket) {
 function planSignature(ticket, cuFt, faceSqFt) {
     const plan = planFor({ ...ticket, cuFt, faceSqFt });
     if (!plan) return 'none';
-    return JSON.stringify([roundSig(plan.faceCuFt || 0, 3), plan.batches.map(b => [b.batchSandLbs, b.type, roundSig(b.cuFt, 3)])]);
+    // The batches only (2026-11-24): the face cu ft behind them is not compared - a Face Sq Ft change that leaves
+    // every batch as printed is no reprint (0383 T7, direct cast: 8 batches unchanged, yet the board stayed orange).
+    return JSON.stringify(plan.batches.map(b => [b.batchSandLbs, b.type, roundSig(b.cuFt, 3)]));
 }
 /** Would this ticket print the same batches from the inventory as it is now? */
 function ticketSameAsInventory(casting, ticket, t) {
