@@ -45,3 +45,47 @@ export function invEarlyMarksRows(rows, milestone) {
 }
 
 export function withInvMark(note, marks) { return `${note || ''} [inv:${marks}]`; }
+
+/** Colour per type as the Final Tracking sheet shows it (2026-11-24): the set of type + color log pairs, order ignored. */
+export function invTypeColourFingerprintRows(rows) {
+    const list = [...new Set((rows || []).map(r => String(r.type || '').trim() + '|' + String(r.color_log_id || '')))].sort();
+    return invHash(list.join('\n')) + '-' + list.length;
+}
+
+/** A marker note with some of its values replaced, added or dropped (null): the new note, or null when nothing
+ *  changes or the note carries no marker. */
+export function markerWith(note, parts) {
+    const m = String(note || '').match(INV_MARK_RE);
+    if (!m) return null;
+    const list = m[1].split(';').filter(Boolean).map(x => { const i = x.indexOf('='); return i < 0 ? [x, ''] : [x.slice(0, i), x.slice(i + 1)]; });
+    let changed = false;
+    for (const [k, v] of Object.entries(parts || {})) {
+        const i = list.findIndex(x => x[0] === k);
+        if (v === null || v === undefined) { if (i >= 0) { list.splice(i, 1); changed = true; } }
+        else if (i < 0) { list.push([k, v]); changed = true; }
+        else if (list[i][1] !== v) { list[i][1] = v; changed = true; }
+    }
+    return changed ? withInvMark(String(note).replace(INV_MARK_RE, ''), list.map(x => x.join('=')).join(';')) : null;
+}
+
+/**
+ * A print made from a FINAL inventory (2026-11-24). The Casting Inventory row's marker holds, per print, the inventory
+ * that print was made from. This print now reflects the inventory as it is: its mark becomes the current fingerprint.
+ * Returns the row's new note, or null when the mark is already right (the usual case: nothing changed since).
+ * Batch tickets also carry the colour set (bc); an older lock judges Final Tracking by that same value, so it is kept
+ * apart as fc before it moves. Final Tracking carries the colour per type (tc).
+ */
+export function printRebase(note, rows, milestone) {
+    const key = INV_MARK_KEYS[milestone];
+    const m = String(note || '').match(INV_MARK_RE);
+    if (!key || !m) return null;
+    const get = (k) => { const x = m[1].split(';').find(y => y.startsWith(k + '=')); return x ? x.slice(k.length + 1) : ''; };
+    const parts = { [key]: invFingerprintRows(rows, milestone) };
+    if (milestone === 'Batching Sheets') {
+        const bc = invColourFingerprintRows(rows);
+        if (!get('tc') && !get('fc') && get('bc') && get('bc') !== bc) parts.fc = get('bc');
+        parts.bc = bc;
+    }
+    if (milestone === 'Final Tracking') { parts.tc = invTypeColourFingerprintRows(rows); parts.fc = null; }
+    return markerWith(note, parts);
+}

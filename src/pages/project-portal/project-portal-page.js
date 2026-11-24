@@ -135,7 +135,7 @@ import { activateJigListTab } from './jig-list.js?v=20261124-2';
 import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, APPROVALS_TAB_ITEMS } from '../../config/milestones-config.js?v=20261119-1';
 import { SLUMP_TARGET_DEFAULTS, FINAL_BACKUP_PIG_REDUCTION_PCT, parsePigReduction, BT_IMPORT_META, btOverrides, btImportStamp, btStampDate, additiveAmount, batchTotalsRows, renderBatchTotals, clampSlumpTarget, formatSlumpLabel, renderSlumpGraphic, renderBatchTicketCard, BATCH_PRINT_CSS, leftOverTicket } from '../../services/batch-ticket-render.js?v=20261124-3';
 import { finishingProductsHtml, faceSqFtOfInventory, loadFinishingDefs, initFinishingEditor } from '../../services/finishing-products.js?v=20261124-2';   // moved out 2026-10-30 so the weekly's week print shares the ticket code
-import { invHash as invHashShared, invFingerprintRows, invColourFingerprintRows } from '../../services/inventory-marks.js';
+import { invHash as invHashShared, invFingerprintRows, invColourFingerprintRows, invTypeColourFingerprintRows, printRebase } from '../../services/inventory-marks.js?v=20261124-3';
 import { loadMilestonesForProject, saveMilestone, isMilestonesMigrationPending, loadLayoutConditions, loadLayoutConditionsForCastings, LAYOUT_CONDITION_PREFIX, layoutConditionNote, parseLayoutCondition, sideWords } from '../../services/milestones-service.js';
 import { loadJigListsForProject as loadJigListsForScrim, scrimForInventory, scrimForCastings } from '../../services/jig-list-service.js?v=20261124-2';
 import { loadReadyFlags, setReadyFlag, loadSettingRows, setSettingRow, loadScheduleForCastings, OPT_SCHEDULER_PREFIX } from '../../services/schedule-service.js?v=20261120-1';
@@ -5147,6 +5147,7 @@ function stampPrinted(castingIds, milestone) {
         // color log afterwards goes orange again (deriveColorLogMilestones).
         const colourNote = milestone === 'Color Log' && currentCastingInventoryLoadedFor === currentProjectNumber ? withInvMark('', 'cl=' + invColourSet(id)) : null;
         msSet(id, milestone, final ? MS.GREEN : MS.ORANGE, { note: final ? colourNote : withInvMark(EARLY_PRINT_NOTE, invEarlyMarks(id, milestone)), stamp: true });
+        if (final && CI_DEPENDENT.includes(milestone)) invRebaseAfterPrint(id, milestone);
     }
 }
 /** Batch tickets printed (2026-11-20). A casting split over its cast days is only green once EVERY day that casts
@@ -5248,7 +5249,57 @@ function invHash(s) { return invHashShared(s); }
 /** Fingerprint of the inventory as one print sees it: the sorted set of its rows' relevant fields (row order ignored, rows added/removed counted). */
 function invFingerprint(castingId, milestone) { return invFingerprintRows(getInventoryFor(castingId), milestone); }   // shared with the weekly's week print (2026-10-30)
 /** All per-print fingerprints as one marker body: b=…;l=…;t=…;c=…;j=… */
-function invMarks(castingId) { return CI_DEPENDENT.map(m => INV_MARK_KEYS[m] + '=' + invFingerprint(castingId, m)).join(';') + ';bc=' + invColourFingerprint(castingId) + ';tc=' + invTypeColourFingerprint(castingId); }
+// ---- Each print is compared with the inventory it was PRINTED from (2026-11-24) ----
+// user: "it turns orange ... stays orange until [it is] printed"; "I thought that this behavior is already programmed".
+// The marker used to be rewritten whole at every "Casting Inventory ready", so a print that was already out of date
+// (orange) was from then on compared with the NEW inventory, and the next unrelated edit turned it green without a
+// reprint. Now: an out-of-date print keeps its own mark across "ready" (keep: milestone -> is that mark still the
+// printed one?), a reprint from a final inventory moves it (invRebaseAfterPrint), and v=2 says the marker was
+// written under this rule. A mark that is no longer known becomes 'x': it matches nothing, only a reprint clears it.
+function invMarks(castingId, keep = null) {
+    const old = {};
+    for (const part of invMarks0(castingId).split(';')) { const i = part.indexOf('='); if (i > 0) old[part.slice(0, i)] = part.slice(i + 1); }
+    const kept = (m) => !!keep && keep.has(m);
+    const keptVal = (m, k) => (keep.get(m) && old[k]) ? old[k] : 'x';
+    const parts = CI_DEPENDENT.map(m => INV_MARK_KEYS[m] + '=' + (kept(m) ? keptVal(m, INV_MARK_KEYS[m]) : invFingerprint(castingId, m)));
+    parts.push('bc=' + (kept('Batching Sheets') ? keptVal('Batching Sheets', 'bc') : invColourFingerprint(castingId)));
+    const ftKnown = kept('Final Tracking') && keep.get('Final Tracking');
+    if (ftKnown && !old.tc && (old.fc || old.bc)) parts.push('fc=' + (old.fc || old.bc));     // an older lock: the colour set is all it recorded
+    else parts.push('tc=' + (ftKnown && old.tc ? old.tc : invTypeColourFingerprint(castingId)));
+    parts.push('v=2');
+    return parts.join(';');
+}
+/** The prints of a casting that are out of date right now (orange, "changed after this was printed"): milestone ->
+ *  true when the lock still holds the mark they were printed from. */
+function invOutOfDatePrints(castingId, reprint = null) {
+    const keep = new Map();
+    for (const m of CI_DEPENDENT) {
+        const r = msRow(castingId, m);
+        if (!r || r.status !== MS.ORANGE || r.note !== INV_CHANGED_NOTE) continue;
+        if (m === 'Batching Sheets' && reprint === 'same') continue;     // it turns green in a moment: its tickets come out the same
+        keep.set(m, invBaselineIsAsPrinted(castingId, r));
+    }
+    return keep;
+}
+/** Is the lock's mark for this out-of-date print still the inventory it was printed from? Always under v=2. A marker
+ *  from before: only when nothing was marked ready (or unlocked) after the print went orange. */
+function invBaselineIsAsPrinted(castingId, r) {
+    if (invMarkPart(castingId, 'v') === '2') return true;
+    const went = Date.parse(r?.updated_at || ''), since = Date.parse(msRow(castingId, 'Casting Inventory')?.stamped_at || '');
+    return Number.isFinite(went) && Number.isFinite(since) && went >= since;
+}
+/** A print made from a final inventory reflects the inventory as it is now: that is what it is compared with from
+ *  here on. Only writes when its mark really moves (it was out of date and has just been reprinted). */
+function invRebaseAfterPrint(castingId, milestone) {
+    const go = () => {
+        const r = msRow(castingId, 'Casting Inventory');
+        if (!r || currentCastingInventoryLoadedFor !== currentProjectNumber) return;
+        const note = printRebase(r.note, getInventoryFor(castingId), milestone);
+        if (note) msSet(castingId, 'Casting Inventory', r.status, { locked: !!r.locked, note });
+    };
+    if (currentCastingInventoryLoadedFor === currentProjectNumber) go();
+    else loadAllInventoryForCurrentProject().then(go).catch(err => logger.warn('[milestones] print mark not refreshed:', err));
+}
 // ---- Colour changes reach Final Tracking and the Color Log too (2026-11-24) ----
 // user: "link final tracking to color log changes. that tracking shows the color log per type ... and needs to be
 // reprinted if it changes"; "the color log changed for the casting, it turns orange ... stays orange until ... printed".
@@ -5257,10 +5308,7 @@ function invMarks(castingId) { return CI_DEPENDENT.map(m => INV_MARK_KEYS[m] + '
 // Color Log: its print stores the colours it was printed for on its own row ([inv:cl=...]); a light that went green
 // before that is compared with the colours this browser first loaded (invColourSeen).
 /** Colour per type as the Final Tracking sheet shows it: the set of type + color log pairs, order ignored. */
-function invTypeColourFingerprint(castingId) {
-    const list = [...new Set(getInventoryFor(castingId).map(r => String(r.type || '').trim() + '|' + String(r.color_log_id || '')))].sort();
-    return invHash(list.join('\n')) + '-' + list.length;
-}
+function invTypeColourFingerprint(castingId) { return invTypeColourFingerprintRows(getInventoryFor(castingId)); }   // shared with the print's own mark (inventory-marks.js)
 /** One value of the marker stored on the Casting Inventory row ('' when that lock predates it). */
 function invMarkPart(castingId, key) {
     const m = String(msRow(castingId, 'Casting Inventory')?.note || '').match(INV_MARK_RE);
@@ -5270,7 +5318,7 @@ function invMarkPart(castingId, key) {
 function invTrackingColoursAsPrinted(castingId) {
     const tc = invMarkPart(castingId, 'tc');
     if (tc) return tc === invTypeColourFingerprint(castingId);
-    const bc = invBaselineColour(castingId);
+    const bc = invMarkPart(castingId, 'fc') || invBaselineColour(castingId);   // fc: the colour set kept apart when the batch tickets were reprinted
     return !bc || bc === invColourFingerprint(castingId);
 }
 /** The color logs a casting's pieces use (blank ones left out), order ignored. */
@@ -5359,7 +5407,8 @@ function msInventoryChanged(castingId) {
         const asPrinted = !!base[m] && invFingerprint(castingId, m) === base[m]
             && (m !== 'Final Tracking' || invTrackingColoursAsPrinted(castingId));   // the sheet shows the colour of every type
         if (asPrinted) {
-            if (r.status === MS.ORANGE && r.note === INV_CHANGED_NOTE) msSet(castingId, m, MS.GREEN, { note: null });   // this print's fields are back as printed; the stamp stays
+            // this print's fields are back as printed; the stamp stays. Only when the mark really is the printed one.
+            if (r.status === MS.ORANGE && r.note === INV_CHANGED_NOTE && invBaselineIsAsPrinted(castingId, r)) msSet(castingId, m, MS.GREEN, { note: null });
         } else if (r.status === MS.GREEN && !String(r.note || '').startsWith(LAYOUT_CONDITION_PREFIX)) {
             msSet(castingId, m, MS.ORANGE, { note: INV_CHANGED_NOTE });
         }
@@ -5430,8 +5479,9 @@ async function ciPmReady(castingId) {
 async function ciAdvance(castingId) {
     if (ciStatus(castingId) !== MS.ORANGE) return;   // nothing entered yet, or already ready
     const reprint = await ciBatchReprintCheck(castingId);   // against the as-printed marks, before the new ones replace them
+    const keep = invOutOfDatePrints(castingId, reprint);     // before the marks move: these stay compared with what they were printed from
     const early = ciEarlyPrintsSettle(castingId);           // prints made through the hold: as printed → green, moved → stays orange
-    await msSet(castingId, 'Casting Inventory', MS.GREEN, { locked: true, note: withInvMark(CI_READY_NOTE, invMarks(castingId)), stamp: true });
+    await msSet(castingId, 'Casting Inventory', MS.GREEN, { locked: true, note: withInvMark(CI_READY_NOTE, invMarks(castingId, keep)), stamp: true });
     invEdits.clear();
     ciBatchReprintReport(castingId, reprint);
     ciEarlyPrintsReport(castingId, early);
@@ -5489,7 +5539,7 @@ function ciBatchReprintReport(castingId, verdict) {
 }
 async function ciUnlock(castingId) {
     // Keep the ready inventory's fingerprint (older locks have none: the inventory as it is now becomes the baseline).
-    await msSet(castingId, 'Casting Inventory', MS.ORANGE, { locked: false, note: withInvMark(CI_UNLOCKED_NOTE, Object.keys(invBaselines(castingId)).length ? invMarks0(castingId) : invMarks(castingId)), stamp: true });
+    await msSet(castingId, 'Casting Inventory', MS.ORANGE, { locked: false, note: withInvMark(CI_UNLOCKED_NOTE, Object.keys(invBaselines(castingId)).length ? invMarks0(castingId) : invMarks(castingId, invOutOfDatePrints(castingId))), stamp: true });
     renderCastings();
 }
 /** The two buttons of the Casting Inventory box. attr: 'data-action' (casting card) or 'data-ms' (floating box). */

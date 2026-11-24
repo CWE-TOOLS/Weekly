@@ -24,7 +24,7 @@ import { loadMilestonesForProjects, saveMilestone } from '../../services/milesto
 import { MS, milestonesApply } from '../../config/milestones-config.js';
 import { getSpecialBatching } from '../../config/special-batching.js';
 import { buildTicketPages, batchTotalsRows, sumTotalsRows, renderTotalsTable, BATCH_PRINT_CSS, SLUMP_TARGET_DEFAULTS, clampSlumpTarget, staleVerdict, activeColorLogFor, leftOverTicket } from '../../services/batch-ticket-render.js?v=20261124-3';
-import { EARLY_PRINT_NOTE, invEarlyMarksRows, withInvMark } from '../../services/inventory-marks.js';
+import { EARLY_PRINT_NOTE, invEarlyMarksRows, withInvMark, printRebase } from '../../services/inventory-marks.js?v=20261124-3';
 import { escapeHtml } from '../../utils/security-utils.js';
 import { loadSettingRows } from '../../services/schedule-service.js';
 import { LAYOUT_DAYS_PREFIX, resolveLayoutDays, layoutDaysSplit, castDayDates, inventoryRowsOfDay, batchDaysStamp } from '../../utils/layout-days.js';
@@ -334,6 +334,11 @@ async function stampPrinted() {
                 stampedAt: now
             });
             n++;
+            // Printed from a final inventory: these tickets are what the lock compares with from here on (2026-11-24;
+            // the same as the portal's own print). Only written when the tickets were out of date before this print.
+            const ci = r.ciFinal ? S.ms?.byCasting.get(r.casting.id)?.get('Casting Inventory') : null;
+            const ciNote = ci ? printRebase(ci.note, r.invRows, 'Batching Sheets') : null;
+            if (ciNote) await saveMilestone({ projectNumber: r.projectNumber, castingId: r.casting.id, milestone: 'Casting Inventory', status: ci.status, locked: !!ci.locked, note: ciNote, stampedAt: ci.stamped_at ?? null });
         } catch (err) { logger.error('[week-batch] stamp failed', r.projectNumber, r.castingNumber, err); }
     }
     $('wb-status').textContent = n ? `Printed — "Batching Sheets" stamped on the board for ${n} casting${n === 1 ? '' : 's'}.` : 'Printed.';
