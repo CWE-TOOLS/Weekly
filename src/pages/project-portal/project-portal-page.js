@@ -135,7 +135,7 @@ import { activateJigListTab } from './jig-list.js?v=20261124-2';
 import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, APPROVALS_TAB_ITEMS } from '../../config/milestones-config.js?v=20261119-1';
 import { SLUMP_TARGET_DEFAULTS, FINAL_BACKUP_PIG_REDUCTION_PCT, parsePigReduction, BT_IMPORT_META, btOverrides, btImportStamp, btStampDate, additiveAmount, batchTotalsRows, renderBatchTotals, clampSlumpTarget, formatSlumpLabel, renderSlumpGraphic, renderBatchTicketCard, BATCH_PRINT_CSS, leftOverTicket } from '../../services/batch-ticket-render.js?v=20261125-1';
 import { finishingProductsHtml, faceSqFtOfInventory, loadFinishingDefs, initFinishingEditor } from '../../services/finishing-products.js?v=20261124-2';   // moved out 2026-10-30 so the weekly's week print shares the ticket code
-import { loadBatchRules, saveBatchRules, rulesSizing, rulesPigReduction, drawBatchRulesPanel, setBatchRulesStatus, updateBatchRulesFloat } from '../../services/batch-rules.js?v=20261125-1';   // job batching rules (2026-11-25)
+import { loadBatchRules, saveBatchRules, rulesSizing, rulesPigReduction, drawBatchRulesPanel, setBatchRulesStatus, updateBatchRulesFloat } from '../../services/batch-rules.js?v=20261125-2';   // job batching rules (2026-11-25)
 import { invHash as invHashShared, invFingerprintRows, invColourFingerprintRows, invTypeColourFingerprintRows, printRebase } from '../../services/inventory-marks.js?v=20261124-4';
 import { loadMilestonesForProject, saveMilestone, isMilestonesMigrationPending, loadLayoutConditions, loadLayoutConditionsForCastings, LAYOUT_CONDITION_PREFIX, layoutConditionNote, parseLayoutCondition, sideWords } from '../../services/milestones-service.js';
 import { loadJigListsForProject as loadJigListsForScrim, scrimForInventory, scrimForCastings } from '../../services/jig-list-service.js?v=20261124-2';
@@ -342,7 +342,7 @@ function invReviewListHtml() {
 // ---- Floating "changes to review" box on the Castings tab: there as soon as a field is marked, stays
 // put while scrolling, so the marks can be accepted or rejected without leaving the tab.
 // ---- Room for a floating box (2026-11-06): while any right-side box shows, the page content moves left to clear it ----
-const FLOAT_BOX_IDS = ['pp-clay-float', 'pp-inv-float', 'pp-bt-stale-float', 'pp-bt-casts-float'];
+const FLOAT_BOX_IDS = ['pp-clay-float', 'pp-inv-float', 'pp-bt-stale-float', 'pp-bt-casts-float', 'pp-btr-float'];
 let floatShiftTimer = 0;
 function syncFloatShift() {
     const open = FLOAT_BOX_IDS.some(id => { const el = document.getElementById(id); return !!el && !el.hidden; });
@@ -12038,18 +12038,18 @@ function handleBatchRulesChange(next) {
     if (!pn) return;
     currentBatchRules = next; batchRulesFor = pn;
     renderBatchTickets();
+    renderBatchRulesPanel();   // the change may have come from the floating copy: the panel on the page follows
     updateFloats();
-    const el = document.getElementById('pp-bt-rules');
-    setBatchRulesStatus(el, 'Saving\u2026');
+    btRulesStatus('Saving\u2026');
     if (batchRulesSaveTimer) clearTimeout(batchRulesSaveTimer);
     batchRulesSaveTimer = setTimeout(async () => {
         batchRulesSaveTimer = null;
         try {
             await saveBatchRules(pn, next);
-            if (pn === currentProjectNumber) setBatchRulesStatus(el, 'Saved');
+            if (pn === currentProjectNumber) btRulesStatus('Saved');
         } catch (err) {
             logger.error('[batch-rules] save failed', err);
-            if (pn === currentProjectNumber) setBatchRulesStatus(el, 'NOT saved', true);
+            if (pn === currentProjectNumber) btRulesStatus('NOT saved', true);
             showToast('The Job Batching change could not be saved. It shows here but will be gone after a reload.', 'error', 10000);
         }
     }, 500);
@@ -12059,9 +12059,30 @@ function handleBatchRulesChange(next) {
         if (printed.length) showToast(`Job batching changed. Batch tickets were already printed for ${printed.length === 1 ? 'cast' : 'casts'} ${printed.slice(0, 12).join(', ')}${printed.length > 12 ? ' and more' : ''}: check them and print again where the batches changed.`, 'warning', 14000);
     }
 }
+/** Saving / Saved, on the panel and on its floating copy. */
+function btRulesStatus(text, isError = false) {
+    for (const id of ['pp-bt-rules', 'pp-btr-float']) {
+        const el = document.getElementById(id);
+        if (el && !isError && el.querySelector('.pp-btr-bad')) continue;   // a red cell there is still waiting: its own note stays
+        setBatchRulesStatus(el, text, isError);
+    }
+}
+/** The Job Batching panel floats in the right column, under the out-of-date box and the Castings box, once the real
+ *  one has scrolled away above the header (2026-11-25). Stays while a cell in it has the cursor. */
 function updateRulesFloat() {
-    const show = currentTab === 'batch-tickets' && !formViewHidden() && !!currentProjectNumber && !getSpecialBatching(currentProjectNumber);
-    updateBatchRulesFloat(show ? btRules() : null, show, () => document.getElementById('pp-bt-rules')?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+    const panel = document.getElementById('pp-bt-rules');
+    const allowed = currentTab === 'batch-tickets' && !formViewHidden() && !!currentProjectNumber && !getSpecialBatching(currentProjectNumber)
+        && !!panel && !panel.hidden && batchRulesFor === currentProjectNumber;
+    const box = document.getElementById('pp-btr-float');
+    const show = allowed && (panel.getBoundingClientRect().bottom < headerBottom() + 4 || (!!box && !box.hidden && box.contains(document.activeElement)));
+    const above = [castsFloatEl, staleFloatEl].find(el => el && !el.hidden);
+    updateBatchRulesFloat({
+        show, rules: show ? btRules() : null,
+        top: above ? above.getBoundingClientRect().bottom + 8 : msTopOffset() + 12,
+        onChange: handleBatchRulesChange,
+        onShow: () => { const p = document.getElementById('pp-bt-rules'); if (p) window.scrollTo({ top: window.scrollY + p.getBoundingClientRect().top - headerBottom() - 12, behavior: 'smooth' }); }
+    });
+    syncFloatShift();
 }
 
 let btTotalsScope = 'day';

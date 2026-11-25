@@ -190,11 +190,23 @@ const CSS = `
 .pp-btr-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; margin-top: 10px; font-size: 11.5px; color: #64748b; }
 .pp-btr-reset { font: inherit; font-size: 12px; font-weight: 700; padding: 4px 10px; border: 1px solid #94a3b8; border-radius: 6px; background: #fff; color: #334155; cursor: pointer; }
 .pp-btr-reset:hover { background: #f1f5f9; }
-.pp-btr-float { position: fixed; left: 16px; bottom: 44px; z-index: 58; max-width: min(360px, calc(100vw - 32px)); padding: 10px 14px; border: 2px solid #d97706; border-radius: 10px; background: #fffbeb; color: #0f172a; box-shadow: 0 10px 30px rgba(180, 83, 9, 0.35); cursor: pointer; font-size: 12px; line-height: 1.35; }
+.pp-btr-show { font: inherit; font-size: 12px; font-weight: 700; padding: 0; border: none; background: none; color: #334155; text-decoration: underline; cursor: pointer; }
+.pp-btr-special .pp-btr-show { color: #92400e; }
+/* the floating copy: right column, under the out-of-date box and the Castings box (same 320 px bubble) */
+.pp-btr-float { position: fixed; right: 16px; width: 320px; max-width: calc(100vw - 32px); z-index: 60; margin: 0; padding: 10px 12px; border: 2px solid #cbd5e1; border-radius: 8px; box-sizing: border-box; overflow: auto; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18); }
+.pp-btr-float.pp-btr-special { box-shadow: 0 10px 30px rgba(180, 83, 9, 0.35); }
 .pp-btr-float[hidden] { display: none; }
-.pp-btr-float-title { font-size: 14px; font-weight: 900; letter-spacing: 0.04em; color: #b45309; margin-bottom: 3px; }
-.pp-btr-float-line b { font-weight: 800; }
-.pp-btr-float-foot { margin-top: 4px; color: #92400e; font-size: 11px; text-decoration: underline; }
+.pp-btr-float .pp-btr-head { margin-bottom: 6px; }
+.pp-btr-float .pp-btr-sub, .pp-btr-float .pp-btr-hint, .pp-btr-float .pp-btr-foot-text { display: none; }
+.pp-btr-float .pp-btr-title { font-size: 11px; letter-spacing: 0.06em; color: #64748b; }
+.pp-btr-float.pp-btr-special .pp-btr-title { color: #b45309; }
+.pp-btr-float .pp-btr-status { min-width: 0; }
+.pp-btr-float .pp-btr-grid { grid-template-columns: 1fr; gap: 7px; }
+.pp-btr-float .pp-btr-label { font-size: 10.5px; }
+.pp-btr-float .pp-btr-field input, .pp-btr-float .pp-btr-field select { padding: 4px 7px; }
+.pp-btr-float .pp-btr-more { margin-top: 8px; }
+.pp-btr-float .pp-btr-more > summary { font-size: 11.5px; margin-bottom: 6px; }
+.pp-btr-float .pp-btr-foot { margin-top: 8px; }
 @media print { .pp-btr, .pp-btr-float { display: none !important; } }
 `;
 function ensureCss() {
@@ -206,12 +218,13 @@ function ensureCss() {
 }
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-function panelHtml(rules) {
+function panelHtml(rules, { compact = false, open = false } = {}) {
     const r = rules || {};
     const set = (on) => (on ? ' class="pp-btr-set"' : '');
-    const field = (label, control, hint) => `<label class="pp-btr-field"><span class="pp-btr-label">${label}</span>${control}<span class="pp-btr-msg" hidden></span><span class="pp-btr-hint">${hint}</span></label>`;
+    // the hint is also the hover text: the floating copy has no room to print it
+    const field = (label, control, hint) => `<label class="pp-btr-field" title="${esc(String(hint).replace(/<[^>]+>/g, ''))}"><span class="pp-btr-label">${label}</span>${control}<span class="pp-btr-msg" hidden></span><span class="pp-btr-hint">${hint}</span></label>`;
     const sel = (key, value, options) => `<select data-btr="${key}"${set(!!value)}>${options.map(([v, t]) => `<option value="${v}"${v === (value || '') ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select>`;
-    const more = !!(r.faceThicknessIn || r.backupLayers || r.pigReduction != null || r.backupAdvaOz != null || r.noCowbay || r.omitAggBackups);
+    const more = open || !!(r.faceThicknessIn || r.backupLayers || r.pigReduction != null || r.backupAdvaOz != null || r.noCowbay || r.omitAggBackups);
     return `
         <div class="pp-btr-head">
             <span class="pp-btr-title">Job Batching</span>
@@ -226,7 +239,7 @@ function panelHtml(rules) {
                 'Typical: <b>250, 150, 100</b>. First and FINAL Back Up batches.')}
         </div>
         <details class="pp-btr-more"${more ? ' open' : ''}>
-            <summary>More job conditions (face thickness, layers, pigment, ADVA, Cowbay, aggregate)</summary>
+            <summary>${compact ? 'More job conditions' : 'More job conditions (face thickness, layers, pigment, ADVA, Cowbay, aggregate)'}</summary>
             <div class="pp-btr-grid">
                 ${field('Face Mix thickness (in)', `<input type="text" data-btr="faceThicknessIn" value="${esc(r.faceThicknessIn ? formatInches(r.faceThicknessIn) : '')}" placeholder="3/16"${set(!!r.faceThicknessIn)}>`,
                     'Typical: <b>3/16</b>. How thick the Face Mix is planned over the Face Sq Ft. Fractions or decimals.')}
@@ -244,7 +257,8 @@ function panelHtml(rules) {
         </details>
         <div class="pp-btr-foot">
             <button type="button" class="pp-btr-reset" data-btr-reset${rules ? '' : ' hidden'}>Back to typical batching</button>
-            <span>Applies to every casting of this job: the tickets here, the batch counts on the weekly and the week batch print.</span>
+            ${compact ? '<button type="button" class="pp-btr-show" data-btr-show>Show me</button>' : ''}
+            <span class="pp-btr-foot-text">Applies to every casting of this job: the tickets here, the batch counts on the weekly and the week batch print.</span>
         </div>`;
 }
 
@@ -285,13 +299,15 @@ function readPanel(el) {
  * @param {HTMLElement} el
  * @param {Object|null} rules - the job's rules as loaded
  * @param {(rules: Object|null) => void} onChange - a cell changed and every cell reads fine (the caller saves + redraws)
+ * @param {{compact?: boolean}} [opts] - compact: the floating copy (no printed hints, a Show me link)
  */
-export function drawBatchRulesPanel(el, rules, onChange) {
+export function drawBatchRulesPanel(el, rules, onChange, opts = {}) {
     if (!el) return;
     ensureCss();
     el.classList.add('pp-btr');
     el.classList.toggle('pp-btr-special', !!rules);
-    el.innerHTML = panelHtml(rules);
+    const open = !!el.querySelector('.pp-btr-more')?.open;   // a fold someone opened stays open across a redraw
+    el.innerHTML = panelHtml(rules, { compact: !!opts.compact, open });
     if (el.dataset.btrWired) { el.__btrChange = onChange; return; }
     el.dataset.btrWired = '1';
     el.__btrChange = onChange;
@@ -324,26 +340,33 @@ export function setBatchRulesStatus(el, text, isError = false) {
 }
 
 let floatEl = null;
-/** The floating marker: shown while `show` and the job has rules. Click = `onClick` (scroll to the panel). */
-export function updateBatchRulesFloat(rules, show, onClick) {
-    const lines = show ? batchRulesLines(rules) : [];
-    if (!lines.length) { if (floatEl) floatEl.hidden = true; return; }
+/**
+ * The floating copy of the Job Batching panel (2026-11-25, user: "make this whole section a floating bubble when
+ * scrolling, just like the other bubbles, under the ones that are already there"). Same cells, same saving: the page
+ * shows it while the real panel is scrolled out of sight.
+ * @param {{show: boolean, rules?: Object|null, top?: number, onChange?: Function, onShow?: Function}} o
+ * @returns {boolean} whether the box is showing
+ */
+export function updateBatchRulesFloat({ show, rules = null, top = 0, onChange, onShow } = {}) {
+    if (!show) { if (floatEl) floatEl.hidden = true; return false; }
     ensureCss();
     if (!floatEl) {
         floatEl = document.createElement('div');
         floatEl.id = 'pp-btr-float';
         floatEl.className = 'pp-btr-float';
-        floatEl.setAttribute('role', 'note');
         document.body.appendChild(floatEl);
-        floatEl.addEventListener('click', () => floatEl.__click?.());
+        floatEl.addEventListener('click', (e) => { if (e.target.closest('[data-btr-show]')) floatEl.__show?.(); });
     }
-    floatEl.__click = onClick;
-    const key = JSON.stringify(lines);
-    if (floatEl.dataset.key !== key) {
-        floatEl.innerHTML = `<div class="pp-btr-float-title">&#9888; SPECIAL BATCHING</div>`
-            + lines.map(l => `<div class="pp-btr-float-line">${esc(l.label)}: <b>${esc(l.text)}</b></div>`).join('')
-            + `<div class="pp-btr-float-foot">Set under Job Batching at the top of this tab</div>`;
+    floatEl.__show = onShow;
+    const key = JSON.stringify(rules || null);
+    // never redraw under someone's hands: a cell in it has the cursor, or the mouse is on it (a click about to land)
+    const busy = !floatEl.hidden && floatEl.dataset.key !== undefined && (floatEl.contains(document.activeElement) || floatEl.matches(':hover'));
+    if (floatEl.dataset.key !== key && !busy) {
+        drawBatchRulesPanel(floatEl, rules, onChange, { compact: true });
         floatEl.dataset.key = key;
-    }
+    } else floatEl.__btrChange = onChange;
+    floatEl.style.top = Math.round(top) + 'px';
+    floatEl.style.maxHeight = `calc(100vh - ${Math.round(top) + 12}px)`;
     floatEl.hidden = false;
+    return true;
 }
