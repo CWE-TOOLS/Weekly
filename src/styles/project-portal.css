@@ -4273,6 +4273,14 @@ body.pp-printing .pp-tab-panel[data-panel="color-log"] { display: none !importan
     box-shadow: 0 0 0 2px rgba(234, 88, 12, 0.15);
 }
 .pp-bt-slump-unit { font-size: 13px; font-weight: 700; color: #64748b; }
+/* Target Slump as a floating bubble (2026-11-25): right column, under the Castings box, above the Job Batching bubble */
+.pp-bt-slump-float { position: fixed; right: 16px; width: 320px; max-width: calc(100vw - 32px); z-index: 60; box-sizing: border-box; padding: 8px 12px; gap: 6px 12px; border-width: 2px; border-radius: 8px; box-shadow: 0 10px 30px rgba(154, 52, 18, 0.22); }
+.pp-bt-slump-float[hidden] { display: none; }
+.pp-bt-slump-float .pp-bt-slump-targets-head { flex-direction: row; align-items: baseline; flex-wrap: wrap; gap: 2px 8px; width: 100%; margin: 0; }
+.pp-bt-slump-float .pp-bt-slump-targets-title { font-size: 11px; letter-spacing: 0.06em; }
+.pp-bt-slump-float .pp-bt-slump-targets-fields { gap: 6px 12px; }
+.pp-bt-slump-float .pp-bt-slump-target { font-size: 10.5px; }
+@media print { .pp-bt-slump-float { display: none !important; } }
 
 .pp-bt-pills {
     display: flex;

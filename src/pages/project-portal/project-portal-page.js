@@ -342,7 +342,7 @@ function invReviewListHtml() {
 // ---- Floating "changes to review" box on the Castings tab: there as soon as a field is marked, stays
 // put while scrolling, so the marks can be accepted or rejected without leaving the tab.
 // ---- Room for a floating box (2026-11-06): while any right-side box shows, the page content moves left to clear it ----
-const FLOAT_BOX_IDS = ['pp-clay-float', 'pp-inv-float', 'pp-bt-stale-float', 'pp-bt-casts-float', 'pp-btr-float'];
+const FLOAT_BOX_IDS = ['pp-clay-float', 'pp-inv-float', 'pp-bt-stale-float', 'pp-bt-casts-float', 'pp-bt-slump-float', 'pp-btr-float'];
 let floatShiftTimer = 0;
 function syncFloatShift() {
     const open = FLOAT_BOX_IDS.some(id => { const el = document.getElementById(id); return !!el && !el.hidden; });
@@ -12100,12 +12100,47 @@ function updateRulesFloat() {
         && !!panel && !panel.hidden && batchRulesFor === currentProjectNumber;
     const box = document.getElementById('pp-btr-float');
     const show = allowed && (panel.getBoundingClientRect().bottom < headerBottom() + 4 || (!!box && !box.hidden && box.contains(document.activeElement)));
-    const above = [castsFloatEl, staleFloatEl].find(el => el && !el.hidden);
+    const above = [slumpFloatEl, castsFloatEl, staleFloatEl].find(el => el && !el.hidden);
     updateBatchRulesFloat({
         show, rules: show ? btRules() : null, presets: currentBatchPresets,
         top: above ? above.getBoundingClientRect().bottom + 8 : msTopOffset() + 12,
         onChange: handleBatchRulesChange
     });
+    syncFloatShift();
+}
+
+// ---- Target Slump bubble (2026-11-25, user: "add the slump inputs as a bubble too") ----
+// The three project-wide slump targets float in the right column, under the Castings box and above the Job Batching
+// bubble, once the Target Slump panel has scrolled away. Same values, same saving (handleSlumpTargetInput).
+let slumpFloatEl = null;
+const SLUMP_FLOAT_FIELDS = [['face', 'Face Mix', 'pp-bt-slump-face'], ['firstBackUp', 'First Back Up', 'pp-bt-slump-first'], ['finalBackUp', 'FINAL Back Up', 'pp-bt-slump-final']];
+function updateSlumpFloat() {
+    const panel = document.getElementById('pp-bt-slump-targets');
+    const allowed = currentTab === 'batch-tickets' && !formViewHidden() && !!panel && !panel.hidden;
+    const typing = !!slumpFloatEl && !slumpFloatEl.hidden && slumpFloatEl.contains(document.activeElement);
+    const show = allowed && (panel.getBoundingClientRect().bottom < headerBottom() + 4 || typing);
+    if (!show) { if (slumpFloatEl) slumpFloatEl.hidden = true; syncFloatShift(); return; }
+    if (!slumpFloatEl) {
+        slumpFloatEl = document.createElement('div');
+        slumpFloatEl.id = 'pp-bt-slump-float';
+        slumpFloatEl.className = 'pp-bt-slump-targets pp-bt-slump-float';
+        slumpFloatEl.innerHTML = `<div class="pp-bt-slump-targets-head"><span class="pp-bt-slump-targets-title">Target Slump</span><span class="pp-bt-slump-targets-sub">project-wide · inches of spread</span></div>
+            <div class="pp-bt-slump-targets-fields">${SLUMP_FLOAT_FIELDS.map(([key, label]) =>
+                `<label class="pp-bt-slump-target"><span class="pp-bt-slump-target-label">${label}</span><span class="pp-bt-slump-target-input"><input type="number" data-slump-key="${key}" min="1" max="10" step="0.25" placeholder="5"><span class="pp-bt-slump-unit">&Prime;</span></span></label>`).join('')}</div>`;
+        document.body.appendChild(slumpFloatEl);
+        slumpFloatEl.addEventListener('input', (e) => {
+            const t = e.target.closest('[data-slump-key]');
+            if (!t) return;
+            const field = SLUMP_FLOAT_FIELDS.find(f => f[0] === t.dataset.slumpKey);
+            const twin = field && document.getElementById(field[2]);
+            if (twin) twin.value = t.value;   // the cell on the page shows the same typing
+            handleSlumpTargetInput(t.dataset.slumpKey, t.value);
+        });
+    }
+    if (!typing) for (const input of slumpFloatEl.querySelectorAll('[data-slump-key]')) input.value = currentSlumpTargets[input.dataset.slumpKey];
+    const above = [castsFloatEl, staleFloatEl].find(el => el && !el.hidden);
+    slumpFloatEl.style.top = Math.round(above ? above.getBoundingClientRect().bottom + 8 : msTopOffset() + 12) + 'px';
+    slumpFloatEl.hidden = false;
     syncFloatShift();
 }
 
@@ -12521,7 +12556,7 @@ function updateCastsFloat() {
     castsFloatEl.hidden = false;
     syncFloatShift();
 }
-function updateFloats() { updateStaleFloat(); updateCastsFloat(); updateMsFloat(); updateRulesFloat(); }
+function updateFloats() { updateStaleFloat(); updateCastsFloat(); updateMsFloat(); updateSlumpFloat(); updateRulesFloat(); }
 
 /** Where the inline warning sits on screen (and what it says), or null when none is showing. */
 function formViewHidden() { const fv = document.getElementById('pp-form-view'); return !fv || fv.hidden; }
