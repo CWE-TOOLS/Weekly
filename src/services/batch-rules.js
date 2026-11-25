@@ -389,7 +389,7 @@ function panelHtml(rules, { compact = false, open = false, presets = [], onSaveP
         </details>
         <div class="pp-btr-foot">
             <button type="button" class="pp-btr-reset" data-btr-reset${rules ? '' : ' hidden'}>Back to typical batching</button>
-            ${compact ? '<button type="button" class="pp-btr-show" data-btr-collapse>Collapse</button><button type="button" class="pp-btr-show" data-btr-show>Show me</button>' : ''}
+            ${compact ? '<button type="button" class="pp-btr-show" data-btr-collapse>Collapse</button>' : ''}
             <span class="pp-btr-foot-text">Applies to every casting of this job: the tickets here, the batch counts on the weekly and the week batch print.</span>
         </div>`;
 }
@@ -432,7 +432,7 @@ function readPanel(el) {
  * @param {Object|null} rules - the job's rules as loaded
  * @param {(rules: Object|null) => void} onChange - a cell changed and every cell reads fine (the caller saves + redraws)
  * @param {{compact?: boolean, presets?: Array, onSavePreset?: Function, onDeletePreset?: Function}} [opts] - compact:
- *        the floating copy (no printed hints, a Show me link); presets: the list for the Preset picker;
+ *        the floating copy (no printed hints, a Collapse link); presets: the list for the Preset picker;
  *        onSavePreset(name, rules) / onDeletePreset(name): the page saves and redraws
  */
 export function drawBatchRulesPanel(el, rules, onChange, opts = {}) {
@@ -524,7 +524,6 @@ function collapsedHtml(rules, presets) {
         </div>${sum}
         <div class="pp-btr-foot">
             <button type="button" class="pp-btr-show" data-btr-expand>Expand</button>
-            <button type="button" class="pp-btr-show" data-btr-show>Show me</button>
         </div>`;
 }
 function drawFloat() {
@@ -544,10 +543,10 @@ function drawFloat() {
  * scrolling, just like the other bubbles, under the ones that are already there"; then: "as a bubble, it can be
  * collapsed ... add an expand option"). Folded: what the job is set to, at a glance. Expanded: the same cells, the
  * same saving. The page shows it while the real panel is scrolled out of sight.
- * @param {{show: boolean, rules?: Object|null, presets?: Array, top?: number, onChange?: Function, onShow?: Function}} o
+ * @param {{show: boolean, rules?: Object|null, presets?: Array, top?: number, onChange?: Function}} o
  * @returns {boolean} whether the box is showing
  */
-export function updateBatchRulesFloat({ show, rules = null, presets = [], top = 0, onChange, onShow } = {}) {
+export function updateBatchRulesFloat({ show, rules = null, presets = [], top = 0, onChange } = {}) {
     if (!show) { if (floatEl) floatEl.hidden = true; return false; }
     ensureCss();
     if (!floatEl) {
@@ -556,12 +555,10 @@ export function updateBatchRulesFloat({ show, rules = null, presets = [], top = 
         floatEl.className = 'pp-btr-float';
         document.body.appendChild(floatEl);
         floatEl.addEventListener('click', (e) => {
-            if (e.target.closest('[data-btr-show]')) { floatEl.__show?.(); return; }
             const fold = e.target.closest('[data-btr-expand], [data-btr-collapse]');
             if (fold) { floatExpanded = fold.hasAttribute('data-btr-expand'); drawFloat(); }
         });
     }
-    floatEl.__show = onShow;
     const key = (floatExpanded ? 'open|' : 'folded|') + JSON.stringify(rules || null) + '|' + presets.map(p => p.name + rulesSignature(p.rules)).join(';');
     floatLast = { rules, presets, onChange, key };
     // expanded: never redraw under someone's hands - a cell in it has the cursor, or the mouse is on it (a click about to land)

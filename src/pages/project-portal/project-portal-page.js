@@ -135,7 +135,7 @@ import { activateJigListTab } from './jig-list.js?v=20261124-2';
 import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, APPROVALS_TAB_ITEMS } from '../../config/milestones-config.js?v=20261119-1';
 import { SLUMP_TARGET_DEFAULTS, FINAL_BACKUP_PIG_REDUCTION_PCT, parsePigReduction, BT_IMPORT_META, btOverrides, btImportStamp, btStampDate, additiveAmount, batchTotalsRows, renderBatchTotals, clampSlumpTarget, formatSlumpLabel, renderSlumpGraphic, renderBatchTicketCard, BATCH_PRINT_CSS, leftOverTicket } from '../../services/batch-ticket-render.js?v=20261125-1';
 import { finishingProductsHtml, faceSqFtOfInventory, loadFinishingDefs, initFinishingEditor } from '../../services/finishing-products.js?v=20261124-2';   // moved out 2026-10-30 so the weekly's week print shares the ticket code
-import { loadBatchRules, saveBatchRules, rulesSizing, rulesPigReduction, drawBatchRulesPanel, setBatchRulesStatus, updateBatchRulesFloat, loadBatchPresets, saveBatchPreset, deleteBatchPreset } from '../../services/batch-rules.js?v=20261125-4';   // job batching rules (2026-11-25)
+import { loadBatchRules, saveBatchRules, rulesSizing, rulesPigReduction, drawBatchRulesPanel, setBatchRulesStatus, updateBatchRulesFloat, loadBatchPresets, saveBatchPreset, deleteBatchPreset } from '../../services/batch-rules.js?v=20261125-5';   // job batching rules (2026-11-25)
 import { invHash as invHashShared, invFingerprintRows, invColourFingerprintRows, invTypeColourFingerprintRows, printRebase } from '../../services/inventory-marks.js?v=20261124-4';
 import { loadMilestonesForProject, saveMilestone, isMilestonesMigrationPending, loadLayoutConditions, loadLayoutConditionsForCastings, LAYOUT_CONDITION_PREFIX, layoutConditionNote, parseLayoutCondition, sideWords } from '../../services/milestones-service.js';
 import { loadJigListsForProject as loadJigListsForScrim, scrimForInventory, scrimForCastings } from '../../services/jig-list-service.js?v=20261124-2';
@@ -12104,8 +12104,7 @@ function updateRulesFloat() {
     updateBatchRulesFloat({
         show, rules: show ? btRules() : null, presets: currentBatchPresets,
         top: above ? above.getBoundingClientRect().bottom + 8 : msTopOffset() + 12,
-        onChange: handleBatchRulesChange,
-        onShow: () => { const p = document.getElementById('pp-bt-rules'); if (p) window.scrollTo({ top: window.scrollY + p.getBoundingClientRect().top - headerBottom() - 12, behavior: 'smooth' }); }
+        onChange: handleBatchRulesChange
     });
     syncFloatShift();
 }
