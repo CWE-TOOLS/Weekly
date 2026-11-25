@@ -131,7 +131,7 @@ import {
 import { renderCastingLayout, computeLayoutRects, parseDimension, tableBlockRects, CASTING_AREAS } from './casting-layout.js?v=20261112-1';
 import { attachLayoutDrag } from './casting-layout-drag.js?v=20261120-1';
 import { LAYOUT_DAYS_PREFIX, normLayoutDays, resolveLayoutDays, layoutDayRows, layoutDaysEmpty, layoutDaysCanon, castDayDates, layoutDayOf, layoutDaysSplit, layoutDaySide, placeKeys, inventoryPieceRows, inventoryRowsOfDay, batchDaysStamp, batchDaysPrinted } from '../../utils/layout-days.js?v=20261120-7';
-import { REPAIR_KIT_PREFIX, REPAIR_KIT_LABEL, normRepairKit, repairKitStates, repairKitAfterClick, repairKitAfterPrint, repairKitToStore } from '../../utils/repair-kit.js?v=20261125-rk2';
+import { REPAIR_KIT_PREFIX, REPAIR_KIT_LABEL, normRepairKit, repairKitStates, repairKitAfterClick, repairKitAfterPrint, repairKitToStore } from '../../utils/repair-kit.js?v=20261125-7';
 import { activateJigListTab } from './jig-list.js?v=20261124-2';
 import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, APPROVALS_TAB_ITEMS } from '../../config/milestones-config.js?v=20261119-1';
 import { SLUMP_TARGET_DEFAULTS, FINAL_BACKUP_PIG_REDUCTION_PCT, parsePigReduction, BT_IMPORT_META, btOverrides, btImportStamp, btStampDate, additiveAmount, batchTotalsRows, renderBatchTotals, clampSlumpTarget, formatSlumpLabel, renderSlumpGraphic, renderBatchTicketCard, BATCH_PRINT_CSS, leftOverTicket } from '../../services/batch-ticket-render.js?v=20261125-1';
