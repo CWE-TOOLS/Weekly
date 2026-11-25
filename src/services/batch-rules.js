@@ -288,6 +288,9 @@ const CSS = `
 .pp-btr-float .pp-btr-more { margin-top: 8px; }
 .pp-btr-float .pp-btr-more > summary { font-size: 11.5px; margin-bottom: 6px; }
 .pp-btr-float .pp-btr-foot { margin-top: 8px; }
+.pp-btr-float.pp-btr-collapsed .pp-btr-head { margin-bottom: 0; }
+.pp-btr-float.pp-btr-collapsed .pp-btr-foot { margin-top: 5px; }
+.pp-btr-sum { margin-top: 5px; font-size: 12px; font-weight: 600; line-height: 1.35; color: #78350f; }
 @media print { .pp-btr, .pp-btr-float { display: none !important; } }
 `;
 function ensureCss() {
@@ -386,7 +389,7 @@ function panelHtml(rules, { compact = false, open = false, presets = [], onSaveP
         </details>
         <div class="pp-btr-foot">
             <button type="button" class="pp-btr-reset" data-btr-reset${rules ? '' : ' hidden'}>Back to typical batching</button>
-            ${compact ? '<button type="button" class="pp-btr-show" data-btr-show>Show me</button>' : ''}
+            ${compact ? '<button type="button" class="pp-btr-show" data-btr-collapse>Collapse</button><button type="button" class="pp-btr-show" data-btr-show>Show me</button>' : ''}
             <span class="pp-btr-foot-text">Applies to every casting of this job: the tickets here, the batch counts on the weekly and the week batch print.</span>
         </div>`;
 }
@@ -499,10 +502,48 @@ export function setBatchRulesStatus(el, text, isError = false) {
 }
 
 let floatEl = null;
+let floatExpanded = false;   // the bubble starts folded on every page load (user 2026-11-25: "not taking so much room")
+let floatLast = null;        // what the bubble was last asked to show
+
+/** The folded bubble: title, badge, and for a special job one line with its batch sizes. */
+function collapsedHtml(rules, presets) {
+    let sum = '';
+    if (rules) {
+        const bits = [];
+        if (rules.faceSizes) bits.push('Face ' + formatSizes(rules.faceSizes) + ' lb');
+        if (rules.backupSizes) bits.push('Back Up ' + formatSizes(rules.backupSizes) + ' lb');
+        const others = batchRulesLines(rules).length - bits.length;
+        if (others > 0) bits.push((bits.length ? '+ ' : '') + others + (bits.length ? ' more' : '') + (others === 1 ? ' condition' : ' conditions'));
+        sum = `<div class="pp-btr-sum">${esc(bits.join(' · '))}</div>`;
+    }
+    return `
+        <div class="pp-btr-head">
+            <span class="pp-btr-title">Job Batching</span>
+            <span class="pp-btr-badge">${esc(badgeText(rules, { presets }))}</span>
+            <span class="pp-btr-status" data-btr-status></span>
+        </div>${sum}
+        <div class="pp-btr-foot">
+            <button type="button" class="pp-btr-show" data-btr-expand>Expand</button>
+            <button type="button" class="pp-btr-show" data-btr-show>Show me</button>
+        </div>`;
+}
+function drawFloat() {
+    if (!floatEl || !floatLast) return;
+    const { rules, presets, onChange, key } = floatLast;
+    if (floatExpanded) drawBatchRulesPanel(floatEl, rules, onChange, { compact: true, presets });
+    else {
+        floatEl.classList.add('pp-btr');
+        floatEl.classList.toggle('pp-btr-special', !!rules);
+        floatEl.innerHTML = collapsedHtml(rules, presets);
+    }
+    floatEl.classList.toggle('pp-btr-collapsed', !floatExpanded);
+    floatEl.dataset.key = key;
+}
 /**
  * The floating copy of the Job Batching panel (2026-11-25, user: "make this whole section a floating bubble when
- * scrolling, just like the other bubbles, under the ones that are already there"). Same cells, same saving: the page
- * shows it while the real panel is scrolled out of sight.
+ * scrolling, just like the other bubbles, under the ones that are already there"; then: "as a bubble, it can be
+ * collapsed ... add an expand option"). Folded: what the job is set to, at a glance. Expanded: the same cells, the
+ * same saving. The page shows it while the real panel is scrolled out of sight.
  * @param {{show: boolean, rules?: Object|null, presets?: Array, top?: number, onChange?: Function, onShow?: Function}} o
  * @returns {boolean} whether the box is showing
  */
@@ -514,16 +555,19 @@ export function updateBatchRulesFloat({ show, rules = null, presets = [], top = 
         floatEl.id = 'pp-btr-float';
         floatEl.className = 'pp-btr-float';
         document.body.appendChild(floatEl);
-        floatEl.addEventListener('click', (e) => { if (e.target.closest('[data-btr-show]')) floatEl.__show?.(); });
+        floatEl.addEventListener('click', (e) => {
+            if (e.target.closest('[data-btr-show]')) { floatEl.__show?.(); return; }
+            const fold = e.target.closest('[data-btr-expand], [data-btr-collapse]');
+            if (fold) { floatExpanded = fold.hasAttribute('data-btr-expand'); drawFloat(); }
+        });
     }
     floatEl.__show = onShow;
-    const key = JSON.stringify(rules || null) + '|' + presets.map(p => p.name + rulesSignature(p.rules)).join(';');
-    // never redraw under someone's hands: a cell in it has the cursor, or the mouse is on it (a click about to land)
-    const busy = !floatEl.hidden && floatEl.dataset.key !== undefined && (floatEl.contains(document.activeElement) || floatEl.matches(':hover'));
-    if (floatEl.dataset.key !== key && !busy) {
-        drawBatchRulesPanel(floatEl, rules, onChange, { compact: true, presets });
-        floatEl.dataset.key = key;
-    } else { floatEl.__btrChange = onChange; floatEl.__btrOpts = { compact: true, presets }; }
+    const key = (floatExpanded ? 'open|' : 'folded|') + JSON.stringify(rules || null) + '|' + presets.map(p => p.name + rulesSignature(p.rules)).join(';');
+    floatLast = { rules, presets, onChange, key };
+    // expanded: never redraw under someone's hands - a cell in it has the cursor, or the mouse is on it (a click about to land)
+    const busy = floatExpanded && !floatEl.hidden && floatEl.dataset.key !== undefined && (floatEl.contains(document.activeElement) || floatEl.matches(':hover'));
+    if (floatEl.dataset.key !== key && !busy) drawFloat();
+    else { floatEl.__btrChange = onChange; floatEl.__btrOpts = { compact: true, presets }; }
     floatEl.style.top = Math.round(top) + 'px';
     floatEl.style.maxHeight = `calc(100vh - ${Math.round(top) + 12}px)`;
     floatEl.hidden = false;
