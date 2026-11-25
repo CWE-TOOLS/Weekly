@@ -135,7 +135,7 @@ import { activateJigListTab } from './jig-list.js?v=20261124-2';
 import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, APPROVALS_TAB_ITEMS } from '../../config/milestones-config.js?v=20261119-1';
 import { SLUMP_TARGET_DEFAULTS, FINAL_BACKUP_PIG_REDUCTION_PCT, parsePigReduction, BT_IMPORT_META, btOverrides, btImportStamp, btStampDate, additiveAmount, batchTotalsRows, renderBatchTotals, clampSlumpTarget, formatSlumpLabel, renderSlumpGraphic, renderBatchTicketCard, BATCH_PRINT_CSS, leftOverTicket } from '../../services/batch-ticket-render.js?v=20261125-1';
 import { finishingProductsHtml, faceSqFtOfInventory, loadFinishingDefs, initFinishingEditor } from '../../services/finishing-products.js?v=20261124-2';   // moved out 2026-10-30 so the weekly's week print shares the ticket code
-import { loadBatchRules, saveBatchRules, rulesSizing, rulesPigReduction, drawBatchRulesPanel, setBatchRulesStatus, updateBatchRulesFloat } from '../../services/batch-rules.js?v=20261125-2';   // job batching rules (2026-11-25)
+import { loadBatchRules, saveBatchRules, rulesSizing, rulesPigReduction, drawBatchRulesPanel, setBatchRulesStatus, updateBatchRulesFloat, loadBatchPresets, saveBatchPreset, deleteBatchPreset } from '../../services/batch-rules.js?v=20261125-3';   // job batching rules (2026-11-25)
 import { invHash as invHashShared, invFingerprintRows, invColourFingerprintRows, invTypeColourFingerprintRows, printRebase } from '../../services/inventory-marks.js?v=20261124-4';
 import { loadMilestonesForProject, saveMilestone, isMilestonesMigrationPending, loadLayoutConditions, loadLayoutConditionsForCastings, LAYOUT_CONDITION_PREFIX, layoutConditionNote, parseLayoutCondition, sideWords } from '../../services/milestones-service.js';
 import { loadJigListsForProject as loadJigListsForScrim, scrimForInventory, scrimForCastings } from '../../services/jig-list-service.js?v=20261124-2';
@@ -12006,6 +12006,7 @@ function scrimLineHtml(casting, day = null) {
 let currentBatchRules = null;
 let batchRulesFor = null;            // project number the rules were read for
 let batchRulesSaveTimer = null;
+let currentBatchPresets = [];        // named sets of conditions (built-in + saved), shared by every job
 function btRules() { return batchRulesFor === currentProjectNumber ? currentBatchRules : null; }
 function btSizing() { return rulesSizing(btRules()); }
 /** The back-up pigment reduction a ticket is batched with: the job-wide value when the job sets one, else the ticket's own. */
@@ -12015,7 +12016,8 @@ async function ensureBatchRules(force = false) {
     if (!pn || getSpecialBatching(pn)) { currentBatchRules = null; batchRulesFor = pn; return; }
     if (batchRulesSaveTimer || (!force && batchRulesFor === pn)) return;   // a change of ours is still on its way to the database
     try {
-        const rules = await loadBatchRules(pn, { strict: true });
+        const [rules, presets] = await Promise.all([loadBatchRules(pn, { strict: true }), loadBatchPresets()]);
+        currentBatchPresets = presets;
         if (pn !== currentProjectNumber || batchRulesSaveTimer) return;
         currentBatchRules = rules; batchRulesFor = pn;
     } catch (err) {
@@ -12023,15 +12025,38 @@ async function ensureBatchRules(force = false) {
         if (pn === currentProjectNumber && batchRulesFor !== pn) showToast('The Job Batching settings could not be read just now. If this job has special batching, the tickets below are NOT right: reload the page before printing.', 'error', 15000);
     }
 }
-function renderBatchRulesPanel() {
+function renderBatchRulesPanel(force = false) {
     const slump = document.getElementById('pp-bt-slump-targets');
     if (!slump) return;
     let el = document.getElementById('pp-bt-rules');
     if (!el) { el = document.createElement('div'); el.id = 'pp-bt-rules'; slump.insertAdjacentElement('afterend', el); }
     el.hidden = false;
-    if (el.contains(document.activeElement) && el.dataset.btrFor === String(currentProjectNumber)) return;   // someone is typing in it
+    if (!force && el.contains(document.activeElement) && el.dataset.btrFor === String(currentProjectNumber)) return;   // someone is typing in it
     el.dataset.btrFor = String(currentProjectNumber);
-    drawBatchRulesPanel(el, btRules(), handleBatchRulesChange);
+    drawBatchRulesPanel(el, btRules(), handleBatchRulesChange, { presets: currentBatchPresets, onSavePreset: handleSaveBatchPreset, onDeletePreset: handleDeleteBatchPreset });
+}
+// Presets (2026-11-25): a named copy of the settings on screen, kept in one shared row, picked on any job.
+async function handleSaveBatchPreset(name, rules) {
+    try {
+        currentBatchPresets = await saveBatchPreset(name, rules);
+        showToast(`Preset "${name}" saved. Pick it under Job Batching on any job.`, 'success', 6000);
+    } catch (err) {
+        logger.error('[batch-rules] preset save failed', err);
+        showToast(`The preset "${name}" could not be saved. Try again.`, 'error', 10000);
+    }
+    renderBatchRulesPanel(true);
+    updateFloats();
+}
+async function handleDeleteBatchPreset(name) {
+    try {
+        currentBatchPresets = await deleteBatchPreset(name);
+        showToast(`Preset "${name}" deleted. Jobs that used it keep their settings.`, 'success', 6000);
+    } catch (err) {
+        logger.error('[batch-rules] preset delete failed', err);
+        showToast(`The preset "${name}" could not be deleted. Try again.`, 'error', 10000);
+    }
+    renderBatchRulesPanel(true);
+    updateFloats();
 }
 function handleBatchRulesChange(next) {
     const pn = currentProjectNumber;
@@ -12077,7 +12102,7 @@ function updateRulesFloat() {
     const show = allowed && (panel.getBoundingClientRect().bottom < headerBottom() + 4 || (!!box && !box.hidden && box.contains(document.activeElement)));
     const above = [castsFloatEl, staleFloatEl].find(el => el && !el.hidden);
     updateBatchRulesFloat({
-        show, rules: show ? btRules() : null,
+        show, rules: show ? btRules() : null, presets: currentBatchPresets,
         top: above ? above.getBoundingClientRect().bottom + 8 : msTopOffset() + 12,
         onChange: handleBatchRulesChange,
         onShow: () => { const p = document.getElementById('pp-bt-rules'); if (p) window.scrollTo({ top: window.scrollY + p.getBoundingClientRect().top - headerBottom() - 12, behavior: 'smooth' }); }

@@ -20,6 +20,13 @@
  * the Weekly-test site) keeps its own "batch_rules_test:" rows, so trying this out never changes a real job.
  * The Color Logs are never touched: the rules only change the batching math.
  *
+ * PRESETS (2026-11-25, user: "i'd also like to save presets ... give it a name ... another job requires the same
+ * condition i could just pull it up by the name ... i would like to have the jane preset to exist"): a named set of
+ * conditions. Saved ones live in ONE shared settings row, "batch_rule_presets" ("batch_rule_presets_test" on a test
+ * copy); Jane Street is built in. Picking a preset COPIES its conditions into the job: a job never follows a preset
+ * afterwards, so changing or deleting a preset cannot change tickets that were already printed. A job shows a
+ * preset's name whenever its conditions are exactly that preset's. Names are on screen only, never on a printout.
+ *
  * @module services/batch-rules
  */
 import { loadSettingRows, setSettingRow } from './schedule-service.js';
@@ -162,7 +169,70 @@ export async function saveBatchRules(pn, rules) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// The panel on the Batch Tickets tab + the floating marker
+// Presets
+// ---------------------------------------------------------------------------------------------------------------
+
+/** Built in: always there, cannot be deleted or replaced. Jane Street = the conditions of jane-street-batching.html
+ *  (100 lb face mixes at 1/4", 200 lb back ups, one back-up layer typed First Back Up, back-up ADVA 0.5 oz, no pigment
+ *  reduction, no aggregate in the back ups, no Cowbay). */
+export const BUILTIN_PRESETS = [
+    { name: 'Jane Street', builtin: true, rules: { faceSizes: [100], backupSizes: [200, 100], faceThicknessIn: 1 / 4, backupLayers: 'first', pigReduction: 0, backupAdvaOz: 0.5, noCowbay: true, omitAggBackups: true } }
+];
+export function batchPresetsKey() { return isTestCopy() ? 'batch_rule_presets_test' : 'batch_rule_presets'; }
+const sameName = (a, b) => String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
+const cleanName = (name) => String(name ?? '').replace(/\s+/g, ' ').trim().slice(0, 60);
+
+/** One text per set of conditions, whatever order its keys came in ('' = typical). */
+export function rulesSignature(rules) {
+    const r = normBatchRules(rules);
+    return r ? JSON.stringify(Object.keys(r).sort().map(k => [k, r[k]])) : '';
+}
+/** The stored row -> [{ name, rules }]: named, not typical, no name twice, never a built-in's name. */
+function normPresets(raw) {
+    const out = [];
+    for (const p of (Array.isArray(raw?.presets) ? raw.presets : [])) {
+        const name = cleanName(p?.name), rules = normBatchRules(p?.rules);
+        if (!name || !rules) continue;
+        if (BUILTIN_PRESETS.some(b => sameName(b.name, name)) || out.some(o => sameName(o.name, name))) continue;
+        out.push({ name, rules });
+    }
+    return out.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+}
+const withBuiltins = (saved) => [...BUILTIN_PRESETS.map(b => ({ name: b.name, builtin: true, rules: normBatchRules(b.rules) })), ...saved];
+async function readSavedPresets(opts) {
+    const key = batchPresetsKey();
+    const rows = await loadSettingRows([key], opts);
+    return normPresets(rows.get(key));
+}
+/** Every preset, built-in ones first. Not strict: when the row cannot be read, the built-in ones still come back. */
+export async function loadBatchPresets(opts = {}) {
+    try { return withBuiltins(await readSavedPresets(opts)); }
+    catch (err) { if (opts.strict) throw err; return withBuiltins([]); }
+}
+/** Add a preset, or replace the one of that name. The row is read again first, so a preset someone else just saved stays. */
+export async function saveBatchPreset(name, rules) {
+    const nm = cleanName(name), clean = normBatchRules(rules);
+    if (!nm || !clean) throw new Error('A preset needs a name and at least one special condition');
+    if (BUILTIN_PRESETS.some(b => sameName(b.name, nm))) throw new Error('That name belongs to a built-in preset');
+    const saved = (await readSavedPresets({ strict: true })).filter(p => !sameName(p.name, nm));
+    saved.push({ name: nm, rules: clean });
+    const next = normPresets({ presets: saved });
+    await setSettingRow(batchPresetsKey(), { presets: next, v: 1 });
+    return withBuiltins(next);
+}
+export async function deleteBatchPreset(name) {
+    const saved = (await readSavedPresets({ strict: true })).filter(p => !sameName(p.name, name));
+    await setSettingRow(batchPresetsKey(), saved.length ? { presets: saved, v: 1 } : null);
+    return withBuiltins(saved);
+}
+/** The preset whose conditions are exactly these, or null. */
+export function matchBatchPreset(presets, rules) {
+    const sig = rulesSignature(rules);
+    return sig ? ((presets || []).find(p => rulesSignature(p.rules) === sig) || null) : null;
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// The panel on the Batch Tickets tab + its floating copy
 // ---------------------------------------------------------------------------------------------------------------
 
 const CSS = `
@@ -190,6 +260,17 @@ const CSS = `
 .pp-btr-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; margin-top: 10px; font-size: 11.5px; color: #64748b; }
 .pp-btr-reset { font: inherit; font-size: 12px; font-weight: 700; padding: 4px 10px; border: 1px solid #94a3b8; border-radius: 6px; background: #fff; color: #334155; cursor: pointer; }
 .pp-btr-reset:hover { background: #f1f5f9; }
+.pp-btr-presets { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid #e2e8f0; }
+.pp-btr-special .pp-btr-presets { border-bottom-color: #fcd34d; }
+.pp-btr-presets select, .pp-btr-preset-new input { font: inherit; font-size: 13px; padding: 6px 8px; border: 1px solid #94a3b8; border-radius: 6px; background: #fff; color: #0f172a; box-sizing: border-box; max-width: 100%; }
+.pp-btr-presets select { min-width: 250px; }
+.pp-btr-presets select.pp-btr-set { border-color: #d97706; background: #fef3c7; font-weight: 700; }
+.pp-btr-preset-new { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.pp-btr-preset-new[hidden] { display: none; }
+.pp-btr-preset-new input { width: 230px; }
+.pp-btr-preset-new input.pp-btr-bad { border-color: #dc2626; background: #fef2f2; }
+.pp-btr-float .pp-btr-presets { gap: 3px 8px; margin-bottom: 8px; padding-bottom: 8px; }
+.pp-btr-float .pp-btr-presets select { width: 100%; min-width: 0; padding: 4px 7px; }
 .pp-btr-show { font: inherit; font-size: 12px; font-weight: 700; padding: 0; border: none; background: none; color: #334155; text-decoration: underline; cursor: pointer; }
 .pp-btr-special .pp-btr-show { color: #92400e; }
 /* the floating copy: right column, under the out-of-date box and the Castings box (same 320 px bubble) */
@@ -218,7 +299,54 @@ function ensureCss() {
 }
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-function panelHtml(rules, { compact = false, open = false } = {}) {
+const badgeText = (rules, opts) => { const m = matchBatchPreset(opts?.presets, rules); return rules ? 'SPECIAL BATCHING' + (m ? ' · ' + m.name : '') : 'TYPICAL BATCHING'; };
+
+/** The Preset row: the picker, and (full panel only) Save as preset / Delete this preset. */
+function presetRowHtml(rules, opts = {}) {
+    const presets = opts.presets || [];
+    const match = matchBatchPreset(presets, rules);
+    const o = (v, t, on, extra = '') => `<option value="${esc(v)}"${on ? ' selected' : ''}${extra}>${esc(t)}</option>`;
+    const options = o('', 'Typical batching (no preset)', !rules)
+        + (rules && !match ? o('__custom', 'Custom: not saved as a preset', true, ' disabled') : '')
+        + presets.map(p => o('p:' + p.name, p.name + (p.builtin ? ' (built in)' : ''), match === p)).join('');
+    const canEdit = !opts.compact && typeof opts.onSavePreset === 'function';
+    const edit = canEdit ? `
+        <button type="button" class="pp-btr-reset" data-btr-preset-save${rules && !match ? '' : ' hidden'} title="Keep these settings under a name, to pick on another job">Save as preset…</button>
+        <button type="button" class="pp-btr-reset" data-btr-preset-del${match && !match.builtin ? '' : ' hidden'} title="Remove this preset from the list. Jobs that use it keep their settings.">Delete this preset</button>
+        <span class="pp-btr-preset-new" hidden>
+            <input type="text" maxlength="60" data-btr-preset-name placeholder="Name for this preset">
+            <button type="button" class="pp-btr-reset" data-btr-preset-ok>Save</button>
+            <button type="button" class="pp-btr-reset" data-btr-preset-cancel>Cancel</button>
+            <span class="pp-btr-msg" data-btr-preset-msg hidden></span>
+        </span>` : '';
+    return `<span class="pp-btr-label">Preset</span>
+        <select data-btr-preset${rules ? ' class="pp-btr-set"' : ''} title="A preset fills in every cell below. The job keeps its own copy: changing a preset later does not change this job.">${options}</select>${edit}`;
+}
+/** After a cell changed: the Preset row and the badge follow, without redrawing the cells. */
+function syncPresetRow(el, rules) {
+    const row = el.querySelector('.pp-btr-presets');
+    if (row) row.innerHTML = presetRowHtml(rules, el.__btrOpts);
+    const badge = el.querySelector('.pp-btr-badge');
+    if (badge) badge.textContent = badgeText(rules, el.__btrOpts);
+}
+/** Save as preset: check the name, ask before replacing, hand over to the page. */
+function savePresetFromPanel(el) {
+    const opts = el.__btrOpts || {}, input = el.querySelector('[data-btr-preset-name]'), msg = el.querySelector('[data-btr-preset-msg]');
+    const say = (t) => { if (msg) { msg.textContent = t || ''; msg.hidden = !t; } if (input) input.classList.toggle('pp-btr-bad', !!t); };
+    const name = cleanName(input?.value);
+    const { rules, errors } = readPanel(el);
+    if (errors) return say('Fix the red cell first');
+    if (!rules) return say('Nothing special is set, so there is nothing to save');
+    if (!name) return say('Give the preset a name');
+    const presets = opts.presets || [];
+    if (presets.some(p => p.builtin && sameName(p.name, name))) return say('That name belongs to a built-in preset');
+    const same = presets.find(p => sameName(p.name, name));
+    if (same && !window.confirm(`A preset named "${same.name}" already exists.\n\nReplace it with these settings? Jobs that already use it keep what they have.`)) return;
+    say('');
+    opts.onSavePreset?.(same ? same.name : name, rules);
+}
+
+function panelHtml(rules, { compact = false, open = false, presets = [], onSavePreset = null } = {}) {
     const r = rules || {};
     const set = (on) => (on ? ' class="pp-btr-set"' : '');
     // the hint is also the hover text: the floating copy has no room to print it
@@ -229,9 +357,10 @@ function panelHtml(rules, { compact = false, open = false } = {}) {
         <div class="pp-btr-head">
             <span class="pp-btr-title">Job Batching</span>
             <span class="pp-btr-sub">project-wide · batch sizes are pounds of sand · an empty cell = the typical value shown in it</span>
-            <span class="pp-btr-badge">${rules ? 'SPECIAL BATCHING' : 'TYPICAL BATCHING'}</span>
+            <span class="pp-btr-badge">${esc(badgeText(rules, { presets }))}</span>
             <span class="pp-btr-status" data-btr-status></span>
         </div>
+        <div class="pp-btr-presets">${presetRowHtml(rules, { compact, presets, onSavePreset })}</div>
         <div class="pp-btr-grid">
             ${field('Face Mix batch sizes (lb)', `<input type="text" inputmode="numeric" data-btr="faceSizes" value="${esc(formatSizes(r.faceSizes))}" placeholder="250, 150, 100"${set(!!r.faceSizes)}>`,
                 'Typical: <b>250, 150, 100</b>. Largest first. <b>150</b> = every batch 150 lb; <b>150, 100</b> = 150 lb batches and a 100 lb one when that covers what is left.')}
@@ -299,7 +428,9 @@ function readPanel(el) {
  * @param {HTMLElement} el
  * @param {Object|null} rules - the job's rules as loaded
  * @param {(rules: Object|null) => void} onChange - a cell changed and every cell reads fine (the caller saves + redraws)
- * @param {{compact?: boolean}} [opts] - compact: the floating copy (no printed hints, a Show me link)
+ * @param {{compact?: boolean, presets?: Array, onSavePreset?: Function, onDeletePreset?: Function}} [opts] - compact:
+ *        the floating copy (no printed hints, a Show me link); presets: the list for the Preset picker;
+ *        onSavePreset(name, rules) / onDeletePreset(name): the page saves and redraws
  */
 export function drawBatchRulesPanel(el, rules, onChange, opts = {}) {
     if (!el) return;
@@ -307,16 +438,16 @@ export function drawBatchRulesPanel(el, rules, onChange, opts = {}) {
     el.classList.add('pp-btr');
     el.classList.toggle('pp-btr-special', !!rules);
     const open = !!el.querySelector('.pp-btr-more')?.open;   // a fold someone opened stays open across a redraw
-    el.innerHTML = panelHtml(rules, { compact: !!opts.compact, open });
-    if (el.dataset.btrWired) { el.__btrChange = onChange; return; }
-    el.dataset.btrWired = '1';
+    el.innerHTML = panelHtml(rules, { ...opts, compact: !!opts.compact, open });
+    el.__btrOpts = opts;
     el.__btrChange = onChange;
+    if (el.dataset.btrWired) return;
+    el.dataset.btrWired = '1';
     const changed = () => {
         const { rules: next, errors } = readPanel(el);
         if (errors) { setBatchRulesStatus(el, 'Not saved: check the red cell', true); return; }
         el.classList.toggle('pp-btr-special', !!next);
-        const badge = el.querySelector('.pp-btr-badge');
-        if (badge) badge.textContent = next ? 'SPECIAL BATCHING' : 'TYPICAL BATCHING';
+        syncPresetRow(el, next);
         const reset = el.querySelector('[data-btr-reset]');
         if (reset) reset.hidden = !next;
         for (const input of el.querySelectorAll('[data-btr]')) {
@@ -325,11 +456,39 @@ export function drawBatchRulesPanel(el, rules, onChange, opts = {}) {
         }
         el.__btrChange?.(next);
     };
-    el.addEventListener('change', (e) => { if (e.target.closest('[data-btr]')) changed(); });
+    el.addEventListener('change', (e) => {
+        const pick = e.target.closest('[data-btr-preset]');
+        if (pick) {
+            // a preset: every cell takes its value (a copy; the job does not follow the preset afterwards)
+            const v = pick.value;
+            const p = v.startsWith('p:') ? (el.__btrOpts?.presets || []).find(x => x.name === v.slice(2)) : null;
+            if (v !== '' && !p) return;
+            const next = p ? normBatchRules(p.rules) : null;
+            drawBatchRulesPanel(el, next, el.__btrChange, el.__btrOpts);
+            el.__btrChange?.(next);
+            return;
+        }
+        if (e.target.closest('[data-btr]')) changed();
+    });
     el.addEventListener('click', (e) => {
-        if (!e.target.closest('[data-btr-reset]')) return;
-        for (const input of el.querySelectorAll('[data-btr]')) input.value = '';
-        changed();
+        if (e.target.closest('[data-btr-reset]')) {
+            for (const input of el.querySelectorAll('[data-btr]')) input.value = '';
+            changed();
+            return;
+        }
+        const box = el.querySelector('.pp-btr-preset-new');
+        if (e.target.closest('[data-btr-preset-save]')) { if (box) { box.hidden = false; box.querySelector('input')?.focus(); } return; }
+        if (e.target.closest('[data-btr-preset-cancel]')) { if (box) box.hidden = true; return; }
+        if (e.target.closest('[data-btr-preset-ok]')) { savePresetFromPanel(el); return; }
+        if (e.target.closest('[data-btr-preset-del]')) {
+            const m = matchBatchPreset(el.__btrOpts?.presets, readPanel(el).rules);
+            if (m && !m.builtin && window.confirm(`Delete the preset "${m.name}"?\n\nIt goes from the list for every job. Jobs that already use it keep their settings.`)) el.__btrOpts?.onDeletePreset?.(m.name);
+        }
+    });
+    el.addEventListener('keydown', (e) => {
+        if (!e.target.closest('[data-btr-preset-name]')) return;
+        if (e.key === 'Enter') { e.preventDefault(); savePresetFromPanel(el); }
+        else if (e.key === 'Escape') { const box = el.querySelector('.pp-btr-preset-new'); if (box) box.hidden = true; }
     });
 }
 export function setBatchRulesStatus(el, text, isError = false) {
@@ -344,10 +503,10 @@ let floatEl = null;
  * The floating copy of the Job Batching panel (2026-11-25, user: "make this whole section a floating bubble when
  * scrolling, just like the other bubbles, under the ones that are already there"). Same cells, same saving: the page
  * shows it while the real panel is scrolled out of sight.
- * @param {{show: boolean, rules?: Object|null, top?: number, onChange?: Function, onShow?: Function}} o
+ * @param {{show: boolean, rules?: Object|null, presets?: Array, top?: number, onChange?: Function, onShow?: Function}} o
  * @returns {boolean} whether the box is showing
  */
-export function updateBatchRulesFloat({ show, rules = null, top = 0, onChange, onShow } = {}) {
+export function updateBatchRulesFloat({ show, rules = null, presets = [], top = 0, onChange, onShow } = {}) {
     if (!show) { if (floatEl) floatEl.hidden = true; return false; }
     ensureCss();
     if (!floatEl) {
@@ -358,13 +517,13 @@ export function updateBatchRulesFloat({ show, rules = null, top = 0, onChange, o
         floatEl.addEventListener('click', (e) => { if (e.target.closest('[data-btr-show]')) floatEl.__show?.(); });
     }
     floatEl.__show = onShow;
-    const key = JSON.stringify(rules || null);
+    const key = JSON.stringify(rules || null) + '|' + presets.map(p => p.name + rulesSignature(p.rules)).join(';');
     // never redraw under someone's hands: a cell in it has the cursor, or the mouse is on it (a click about to land)
     const busy = !floatEl.hidden && floatEl.dataset.key !== undefined && (floatEl.contains(document.activeElement) || floatEl.matches(':hover'));
     if (floatEl.dataset.key !== key && !busy) {
-        drawBatchRulesPanel(floatEl, rules, onChange, { compact: true });
+        drawBatchRulesPanel(floatEl, rules, onChange, { compact: true, presets });
         floatEl.dataset.key = key;
-    } else floatEl.__btrChange = onChange;
+    } else { floatEl.__btrChange = onChange; floatEl.__btrOpts = { compact: true, presets }; }
     floatEl.style.top = Math.round(top) + 'px';
     floatEl.style.maxHeight = `calc(100vh - ${Math.round(top) + 12}px)`;
     floatEl.hidden = false;
