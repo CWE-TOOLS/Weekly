@@ -131,6 +131,7 @@ import {
 import { renderCastingLayout, computeLayoutRects, parseDimension, tableBlockRects, CASTING_AREAS } from './casting-layout.js?v=20261112-1';
 import { attachLayoutDrag } from './casting-layout-drag.js?v=20261120-1';
 import { LAYOUT_DAYS_PREFIX, normLayoutDays, resolveLayoutDays, layoutDayRows, layoutDaysEmpty, layoutDaysCanon, castDayDates, layoutDayOf, layoutDaysSplit, layoutDaySide, placeKeys, inventoryPieceRows, inventoryRowsOfDay, batchDaysStamp, batchDaysPrinted } from '../../utils/layout-days.js?v=20261120-7';
+import { REPAIR_KIT_PREFIX, REPAIR_KIT_LABEL, normRepairKit, repairKitStates, repairKitAfterClick, repairKitAfterPrint, repairKitToStore } from '../../utils/repair-kit.js?v=20261125-rk1';
 import { activateJigListTab } from './jig-list.js?v=20261124-2';
 import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, APPROVALS_TAB_ITEMS } from '../../config/milestones-config.js?v=20261119-1';
 import { SLUMP_TARGET_DEFAULTS, FINAL_BACKUP_PIG_REDUCTION_PCT, parsePigReduction, BT_IMPORT_META, btOverrides, btImportStamp, btStampDate, additiveAmount, batchTotalsRows, renderBatchTotals, clampSlumpTarget, formatSlumpLabel, renderSlumpGraphic, renderBatchTicketCard, BATCH_PRINT_CSS, leftOverTicket } from '../../services/batch-ticket-render.js?v=20261125-1';
@@ -2439,6 +2440,7 @@ async function handleDeleteCasting(id) {
     try {
         await deleteCasting(id);
         if (castDaysCfgBy.has(id)) { castDaysCfgBy.delete(id); setSettingRow(LAYOUT_DAYS_PREFIX + id, null).catch(() => { /* an orphan settings row is harmless */ }); }
+        if (repairKitRows.has(id)) { repairKitRows.delete(id); setSettingRow(REPAIR_KIT_PREFIX + id, null).catch(() => { /* an orphan settings row is harmless */ }); }
         currentCastings = currentCastings.filter(x => x.id !== id);
         currentCastInvExpanded.delete(id);
         currentCastingInventory.delete(id);
@@ -6075,12 +6077,13 @@ async function activateTrackingTab() {
 
     await Promise.all([
         loadAllComponentsForCurrentProject(),
-        ensureCratesLoaded()
+        ensureCratesLoaded(),
+        loadRepairKitRows()
     ]);
     renderTracking();
     // Cast days (2026-11-20): split castings list their panels day by day once the weekly has answered.
     const daysFor = currentProjectNumber;
-    ensureCastDays().then(() => { if (currentProjectNumber === daysFor && currentTab === 'tracking' && castDaysCfgBy.size) renderTracking(); });
+    ensureCastDays().then(() => { if (currentProjectNumber === daysFor && currentTab === 'tracking') renderTracking(); });   // also: the repair kit goes with the LAST cast day
     // Every open re-reads the Casting Inventory and checks the list against it (out-of-band writes included).
     syncTrackingFromInventory({ fresh: true });
 }
@@ -7439,6 +7442,121 @@ function printCastingLayoutNow() {
     w.print();
 }
 
+// ---------- REPAIR KIT (2026-11-25): a tracking bubble per CASTING. The rules are in src/utils/repair-kit.js ----------
+// Normally off; on by itself for the last casting of the job (of the phase on a phased job); a tick set by hand
+// anywhere stops the automatic one; a sheet already printed with it for a casting that has been cast keeps it.
+let repairKitRows = new Map();      // casting id -> { manual, printed }
+let repairKitRowsFor = null;        // the job the rows were read for (null = not read yet)
+async function loadRepairKitRows({ strict = false } = {}) {
+    const pn = currentProjectNumber;
+    const ids = currentCastings.map(c => c.id);
+    try {
+        const got = ids.length ? await loadSettingRows(ids.map(id => REPAIR_KIT_PREFIX + id), { strict: true }) : new Map();
+        if (currentProjectNumber !== pn) return false;
+        repairKitRows = new Map([...got].map(([k, v]) => [k.slice(REPAIR_KIT_PREFIX.length), normRepairKit(v)]));
+        repairKitRowsFor = pn;
+        return true;
+    } catch (e) {
+        logger.warn('[project-portal] repair kit ticks could not be read', e);
+        if (strict) throw e;
+        return false;
+    }
+}
+/** The weekly has been asked when this job casts (answered or not: after that the stored dates are all there is). */
+function repairKitDaysKnown() { return !!weeklyCastDates && weeklyCastDatesFor === String(currentProjectNumber || '').trim(); }
+/** The castings that share one repair kit with this one (its phase on a phased job, else the job), with their cast days. */
+function repairKitGroup(casting) {
+    const group = currentPhasesEnabled ? currentCastings.filter(c => (c.phase_id || null) === (casting.phase_id || null)) : currentCastings;
+    return group.map(c => {
+        const i = castDayInfo(c);
+        const own = String(c.casting_date || '').slice(0, 10);
+        return { id: c.id, castDate: i.last || i.first || (/^\d{4}-\d{2}-\d{2}$/.test(own) ? own : null), castOver: i.state === 'done' };
+    });
+}
+function repairKitState(castingId) {
+    const casting = currentCastings.find(c => c.id === castingId);
+    if (!casting || repairKitRowsFor !== currentProjectNumber) return null;
+    return repairKitStates(repairKitGroup(casting), repairKitRows).get(castingId) || null;
+}
+function repairKitCastName(id) { return currentCastings.find(c => c.id === id)?.casting_number || '?'; }
+/** The bubble in a casting's header on the Tracking tab. */
+function repairKitChipHtml(casting) {
+    const st = repairKitState(casting.id);
+    const chip = (cls, attrs, tag, title) => `<button type="button" class="pp-track-phase-chip pp-rk-chip${cls}" ${attrs} title="${escapeAttr(title)}">${REPAIR_KIT_LABEL}${tag ? `<span class="pp-rk-tag">${escapeHtml(tag)}</span>` : ''}</button>`;
+    if (!st) return `<span class="pp-rk">${chip('', 'disabled', '', 'Reading the repair kit ticks…')}</span>`;
+    if (!st.manual && !st.printed && !repairKitDaysKnown()) return `<span class="pp-rk">${chip('', 'disabled', 'checking the weekly…', 'The repair kit goes with the last casting: reading the cast days from the weekly')}</span>`;
+    const scope = currentPhasesEnabled ? 'phase' : 'job';
+    const col = `It prints as a ${REPAIR_KIT_LABEL} column on this casting's tracking sheet.`;
+    let tag = '', title = '';
+    if (st.why === 'hand-on') { tag = 'by hand'; title = `Ticked on by hand for this casting. ${col} The automatic tick on the last casting is off for this ${scope}. Click to take it off.`; }
+    else if (st.why === 'hand-off') { tag = 'off by hand'; title = 'Taken off by hand for this casting. Click to put it back.'; }
+    else if (st.why === 'printed') { tag = 'printed'; title = `The tracking sheet was printed with the repair kit (${castDayLong(st.printed)}) and this casting has been cast: the tick stays. Click to take it off.`; }
+    else if (st.why === 'last') { tag = 'auto \u00b7 last cast'; title = `Ticked by itself: this is the last casting of the ${scope}. ${col} It moves by itself when a later casting is added. Click to take it off.`; }
+    else if (st.why === 'by-hand-elsewhere') { title = `Off: the repair kit was ticked by hand on cast ${repairKitCastName(st.byHandId)}. Click to tick it on this casting too.`; }
+    else { title = `Off: the repair kit goes with the last casting of the ${scope} (cast ${repairKitCastName(st.lastId)}). Click to tick it on this casting by hand.`; }
+    // The sheet on the floor says something else than the tick does now
+    let hint = '';
+    const ft = msOn() ? msRow(casting.id, 'Final Tracking') : null;
+    const sheetPrinted = !!ft && (ft.status === MS.GREEN || (ft.status === MS.ORANGE && /print/i.test(String(ft.note || ''))));
+    if (st.printed && !st.on) hint = `<span class="pp-rk-hint" title="The tracking sheet of this casting was printed WITH the repair kit column (${escapeAttr(castDayLong(st.printed))}). The repair kit is off here now: print the tracking sheet again.">sheet printed WITH it \u2014 print again</span>`;
+    else if (st.on && !st.printed && sheetPrinted && castDayInfo(casting).state !== 'done') hint = `<span class="pp-rk-hint" title="The tracking sheet of this casting was printed without the repair kit column. Print the tracking sheet again.">sheet printed WITHOUT it \u2014 print again</span>`;
+    return `<span class="pp-rk">${chip(st.on ? ' pp-track-phase-active' : '', `data-action="toggle-repair-kit" data-casting-id="${escapeAttr(casting.id)}" aria-pressed="${st.on}"`, tag, title)}${hint}</span>`;
+}
+/** Next to the phase bubbles: which casting the repair kit is on right now (click = go there). */
+function renderRepairKitWhere() {
+    const el = document.getElementById('pp-rk-where');
+    if (!el) return;
+    const scoped = getCastingsForActivePhase();
+    if (!scoped.length || repairKitRowsFor !== currentProjectNumber) { el.innerHTML = ''; return; }
+    const on = scoped.filter(c => repairKitState(c.id)?.on);
+    const waiting = !repairKitDaysKnown() && !on.some(c => repairKitState(c.id)?.manual);
+    const text = waiting ? 'checking the weekly…' : on.length ? `Cast ${on.map(c => c.casting_number || '?').join(', ')}` : 'no casting';
+    const title = `${REPAIR_KIT_LABEL} is set per casting, not for the whole job: it is on by itself for the last casting, and can be ticked by hand on any casting below. Click to go to the casting.`;
+    el.innerHTML = `<button type="button" class="pp-track-phase-chip pp-rk-where${on.length && !waiting ? ' pp-track-phase-active' : ''}" data-rk-goto="${escapeAttr(on[0]?.id || '')}" title="${escapeAttr(title)}">${REPAIR_KIT_LABEL} \u2192 ${escapeHtml(text)}</button>`;
+}
+function repairKitGoto(castingId) {
+    if (!castingId) return;
+    const el = document.querySelector(`.pp-track-section[data-casting-id="${cssEscape(castingId)}"]`);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+async function handleToggleRepairKit(castingId) {
+    const before = repairKitState(castingId);
+    if (!before) return;
+    const want = !before.on;
+    try { await loadRepairKitRows({ strict: true }); }      // someone else may have ticked meanwhile
+    catch (e) { showToast('Could not read the repair kit ticks just now, so nothing was changed. Try again in a moment.', 'error', 6000); return; }
+    const st = repairKitState(castingId);
+    if (!st) return;
+    if (st.on === want) { renderTracking(); return; }       // already as asked (changed on another screen)
+    const store = repairKitToStore(repairKitAfterClick(st));
+    const had = repairKitRows.get(castingId);
+    if (store) repairKitRows.set(castingId, normRepairKit(store)); else repairKitRows.delete(castingId);
+    renderTracking();
+    try { await setSettingRow(REPAIR_KIT_PREFIX + castingId, store); }
+    catch (e) {
+        logger.error('[project-portal] repair kit tick not saved', e);
+        if (had) repairKitRows.set(castingId, had); else repairKitRows.delete(castingId);
+        renderTracking();
+        showToast('The repair kit tick could not be saved: ' + (e?.message || e), 'error', 6000);
+        return;
+    }
+    const now = repairKitState(castingId);
+    const cn = repairKitCastName(castingId);
+    const others = getCastingsForActivePhase().filter(c => c.id !== castingId && repairKitState(c.id)?.on).map(c => c.casting_number || '?');
+    showToast(now?.on
+        ? `Repair kit ON for cast ${cn}: it prints as a column on its tracking sheet.${now.why === 'hand-on' ? ' Set by hand, so the automatic tick on the last casting is off.' : ''}`
+        : `Repair kit OFF for cast ${cn}.${others.length ? ` It is on for cast ${others.join(', ')}.` : ' No casting has it now.'}`, 'success', 6000);
+}
+/** The tracking sheet went to the printer: remember that it was printed with the repair kit (or no longer is). */
+function repairKitRecordPrint(castingId, st) {
+    if (!st) return;
+    const store = repairKitToStore(repairKitAfterPrint(st, isoDay(new Date())));
+    if (JSON.stringify(store) === JSON.stringify(repairKitToStore(repairKitRows.get(castingId)))) return;
+    if (store) repairKitRows.set(castingId, normRepairKit(store)); else repairKitRows.delete(castingId);
+    setSettingRow(REPAIR_KIT_PREFIX + castingId, store).catch(e => logger.error('[project-portal] repair kit print not recorded', e));
+    if (currentTab === 'tracking') renderTracking();
+}
+
 function renderTrackingPhasesBar() {
     const bar = document.getElementById('pp-track-phases-bar');
     const chips = document.getElementById('pp-track-phases-chips');
@@ -7446,7 +7564,8 @@ function renderTrackingPhasesBar() {
     chips.innerHTML = TRACKING_PHASES.map(p => {
         const active = currentTrackingPhases.has(p);
         return `<button type="button" class="pp-track-phase-chip${active ? ' pp-track-phase-active' : ''}" data-phase="${escapeAttr(p)}" aria-pressed="${active}" title="${active ? 'Click to remove' : 'Click to add'} ${escapeAttr(p)}">${escapeHtml(p)}</button>`;
-    }).join('');
+    }).join('') + '<span id="pp-rk-where" class="pp-rk-where-wrap"></span>';
+    renderRepairKitWhere();
     bar.hidden = false;
 }
 
@@ -7478,6 +7597,7 @@ function renderTracking() {
     if (!list) return;
     pruneSelectedComponentIds();
     renderTrackingMismatchBanner();
+    renderRepairKitWhere();
     list.innerHTML = getCastingsForActivePhase().map(c => renderTrackSection(c)).join('');
     // <input> doesn't have an :indeterminate attribute, so set it via JS.
     list.querySelectorAll('.pp-track-select-all[data-indeterminate="true"]').forEach(cb => {
@@ -7704,6 +7824,7 @@ function renderTrackSection(casting) {
                     ${desc}
                 </button>
                 <div class="pp-track-section-print-group">
+                    ${repairKitChipHtml(casting)}
                     <button type="button" class="pp-track-section-stickers" data-action="print-stickers" data-casting-id="${escapeAttr(casting.id)}" ${count === 0 ? 'disabled' : ''} title="${count === 0 ? 'No panels to label' : `Print panel labels for Cast ${casting.casting_number || ''}`}">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <polyline points="6 9 6 2 18 2 18 9"/>
@@ -11026,6 +11147,11 @@ function wireEvents() {
             if (section) handleToggleTrackSection(section.dataset.castingId);
             return;
         }
+        const rkBtn = e.target.closest('button[data-action="toggle-repair-kit"]');
+        if (rkBtn) {
+            if (rkBtn.dataset.castingId) handleToggleRepairKit(rkBtn.dataset.castingId);
+            return;
+        }
         const printBtn = e.target.closest('button[data-action="print-tracking"]');
         if (printBtn) {
             const id = printBtn.dataset.castingId;
@@ -11257,6 +11383,7 @@ function wireEvents() {
     document.getElementById('pp-track-phases-chips')?.addEventListener('click', (e) => {
         const chip = e.target.closest('.pp-track-phase-chip');
         if (!chip) return;
+        if (chip.dataset.rkGoto !== undefined) { repairKitGoto(chip.dataset.rkGoto); return; }   // the repair kit is per casting
         handleToggleTrackingPhase(chip.dataset.phase);
     });
 
@@ -14461,7 +14588,10 @@ function descriptionLinesHtml(text) {
     return String(text || '').split(',').map(x => x.trim()).filter(Boolean).map(escapeHtml).join('<br>');
 }
 
-function buildTrackPrintHtml(casting, components, projectNumber, projectName, day = null) {
+/** Column order of the printed sheet: the phases, with the repair kit in front of CRATE (it is packed with the crates). */
+const TRACK_PRINT_ORDER = TRACKING_PHASES.flatMap(p => (p === 'CRATE' ? [REPAIR_KIT_LABEL, p] : [p]));
+
+function buildTrackPrintHtml(casting, components, projectNumber, projectName, day = null, repairKit = false) {
     const num = casting.casting_number || '';
     const desc = casting.description || '';
 
@@ -14469,9 +14599,9 @@ function buildTrackPrintHtml(casting, components, projectNumber, projectName, da
     // selected. FINAL is the QC hold-point — always force it on for the
     // printed traveler so the 2nd-initial sign-off column is never missing.
     const userPhases = TRACKING_PHASES.filter(p => currentTrackingPhases.has(p));
-    const selectedPhases = userPhases.includes('FINAL')
-        ? userPhases
-        : [...userPhases, 'FINAL'].sort((a, b) => TRACKING_PHASES.indexOf(a) - TRACKING_PHASES.indexOf(b));
+    // The repair kit (2026-11-25) is not a job-wide phase: it is a column only on the casting that has it.
+    const selectedPhases = [...userPhases, ...(userPhases.includes('FINAL') ? [] : ['FINAL']), ...(repairKit ? [REPAIR_KIT_LABEL] : [])]
+        .sort((a, b) => TRACK_PRINT_ORDER.indexOf(a) - TRACK_PRINT_ORDER.indexOf(b));
 
     // ---------- Header values ----------
     const projectLabel = [projectNumber, projectName]
@@ -14654,10 +14784,14 @@ async function handlePrintTracking(castingId) {
     if (!castingId) return;
     if (!(await printGate([castingId], 'Final Tracking'))) return;
     await ensureCastDaysForPrint('the tracking sheet will');
+    // Repair kit: read fresh (the last casting may have changed on another screen), after the cast days are in.
+    let kit = null;
+    try { await loadRepairKitRows({ strict: true }); kit = repairKitState(castingId); }
+    catch (e) { showToast('The repair kit ticks could not be read just now: this sheet prints WITHOUT the repair kit column. If this casting should have it, print again in a moment.', 'error', 9000); }
     msArmStamp([castingId], 'Final Tracking');
-    handlePrintTrackingNow(castingId);
+    handlePrintTrackingNow(castingId, kit);
 }
-function handlePrintTrackingNow(castingId) {
+function handlePrintTrackingNow(castingId, kit = null) {
     if (!castingId) return;
     const casting = currentCastings.find(c => c.id === castingId);
     if (!casting) {
@@ -14675,13 +14809,13 @@ function handlePrintTrackingNow(castingId) {
     const dayGroups = (castDayGroups(casting, components) || []).filter(g => g.comps.length);
     let html;
     if (dayGroups.length > 1) {
-        const docs = dayGroups.map(g => buildTrackPrintHtml(casting, g.comps, projectNumber, projectName, g));
+        const docs = dayGroups.map(g => buildTrackPrintHtml(casting, g.comps, projectNumber, projectName, g, !!kit?.on));
         const bodyOf = d => d.slice(d.indexOf('<body>') + 6, d.lastIndexOf('</body>'));
         const more = docs.slice(1).map(d => `<div style="break-before:page;page-break-before:always;">${bodyOf(d)}</div>`).join('');
         const at = docs[0].lastIndexOf('</body>');
         html = docs[0].slice(0, at) + more + docs[0].slice(at);
     } else {
-        html = buildTrackPrintHtml(casting, components, projectNumber, projectName, dayGroups[0] || null);
+        html = buildTrackPrintHtml(casting, components, projectNumber, projectName, dayGroups[0] || null, !!kit?.on);
     }
 
     // Remove any leftover iframe from a prior print attempt.
@@ -14711,6 +14845,7 @@ function handlePrintTrackingNow(castingId) {
             win.addEventListener('afterprint', cleanup);
             win.focus();
             msFlushPendingStamp();
+            repairKitRecordPrint(castingId, kit);
             win.print();
         } catch (err) {
             logger.error('[project-portal] print tracking failed:', err);

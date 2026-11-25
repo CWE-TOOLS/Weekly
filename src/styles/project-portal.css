@@ -7216,3 +7216,12 @@ body.pp-clay-zoom-open { overflow: hidden; }
 .pp-inv-fill-master { margin-left: 8px; }
 .pp-inv-fill-master:not(:disabled) { border-color: #0d9488; color: #0f766e; font-weight: 700; }
 .pp-inv-fill-master:not(:disabled):hover { background: #ccfbf1; color: #134e4a; }
+/* REPAIR KIT: a tracking bubble per casting (2026-11-25). */
+.pp-rk { display: inline-flex; align-items: center; gap: 6px; margin-right: 4px; }
+.pp-rk-chip { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.pp-rk-chip:disabled { opacity: 0.55; cursor: default; }
+.pp-rk-tag { font-weight: 600; font-size: 10px; letter-spacing: 0; opacity: 0.85; }
+.pp-rk-hint { font: 700 10.5px/1.2 'Segoe UI', Arial, sans-serif; color: #9a3412; background: #ffedd5; border: 1px solid #fdba74; border-radius: 6px; padding: 3px 7px; white-space: nowrap; }
+.pp-rk-where-wrap { display: inline-flex; align-items: center; margin-left: 6px; padding-left: 12px; border-left: 1px solid #cbd5e1; }
+.pp-rk-where-wrap:empty { display: none; }
+.pp-rk-where { border-style: dashed; white-space: nowrap; }
