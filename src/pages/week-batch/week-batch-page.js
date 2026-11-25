@@ -23,10 +23,11 @@ import { loadAllInventoryForProject } from '../../services/inventory-service.js'
 import { loadMilestonesForProjects, saveMilestone } from '../../services/milestones-service.js';
 import { MS, milestonesApply } from '../../config/milestones-config.js';
 import { getSpecialBatching } from '../../config/special-batching.js';
-import { buildTicketPages, batchTotalsRows, sumTotalsRows, renderTotalsTable, BATCH_PRINT_CSS, SLUMP_TARGET_DEFAULTS, clampSlumpTarget, staleVerdict, activeColorLogFor, leftOverTicket } from '../../services/batch-ticket-render.js?v=20261124-4';
+import { buildTicketPages, batchTotalsRows, sumTotalsRows, renderTotalsTable, BATCH_PRINT_CSS, SLUMP_TARGET_DEFAULTS, clampSlumpTarget, staleVerdict, activeColorLogFor, leftOverTicket } from '../../services/batch-ticket-render.js?v=20261125-1';
 import { EARLY_PRINT_NOTE, invEarlyMarksRows, withInvMark, printRebase } from '../../services/inventory-marks.js?v=20261124-4';
 import { escapeHtml } from '../../utils/security-utils.js';
 import { loadSettingRows } from '../../services/schedule-service.js';
+import { loadBatchRules, rulesSizing } from '../../services/batch-rules.js?v=20261125-1';
 import { LAYOUT_DAYS_PREFIX, resolveLayoutDays, layoutDaysSplit, castDayDates, inventoryRowsOfDay, batchDaysStamp } from '../../utils/layout-days.js';
 import { logger } from '../../utils/logger.js';
 
@@ -95,11 +96,14 @@ function daysInWeek(all) {
 async function loadProjectData(pn) {
     const [project, castings, logs] = await Promise.all([loadProject(pn), loadCastings(pn), loadColorLogsForProject(pn)]);
     const ids = (castings || []).map(c => c.id);
-    const [tickets, comps, inv, dayRows] = await Promise.all([
+    // rules (2026-11-25): the job's own batching rules (portal: Batch Tickets, Job Batching). They MUST be read: a job
+    // with special batching printed the typical way would be wrong tickets, so a failed read fails the whole job.
+    const [tickets, comps, inv, dayRows, rules] = await Promise.all([
         loadBatchTicketsForCastings(ids),
         loadAllComponentsForProject(ids).catch(() => new Map()),
         loadAllInventoryForProject(ids).catch(() => new Map()),
-        loadSettingRows(ids.map(id => LAYOUT_DAYS_PREFIX + id)).catch(() => new Map())
+        loadSettingRows(ids.map(id => LAYOUT_DAYS_PREFIX + id)).catch(() => new Map()),
+        getSpecialBatching(pn) ? null : loadBatchRules(pn, { strict: true })
     ]);
     // castings split over their cast days (portal: Casting Inventory, Day columns), read against the inventory as it is now
     const days = new Map();
@@ -109,7 +113,7 @@ async function loadProjectData(pn) {
         firstBackUp: clampSlumpTarget(project?.target_slump_first_backup, SLUMP_TARGET_DEFAULTS.firstBackUp),
         finalBackUp: clampSlumpTarget(project?.target_slump_final_backup, SLUMP_TARGET_DEFAULTS.finalBackUp)
     };
-    return { pn, project, castings: castings || [], logs: logs || [], tickets: tickets || new Map(), comps: comps || new Map(), inv: inv || new Map(), days, slump, special: getSpecialBatching(pn) };
+    return { pn, project, castings: castings || [], logs: logs || [], tickets: tickets || new Map(), comps: comps || new Map(), inv: inv || new Map(), days, slump, special: getSpecialBatching(pn), rules: rules || null };
 }
 
 /** The special job's own batching page, loaded hidden; resolves with its window once jsbWeekTickets exists. */
@@ -205,13 +209,13 @@ async function build() {
             if (leftOver.length) r.leftOver = leftOver.map(colourName).join(', ');
             const out = buildTicketPages({
                 casting, projectName: r.projectName, tickets: liveTickets, logs: d.logs, components: d.comps.get(casting.id) || [],
-                slumpTargets: d.slump, printedOn: S.printedOn, castDate: it.date,
+                slumpTargets: d.slump, printedOn: S.printedOn, castDate: it.date, rules: d.rules, sizing: rulesSizing(d.rules),
                 castLabel: it.split ? `${casting.casting_number || ''} \u2014 DAY ${it.dayN} OF ${it.dayOf}` : null
             });
             r.pages = out.pages; r.rows = batchTotalsRows(out.entries); r.batches = out.batches; r.reason = out.reason;
             if (!out.pages && r.leftOver) r.reason = `the only batched ticket (${r.leftOver}) is in a color no piece of this casting has any more`;
             const comps = d.comps.get(casting.id) || [];
-            r.stale = staleVerdict({ tickets: liveTickets, rows: dayInvRows, logFor: (tk) => activeColorLogFor({ ticket: tk, components: comps, logs: d.logs }) });
+            r.stale = staleVerdict({ tickets: liveTickets, rows: dayInvRows, sizing: rulesSizing(d.rules), logFor: (tk) => activeColorLogFor({ ticket: tk, components: comps, logs: d.logs }) });
         }
     }
     S.results = results;

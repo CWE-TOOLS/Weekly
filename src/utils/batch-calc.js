@@ -20,6 +20,41 @@ export function sizesFor(maxSize) {
     return SIZE_SETS[maxSize] || BATCH_SIZES;
 }
 
+// A job's own list of batch sizes (services/batch-rules.js, 2026-11-25): any whole lb of sand, largest first.
+// The three lists the portal has always planned with keep their plan to the batch; any other list is filled
+// with the largest size and the cheapest cover of what is left (fillCustom).
+const sameSizes = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+const LEGACY_SIZE_LISTS = [BATCH_SIZES, [200, 100], [100]];
+function sizeList(list, maxSize) {
+    if (Array.isArray(list)) {
+        const clean = [...new Set(list.map(Number).filter(n => Number.isFinite(n) && n > 0))].sort((a, b) => b - a);
+        if (clean.length) return clean;
+    }
+    return sizesFor(maxSize);
+}
+/** The batches (lb of sand) that cover `cuFt` with the least sand, then the fewest batches. Pure. */
+function cheapestCover(cuFt, cuFtPer250, sizes) {
+    let best = null;
+    const walk = (i, picked, lbs) => {
+        if (best && lbs >= best.lbs && !(lbs === best.lbs && picked.length < best.picked.length)) return;
+        if (cuFtFor(lbs, cuFtPer250) >= cuFt - 1e-9) { best = { lbs, picked: picked.slice() }; return; }
+        if (i >= sizes.length) return;
+        picked.push(sizes[i]); walk(i, picked, lbs + sizes[i]); picked.pop();   // one more of this size
+        walk(i + 1, picked, lbs);                                               // or go on to the next smaller size
+    };
+    walk(0, [], 0);
+    return best ? best.picked : [sizes[sizes.length - 1]];
+}
+function fillCustom(cuFtNeeded, cuFtPer250, sizes) {
+    const out = [];
+    const big = cuFtFor(sizes[0], cuFtPer250);
+    const n = Math.floor(cuFtNeeded / big + 1e-9);
+    for (let i = 0; i < n; i++) out.push(sizes[0]);
+    const remaining = cuFtNeeded - n * big;
+    if (remaining > 0.01) out.push(...cheapestCover(remaining, cuFtPer250, sizes));
+    return out.sort((a, b) => b - a);
+}
+
 // Multiplier to convert weight in lbs INTO the target unit.
 //   weightInUnit = weightInLbs * FROM_LBS[unit]
 export const FROM_LBS = {
@@ -63,6 +98,7 @@ export function cuFtFor(sandLbs, cuFtPer250 = 4.28) {
  * smaller set, e.g. [100] or [200, 100].
  */
 export function fillBatches(cuFtNeeded, cuFtPer250 = 4.28, sizes = BATCH_SIZES) {
+    if (!LEGACY_SIZE_LISTS.some(l => sameSizes(l, sizes))) return fillCustom(cuFtNeeded, cuFtPer250, sizes);   // a job's own sizes
     const batches = [];
     let remaining = cuFtNeeded;
     for (const size of sizes) {
@@ -125,8 +161,9 @@ export function planBatches({ totalCuFt, faceSqFt = 0, cuFtPer250 = 4.28, castMe
     // Job-specific sizing (config/special-batching.js): Face Mix and Back Up layers can have their
     // own largest batch, and the First Back Up layer can be dropped (everything behind the face is
     // FINAL Back Up). Without `sizing` this is the standard plan, unchanged.
-    const faceSizes = sizing ? sizesFor(sizing.face) : BATCH_SIZES;
-    const backupSizes = sizing ? sizesFor(sizing.backup) : BATCH_SIZES;
+    // faceSizes / backupSizes (2026-11-25): a job's own size lists (services/batch-rules.js) win over the named sets.
+    const faceSizes = sizing ? sizeList(sizing.faceSizes, sizing.face) : BATCH_SIZES;
+    const backupSizes = sizing ? sizeList(sizing.backupSizes, sizing.backup) : BATCH_SIZES;
     const useFirstBackUp = sizing ? !!sizing.firstBackUp : true;
 
     const directCast = castMethod === 'directCast';
@@ -167,7 +204,7 @@ export function planBatches({ totalCuFt, faceSqFt = 0, cuFtPer250 = 4.28, castMe
             types.push(...finalBatches.map(() => 'finalBackUp'));
         }
     } else {
-        if (faceSizes[0] === backupSizes[0]) {
+        if (sameSizes(faceSizes, backupSizes)) {
             batches = fillBatches(totalCuFt, cuFtPer250, faceSizes);
         } else {
             // One face batch (largest face size, or less if the whole pour is smaller), rest at back up sizes.
@@ -181,6 +218,8 @@ export function planBatches({ totalCuFt, faceSqFt = 0, cuFtPer250 = 4.28, castMe
             return useFirstBackUp ? 'firstBackUp' : 'finalBackUp';
         });
     }
+    // One back-up layer typed First Back Up (sizing.backupType): everything behind the face carries that label.
+    if (sizing && !useFirstBackUp && sizing.backupType === 'firstBackUp') types = types.map(t => (t === 'finalBackUp' ? 'firstBackUp' : t));
     return { batches, types, faceCuFt };
 }
 
@@ -227,7 +266,10 @@ export function buildBatchPlan({
     // { batchLbs, type } picks count as overrides.
     const overrides = Array.isArray(manualOverrides) ? manualOverrides.filter(o => o && o.type) : null;
     let types = autoTypes;
-    if (overrides && overrides.length === batches.length) {
+    // With a job's own sizing (2026-11-25) a hand pick only counts while it was made for these very batches: picks
+    // saved under other batch sizes (the job's rules changed since) are dropped instead of landing on the wrong batch.
+    const picksFit = !sizing || !overrides || overrides.every((o, i) => !o.batchLbs || Number(o.batchLbs) === batches[i]);
+    if (overrides && overrides.length === batches.length && picksFit) {
         types = overrides.map((o, i) => o?.type || autoTypes[i]);
     }
 

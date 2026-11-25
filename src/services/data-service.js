@@ -38,6 +38,7 @@ import { loadMilestonesForProjects, parseLayoutCondition } from './milestones-se
 import { getSpecialBatching } from '../config/special-batching.js';
 import { parseDate } from '../utils/date-utils.js';
 import { loadSettingRows } from './schedule-service.js';
+import { loadBatchRulesMap, rulesSizing } from './batch-rules.js';
 import { LAYOUT_DAYS_PREFIX, normLayoutDays, resolveLayoutDays, castDayDates, layoutDayOf, layoutDaysSplit, layoutDaySide, inventoryPieceRows, isBatchDaysNote, batchDaysPrinted } from '../utils/layout-days.js';
 import { setAllTasks, getAllTasks } from '../core/state.js';
 
@@ -503,10 +504,12 @@ export async function enrichTasksWithPieces(tasks) {
         // Sum quantity + extras per casting (same formula as the portal "pcs"
         // total). Batch tickets + color logs load in parallel — they feed the
         // color-log-title / batch-count enrichment below.
-        const [inventoryByCasting, ticketsByCasting, colorLogsByProject, milestones] = await Promise.all([
+        // batchRulesByProject (2026-11-25): jobs with their own batching rules (portal: Batch Tickets, Job Batching)
+        const [inventoryByCasting, ticketsByCasting, colorLogsByProject, batchRulesByProject, milestones] = await Promise.all([
             loadAllInventoryForProject([...referencedIds]),
             loadBatchTicketsForCastings([...referencedIds]),
             loadColorLogsForProjects(projectNumbers),
+            loadBatchRulesMap(projectNumbers).catch(err => { logger.error('[data-service] batch rules load failed (non-fatal):', err); return new Map(); }),
             loadMilestonesForProjects(projectNumbers).catch(err => { logger.error('[data-service] milestones load failed (non-fatal):', err); return { byCasting: new Map(), touched: new Set() }; })
         ]);
         // Per-casting inventory summary (2026-10-21): the portal's title-block line
@@ -641,7 +644,9 @@ export async function enrichTasksWithPieces(tasks) {
                 const logById = new Map(projectLogs.map(l => [l.id, l]));
                 // Projects batched on a dedicated page plan with their own sizing, so the
                 // count shown on the board matches that page (config/special-batching.js).
-                const sizing = getSpecialBatching(projectByCastingId.get(castingId))?.sizing || null;
+                // A job batched on the regular tab with its own rules (batch sizes, face thickness, layers) plans with those.
+                const sizing = getSpecialBatching(projectByCastingId.get(castingId))?.sizing
+                    || rulesSizing(batchRulesByProject.get(String(projectByCastingId.get(castingId) ?? '').trim()) || null);
 
                 const names = [];
                 const methods = [];

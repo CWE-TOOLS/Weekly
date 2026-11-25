@@ -76,6 +76,7 @@ export function renderBatchTicketCard({
     colorName = '', batchedBy, notes, pigReductionPct = FINAL_BACKUP_PIG_REDUCTION_PCT, reduceFirstBackup = false,
     omitAggFinalBackup = false, omitFibersFace = false, cowbayFinalBackup = false,
     targetSlump = 5,
+    rules = null,                        // the job's batching rules (services/batch-rules.js): noCowbay, backupAdvaOz, omitAggBackups
     printedOn = null, batchedOn = null   // print only: PRINTED ON (red) + BATCHED ON (green, last Import from Tracking)
 }) {
     const slumpTarget = clampSlumpTarget(targetSlump);
@@ -116,7 +117,8 @@ export function renderBatchTicketCard({
 
     // Aggregate is omitted from the FINAL Back Up when the ticket opts out
     // (e.g. Direct Cast jobs that only want aggregate in the Face Mix).
-    const omitAggHere = omitAggFinalBackup && batchType === 'finalBackUp';
+    const isBackupBatch = batchType === 'firstBackUp' || batchType === 'finalBackUp';
+    const omitAggHere = (omitAggFinalBackup && batchType === 'finalBackUp') || (!!rules?.omitAggBackups && isBackupBatch);   // job rule: out of every back up
     let aggRows = '';
     const aggs = omitAggHere ? [] : (colorLog?.aggregates || []).filter(a => a && a.name);
     if (aggs.length) {
@@ -176,9 +178,12 @@ export function renderBatchTicketCard({
     // 2. Every additive in order, scaled (skip fibers — shown under DRY BATCH).
     for (const add of (colorLog?.additives || [])) {
         if (!add || !add.name || /fiber|fibre/i.test(add.name)) continue;
-        const amt = additiveAmount(add);
+        let amt = additiveAmount(add);
         if (amt == null) continue;
-        addAdmix(add.name, add.note, { qty: roundSig(amt * scaleFactor, 2), unit: add.unit || 'oz' });
+        let unit = add.unit || 'oz';
+        // Job rule: ADVA on a back-up batch is the job's own dose per color-log batch, not the color log's amount.
+        if (isBackupBatch && rules?.backupAdvaOz != null && /adva/i.test(add.name)) { amt = Number(rules.backupAdvaOz); unit = 'oz'; }
+        addAdmix(add.name, add.note, { qty: roundSig(amt * scaleFactor, 2), unit });
     }
 
     // 3. Forton — base preferred, additive fallback (deduped if already listed).
@@ -219,7 +224,7 @@ export function renderBatchTicketCard({
     //   - Face Mix & First Back Up → the color-log sand (e.g. Qrok)
     //   - FINAL Back Up → Bulk Sand (Cowbay) for Spray Up, or when a Direct
     //     Cast ticket opts in via "Switch to Cowbay for Final Back Up".
-    const useCowbayFinal = (!isDirectCast || cowbayFinalBackup) && batchType === 'finalBackUp';
+    const useCowbayFinal = (!isDirectCast || cowbayFinalBackup) && batchType === 'finalBackUp' && !rules?.noCowbay;   // job rule: no Cowbay
     const sandTypeDisplay = useCowbayFinal
         ? 'Bulk Sand (Cowbay)'
         : escapeHtml(sand.type || '');
@@ -331,11 +336,11 @@ export function batchTotalsRows(entries) {
     // Accumulate every color ticket's plan into one shared totals map — same-name
     // materials (Portland, Sand, Water…) merge across colors, color-specific
     // pigments/additives get their own rows.
-    for (const { plan, log, pigReductionPct = FINAL_BACKUP_PIG_REDUCTION_PCT, reduceFirstBackup = false, omitAggFinalBackup = false, omitFibersFace = false, cowbayFinalBackup = false } of entries) {
+    for (const { plan, log, pigReductionPct = FINAL_BACKUP_PIG_REDUCTION_PCT, reduceFirstBackup = false, omitAggFinalBackup = false, omitFibersFace = false, cowbayFinalBackup = false, rules = null } of entries) {
         const isDirectCast = log?.castMethod === 'directCast';
         // FINAL Back Up sand goes to Bulk Sand (Cowbay) for Spray Up, or when a
         // Direct Cast ticket opts in via "Switch to Cowbay for Final Back Up".
-        const finalUsesCowbay = !isDirectCast || cowbayFinalBackup;
+        const finalUsesCowbay = (!isDirectCast || cowbayFinalBackup) && !rules?.noCowbay;   // job rule: no Cowbay
 
         // Pre-seed base ingredient ordering, inserting bulk sand right after sand.
         const hasBulkSand = finalUsesCowbay && plan.batches.some(b => b.type === 'finalBackUp');
@@ -376,7 +381,7 @@ export function batchTotalsRows(entries) {
 
             // Aggregates — printed under DRY BATCH on every ticket card, so total them
             // the same way. Skipped for the FINAL Back Up when the ticket opts out.
-            const omitAggHere = omitAggFinalBackup && batchType === 'finalBackUp';
+            const omitAggHere = (omitAggFinalBackup && batchType === 'finalBackUp') || (!!rules?.omitAggBackups && isBackup);
             if (!omitAggHere) {
                 for (const agg of (log?.aggregates || [])) {
                     if (!agg?.name || !agg.amount) continue;
@@ -418,10 +423,12 @@ export function batchTotalsRows(entries) {
             for (const add of (log?.additives || [])) {
                 if (!add?.name) continue;
                 if (/fiber|fibre/i.test(add.name)) continue;
-                const amt = additiveAmount(add);
+                let amt = additiveAmount(add);
                 if (amt == null) continue;
+                let unit = add.unit || 'oz';
+                if (isBackup && rules?.backupAdvaOz != null && /adva/i.test(add.name)) { amt = Number(rules.backupAdvaOz); unit = 'oz'; }   // job rule
                 const a = amt * scaleFactor;
-                addTotal(add.name, add.name + (add.note ? ' (' + add.note + ')' : ''), roundSig(a, 4), add.unit || 'oz', 'additive');
+                addTotal(add.name, add.name + (add.note ? ' (' + add.note + ')' : ''), roundSig(a, 4), unit, 'additive');
             }
         });
     }
@@ -599,7 +606,8 @@ export function activeColorLogFor({ ticket, components = [], logs = [] }) {
  * Mirrors the portal's handlePrintBatchTicketsNow() + buildBatchTotalsEntries().
  * @returns {{ pages: string, entries: Array<Object>, batches: number, reason: string|null }}
  */
-export function buildTicketPages({ casting, projectName = '', tickets = [], logs = [], components = [], slumpTargets = SLUMP_TARGET_DEFAULTS, printedOn = new Date(), castDate = null, castLabel = null }) {
+/** rules / sizing (2026-11-25): the job's batching rules and the planner sizing they give (services/batch-rules.js). */
+export function buildTicketPages({ casting, projectName = '', tickets = [], logs = [], components = [], slumpTargets = SLUMP_TARGET_DEFAULTS, printedOn = new Date(), castDate = null, castLabel = null, rules = null, sizing = null }) {
     const printable = [];
     let reason = null;
     for (const ticket of tickets || []) {
@@ -614,7 +622,8 @@ export function buildTicketPages({ casting, projectName = '', tickets = [], logs
             cuFtPer250: parseFloat(ticket.cuFtPer250) || 4.28,
             castMethod: activeLog?.castMethod || 'sprayUp',
             colorLogSandLbs: sandLbs,
-            manualOverrides: btOverrides(ticket)
+            manualOverrides: btOverrides(ticket),
+            sizing
         });
         if (!plan.batches.length) continue;
         printable.push({ ticket, activeLog, plan });
@@ -622,12 +631,13 @@ export function buildTicketPages({ casting, projectName = '', tickets = [], logs
     if (!printable.length) return { pages: '', entries: [], batches: 0, reason: reason || 'no batch tickets' };
     const entries = [];
     const pages = printable.map(({ ticket, activeLog, plan }) => {
-        const pigReductionPct = parsePigReduction(ticket.pigReduction);
+        // job rule (2026-11-25): a job-wide back-up pigment reduction replaces every casting's own value
+        const pigReductionPct = rules?.pigReduction != null ? Number(rules.pigReduction) : parsePigReduction(ticket.pigReduction);
         const reduceFirstBackup = !!ticket.pigReduceFirstBackup;
         const omitAggFinalBackup = !!ticket.omitAggFinalBackup;
         const omitFibersFace = !!ticket.omitFibersFace;
         const cowbayFinalBackup = !!ticket.cowbayFinalBackup;
-        entries.push({ plan, log: activeLog, pigReductionPct, reduceFirstBackup, omitAggFinalBackup, omitFibersFace, cowbayFinalBackup });
+        entries.push({ plan, log: activeLog, pigReductionPct, reduceFirstBackup, omitAggFinalBackup, omitFibersFace, cowbayFinalBackup, rules });
         const batchedOn = btImportStamp(ticket)?.importedAt || null;
         return plan.batches.map(b => `<div class="bt-page bt-${b.type}">${renderBatchTicketCard({
             printedOn, batchedOn,
@@ -641,7 +651,7 @@ export function buildTicketPages({ casting, projectName = '', tickets = [], logs
             colorName: ticket.colorLogId ? (activeLog?.name || '') : '',
             batchedBy: ticket.batchedBy,
             notes: ticket.notes,
-            pigReductionPct, reduceFirstBackup, omitAggFinalBackup, omitFibersFace, cowbayFinalBackup,
+            pigReductionPct, reduceFirstBackup, omitAggFinalBackup, omitFibersFace, cowbayFinalBackup, rules,
             targetSlump: clampSlumpTarget(slumpTargets?.[b.type], SLUMP_TARGET_DEFAULTS[b.type])
         })}</div>`).join('');
     }).join('');
@@ -677,14 +687,14 @@ export function inventoryTotalsFor(rows, ticket, multiColor = false) {
 }
 
 /** What the ticket's batches would be for these totals — equal signatures = the printed tickets do not change. */
-export function planSignatureFor({ ticket, log, cuFt, faceSqFt }) {
+export function planSignatureFor({ ticket, log, cuFt, faceSqFt, sizing = null }) {
     const totalCuFt = parseFloat(cuFt);
     if (!totalCuFt || totalCuFt <= 0) return 'none';
     const sandLbs = getColorLogSandLbs(log);
     if (!sandLbs) return 'none';
     const plan = buildBatchPlan({
         totalCuFt, faceSqFt: parseFloat(faceSqFt) || 0, cuFtPer250: parseFloat(ticket.cuFtPer250) || 4.28,
-        castMethod: log?.castMethod || 'sprayUp', colorLogSandLbs: sandLbs, manualOverrides: btOverrides(ticket)
+        castMethod: log?.castMethod || 'sprayUp', colorLogSandLbs: sandLbs, manualOverrides: btOverrides(ticket), sizing
     });
     // The batches only (2026-11-24): the face cu ft behind them is not compared - a Face Sq Ft change that leaves
     // every batch as printed is no reprint (0383 T7, direct cast: 8 batches unchanged, yet the board stayed orange).
@@ -697,7 +707,7 @@ export function planSignatureFor({ ticket, log, cuFt, faceSqFt }) {
  * 'changed' = at least one ticket would print different batches now (print it again after Import from Tracking);
  * 'same' = the inventory moved but the batches come out the same (or nothing moved); 'none' = nothing to compare.
  */
-export function staleVerdict({ tickets = [], rows = [], logFor }) {
+export function staleVerdict({ tickets = [], rows = [], logFor, sizing = null }) {
     const multi = tickets.length > 1;
     const num = (v) => roundSig(parseFloat(v) || 0, 2);
     const typed = (v) => String(v ?? '').trim() !== '';
@@ -712,8 +722,8 @@ export function staleVerdict({ tickets = [], rows = [], logFor }) {
         if (num(ticket.cuFt) !== t.cuFt) diffs.push(`Total Cu Ft ${ticket.cuFt} → ${t.cuFt}`);
         if (typed(ticket.faceSqFt) && num(ticket.faceSqFt) !== t.ff) diffs.push(`Face Sq Ft ${ticket.faceSqFt} → ${t.ff}`);
         const log = logFor(ticket);
-        const was = planSignatureFor({ ticket, log, cuFt: ticket.cuFt, faceSqFt: ticket.faceSqFt });
-        if (was === 'none' || was !== planSignatureFor({ ticket, log, cuFt: t.cuFt, faceSqFt: t.ff })) changed = true;
+        const was = planSignatureFor({ ticket, log, cuFt: ticket.cuFt, faceSqFt: ticket.faceSqFt, sizing });
+        if (was === 'none' || was !== planSignatureFor({ ticket, log, cuFt: t.cuFt, faceSqFt: t.ff, sizing })) changed = true;
     }
     return { verdict: changed ? 'changed' : (seen ? 'same' : 'none'), diffs };
 }

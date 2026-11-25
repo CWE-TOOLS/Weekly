@@ -133,8 +133,9 @@ import { attachLayoutDrag } from './casting-layout-drag.js?v=20261120-1';
 import { LAYOUT_DAYS_PREFIX, normLayoutDays, resolveLayoutDays, layoutDayRows, layoutDaysEmpty, layoutDaysCanon, castDayDates, layoutDayOf, layoutDaysSplit, layoutDaySide, placeKeys, inventoryPieceRows, inventoryRowsOfDay, batchDaysStamp, batchDaysPrinted } from '../../utils/layout-days.js?v=20261120-7';
 import { activateJigListTab } from './jig-list.js?v=20261124-2';
 import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, APPROVALS_TAB_ITEMS } from '../../config/milestones-config.js?v=20261119-1';
-import { SLUMP_TARGET_DEFAULTS, FINAL_BACKUP_PIG_REDUCTION_PCT, parsePigReduction, BT_IMPORT_META, btOverrides, btImportStamp, btStampDate, additiveAmount, batchTotalsRows, renderBatchTotals, clampSlumpTarget, formatSlumpLabel, renderSlumpGraphic, renderBatchTicketCard, BATCH_PRINT_CSS, leftOverTicket } from '../../services/batch-ticket-render.js?v=20261124-4';
+import { SLUMP_TARGET_DEFAULTS, FINAL_BACKUP_PIG_REDUCTION_PCT, parsePigReduction, BT_IMPORT_META, btOverrides, btImportStamp, btStampDate, additiveAmount, batchTotalsRows, renderBatchTotals, clampSlumpTarget, formatSlumpLabel, renderSlumpGraphic, renderBatchTicketCard, BATCH_PRINT_CSS, leftOverTicket } from '../../services/batch-ticket-render.js?v=20261125-1';
 import { finishingProductsHtml, faceSqFtOfInventory, loadFinishingDefs, initFinishingEditor } from '../../services/finishing-products.js?v=20261124-2';   // moved out 2026-10-30 so the weekly's week print shares the ticket code
+import { loadBatchRules, saveBatchRules, rulesSizing, rulesPigReduction, drawBatchRulesPanel, setBatchRulesStatus, updateBatchRulesFloat } from '../../services/batch-rules.js?v=20261125-1';   // job batching rules (2026-11-25)
 import { invHash as invHashShared, invFingerprintRows, invColourFingerprintRows, invTypeColourFingerprintRows, printRebase } from '../../services/inventory-marks.js?v=20261124-4';
 import { loadMilestonesForProject, saveMilestone, isMilestonesMigrationPending, loadLayoutConditions, loadLayoutConditionsForCastings, LAYOUT_CONDITION_PREFIX, layoutConditionNote, parseLayoutCondition, sideWords } from '../../services/milestones-service.js';
 import { loadJigListsForProject as loadJigListsForScrim, scrimForInventory, scrimForCastings } from '../../services/jig-list-service.js?v=20261124-2';
@@ -11999,6 +12000,70 @@ function scrimLineHtml(casting, day = null) {
 // Job = every casting of the job that has a batch ticket, added up (materials, finishing products, scrim); a casting
 // with no ticket yet is not guessed, it is named as not counted. A job with phases gets a Phase step in between,
 // because its castings repeat their numbers per phase. Kept while the job stays open; another job starts on Day.
+// ---- Job batching rules (2026-11-25): the job's own batch sizes, face thickness, back-up layers, pigment reduction,
+// back-up ADVA, Cowbay and aggregate, typed in the Job Batching panel at the top of this tab (services/batch-rules.js).
+// null = typical batching: everything below plans and prints exactly as it always has.
+let currentBatchRules = null;
+let batchRulesFor = null;            // project number the rules were read for
+let batchRulesSaveTimer = null;
+function btRules() { return batchRulesFor === currentProjectNumber ? currentBatchRules : null; }
+function btSizing() { return rulesSizing(btRules()); }
+/** The back-up pigment reduction a ticket is batched with: the job-wide value when the job sets one, else the ticket's own. */
+function btPigPct(ticket) { const job = rulesPigReduction(btRules()); return job != null ? job : parsePigReduction(ticket?.pigReduction); }
+async function ensureBatchRules(force = false) {
+    const pn = currentProjectNumber;
+    if (!pn || getSpecialBatching(pn)) { currentBatchRules = null; batchRulesFor = pn; return; }
+    if (batchRulesSaveTimer || (!force && batchRulesFor === pn)) return;   // a change of ours is still on its way to the database
+    try {
+        const rules = await loadBatchRules(pn, { strict: true });
+        if (pn !== currentProjectNumber || batchRulesSaveTimer) return;
+        currentBatchRules = rules; batchRulesFor = pn;
+    } catch (err) {
+        logger.error('[batch-rules] load failed', err);
+        if (pn === currentProjectNumber && batchRulesFor !== pn) showToast('The Job Batching settings could not be read just now. If this job has special batching, the tickets below are NOT right: reload the page before printing.', 'error', 15000);
+    }
+}
+function renderBatchRulesPanel() {
+    const slump = document.getElementById('pp-bt-slump-targets');
+    if (!slump) return;
+    let el = document.getElementById('pp-bt-rules');
+    if (!el) { el = document.createElement('div'); el.id = 'pp-bt-rules'; slump.insertAdjacentElement('afterend', el); }
+    el.hidden = false;
+    if (el.contains(document.activeElement) && el.dataset.btrFor === String(currentProjectNumber)) return;   // someone is typing in it
+    el.dataset.btrFor = String(currentProjectNumber);
+    drawBatchRulesPanel(el, btRules(), handleBatchRulesChange);
+}
+function handleBatchRulesChange(next) {
+    const pn = currentProjectNumber;
+    if (!pn) return;
+    currentBatchRules = next; batchRulesFor = pn;
+    renderBatchTickets();
+    updateFloats();
+    const el = document.getElementById('pp-bt-rules');
+    setBatchRulesStatus(el, 'Saving\u2026');
+    if (batchRulesSaveTimer) clearTimeout(batchRulesSaveTimer);
+    batchRulesSaveTimer = setTimeout(async () => {
+        batchRulesSaveTimer = null;
+        try {
+            await saveBatchRules(pn, next);
+            if (pn === currentProjectNumber) setBatchRulesStatus(el, 'Saved');
+        } catch (err) {
+            logger.error('[batch-rules] save failed', err);
+            if (pn === currentProjectNumber) setBatchRulesStatus(el, 'NOT saved', true);
+            showToast('The Job Batching change could not be saved. It shows here but will be gone after a reload.', 'error', 10000);
+        }
+    }, 500);
+    // Tickets already printed for this job were made with the old settings: say which castings.
+    if (msOn()) {
+        const printed = currentCastings.filter(c => { const r = msRow(c.id, 'Batching Sheets'); return r && (r.status === MS.GREEN || r.status === MS.ORANGE); }).map(c => c.casting_number || '?');
+        if (printed.length) showToast(`Job batching changed. Batch tickets were already printed for ${printed.length === 1 ? 'cast' : 'casts'} ${printed.slice(0, 12).join(', ')}${printed.length > 12 ? ' and more' : ''}: check them and print again where the batches changed.`, 'warning', 14000);
+    }
+}
+function updateRulesFloat() {
+    const show = currentTab === 'batch-tickets' && !formViewHidden() && !!currentProjectNumber && !getSpecialBatching(currentProjectNumber);
+    updateBatchRulesFloat(show ? btRules() : null, show, () => document.getElementById('pp-bt-rules')?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+}
+
 let btTotalsScope = 'day';
 const btPhased = () => !!currentPhasesEnabled && currentPhases.length > 1;
 function btTotalsScopeNow() {
@@ -12049,7 +12114,8 @@ function btTotalsPanelHtml(casting) {
 }
 async function activateBatchTicketsTab() {
     if (currentProjectNumber) syncCastDatesWithWeekly();   // runs alongside; redraws when the weekly answers
-    await Promise.all([ensureJigListsForScrim(), loadFinishingDefs()]);
+    await Promise.all([ensureJigListsForScrim(), loadFinishingDefs(), ensureBatchRules(true)]);   // the job's rules are read again on every visit
+    { const rulesEl = document.getElementById('pp-bt-rules'); if (rulesEl) rulesEl.hidden = true; }   // shown on the success path only
     const needsSave    = document.getElementById('pp-bt-needs-save');
     const needsCL      = document.getElementById('pp-bt-needs-color-log');
     const noCastings   = document.getElementById('pp-bt-no-castings');
@@ -12139,6 +12205,7 @@ async function activateBatchTicketsTab() {
         if (fFinal) fFinal.value = currentSlumpTargets.finalBackUp;
         slumpPanel.hidden = false;
     }
+    renderBatchRulesPanel();
 
     renderBatchTickets();
 }
@@ -12265,7 +12332,7 @@ function btPlanSignature(casting, ticket, cuFt, faceSqFt) {
     const activeLog = getActiveBatchColorLog(casting, ticket);
     const sandLbs = getColorLogSandLbs(activeLog);
     if (!sandLbs) return 'none';
-    const plan = buildBatchPlan({
+    const plan = buildBatchPlan({ sizing: btSizing(),
         totalCuFt,
         faceSqFt: parseFloat(faceSqFt) || 0,
         cuFtPer250: parseFloat(ticket.cuFtPer250) || 4.28,
@@ -12299,6 +12366,7 @@ function btReprintCheck(castingId) {
     return seen ? 'same' : 'none';
 }
 async function ensureBatchTicketsLoaded() {
+    await ensureBatchRules();   // whoever compares or prints tickets plans them with the job's own batching rules
     if (batchTicketsLoadedFor === currentProjectNumber) return;
     const map = await loadBatchTicketsForCastings(currentCastings.map(c => c.id));
     batchTickets.clear();
@@ -12408,7 +12476,7 @@ function updateCastsFloat() {
     castsFloatEl.hidden = false;
     syncFloatShift();
 }
-function updateFloats() { updateStaleFloat(); updateCastsFloat(); updateMsFloat(); }
+function updateFloats() { updateStaleFloat(); updateCastsFloat(); updateMsFloat(); updateRulesFloat(); }
 
 /** Where the inline warning sits on screen (and what it says), or null when none is showing. */
 function formViewHidden() { const fv = document.getElementById('pp-form-view'); return !fv || fv.hidden; }
@@ -12603,13 +12671,13 @@ function renderBatchTicketBody(casting, ticket, multi = false) {
                 <div class="pp-bt-field pp-bt-pigreduce">
                     <label class="pp-bt-field-label">Back Up Pigment Reduction (%)</label>
                     <div class="pp-bt-pigreduce-row">
-                        <input type="number" step="1" min="0" max="100" class="pp-bt-input pp-bt-pigreduce-input" data-bt-field="pigReduction" value="${escapeAttr(ticket.pigReduction)}" placeholder="50">
+                        <input type="number" step="1" min="0" max="100" class="pp-bt-input pp-bt-pigreduce-input" data-bt-field="pigReduction" value="${escapeAttr(rulesPigReduction(btRules()) != null ? String(rulesPigReduction(btRules())) : ticket.pigReduction)}" placeholder="50"${rulesPigReduction(btRules()) != null ? ' disabled title="Set for the whole job under Job Batching, at the top of this tab"' : ''}>
                         <label class="pp-bt-checkbox">
                             <input type="checkbox" data-bt-field="pigReduceFirstBackup"${ticket.pigReduceFirstBackup ? ' checked' : ''}>
                             Also reduce First Back Up
                         </label>
                     </div>
-                    <span class="pp-bt-field-hint">Always applied to FINAL Back Up. Check the box to also reduce First Back Up.</span>
+                    <span class="pp-bt-field-hint">${rulesPigReduction(btRules()) != null ? '<strong>Set for the whole job under Job Batching</strong> (top of this tab). ' : ''}Always applied to FINAL Back Up. Check the box to also reduce First Back Up.</span>
                 </div>
                 <details class="pp-bt-advanced"${(ticket.omitAggFinalBackup || ticket.omitFibersFace || ticket.cowbayFinalBackup) ? ' open' : ''}>
                     <summary>Direct Cast Options</summary>
@@ -12679,7 +12747,7 @@ function renderBatchPreview(casting, ticket) {
         return `<div class="pp-bt-no-color-log">No sand weight in this project's color log base ingredients. Add a sand entry to the color log to enable scaling.</div>`;
     }
 
-    const plan = buildBatchPlan({
+    const plan = buildBatchPlan({ sizing: btSizing(),
         totalCuFt,
         faceSqFt: parseFloat(ticket.faceSqFt) || 0,
         cuFtPer250: parseFloat(ticket.cuFtPer250) || 4.28,
@@ -12722,7 +12790,7 @@ function buildBatchTotalsEntries(casting, day = null) {
         const log = getActiveBatchColorLog(casting, t);
         const sandLbs = getColorLogSandLbs(log);
         if (!sandLbs) continue;
-        const plan = buildBatchPlan({
+        const plan = buildBatchPlan({ sizing: btSizing(),
             totalCuFt,
             faceSqFt: parseFloat(t.faceSqFt) || 0,
             cuFtPer250: parseFloat(t.cuFtPer250) || 4.28,
@@ -12734,11 +12802,12 @@ function buildBatchTotalsEntries(casting, day = null) {
         entries.push({
             plan,
             log,
-            pigReductionPct: parsePigReduction(t.pigReduction),
+            pigReductionPct: btPigPct(t),
             reduceFirstBackup: !!t.pigReduceFirstBackup,
             omitAggFinalBackup: !!t.omitAggFinalBackup,
             omitFibersFace: !!t.omitFibersFace,
-            cowbayFinalBackup: !!t.cowbayFinalBackup
+            cowbayFinalBackup: !!t.cowbayFinalBackup,
+            rules: btRules()
         });
     }
     return entries;
@@ -12746,10 +12815,10 @@ function buildBatchTotalsEntries(casting, day = null) {
 
 function renderBatchSectionHeader(plan) {
     const { summary } = plan;
-    const parts = [];
-    if (summary.count250) parts.push(`${summary.count250} × 250 lb`);
-    if (summary.count150) parts.push(`${summary.count150} × 150 lb`);
-    if (summary.count100) parts.push(`${summary.count100} × 100 lb`);
+    // every batch size in the plan, largest first (a job's own sizes included, 2026-11-25)
+    const bySize = new Map();
+    for (const b of plan.batches) bySize.set(b.batchSandLbs, (bySize.get(b.batchSandLbs) || 0) + 1);
+    const parts = [...bySize].sort((a, b) => b[0] - a[0]).map(([lbs, n]) => `${n} × ${lbs} lb`);
     return `
         <div class="pp-bt-section-header">
             <span class="pp-bt-section-header-title">Generated Batches</span>
@@ -12817,7 +12886,7 @@ function renderBatchTicketCards(casting, ticket, plan) {
     const castNumber = btCastLabel(casting, ticket);
     const castDate = btCastDate(casting, ticket);
 
-    const pigReductionPct = parsePigReduction(ticket.pigReduction);
+    const pigReductionPct = btPigPct(ticket);
     const reduceFirstBackup = !!ticket.pigReduceFirstBackup;
     const omitAggFinalBackup = !!ticket.omitAggFinalBackup;
     const omitFibersFace = !!ticket.omitFibersFace;
@@ -12841,7 +12910,7 @@ function renderBatchTicketCards(casting, ticket, plan) {
             omitFibersFace,
             cowbayFinalBackup,
             // Project-wide slump target for this batch's type (in inches).
-            targetSlump: clampSlumpTarget(currentSlumpTargets[b.type])
+            rules: btRules(), targetSlump: clampSlumpTarget(currentSlumpTargets[b.type])
         })
     ).join('');
 }
@@ -13018,7 +13087,7 @@ function handleBatchFieldInput(castingId, field, value) {
         const activeLog = getActiveBatchColorLog(casting, ticket);
         const sandLbs = getColorLogSandLbs(activeLog);
         if (sandLbs && btOverrides(ticket).length) {
-            const newPlan = buildBatchPlan({
+            const newPlan = buildBatchPlan({ sizing: btSizing(),
                 totalCuFt: parseFloat(ticket.cuFt) || 0,
                 faceSqFt: parseFloat(ticket.faceSqFt) || 0,
                 cuFtPer250: parseFloat(ticket.cuFtPer250) || 4.28,
@@ -13048,7 +13117,7 @@ function handleBatchAssignChange(castingId, idx, type) {
     const activeLog = getActiveBatchColorLog(casting, ticket);
     const sandLbs = getColorLogSandLbs(activeLog);
     if (!sandLbs) return;
-    const plan = buildBatchPlan({
+    const plan = buildBatchPlan({ sizing: btSizing(),
         totalCuFt: parseFloat(ticket.cuFt) || 0,
         faceSqFt: parseFloat(ticket.faceSqFt) || 0,
         cuFtPer250: parseFloat(ticket.cuFtPer250) || 4.28,
@@ -16432,7 +16501,7 @@ function btPrintable(castingId) {
         const activeLog = getActiveBatchColorLog(casting, ticket);
         const sandLbs = getColorLogSandLbs(activeLog);
         if (!sandLbs) continue;
-        const plan = buildBatchPlan({
+        const plan = buildBatchPlan({ sizing: btSizing(),
             totalCuFt: parseFloat(ticket.cuFt) || 0,
             faceSqFt: parseFloat(ticket.faceSqFt) || 0,
             cuFtPer250: parseFloat(ticket.cuFtPer250) || 4.28,
@@ -16480,7 +16549,7 @@ function handlePrintBatchTicketsNow(castingId, days = null) {
         // these, renderBatchTicketCard() falls back to its defaults and the
         // printed tickets show un-reduced pigment values even though the on-screen
         // preview applies the reduction.
-        const pigReductionPct = parsePigReduction(ticket.pigReduction);
+        const pigReductionPct = btPigPct(ticket);
         const reduceFirstBackup = !!ticket.pigReduceFirstBackup;
         const omitAggFinalBackup = !!ticket.omitAggFinalBackup;
         const omitFibersFace = !!ticket.omitFibersFace;
@@ -16509,7 +16578,7 @@ function handlePrintBatchTicketsNow(castingId, days = null) {
                 cowbayFinalBackup,
                 // Project-wide slump target for this batch's type — mirror the on-screen
                 // preview (renderBatchTicketCards) so print isn't stuck on the 5" default.
-                targetSlump: clampSlumpTarget(currentSlumpTargets[b.type])
+                rules: btRules(), targetSlump: clampSlumpTarget(currentSlumpTargets[b.type])
             })}
         </div>
     `).join('');
