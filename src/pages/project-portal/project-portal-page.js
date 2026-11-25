@@ -131,7 +131,7 @@ import {
 import { renderCastingLayout, computeLayoutRects, parseDimension, tableBlockRects, CASTING_AREAS } from './casting-layout.js?v=20261112-1';
 import { attachLayoutDrag } from './casting-layout-drag.js?v=20261120-1';
 import { LAYOUT_DAYS_PREFIX, normLayoutDays, resolveLayoutDays, layoutDayRows, layoutDaysEmpty, layoutDaysCanon, castDayDates, layoutDayOf, layoutDaysSplit, layoutDaySide, placeKeys, inventoryPieceRows, inventoryRowsOfDay, batchDaysStamp, batchDaysPrinted } from '../../utils/layout-days.js?v=20261120-7';
-import { REPAIR_KIT_PREFIX, REPAIR_KIT_LABEL, normRepairKit, repairKitStates, repairKitAfterClick, repairKitAfterPrint, repairKitToStore } from '../../utils/repair-kit.js?v=20261125-rk1';
+import { REPAIR_KIT_PREFIX, REPAIR_KIT_LABEL, normRepairKit, repairKitStates, repairKitAfterClick, repairKitAfterPrint, repairKitToStore } from '../../utils/repair-kit.js?v=20261125-rk2';
 import { activateJigListTab } from './jig-list.js?v=20261124-2';
 import { CI_DEPENDENT, MS, CI_STATE, milestonesApply, AUTO_MILESTONES, PORTAL_MANUAL_MILESTONES, APPROVALS_TAB_ITEMS } from '../../config/milestones-config.js?v=20261119-1';
 import { SLUMP_TARGET_DEFAULTS, FINAL_BACKUP_PIG_REDUCTION_PCT, parsePigReduction, BT_IMPORT_META, btOverrides, btImportStamp, btStampDate, additiveAmount, batchTotalsRows, renderBatchTotals, clampSlumpTarget, formatSlumpLabel, renderSlumpGraphic, renderBatchTicketCard, BATCH_PRINT_CSS, leftOverTicket } from '../../services/batch-ticket-render.js?v=20261125-1';
@@ -7493,6 +7493,7 @@ function repairKitChipHtml(casting) {
     else if (st.why === 'printed') { tag = 'printed'; title = `The tracking sheet was printed with the repair kit (${castDayLong(st.printed)}) and this casting has been cast: the tick stays. Click to take it off.`; }
     else if (st.why === 'last') { tag = 'auto \u00b7 last cast'; title = `Ticked by itself: this is the last casting of the ${scope}. ${col} It moves by itself when a later casting is added. Click to take it off.`; }
     else if (st.why === 'by-hand-elsewhere') { title = `Off: the repair kit was ticked by hand on cast ${repairKitCastName(st.byHandId)}. Click to tick it on this casting too.`; }
+    else if (st.why === 'kept-elsewhere') { title = `Off: the repair kit already went with cast ${repairKitCastName(st.keptId)} (its tracking sheet was printed with it and it has been cast). Click to tick it on this casting too, by hand.`; }
     else { title = `Off: the repair kit goes with the last casting of the ${scope} (cast ${repairKitCastName(st.lastId)}). Click to tick it on this casting by hand.`; }
     // The sheet on the floor says something else than the tick does now
     let hint = '';
@@ -14588,7 +14589,7 @@ function descriptionLinesHtml(text) {
     return String(text || '').split(',').map(x => x.trim()).filter(Boolean).map(escapeHtml).join('<br>');
 }
 
-/** Column order of the printed sheet: the phases, with the repair kit in front of CRATE (it is packed with the crates). */
+/** Column order of the printed sheet: the phases, with the repair kit in front of CRATE (confirmed by the user 2026-11-25). */
 const TRACK_PRINT_ORDER = TRACKING_PHASES.flatMap(p => (p === 'CRATE' ? [REPAIR_KIT_LABEL, p] : [p]));
 
 function buildTrackPrintHtml(casting, components, projectNumber, projectName, day = null, repairKit = false) {

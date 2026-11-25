@@ -5,7 +5,8 @@
  * on by itself for the LAST casting of the job (of the phase, on a phased job). The user's rules:
  *   - the last casting can change (a casting added after it): the tick moves to the new last casting ...
  *   - ... except on a casting whose tracking sheet was already PRINTED with the repair kit and whose cast day is
- *     over: that sheet is out on the floor, so its tick is never taken off by itself;
+ *     over: that sheet is out on the floor, so its tick is never taken off by itself - and the kit went with it,
+ *     so a casting added later does NOT get the automatic tick ("new one stays off", user 2026-11-25);
  *   - a casting printed as last but not cast yet keeps the tick on a reprint only while it is still the last one;
  *   - a tick set BY HAND on any casting stops the automatic tick for that job / phase (the kit is packed there).
  *
@@ -49,8 +50,9 @@ export function lastCastingId(castings) {
  * Where the repair kit is ticked, for every casting of ONE job / phase.
  * @param {Array<{id:string, castDate:(string|null), castOver:boolean}>} castings in the portal's order
  * @param {Map<string,{manual:(string|null), printed:(string|null)}>} rows stored rows by casting id
- * @returns {Map<string,{on:boolean, why:string, auto:boolean, autoWhy:string, manual:(string|null), printed:(string|null), lastId:(string|null), byHandId:(string|null)}>}
- *   why: 'hand-on' | 'hand-off' | 'printed' (printed with the kit and cast: kept) | 'last' | 'by-hand-elsewhere' | 'not-last'
+ * @returns {Map<string,{on:boolean, why:string, auto:boolean, autoWhy:string, manual:(string|null), printed:(string|null), lastId:(string|null), byHandId:(string|null), keptId:(string|null)}>}
+ *   why: 'hand-on' | 'hand-off' | 'printed' (printed with the kit and cast: kept) | 'last' | 'by-hand-elsewhere'
+ *        | 'kept-elsewhere' (the kit already went with a printed + cast casting) | 'not-last'
  *   auto / autoWhy: what the automatic rule alone gives this casting (its own hand tick left out)
  */
 export function repairKitStates(castings, rows) {
@@ -58,18 +60,21 @@ export function repairKitStates(castings, rows) {
     const row = (id) => normRepairKit(rows && rows.get(id));
     const lastId = lastCastingId(list);
     const handOn = list.filter(c => row(c.id).manual === 'on').map(c => c.id);
+    const kept = list.filter(c => { const r = row(c.id); return r.printed && c.castOver && r.manual !== 'off'; }).map(c => c.id);
     const out = new Map();
     for (const c of list) {
         const r = row(c.id);
         const elsewhere = handOn.find(id => id !== c.id) || null;
+        const keptElsewhere = kept.find(id => id !== c.id) || null;
         let auto, autoWhy;
         if (r.printed && c.castOver) { auto = true; autoWhy = 'printed'; }
         else if (elsewhere) { auto = false; autoWhy = 'by-hand-elsewhere'; }
+        else if (keptElsewhere) { auto = false; autoWhy = 'kept-elsewhere'; }
         else if (c.id === lastId) { auto = true; autoWhy = 'last'; }
         else { auto = false; autoWhy = 'not-last'; }
         const on = r.manual ? r.manual === 'on' : auto;
         const why = r.manual === 'on' ? 'hand-on' : r.manual === 'off' ? 'hand-off' : autoWhy;
-        out.set(c.id, { on, why, auto, autoWhy, manual: r.manual, printed: r.printed, lastId, byHandId: elsewhere });
+        out.set(c.id, { on, why, auto, autoWhy, manual: r.manual, printed: r.printed, lastId, byHandId: elsewhere, keptId: keptElsewhere });
     }
     return out;
 }
