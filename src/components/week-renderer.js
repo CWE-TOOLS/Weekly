@@ -25,7 +25,7 @@
 import { getFilteredTasks, getAllTasks, injectSyntheticTasks } from '../core/state.js';
 import { parseDate } from '../utils/date-utils.js';
 import { getMonday, getLocalDateString, createWeekDates } from '../utils/date-utils.js';
-import { DEPARTMENT_ORDER, normalizeDepartmentClass, DEPARTMENT_COLORS } from '../config/department-config.js';
+import { DEPARTMENT_ORDER, normalizeDepartmentClass, DEPARTMENT_COLORS, isCranbury, dunhamsCounterpart, BUILDING_CRANBURY } from '../config/department-config.js';
 import { groupTasksByDepartment, groupTasksByDate } from '../utils/department-utils.js';
 import { createTaskCard, createTaskCardPlaceholder } from './task-card.js';
 import { generateAllSyntheticTasks } from '../utils/schedule-utils.js';
@@ -90,6 +90,9 @@ function createDepartmentLabel(dept, maxTasksInRow) {
 
     if (dept === 'Special Events') {
         deptLabel.innerHTML = 'Special<br>Events';
+    } else if (isCranbury(dept)) {
+        // 'Seal (Cranbury)' on two lines, like 'Special Events', in the same size and weight as every other label
+        deptLabel.append(dunhamsCounterpart(dept), document.createElement('br'), `(${BUILDING_CRANBURY})`);
     } else {
         deptLabel.textContent = dept;
     }
@@ -98,6 +101,23 @@ function createDepartmentLabel(dept, maxTasksInRow) {
     deptLabel.style.zIndex = Z_INDEX.DEPT_LABEL;
 
     return deptLabel;
+}
+
+/**
+ * Full-width "CRANBURY" divider between the Dunhams and Cranbury blocks. It sits on a grid row of its own
+ * (grid-column 1 / -1) and is not a .grid-cell, so the cell/row maths and smart-renderer lookups are unaffected.
+ * @returns {HTMLElement}
+ */
+function createBuildingDivider(building) {
+    const divider = document.createElement('div');
+    divider.className = 'building-divider';
+    divider.dataset.building = building;
+    divider.setAttribute('role', 'separator');
+    const text = document.createElement('span');
+    text.className = 'building-divider-text';
+    text.textContent = building.toUpperCase();
+    divider.appendChild(text);
+    return divider;
 }
 
 const HOURLY_RATE = 135;
@@ -208,6 +228,7 @@ function renderDepartmentRows(grid, sortedDepts, tasksByDept, weekDates, maxTask
     const allRowClasses = new Set();
     const weekDateStrings = weekDates.map(d => d.toDateString());
     const hoursLookup = buildHoursLookup();
+    let cranburyDividerDone = false;
 
     sortedDepts.forEach(dept => {
         const deptData = tasksByDept[dept];
@@ -228,6 +249,10 @@ function renderDepartmentRows(grid, sortedDepts, tasksByDept, weekDates, maxTask
         const rowsToRender = Math.max(primaryMaxTasks, 0);
 
         if (rowsToRender > 0) {
+            if (isCranbury(dept) && !cranburyDividerDone) {
+                grid.appendChild(createBuildingDivider(BUILDING_CRANBURY));
+                cranburyDividerDone = true;
+            }
             grid.appendChild(createDepartmentLabel(dept, rowsToRender + 1));
             for (let i = 0; i < rowsToRender; i++) {
                 const rowClass = `dept-row-${normalizeDepartmentClass(dept)}-${i}`;
@@ -318,13 +343,13 @@ export function renderWeekGrid(dateForWeek, maxTasksPerDept, isEditingUnlocked) 
 
     // Group and sort tasks
     const tasksByDept = groupTasksByDepartment(filteredTasks, syntheticTasksByDept);
-    const sortedDepts = Object.keys(tasksByDept).sort((a, b) => {
-        const aIndex = DEPARTMENT_ORDER.indexOf(a);
-        const bIndex = DEPARTMENT_ORDER.indexOf(b);
-        if (aIndex === -1) return 1;
-        if (bIndex === -1) return -1;
-        return aIndex - bIndex;
-    });
+    // DEPARTMENT_ORDER, with any department it doesn't know kept in the Dunhams block (above the Cranbury divider)
+    const deptRank = (d) => {
+        const i = DEPARTMENT_ORDER.indexOf(d);
+        if (i === -1) return 999;
+        return isCranbury(d) ? 1000 + i : i;
+    };
+    const sortedDepts = Object.keys(tasksByDept).sort((a, b) => deptRank(a) - deptRank(b));
 
     // Render department rows
     const allRowClasses = renderDepartmentRows(grid, sortedDepts, tasksByDept, weekDates, maxTasksPerDept, isEditingUnlocked);

@@ -30,7 +30,7 @@
 
 import { initializeSupabase, getSupabaseClient } from './supabase-service.js';
 import { DEPARTMENTS, teamOfDepartment } from '../config/scheduler-config.js';
-import { DEPARTMENT_ORDER } from '../config/department-config.js';
+import { DEPARTMENT_ORDER, applyBuilding } from '../config/department-config.js';
 import { normalizeDepartment, normalizeProjectName } from '../utils/ui-utils.js';
 import { logger } from '../utils/logger.js';
 
@@ -178,6 +178,9 @@ export async function fetchTasksFromScheduler() {
             _iso: r.date,
             _sortKey: ''
         });
+        // Cranbury: a "-C" suffix on the plant_schedule task code moves the task to its Cranbury department
+        // (department-config applyBuilding); the staging note stays under the original department.
+        applyBuilding(tasks[tasks.length - 1], String(r.task || ''));
     }
 
     // deterministic order: date, the weekly's department order, project, casting, task — then sheet-style ids
@@ -191,10 +194,10 @@ export async function fetchTasksFromScheduler() {
     const byCast = new Map(), byName = new Map();
     for (const t of tasks) {
         t._explicitDay = parseInt(t.stagingDayNumber, 10) || 0;
-        const k1 = `${t.projectNumber}|${t.castingNumber}|${t.department}`;
+        const k1 = `${t.projectNumber}|${t.castingNumber}|${t.sheetDepartment || t.department}`;   // Cranbury tasks count in their original department (staging key)
         if (!byCast.has(k1)) byCast.set(k1, []);
         byCast.get(k1).push(t);
-        const k2 = `${normalizeProjectName(t.project)}|${t.department}`;
+        const k2 = `${normalizeProjectName(t.project)}|${t.sheetDepartment || t.department}`;
         if (!byName.has(k2)) byName.set(k2, []);
         byName.get(k2).push(t);
     }

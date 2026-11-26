@@ -25,7 +25,7 @@ if (typeof window !== 'undefined' && window.__SCHEDULER_CREW_PREVIEW) {
 
     function decorate(card, task) {
         if (!card || !task || card.querySelector('.crew-line')) return;
-        const team = teamOfDepartment(task.department);
+        const team = teamOfDepartment(task.sheetDepartment || task.department);   // a Cranbury task keeps its sheet department's team + day index
         const key = `${String(task.projectNumber || '').trim()}|${String(task.castingNumber || '').trim()}|${team}|${String(task.castingDayNumber || task.dayNumber || '').trim()}`;
         const names = index.get(key);
         if (!names || !names.length) return;

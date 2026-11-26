@@ -35,7 +35,7 @@ Only these, so they are easy to skip when promoting:
 5. Re-sync the test copy from live before the next feature, so it doesn't drift.
    Copy `index.html` and `src/` over again and re-apply the test-only differences.
 
-## Cranbury (second building, test only for now)
+## Cranbury (second building, live since 2026-11-26)
 
 - **Rule:** a task is Cranbury when its task code (Sheet column F, `task.value`; `plant_schedule.task` on the
   scheduler path) ends in `-C` (`/-\s*C\s*$/i`). Load becomes `Load (Cranbury)`, and so does a Crating task whose

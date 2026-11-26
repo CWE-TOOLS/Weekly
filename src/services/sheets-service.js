@@ -7,6 +7,7 @@
 import { getAccessToken } from './auth-service.js';
 import { GOOGLE_SHEETS } from '../config/api-config.js';
 import { normalizeDepartment, normalizeProjectName } from '../utils/ui-utils.js';
+import { applyBuilding } from '../config/department-config.js';
 import { loadTasksFromCacheOrFetch, loadStagingFromCacheOrFetch, clearCache } from './sheets-cache-service.js';
 import { saveTaskDescriptions } from './supabase-service.js';
 import { getWeeklySource, SOURCE_SCHEDULER, updateSourceBadge } from './weekly-source-service.js';
@@ -74,8 +75,27 @@ export async function fetchTasks(opts) {
     // (weekly-source-service) decides; the sheet stays the default until it is switched.
     const source = await getWeeklySource();
     updateSourceBadge(source);
-    if (source === SOURCE_SCHEDULER) return await fetchTasksFromScheduler();
-    return await loadTasksFromCacheOrFetch(fetchTasksDirect, force);
+    if (source === SOURCE_SCHEDULER) return await fetchTasksFromScheduler();   // applies the building itself
+    const sheetTasks = await loadTasksFromCacheOrFetch(fetchTasksDirect, force);
+    return withBuildings(sheetTasks);
+}
+
+/**
+ * Cranbury: a "-C" task code (Sheet column F = task.value) moves a Crating/Load/Seal/Special/Ship task to its
+ * Cranbury department (department-config applyBuilding). Applied AFTER the cache, on copies: the parsed sheet
+ * tasks in the shared cache (Supabase + localStorage, also read by the live page) stay exactly as the live page
+ * parses them, and the day numbers stay counted per sheet department (the staging-note key).
+ * @param {Array<Object>} tasks
+ * @returns {Array<Object>}
+ */
+function withBuildings(tasks) {
+    if (!Array.isArray(tasks)) return tasks;
+    return tasks.map(t => {
+        const out = applyBuilding({ ...t, sheetDepartment: t.department, department: normalizeDepartment(t.department || '') }, t.value);
+        // a department typed as Cranbury in column E ('Seal-C') keeps its note under the name the live page sees
+        if (out.department !== t.department && !out.stagingDepartment) out.stagingDepartment = t.department;
+        return out;
+    });
 }
 
 /**
@@ -477,7 +497,7 @@ export async function saveToStaging(projectName, changedTasks) {
                 // Legacy fallback for rows without casting numbers.
                 record = {
                     project: normalizedProjectName, // Normalize to match display and lookup behavior
-                    department: task.department,
+                    department: task.stagingDepartment || task.department,   // same key the merge looks up (Cranbury keeps the sheet department)
                     day_number: task.dayNumber,
                     description: (newText != null ? newText : '') // Handle null/undefined (Chrome 76 compatible)
                 };

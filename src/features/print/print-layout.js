@@ -439,11 +439,26 @@ function createFrozenDailySummaryTable(departmentSummaries) {
     // Create body with department rows
     const tbody = document.createElement('tbody');
     let grandTotal = 0;
+    // Per building (Cranbury, 2026-11): the Dunhams lines, then the Cranbury lines; totals per building
+    const buildingTotals = { Dunhams: 0, Cranbury: 0 };
+    const hasCranbury = departmentSummaries.some(s => s.building === 'Cranbury');
+    let cranburyHeaderDone = false;
 
     // Get color mapping
     const colorMapping = window.PrintUtils.getDepartmentColorMapping();
 
     departmentSummaries.forEach(summary => {
+        if (summary.building === 'Cranbury' && !cranburyHeaderDone) {
+            const sectionRow = document.createElement('tr');
+            sectionRow.className = 'building-section-row';
+            const sectionCell = document.createElement('td');
+            sectionCell.colSpan = 5;
+            sectionCell.textContent = 'CRANBURY';
+            sectionCell.style.cssText = 'background:#333;color:#fff;font-weight:700;letter-spacing:0.15em;print-color-adjust:exact;-webkit-print-color-adjust:exact;';
+            sectionRow.appendChild(sectionCell);
+            tbody.appendChild(sectionRow);
+            cranburyHeaderDone = true;
+        }
         const row = document.createElement('tr');
         // Use Crating color for combined Crating + Load department
         let deptClass = window.PrintUtils.normalizeDepartmentClass(summary.department);
@@ -455,7 +470,7 @@ function createFrozenDailySummaryTable(departmentSummaries) {
         // Create department name cell with color
         const deptCell = document.createElement('td');
         deptCell.className = 'dept-name';
-        deptCell.textContent = summary.department;
+        deptCell.textContent = summary.label || summary.department;
         deptCell.style.backgroundColor = colors.bg;
         deptCell.style.color = colors.text;
         row.appendChild(deptCell);
@@ -510,13 +525,22 @@ function createFrozenDailySummaryTable(departmentSummaries) {
 
         tbody.appendChild(row);
         grandTotal += summary.targetRevenue;
+        buildingTotals[summary.building === 'Cranbury' ? 'Cranbury' : 'Dunhams'] += summary.targetRevenue;
     });
 
     table.appendChild(tbody);
 
     // Create footer with grand total
     const tfoot = document.createElement('tfoot');
-    tfoot.innerHTML = `
+    const buildingRow = (name) => `
+        <tr class="building-total-row">
+            <td class="total-label">${name} Total</td>
+            <td class="total-revenue">$${buildingTotals[name].toLocaleString()}</td>
+            <td class="total-actual">____________</td>
+            <td class="total-overtime">____________</td>
+            <td class="total-qc"></td>
+        </tr>`;
+    tfoot.innerHTML = `${hasCranbury ? buildingRow('Dunhams') + buildingRow('Cranbury') : ''}
         <tr class="grand-total-row">
             <td class="total-label">TOTAL</td>
             <td class="total-revenue">$${grandTotal.toLocaleString()}</td>

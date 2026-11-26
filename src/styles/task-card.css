@@ -561,3 +561,29 @@ body.dragging-active .task-card-placeholder {
   color: inherit;
   text-align: center;
 }
+
+/* Cranbury building (same colours as the Dunhams counterpart) */
+.task-card.department-crating-cranbury {
+  background-color: var(--color-crating-cranbury);
+  color: var(--color-crating-cranbury-text);
+}
+
+.task-card.department-load-cranbury {
+  background-color: var(--color-load-cranbury);
+  color: var(--color-load-cranbury-text);
+}
+
+.task-card.department-seal-cranbury {
+  background-color: var(--color-seal-cranbury);
+  color: var(--color-seal-cranbury-text);
+}
+
+.task-card.department-special-cranbury {
+  background-color: var(--color-special-cranbury) !important;
+  color: var(--color-special-cranbury-text) !important;
+}
+
+.task-card.department-ship-cranbury {
+  background-color: var(--color-ship-cranbury);
+  color: var(--color-ship-cranbury-text);
+}

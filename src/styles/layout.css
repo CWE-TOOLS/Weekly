@@ -321,3 +321,49 @@ body { top: 0 !important; }
   background-color: var(--color-facilities);
   color: var(--color-facilities-text);
 }
+
+/* Cranbury building (same colours as the Dunhams counterpart) */
+.department-label.department-crating-cranbury {
+  background-color: var(--color-crating-cranbury);
+  color: var(--color-crating-cranbury-text);
+}
+
+.department-label.department-load-cranbury {
+  background-color: var(--color-load-cranbury);
+  color: var(--color-load-cranbury-text);
+}
+
+.department-label.department-seal-cranbury {
+  background-color: var(--color-seal-cranbury);
+  color: var(--color-seal-cranbury-text);
+}
+
+.department-label.department-special-cranbury {
+  background-color: var(--color-special-cranbury);
+  color: var(--color-special-cranbury-text);
+}
+
+.department-label.department-ship-cranbury {
+  background-color: var(--color-ship-cranbury);
+  color: var(--color-ship-cranbury-text);
+}
+
+/* Full-width divider between the Dunhams and Cranbury blocks of the weekly grid */
+.building-divider {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  padding: 0.35rem 0.75rem;
+  background-color: #1F2937;
+  color: #FFFFFF;
+  border-top: 4px solid #111827;
+  border-bottom: 4px solid #111827;
+}
+
+.building-divider-text {
+  position: sticky;
+  left: 0.75rem;
+  font-weight: 600;
+  font-size: 2rem;
+  letter-spacing: 0.3em;
+}

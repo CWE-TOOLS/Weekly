@@ -32,7 +32,13 @@ const PRINT_UTILS = {
         'Load',
         'Ship',
         'Samples',
-        'Facilities'
+        'Facilities',
+        // Cranbury building: a block after every Dunhams department
+        'Crating (Cranbury)',
+        'Load (Cranbury)',
+        'Seal (Cranbury)',
+        'Special (Cranbury)',
+        'Ship (Cranbury)'
     ]
 };
 
@@ -57,7 +63,13 @@ function getDepartmentColorMapping() {
         'load': { bg: '#F59E0B', text: '#FFFFFF' },
         'ship': { bg: '#22C55E', text: '#FFFFFF' },
         'samples': { bg: '#047857', text: '#FFFFFF' },
-        'facilities': { bg: '#9CA3AF', text: '#FFFFFF' }
+        'facilities': { bg: '#9CA3AF', text: '#FFFFFF' },
+        // Cranbury: same colours as the Dunhams counterpart
+        'crating-cranbury': { bg: '#A16207', text: '#FFFFFF' },
+        'load-cranbury': { bg: '#F59E0B', text: '#FFFFFF' },
+        'seal-cranbury': { bg: '#6B7280', text: '#FFFFFF' },
+        'special-cranbury': { bg: '#EC4899', text: '#FFFFFF' },
+        'ship-cranbury': { bg: '#22C55E', text: '#FFFFFF' }
     };
 }
 
@@ -283,7 +295,9 @@ function detectPhaseStarts(weekTasks, allTasks, weekStart, weekEnd) {
     // Match is case-insensitive and tolerates leading/trailing whitespace.
     const CODE_PREFIX_RULES = {
         'Crating': 'b',
-        'Special': 's'
+        'Special': 's',
+        'Crating (Cranbury)': 'b',
+        'Special (Cranbury)': 's'
     };
 
     // Check each task in the selected week
